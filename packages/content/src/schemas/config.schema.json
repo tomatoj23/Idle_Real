@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ConfigSection",
+  "description": "content 包 config 节：全局配置。槽位数据化起步（issue #16），#13 起槽位列表驱动引擎遍历（加/减槽引擎零改动）。本节在包级校验中可选：省略=无槽位数据（引擎安全兜底）。",
+  "type": "object",
+  "required": ["slots"],
+  "additionalProperties": false,
+  "properties": {
+    "slots": {
+      "type": "array",
+      "minItems": 1,
+      "description": "佩戴槽位列表：法器/护体/灵饰起步，为法宝/外袍留门；数组顺序即槽位顺序，id 需唯一（语义校验）",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "additionalProperties": false,
+        "description": "槽位定义：icon 未显式写入即不落盘（ADR-013）",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "description": "槽位 id：items 的 slot 字段引用它"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 6,
+            "description": "显示名（中文，如 法器/护体/灵饰）"
+          },
+          "icon": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2,
+            "description": "单字图标（汉字，可选）"
+          }
+        }
+      }
+    }
+  }
+}

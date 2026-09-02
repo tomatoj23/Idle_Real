@@ -1,51 +1,150 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ItemsSection",
-  "description": "content 包 items 节：物品定义（mat 材料 / pill 丹药 / equip 装备）。类型相关字段（slot/bonuses/effect/heal）的按型约束由 validateContentPack 语义检查补全。",
+  "description": "content 包 items 节：物品定义。oneOf 按 type 分流五类形态：mat 材料 / pill 丹药 / equip 装备 / blank 器胚（装备底材模板）/ inscription 铭纹（装备词缀模板）。equip/pill 的按型必填（slot+bonuses、effect|heal）仍由 validateContentPack 语义检查补全（ADR-010 分工）；器胚/铭纹的核心形态在 schema 分支内直接必填（issue #16）。",
   "type": "array",
   "minItems": 1,
   "items": { "$ref": "#/definitions/item" },
   "definitions": {
     "item": {
+      "oneOf": [
+        { "$ref": "#/definitions/mat" },
+        { "$ref": "#/definitions/pill" },
+        { "$ref": "#/definitions/equip" },
+        { "$ref": "#/definitions/blank" },
+        { "$ref": "#/definitions/inscription" }
+      ]
+    },
+    "mat": {
       "type": "object",
       "required": ["id", "name", "icon", "type", "sell"],
       "additionalProperties": false,
+      "description": "材料：只携带公共字段",
       "properties": {
-        "id": {
-          "type": "string",
-          "pattern": "^[a-z][a-z0-9_]*$",
-          "description": "稳定标识符：掉落表/配方/存档引用均用它"
-        },
-        "name": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 12
-        },
-        "icon": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2
-        },
-        "type": {
-          "enum": ["mat", "pill", "equip"]
-        },
-        "sell": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "出售价（灵石）"
-        },
-        "description": {
-          "type": "string",
-          "maxLength": 120
-        },
-        "slot": {
-          "enum": ["weapon", "body", "accessory"],
-          "description": "equip 类：佩戴槽位"
-        },
-        "bonuses": { "$ref": "#/definitions/bonuses" },
+        "id": { "$ref": "#/definitions/id" },
+        "name": { "$ref": "#/definitions/name" },
+        "icon": { "$ref": "#/definitions/icon" },
+        "type": { "enum": ["mat"] },
+        "sell": { "$ref": "#/definitions/sell" },
+        "description": { "$ref": "#/definitions/description" },
+        "prototypeKey": { "$ref": "#/definitions/prototypeKey" },
+        "prototypeParent": { "$ref": "#/definitions/prototypeParent" }
+      }
+    },
+    "pill": {
+      "type": "object",
+      "required": ["id", "name", "icon", "type", "sell"],
+      "additionalProperties": false,
+      "description": "丹药：effect（持续增益）或 heal（即时恢复）至少其一（语义检查）",
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "name": { "$ref": "#/definitions/name" },
+        "icon": { "$ref": "#/definitions/icon" },
+        "type": { "enum": ["pill"] },
+        "sell": { "$ref": "#/definitions/sell" },
+        "description": { "$ref": "#/definitions/description" },
+        "prototypeKey": { "$ref": "#/definitions/prototypeKey" },
+        "prototypeParent": { "$ref": "#/definitions/prototypeParent" },
         "effect": { "$ref": "#/definitions/effect" },
         "heal": { "$ref": "#/definitions/heal" }
       }
+    },
+    "equip": {
+      "type": "object",
+      "required": ["id", "name", "icon", "type", "sell"],
+      "additionalProperties": false,
+      "description": "装备：slot 必须指向 config.slots 已定义的槽位 id（语义检查）",
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "name": { "$ref": "#/definitions/name" },
+        "icon": { "$ref": "#/definitions/icon" },
+        "type": { "enum": ["equip"] },
+        "sell": { "$ref": "#/definitions/sell" },
+        "description": { "$ref": "#/definitions/description" },
+        "prototypeKey": { "$ref": "#/definitions/prototypeKey" },
+        "prototypeParent": { "$ref": "#/definitions/prototypeParent" },
+        "slot": { "$ref": "#/definitions/slot" },
+        "bonuses": { "$ref": "#/definitions/bonuses" }
+      }
+    },
+    "blank": {
+      "type": "object",
+      "required": ["id", "name", "icon", "type", "sell", "slot", "floorRange", "tierRange"],
+      "additionalProperties": false,
+      "description": "器胚（装备底材模板）：槽位 + 掉落层数段 + 纹阶天花板；分层掉不同器胚，否决 itemLevel 缩放",
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "name": { "$ref": "#/definitions/name" },
+        "icon": { "$ref": "#/definitions/icon" },
+        "type": { "enum": ["blank"] },
+        "sell": { "$ref": "#/definitions/sell" },
+        "description": { "$ref": "#/definitions/description" },
+        "prototypeKey": { "$ref": "#/definitions/prototypeKey" },
+        "prototypeParent": { "$ref": "#/definitions/prototypeParent" },
+        "slot": { "$ref": "#/definitions/slot" },
+        "floorRange": { "$ref": "#/definitions/floorRange" },
+        "tierRange": { "$ref": "#/definitions/tierRange" },
+        "preferredTags": { "$ref": "#/definitions/preferredTags" },
+        "inherentModifiers": { "$ref": "#/definitions/inherentModifiers" }
+      }
+    },
+    "inscription": {
+      "type": "object",
+      "required": ["id", "name", "icon", "type", "sell", "tiers"],
+      "additionalProperties": false,
+      "description": "铭纹（装备词缀模板）：三阶数值表 + 可选机制型 feature + tags（供器胚 preferredTags 加权抽取）",
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "name": { "$ref": "#/definitions/name" },
+        "icon": { "$ref": "#/definitions/icon" },
+        "type": { "enum": ["inscription"] },
+        "sell": { "$ref": "#/definitions/sell" },
+        "description": { "$ref": "#/definitions/description" },
+        "prototypeKey": { "$ref": "#/definitions/prototypeKey" },
+        "prototypeParent": { "$ref": "#/definitions/prototypeParent" },
+        "tiers": { "$ref": "#/definitions/tiers" },
+        "feature": { "$ref": "#/definitions/feature" },
+        "tags": { "$ref": "#/definitions/tags" }
+      }
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "稳定标识符：掉落表/配方/存档引用均用它"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 12
+    },
+    "icon": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2
+    },
+    "sell": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "出售价（灵石）"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 120
+    },
+    "prototypeKey": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "ADR-015 原型继承：声明本条目可被同集合条目继承；值必须等于自身 id（语义校验）"
+    },
+    "prototypeParent": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "ADR-015 原型继承：继承同集合内已声明 prototypeKey 的父条目；父不存在或未声明即大声失败（语义校验）"
+    },
+    "slot": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "佩戴槽位 id（config.slots 数据化，起步 weapon/body/accessory，为法宝/外袍留门）"
     },
     "bonuses": {
       "type": "object",
@@ -92,6 +191,109 @@
       "description": "即时恢复：按气血上限百分比",
       "properties": {
         "percent": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
+      }
+    },
+    "floorRange": {
+      "type": "object",
+      "required": ["min", "max"],
+      "additionalProperties": false,
+      "description": "掉落层数段（秘境层数，1 起）；方向性 min ≤ max 由语义检查保证",
+      "properties": {
+        "min": { "type": "integer", "minimum": 1 },
+        "max": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "tierRange": {
+      "type": "object",
+      "required": ["min", "max"],
+      "additionalProperties": false,
+      "description": "纹阶天花板区间 T1~T3；方向性 min ≤ max 由语义检查保证",
+      "properties": {
+        "min": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "max": { "type": "integer", "minimum": 1, "maximum": 3 }
+      }
+    },
+    "preferredTags": {
+      "type": "array",
+      "description": "偏好标签：铭纹抽取按「基础 × (1+匹配数×加成)」加权；空数组=无偏好",
+      "items": { "$ref": "#/definitions/tag" }
+    },
+    "inherentModifiers": {
+      "type": "array",
+      "description": "胚纹：器胚固有词条，固定非随机，实例化时直接附加；空数组=无胚纹",
+      "items": { "$ref": "#/definitions/modifier" }
+    },
+    "tiers": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "description": "三阶数值表：下标 0/1/2 对应纹阶 T1/T2/T3，实例化时按器胚 tierRange 掷出",
+      "items": {
+        "type": "array",
+        "minItems": 1,
+        "description": "该纹阶产出的修饰符组",
+        "items": { "$ref": "#/definitions/modifier" }
+      }
+    },
+    "feature": {
+      "type": "object",
+      "required": ["primitive"],
+      "additionalProperties": false,
+      "description": "机制型特色铭纹：condition+primitive 表达（引擎原语池零新增，未注册原语忽略）",
+      "properties": {
+        "primitive": {
+          "type": "string",
+          "minLength": 1,
+          "description": "引擎机制原语名（如燃爆/疫毒/滞缓）"
+        },
+        "condition": { "$ref": "#/definitions/condition" },
+        "value": { "type": "number", "description": "原语数值参数（如传染概率）；无参数原语省略" }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "description": "标签加权抽取归类（ADR-015 tags/flags 分工：归类批量捞）；空数组=不参与加权",
+      "items": { "$ref": "#/definitions/tag" }
+    },
+    "tag": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "标签 id"
+    },
+    "modifier": {
+      "type": "object",
+      "required": ["stat", "zone", "value"],
+      "additionalProperties": false,
+      "description": "属性修饰符：#13 聚合管线的最小贡献单元（flat → 加法% → 乘法区按序结算，ADR-011）",
+      "properties": {
+        "stat": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "目标属性 id（atk/def/hp/crit/gatherXp…）"
+        },
+        "zone": {
+          "enum": ["flat", "addPct", "mult"],
+          "description": "聚合区：flat 固定值 / addPct 加法百分比 / mult 乘法区"
+        },
+        "value": { "type": "number", "description": "数值；乘法区须 > 0、加法%区 ≥ −100（语义检查）" },
+        "condition": { "$ref": "#/definitions/condition" }
+      }
+    },
+    "condition": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "description": "定向条件：至少声明一维，命中才生效（如受火系伤害、某招式命中）",
+      "properties": {
+        "element": {
+          "enum": ["metal", "wood", "water", "fire", "earth", "wind", "thunder"],
+          "description": "系别（金木水火土风雷）"
+        },
+        "moveId": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "招式 id（combatText.moves 注册键）"
+        }
       }
     }
   }

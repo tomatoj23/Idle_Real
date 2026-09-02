@@ -290,5 +290,12 @@
     { "item": "pill_def", "price": 450 },
     { "item": "silk", "price": 15 },
     { "item": "bingsilk", "price": 90 }
-  ]
+  ],
+  "config": {
+    "slots": [
+      { "id": "weapon", "name": "法器", "icon": "兵" },
+      { "id": "body", "name": "护体", "icon": "甲" },
+      { "id": "accessory", "name": "灵饰", "icon": "饰" }
+    ]
+  }
 }

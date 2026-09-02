@@ -1,11 +1,13 @@
 /**
- * 内容包整体校验（issue #2）。
+ * 内容包整体校验（issue #2；#16 扩展）。
  *
  * 两道关卡：
  * 1. **schema 校验**：各内容节对照 src/schemas/ 下的 JSON Schema，
- *    逐字段上报（JSON Pointer 路径 + 关键字）。
+ *    逐字段上报（JSON Pointer 路径 + 关键字）。item 节按 type 走
+ *    oneOf 五形态分流（mat/pill/equip/blank 器胚/inscription 铭纹），
+ *    跨形态字段由分支 additionalProperties:false 直接拒绝。
  * 2. **语义校验**：schema 表达不了的跨引用与形态规则——
- *    - id 去重（items / skills / enemies）；
+ *    - id 去重（items / skills / enemies / config.slots）；
  *    - 掉落池 id 必须存在于 items（异宝池还须为 equip 类）；
  *    - 武器 id 与敌人 id 必须在 combatText.moves 注册招式名；
  *    - moves 注册键不得悬空（只能是 fist、武器 id 或敌人 id）；
@@ -14,18 +16,25 @@
  *      货架的物品 id 必须存在（旧版 data.js 曾因材料 id 打错而埋雷，
  *      教训固化为校验）；
  *    - 物品按类型的字段形态（equip 须 slot+bonuses、pill 须
- *      effect/heal、mat 不得携带任何装备/丹药字段）。
+ *      effect/heal；器胚胚纹与铭纹各阶的修饰符区约束：乘法区 > 0、
+ *      加法%区 ≥ −100；floorRange/tierRange 方向性 min ≤ max）；
+ *    - 槽位数据化（#16）：equip/blank 的 slot 须在 config.slots 有定义
+ *      （config 缺省时跳过，零破坏）；
+ *    - 原型继承三检（#16，ADR-015/SexyMUD ADR-0030）：prototypeKey 须等
+ *      于自身 id、prototypeParent 须指向同集合内已声明 prototypeKey 的
+ *      条目、父链不得成环（展平留待后续票，此处为门禁侧保险）。
  */
 
 import defaultPackJson from './content/default.json';
 import combatTextSchemaJson from './schemas/combat-text.schema.json';
+import configSchemaJson from './schemas/config.schema.json';
 import enemySchemaJson from './schemas/enemy.schema.json';
 import gearDropSchemaJson from './schemas/gear-drop.schema.json';
 import itemSchemaJson from './schemas/item.schema.json';
 import recipeSchemaJson from './schemas/recipe.schema.json';
 import shopSchemaJson from './schemas/shop.schema.json';
 import skillSchemaJson from './schemas/skill.schema.json';
-import type { ContentPack, Item, Skill } from './types.js';
+import type { Config, ContentPack, Item, Modifier, Range, Skill } from './types.js';
 import { validateContent } from './validate.js';
 import type { ContentError, JsonSchema } from './validate.js';
 
@@ -36,6 +45,7 @@ const enemySchema = enemySchemaJson as unknown as JsonSchema;
 const gearDropSchema = gearDropSchemaJson as unknown as JsonSchema;
 const combatTextSchema = combatTextSchemaJson as unknown as JsonSchema;
 const shopSchema = shopSchemaJson as unknown as JsonSchema;
+const configSchema = configSchemaJson as unknown as JsonSchema;
 
 /** 内容节 → 该节值的独立 schema。 */
 const SECTION_SCHEMAS = {
@@ -46,11 +56,15 @@ const SECTION_SCHEMAS = {
   gearDrops: gearDropSchema,
   combatText: combatTextSchema,
   shop: shopSchema,
+  config: configSchema,
 } as const;
 
 type SectionName = keyof typeof SECTION_SCHEMAS;
 
 const SECTION_NAMES = Object.keys(SECTION_SCHEMAS) as readonly SectionName[];
+
+/** 可选内容节：缺省合法（引擎安全兜底），存在则整节强校验。 */
+const OPTIONAL_SECTIONS: ReadonlySet<SectionName> = new Set(['config']);
 
 export type PackValidationResult =
   | { readonly ok: true; readonly pack: ContentPack }
@@ -71,7 +85,9 @@ export function validateContentPack(json: unknown): PackValidationResult {
   for (const section of SECTION_NAMES) {
     const value = pack[section];
     if (value === undefined) {
-      errors.push({ path: `/${section}`, keyword: 'required', message: '缺少内容节' });
+      if (!OPTIONAL_SECTIONS.has(section)) {
+        errors.push({ path: `/${section}`, keyword: 'required', message: '缺少内容节' });
+      }
       continue;
     }
     const result = validateContent(value, SECTION_SCHEMAS[section]);
@@ -119,8 +135,9 @@ function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
   pushDuplicates(pack.items, '/items', errors);
   pushDuplicates(pack.skills, '/skills', errors);
   pushDuplicates(pack.enemies, '/enemies', errors);
+  const slotIds = checkConfig(pack.config, errors);
 
-  const weaponIds = checkItemShapes(pack.items, errors);
+  const weaponIds = checkItemShapes(pack.items, slotIds, errors);
 
   checkSkills(pack.skills, itemIndex, errors);
   checkRecipes(pack.recipes, itemIndex, skillIndex, pack.skills, errors);
@@ -132,6 +149,10 @@ function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
   checkWeaponMoves(weaponIds, pack.items, moves, errors);
   checkMoveRegistry(moves, weaponIds, enemyIndex, errors);
   checkFistFallback(moves, errors);
+
+  checkPrototypes(pack.skills, '/skills', errors);
+  checkPrototypes(pack.items, '/items', errors);
+  checkPrototypes(pack.enemies, '/enemies', errors);
 }
 
 /** id → 首次出现的下标。 */
@@ -165,14 +186,42 @@ function pushDuplicates(
   });
 }
 
-/** 物品按类型的字段形态检查；返回武器 id 集合。 */
+/**
+ * 槽位数据化（#16）：config 存在时返回槽位 id 集合并查重；
+ * 缺省时返回 undefined（跳过槽位跨引用检查，对既有包零破坏）。
+ */
+function checkConfig(
+  config: Config | undefined,
+  errors: ContentError[],
+): ReadonlySet<string> | undefined {
+  if (config === undefined) {
+    return undefined;
+  }
+  pushDuplicates(config.slots, '/config/slots', errors);
+  return new Set(config.slots.map((slot) => slot.id));
+}
+
+/**
+ * 物品按类型的字段形态检查；返回武器 id 集合。
+ * 跨形态字段冲突（mat 携带装备字段等）已由 item schema 的 oneOf 分支
+ * additionalProperties:false 在 schema 关卡拦截，此处只做分支内规则。
+ */
 function checkItemShapes(
   items: readonly Item[],
+  slotIds: ReadonlySet<string> | undefined,
   errors: ContentError[],
 ): ReadonlySet<string> {
   const weaponIds = new Set<string>();
   items.forEach((item, index) => {
     const at = (field: string) => `/items/${index}/${field}`;
+    // 槽位数据化跨引用：equip/blank 声明的 slot 须在 config.slots 有定义。
+    if (item.slot !== undefined && slotIds !== undefined && !slotIds.has(item.slot)) {
+      errors.push({
+        path: at('slot'),
+        keyword: 'xref',
+        message: `槽位 "${item.slot}" 未在 config.slots 定义`,
+      });
+    }
     if (item.type === 'equip') {
       if (item.slot === undefined) {
         errors.push({ path: at('slot'), keyword: 'shape', message: 'equip 类物品缺少 slot' });
@@ -190,19 +239,119 @@ function checkItemShapes(
           message: 'pill 类物品必须声明 effect（持续增益）或 heal（即时恢复）',
         });
       }
-    } else {
-      for (const field of ['slot', 'bonuses', 'effect', 'heal'] as const) {
-        if (item[field] !== undefined) {
-          errors.push({
-            path: at(field),
-            keyword: 'shape',
-            message: `mat 类物品不应携带 /${field}`,
-          });
-        }
-      }
+    } else if (item.type === 'blank') {
+      checkRangeDirection(item.floorRange, at('floorRange'), errors);
+      checkRangeDirection(item.tierRange, at('tierRange'), errors);
+      checkModifiers(item.inherentModifiers ?? [], at('inherentModifiers'), errors);
+    } else if (item.type === 'inscription') {
+      (item.tiers ?? []).forEach((tier, tierIndex) => {
+        checkModifiers(tier, `${at('tiers')}/${tierIndex}`, errors);
+      });
     }
   });
   return weaponIds;
+}
+
+/** 区间方向性：min 不得大于 max（floorRange/tierRange 与敌人 gold 同律）。 */
+function checkRangeDirection(range: Range | undefined, path: string, errors: ContentError[]): void {
+  if (range !== undefined && range.min > range.max) {
+    errors.push({
+      path,
+      keyword: 'shape',
+      message: `区间 min(${range.min}) 不得大于 max(${range.max})`,
+    });
+  }
+}
+
+/** 修饰符区约束（ADR-011 聚合区）：乘法区须 > 0，加法%区不得低于 −100。 */
+function checkModifiers(
+  modifiers: readonly Modifier[],
+  basePath: string,
+  errors: ContentError[],
+): void {
+  modifiers.forEach((mod, i) => {
+    if (mod.zone === 'mult' && mod.value <= 0) {
+      errors.push({
+        path: `${basePath}/${i}/value`,
+        keyword: 'shape',
+        message: `乘法区修饰符（${mod.stat}）value 必须 > 0`,
+      });
+    }
+    if (mod.zone === 'addPct' && mod.value < -100) {
+      errors.push({
+        path: `${basePath}/${i}/value`,
+        keyword: 'shape',
+        message: `加法%区修饰符（${mod.stat}）value 不得小于 −100`,
+      });
+    }
+  });
+}
+
+interface PrototypeEntry {
+  readonly id: string;
+  readonly prototypeKey?: string;
+  readonly prototypeParent?: string;
+}
+
+/**
+ * 原型继承三检（#16，ADR-015 / SexyMUD ADR-0030 纪律）：
+ * - prototypeKey 须等于自身 id（同 id 空间，唯一性免费）；
+ * - prototypeParent 须指向同集合内**已声明 prototypeKey** 的条目
+ *   （显式声明才可被继承，未声明的被引用即大声失败）；
+ * - 父链不得成环（门禁侧保险，与后续展平票据的注册表检测构成双保险）。
+ * 加载期展平继承留待后续票；本检查只拦数据，不改写数据。
+ */
+function checkPrototypes(
+  entries: ReadonlyArray<PrototypeEntry>,
+  basePath: string,
+  errors: ContentError[],
+): void {
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
+  entries.forEach((entry, index) => {
+    if (entry.prototypeKey !== undefined && entry.prototypeKey !== entry.id) {
+      errors.push({
+        path: `${basePath}/${index}/prototypeKey`,
+        keyword: 'prototype',
+        message: `prototypeKey ("${entry.prototypeKey}") 必须等于条目自身 id ("${entry.id}")`,
+      });
+    }
+    const parent = entry.prototypeParent;
+    if (parent === undefined) {
+      return;
+    }
+    const at = `${basePath}/${index}/prototypeParent`;
+    const parentEntry = byId.get(parent);
+    if (parentEntry === undefined) {
+      errors.push({
+        path: at,
+        keyword: 'prototype',
+        message: `父原型 "${parent}" 不存在于同集合`,
+      });
+      return;
+    }
+    if (parentEntry.prototypeKey === undefined) {
+      errors.push({
+        path: at,
+        keyword: 'prototype',
+        message: `父原型 "${parent}" 未声明 prototypeKey，不可被继承`,
+      });
+      return;
+    }
+    const seen = new Set<string>([entry.id]);
+    let cursor: PrototypeEntry | undefined = parentEntry;
+    while (cursor !== undefined) {
+      if (seen.has(cursor.id)) {
+        errors.push({
+          path: at,
+          keyword: 'prototype',
+          message: `原型继承链存在环：${[...seen, cursor.id].join(' → ')}`,
+        });
+        return;
+      }
+      seen.add(cursor.id);
+      cursor = cursor.prototypeParent !== undefined ? byId.get(cursor.prototypeParent) : undefined;
+    }
+  });
 }
 
 function checkSkills(

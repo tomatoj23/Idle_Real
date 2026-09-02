@@ -16,6 +16,16 @@
           "pattern": "^[a-z][a-z0-9_]*$",
           "description": "稳定标识符：存档与引擎引用均用它"
         },
+        "prototypeKey": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "ADR-015 原型继承：声明本条目可被同集合条目继承；值必须等于自身 id（语义校验）"
+        },
+        "prototypeParent": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "ADR-015 原型继承：继承同集合内已声明 prototypeKey 的父条目；父不存在或未声明即大声失败（语义校验）"
+        },
         "name": {
           "type": "string",
           "minLength": 1,

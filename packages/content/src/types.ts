@@ -1,8 +1,11 @@
 /**
- * 内容包类型（issue #2）。
+ * 内容包类型（issue #2；#16 落地预留字段）。
  *
  * 这些接口描述 content 包各节的形状，供引擎消费方（app / editor）与
  * 默认内容包加载器使用；引擎本体依旧零内容感知（透明持有 GameContent）。
+ *
+ * 三处同步纪律（ADR-015）：字段变更须同步 schemas/*.schema.json、
+ * 本文件、docs/agents/content.md（字段约定文档）。
  */
 
 /* ---------- 技能与活动 ---------- */
@@ -42,12 +45,71 @@ export interface Skill {
   readonly description?: string;
   /** 仅 gather 类技能携带；craft 的动作是 recipes，combat 的动作是斗法。 */
   readonly activities?: readonly Activity[];
+  /** ADR-015 原型继承：声明本条目可被同集合条目继承（值须等于自身 id）。 */
+  readonly prototypeKey?: string;
+  /** ADR-015 原型继承：继承同集合内已声明 prototypeKey 的父条目。 */
+  readonly prototypeParent?: string;
 }
 
 /* ---------- 物品 ---------- */
 
-export type ItemType = 'mat' | 'pill' | 'equip';
-export type EquipSlot = 'weapon' | 'body' | 'accessory';
+export type ItemType = 'mat' | 'pill' | 'equip' | 'blank' | 'inscription';
+
+/**
+ * 佩戴槽位 id：数据化（config.slots），起步三槽 法器 weapon / 护体 body /
+ * 灵饰 accessory，为法宝/外袍留门——不再用字面量联合锁死，新槽 = 新 JSON。
+ */
+export type EquipSlot = string;
+
+/** 连续数值区间（min ≤ max，方向性由语义校验保证）。 */
+export interface Range {
+  readonly min: number;
+  readonly max: number;
+}
+
+/* ---------- 系别（ADR-012） ---------- */
+
+/** 系别 id：金木水火土风雷；凡击=无 element 字段，不是第七个值。 */
+export type Element = 'metal' | 'wood' | 'water' | 'fire' | 'earth' | 'wind' | 'thunder';
+
+/** 系别亲和：键=系别 id 的任意子集，值=受该系攻击的伤害调整百分点（−100 抗性 ~ 100 易伤）。 */
+export type Affinities = Readonly<Partial<Record<Element, number>>>;
+
+/* ---------- 修饰符（器胚胚纹 / 铭纹 tiers 的最小单元，#13 聚合管线消费） ---------- */
+
+/** 聚合区（ADR-011 统一管线）：flat → 加法% → 乘法区按序结算，禁绕管直改。 */
+export type ModifierZone = 'flat' | 'addPct' | 'mult';
+
+/** 定向条件：声明后仅在该条件命中时生效（受某系伤害/某招式命中）。 */
+export interface ModifierCondition {
+  readonly element?: Element;
+  readonly moveId?: string;
+}
+
+/** 属性修饰符：铭纹/胚纹产出，统一走 #13 聚合管线。 */
+export interface Modifier {
+  /** 目标属性 id（atk/def/hp/crit/gatherXp…）。 */
+  readonly stat: string;
+  readonly zone: ModifierZone;
+  /** 数值；乘法区须 > 0、加法%区 ≥ −100（语义校验）。 */
+  readonly value: number;
+  readonly condition?: ModifierCondition;
+}
+
+/** 机制型特色铭纹：condition+primitive 表达，引擎原语池零新增（未注册原语忽略）。 */
+export interface Feature {
+  readonly primitive: string;
+  readonly condition?: ModifierCondition;
+  /** 原语数值参数（如传染概率）；无参数原语省略。 */
+  readonly value?: number;
+}
+
+/** 铭纹三阶数值表：下标 0/1/2 对应纹阶 T1/T2/T3。 */
+export type InscriptionTiers = readonly [
+  readonly Modifier[],
+  readonly Modifier[],
+  readonly Modifier[],
+];
 
 /** 装备基础加成（稀有度与词条是运行时实例化概念，不属于内容包）。 */
 export interface Bonuses {
@@ -85,7 +147,11 @@ export interface Item {
   /** 出售价（灵石）。 */
   readonly sell: number;
   readonly description?: string;
-  /** equip 类：佩戴槽位。 */
+  /** ADR-015 原型继承：声明本条目可被同集合条目继承（值须等于自身 id）。 */
+  readonly prototypeKey?: string;
+  /** ADR-015 原型继承：继承同集合内已声明 prototypeKey 的父条目。 */
+  readonly prototypeParent?: string;
+  /** equip/blank 类：佩戴槽位（config.slots 数据化的槽位 id）。 */
   readonly slot?: EquipSlot;
   /** equip 类：基础加成。 */
   readonly bonuses?: Bonuses;
@@ -93,6 +159,20 @@ export interface Item {
   readonly effect?: PillEffect;
   /** pill 类：即时恢复。 */
   readonly heal?: Heal;
+  /** blank 类（器胚）：掉落层数段（秘境层数），分层掉不同器胚。 */
+  readonly floorRange?: Range;
+  /** blank 类（器胚）：纹阶天花板区间 T1~T3，重铸不得突破。 */
+  readonly tierRange?: Range;
+  /** blank 类（器胚）：偏好标签，铭纹抽取按匹配数加权。 */
+  readonly preferredTags?: readonly string[];
+  /** blank 类（器胚）：胚纹——固有词条，固定非随机，实例化时直接附加。 */
+  readonly inherentModifiers?: readonly Modifier[];
+  /** inscription 类（铭纹）：三阶数值表，下标 0/1/2 = T1/T2/T3。 */
+  readonly tiers?: InscriptionTiers;
+  /** inscription 类（铭纹）：机制型特色表达。 */
+  readonly feature?: Feature;
+  /** inscription 类（铭纹）：标签加权抽取归类。 */
+  readonly tags?: readonly string[];
 }
 
 /* ---------- 配方 ---------- */
@@ -136,6 +216,14 @@ export interface Enemy {
   readonly gold: { readonly min: number; readonly max: number };
   /** 常规物品掉落表。 */
   readonly drops: readonly ItemDrop[];
+  /** 系别（金木水火土风雷）；不填=凡击无系别。只给 Boss/特色怪配（ADR-012）。 */
+  readonly element?: Element;
+  /** 系别亲和：受该系攻击的伤害调整百分点（负=抗性，正=易伤）；不填=全系无调整。 */
+  readonly affinities?: Affinities;
+  /** ADR-015 原型继承：声明本条目可被同集合条目继承（值须等于自身 id）。 */
+  readonly prototypeKey?: string;
+  /** ADR-015 原型继承：继承同集合内已声明 prototypeKey 的父条目。 */
+  readonly prototypeParent?: string;
 }
 
 /** 异宝掉落表：敌人按 chance 掉落 pool 中的随机异宝装备。 */
@@ -186,6 +274,19 @@ export interface ShopEntry {
   readonly price: number;
 }
 
+/* ---------- 全局配置（槽位数据化） ---------- */
+
+/** 槽位定义（config.slots 条目）；icon 未显式写入即不落盘（ADR-013）。 */
+export interface SlotDef {
+  readonly id: string;
+  readonly name: string;
+  readonly icon?: string;
+}
+
+export interface Config {
+  readonly slots: readonly SlotDef[];
+}
+
 /* ---------- 内容包整体 ---------- */
 
 export interface ContentPack {
@@ -196,4 +297,6 @@ export interface ContentPack {
   readonly gearDrops: readonly GearDrop[];
   readonly combatText: CombatText;
   readonly shop: readonly ShopEntry[];
+  /** 全局配置（槽位数据化）；可选节，省略=无槽位数据（引擎安全兜底）。 */
+  readonly config?: Config;
 }

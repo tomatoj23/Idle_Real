@@ -1,10 +1,11 @@
 /**
- * JSON Schema 校验器骨架（issue #1）。
+ * JSON Schema 校验器骨架（issue #1，扩展至 issue #2/#16）。
  *
  * 支持常用关键字子集：type / required / properties / items /
- * additionalProperties / enum / 数值与字符串边界 / pattern / $ref（仅
- * `#/definitions/...` 内部引用，不做递归展开）。完整 JSON Schema 支持
- * 与内容包整体校验在 issue #2 落地。
+ * additionalProperties / patternProperties / enum / 数值与字符串边界 /
+ * pattern / minProperties / $ref（仅 `#/definitions/...` 内部引用，不做
+ * 递归展开）/ oneOf（issue #16，含判别式分流报错——type 枚举恰命中
+ * 一个分支时上报该分支的字段级错误）。
  */
 
 /** 本校验器支持的 JSON Schema 关键字子集。 */
@@ -15,6 +16,8 @@ export interface JsonSchema {
   readonly items?: JsonSchema;
   readonly additionalProperties?: boolean | JsonSchema;
   readonly enum?: readonly unknown[];
+  /** 分支联合：内容应恰好匹配其中一个分支。 */
+  readonly oneOf?: readonly JsonSchema[];
   readonly minimum?: number;
   readonly maximum?: number;
   readonly exclusiveMinimum?: number;
@@ -77,6 +80,12 @@ function validateNode(json: unknown, schema: JsonSchema, path: string, ctx: Ctx)
     return;
   }
 
+  if (schema.oneOf !== undefined) {
+    // 分支联合自带完整形态约束，本层不再叠加其它关键字。
+    checkOneOf(json, schema.oneOf, path, ctx);
+    return;
+  }
+
   if (!checkType(json, schema.type, path, ctx.errors)) {
     // 类型不符时不再深入子字段，避免衍生噪音错误。
     return;
@@ -101,6 +110,61 @@ function resolveRef(ref: string, root: JsonSchema): JsonSchema | undefined {
     return undefined;
   }
   return root.definitions?.[ref.slice('#/definitions/'.length)];
+}
+
+/**
+ * oneOf：内容应恰好匹配一个分支。各分支在隔离错误列表里独立校验，
+ * 恰好一个通过即合法；否则收敛报错——
+ * - 全不通过且 `type` 枚举（判别式）恰命中一个分支时，上报该分支的
+ *   字段级错误（比笼统的 oneOf 失败可读得多，item 五形态分流依赖此路径）；
+ * - 其余情况报分支数不对的 oneOf 错误。
+ */
+function checkOneOf(json: unknown, branches: readonly JsonSchema[], path: string, ctx: Ctx): void {
+  const branchErrors = branches.map((branch) => {
+    const isolated: Ctx = { root: ctx.root, errors: [], depth: ctx.depth + 1 };
+    validateNode(json, branch, path, isolated);
+    return isolated.errors;
+  });
+  const passing = branchErrors.filter((errors) => errors.length === 0).length;
+  if (passing === 1) {
+    return;
+  }
+  if (passing === 0) {
+    let matchIndex = -1;
+    let matchCount = 0;
+    branches.forEach((branch, index) => {
+      if (branchDiscriminates(branch, ctx.root, json)) {
+        matchCount += 1;
+        matchIndex = index;
+      }
+    });
+    if (matchCount === 1) {
+      const errors = branchErrors[matchIndex];
+      if (errors !== undefined) {
+        ctx.errors.push(...errors);
+        return;
+      }
+    }
+  }
+  ctx.errors.push({
+    path,
+    keyword: 'oneOf',
+    message:
+      passing === 0
+        ? '未匹配任何 oneOf 分支（应恰好匹配一个）'
+        : `匹配了 ${passing} 个 oneOf 分支（应恰好匹配一个）`,
+  });
+}
+
+/** 判别式：分支用 properties.type.enum 钉死形态时，检查内容的 type 值是否命中。 */
+function branchDiscriminates(branch: JsonSchema, root: JsonSchema, json: unknown): boolean {
+  const resolved = branch.$ref !== undefined ? resolveRef(branch.$ref, root) : branch;
+  const enumValues = resolved?.properties?.type?.enum;
+  if (enumValues === undefined) {
+    return false;
+  }
+  const actual = isPlainObject(json) ? json.type : undefined;
+  return enumValues.some((option) => option === actual);
 }
 
 function checkType(

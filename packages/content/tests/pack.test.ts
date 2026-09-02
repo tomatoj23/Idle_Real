@@ -217,10 +217,10 @@ describe('validateContentPack · 去重与形态', () => {
     expectError(validateContentPack(pack), '/items/4/effect', 'shape');
   });
 
-  it('mat 携带装备/丹药字段 → shape', () => {
+  it('mat 携带装备/丹药字段 → schema oneOf 分支拦截（#16 起跨形态字段在 schema 关卡拒绝）', () => {
     const pack = makePack();
     pack.items[0].bonuses = { atk: 1 };
-    expectError(validateContentPack(pack), '/items/0/bonuses', 'shape');
+    expectError(validateContentPack(pack), '/items/0/bonuses', 'additionalProperties');
   });
 
   it('gather 技能无活动 / craft 技能带活动 → shape', () => {

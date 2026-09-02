@@ -131,3 +131,43 @@ describe('schema 关键字扩展（issue #2）', () => {
     expectFieldError(result, '/坏键', 'additionalProperties');
   });
 });
+
+describe('schema 关键字扩展（issue #16）：oneOf', () => {
+  /** 双分支判别式 schema：type=num 要 number，type=str 要 string。 */
+  const discriminated: JsonSchema = {
+    oneOf: [
+      {
+        type: 'object',
+        required: ['type'],
+        additionalProperties: false,
+        properties: { type: { enum: ['num'] }, v: { type: 'number' } },
+      },
+      {
+        type: 'object',
+        required: ['type'],
+        additionalProperties: false,
+        properties: { type: { enum: ['str'] }, v: { type: 'string' } },
+      },
+    ],
+  };
+
+  it('恰好匹配一个分支时通过', () => {
+    expect(validateContent({ type: 'num', v: 1 }, discriminated)).toEqual({ ok: true });
+    expect(validateContent({ type: 'str', v: '灵' }, discriminated)).toEqual({ ok: true });
+  });
+
+  it('全不通过且 type 判别式命中一个分支 → 上报该分支的字段级错误', () => {
+    const result = validateContent({ type: 'num', v: '不是数字' }, discriminated);
+    expectFieldError(result, '/v', 'type');
+  });
+
+  it('判别式未命中（type 不属任何分支）→ 笼统 oneOf 错误', () => {
+    const result = validateContent({ type: 'bool', v: 1 }, discriminated);
+    expectFieldError(result, '', 'oneOf');
+  });
+
+  it('匹配多个分支 → oneOf 错误（应恰好一个）', () => {
+    const loose: JsonSchema = { oneOf: [{ type: 'number' }, { type: 'number', minimum: 0 }] };
+    expectFieldError(validateContent(5, loose), '', 'oneOf');
+  });
+});

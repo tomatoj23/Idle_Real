@@ -45,6 +45,15 @@ describe('默认内容包 · 验收（issue #2）', () => {
       expect(pack.combatText.verbs[style].length).toBeGreaterThan(0);
     }
   });
+
+  it('config 槽位节：法器/护体/灵饰起步（#16，为法宝/外袍留门）', () => {
+    const pack = loadDefaultContent();
+    expect(pack.config?.slots).toEqual([
+      { id: 'weapon', name: '法器', icon: '兵' },
+      { id: 'body', name: '护体', icon: '甲' },
+      { id: 'accessory', name: '灵饰', icon: '饰' },
+    ]);
+  });
 });
 
 /* ==================== 数值基线（防迁移走样，对照旧 js/data.js） ==================== */
