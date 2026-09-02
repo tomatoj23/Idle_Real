@@ -1,7 +1,7 @@
-# 012 · 打包分发 + Steam 上架预备
+﻿﻿# #12 · 打包分发 + Steam 上架预备
 
-**Blockers**: 010, 011
-**User stories**: #1 #25
+**Blockers**: #10, #11
+**User stories**: US-1 US-25
 
 ## 范围
 - 一键构建链：`npm run dist` = 构建 engine/content/editor 产物 + Electron 打包（NSIS 安装包 + portable）
@@ -13,3 +13,5 @@
 - [ ] 干净机器（无 Node 环境）双击安装包 → 完整可玩
 - [ ] content 包版本变更 → 游戏内可见
 - [ ] wizard 脚本可引导完成 Steamworks 侧配置（人工步骤清单）
+
+

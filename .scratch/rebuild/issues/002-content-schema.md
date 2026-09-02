@@ -1,7 +1,7 @@
 # 002 · content schema + 校验器 + 默认内容包迁移
 
 **Blockers**: 001
-**User stories**: #16 #18 #22
+**User stories**: US-16 US-18 US-22
 
 ## 范围
 - Schema 全集（JSON Schema）：`skills`（含活动+副产出）、`items`（mat/pill/equip）、`recipes`（炼丹/炼器）、`enemies`（数值/掉落/招式名）、`drops`（装备掉落表）、`combat-text`（动词部位池/招式名/起势/按伤害档分池后果词库/致命一击）、`shop`

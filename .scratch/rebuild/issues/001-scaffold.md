@@ -1,7 +1,7 @@
-# 001 · workspace 脚手架 + TS 环境
+﻿﻿# #1 · workspace 脚手架 + TS 环境
 
 **Blockers**: 无
-**User stories**: #21 #23 #24 #25
+**User stories**: US-21 US-23 US-24 US-25
 
 ## 范围
 - npm workspaces monorepo：`packages/engine`、`packages/content`、`packages/editor`、`packages/app-desktop`
@@ -14,3 +14,5 @@
 - [ ] `npm test` 通过：createGame 注入最小 content + 假时钟，tick 后事件流产出一条 tick 事件
 - [ ] `validateContent` 对合法样例通过、对缺字段样例报字段级错误
 - [ ] 未全局安装任何包；`node_modules` 全部位于项目内
+
+
