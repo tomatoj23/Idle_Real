@@ -1,2 +1,5 @@
 .codebuddy/
 *.log
+node_modules/
+dist/
+*.tsbuildinfo

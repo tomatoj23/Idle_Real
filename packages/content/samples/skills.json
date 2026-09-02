@@ -1,0 +1,20 @@
+{
+  "skills": [
+    {
+      "id": "lianqi",
+      "name": "炼气",
+      "description": "吐纳天地灵气，夯实道基。",
+      "baseInterval": 3000,
+      "baseExp": 10,
+      "maxLevel": 99
+    },
+    {
+      "id": "liandan",
+      "name": "炼丹",
+      "description": "以丹炉熔炼药材，凝丹成药。",
+      "baseInterval": 5000,
+      "baseExp": 25,
+      "maxLevel": 99
+    }
+  ]
+}

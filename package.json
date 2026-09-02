@@ -1,0 +1,23 @@
+{
+  "name": "wendao-changsheng",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "packages/engine",
+    "packages/content",
+    "packages/editor",
+    "packages/app-desktop"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @wendao/app-desktop",
+    "dev:editor": "npm run dev -w @wendao/editor",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "check": "npm run check --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

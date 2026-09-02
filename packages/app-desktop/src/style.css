@@ -1,0 +1,33 @@
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 50% 0%, #1d2233 0%, #12141c 60%);
+  color: #d8d3c8;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  text-align: center;
+}
+
+h1 {
+  font-family: "STKaiti", "KaiTi", serif;
+  font-weight: 400;
+  letter-spacing: 0.35em;
+  font-size: 3rem;
+  color: #e6d9a8;
+  margin-bottom: 0.4em;
+}
+
+p {
+  margin: 0.3em 0;
+  color: #9a958a;
+}
+
+.smoke {
+  color: #6f8f6a;
+  font-size: 0.85rem;
+}
