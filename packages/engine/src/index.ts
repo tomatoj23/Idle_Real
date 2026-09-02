@@ -34,9 +34,10 @@ export {
   itemsOf,
   playerMaxHp,
   shopOf,
+  slotsOf,
   skillsOf,
 } from './contentView.js';
-export type { ActivityView, ByproductView, ItemView, ShopEntryView, SkillView, StackView } from './contentView.js';
+export type { ActivityView, ByproductView, ItemView, ShopEntryView, SkillView, SlotView, StackView } from './contentView.js';
 export { cloneState, initialState, restoreState } from './state.js';
 export type { ActivityState, GameState, SkillProgress } from './state.js';
 
@@ -47,3 +48,16 @@ export type {
   GameEvent,
   SaveData,
 } from './types.js';
+
+// 修饰符聚合管线（issue #13，ADR-011）
+export { aggregateStat, aggregateStats, conditionMatches } from './modifiers.js';
+export type {
+  AggregationContext,
+  AppliedContribution,
+  Contribution,
+  Modifier,
+  ModifierCondition,
+  ModifierSource,
+  ModifierZone,
+  StatBreakdown,
+} from './modifiers.js';

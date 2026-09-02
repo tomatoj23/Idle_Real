@@ -6,6 +6,11 @@
  */
 import type { GameContent } from './types.js';
 import { levelFromXp, maxHpForLevel } from './progression.js';
+import {
+  aggregateStat,
+  type AggregationContext,
+  type Contribution,
+} from './modifiers.js';
 
 export interface StackView {
   readonly item: string;
@@ -85,6 +90,22 @@ export function findShopEntry(content: GameContent, itemId: string): ShopEntryVi
   return shopOf(content).find((entry) => entry.item === itemId);
 }
 
+/** 佩戴槽位视图（config.slots 数据化，issue #13）。 */
+export interface SlotView {
+  readonly id: string;
+  readonly name: string;
+  readonly icon?: string;
+}
+
+/**
+ * 槽位列表：由内容包 config.slots 驱动（换包加/减槽引擎零改动）。
+ * 缺省安全兜底：无 config 节 / 无 slots / 形状非法 → 空列表。
+ */
+export function slotsOf(content: GameContent): readonly SlotView[] {
+  const slots = (content as { config?: { slots?: unknown } }).config?.slots;
+  return Array.isArray(slots) ? (slots as SlotView[]) : [];
+}
+
 /** 斗法层数（内容包里 kind=combat 的技能；无则按 0 层）。 */
 export function combatLevelOf(
   content: GameContent,
@@ -94,10 +115,22 @@ export function combatLevelOf(
   return combat ? levelFromXp(skills[combat.id]?.xp ?? 0) : 0;
 }
 
-/** 玩家气血上限：斗法修为映射（旧版基线公式）。 */
+/**
+ * 玩家气血上限：斗法修为映射基线，再走修饰符聚合管线（issue #13，ADR-011）。
+ *
+ * 这是管线的第一个引擎内消费点——装备加成（#4）、丹药 buff（#4）、
+ * 系别抗性（#15）将来一律产出 Contribution 注入，不存在第二条直算路径。
+ * 无贡献时行为与旧基线完全一致（管线空转）。
+ * 注意：需要事件语境（breakdown.applied）的下游（#4 战斗事件）应直接调
+ * aggregateStat 取完整快照，不要经本函数（本函数只回数值上限）。
+ */
 export function playerMaxHp(
   content: GameContent,
   skills: Readonly<Record<string, { xp?: number }>>,
+  contributions: readonly Contribution[] = [],
+  context: AggregationContext = {},
 ): number {
-  return maxHpForLevel(combatLevelOf(content, skills));
+  const base = maxHpForLevel(combatLevelOf(content, skills));
+  const { value } = aggregateStat('hp', base, contributions, context);
+  return Math.round(value); // 三区浮点运算的累积误差不容差 1 点
 }

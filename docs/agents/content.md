@@ -52,7 +52,7 @@ content 包的字段级约定。**schema 变更三处同步纪律（ADR-015）**
 | `feature` | `{primitive, condition?, value?}` | 机制型特色铭纹：condition+primitive 表达，引擎原语池零新增（未注册原语忽略） |
 | `tags` | string[] | 标签加权抽取归类（tags/flags 分工：归类批量捞，裸布尔走 flags） |
 
-### Modifier（修饰符，#13 聚合管线消费）
+### Modifier（修饰符，#13 聚合管线已消费）
 
 ```json
 { "stat": "atk", "zone": "flat", "value": 5, "condition": { "element": "fire" } }
@@ -61,6 +61,16 @@ content 包的字段级约定。**schema 变更三处同步纪律（ADR-015）**
 - `zone`: `flat` → `addPct` → `mult` 三区按序结算（ADR-011），禁绕管直改。
 - `value`: 乘法区须 > 0；加法%区 ≥ −100（语义检查）。flat/addPct 可为负。
 - `condition`: `{element?, moveId?}` 至少一维（minProperties），命中才生效。
+
+**引擎聚合公式（#13 定版）**：`value = (base + Σflat) × (1 + ΣaddPct/100) × Πmult`，
+负值钳到 0；倍率类属性（gatherXp 等以 1 为基线）基线由消费方给定，百分点型
+增量（暴击率 +25）走 flat。引擎侧 `packages/engine/src/modifiers.ts` 提供
+`aggregateStat/aggregateStats/conditionMatches`；每条贡献自带来源语境
+`source{id,kind,uid?,name?}`，聚合快照 breakdown.applied 保留命中明细——
+事件流消费属性效果时第一天就携带完整语境（SexyMUD ADR-0006 教训）。
+引擎接缝：`playerMaxHp(content, skills, contributions?, context?)` 已走管线；
+静态全局产出方（宗门/转生天赋）经 `createGame({modifiers})` 注入；
+装备/丹药 buff（#4）在引擎内部从状态派生 Contribution，禁止另开直算路径。
 
 ## config 槽位数据化（#16）
 
@@ -72,7 +82,7 @@ content 包的字段级约定。**schema 变更三处同步纪律（ADR-015）**
 - `config` 为**可选节**：缺省时跳过槽位 xref 检查（既有包零破坏），引擎按无槽位兜底。
 - 起步三槽：`weapon` 法器 / `body` 护体 / `accessory` 灵饰。
 - 注意：武器招式注册（`combatText.moves` 键）目前锚定槽位 id `weapon`；
-  若未来槽位改名/多武器槽，须同步放宽该锚定（#13/#14 消费时处理）。
+  若未来槽位改名/多武器槽，须同步放宽该锚定（#14 装备票消费时处理）。
 
 ## enemies 系别字段（#16，可选零破坏）
 

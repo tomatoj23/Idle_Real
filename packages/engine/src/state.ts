@@ -7,6 +7,7 @@
  */
 import type { GameContent, SaveData } from './types.js';
 import { findActivity, playerMaxHp, skillsOf } from './contentView.js';
+import type { Contribution } from './modifiers.js';
 
 export interface SkillProgress {
   xp: number;
@@ -38,14 +39,18 @@ export interface GameState {
 
 const RESERVED_KEYS = new Set(['gp', 'hp', 'items', 'skills', 'activity', 'rngSeed']);
 
-export function initialState(content: GameContent, seed: number): GameState {
+export function initialState(
+  content: GameContent,
+  seed: number,
+  contributions: readonly Contribution[] = [],
+): GameState {
   const skills: Record<string, SkillProgress> = {};
   for (const skill of skillsOf(content)) {
     skills[skill.id] = { xp: 0 };
   }
   return {
     gp: 0,
-    hp: playerMaxHp(content, skills),
+    hp: playerMaxHp(content, skills, contributions),
     items: {},
     skills,
     activity: null,
@@ -69,10 +74,11 @@ export function restoreState(
   content: GameContent,
   save: SaveData,
   fallbackSeed: number,
+  contributions: readonly Contribution[] = [],
 ): GameState {
   const raw = save.state;
   const seed = isObj(raw) ? safeNumber(raw.rngSeed, fallbackSeed) >>> 0 : fallbackSeed >>> 0;
-  const state = initialState(content, seed);
+  const state = initialState(content, seed, contributions);
 
   // 透明收编未知顶层键（跳过原型污染键），已知键随后覆盖。
   if (isObj(raw)) {
@@ -85,7 +91,7 @@ export function restoreState(
 
   if (isObj(raw)) {
     state.gp = Math.max(0, Math.floor(safeNumber(raw.gp, 0)));
-    const cap = playerMaxHp(content, state.skills);
+    const cap = playerMaxHp(content, state.skills, contributions);
     state.hp = Math.min(cap, Math.max(0, safeNumber(raw.hp, cap)));
 
     if (isObj(raw.items)) {

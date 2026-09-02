@@ -21,6 +21,7 @@ import {
   type GameState,
 } from './state.js';
 import type { Clock, GameAction, GameContent, SaveData } from './types.js';
+import type { Contribution } from './modifiers.js';
 
 export interface CreateGameOptions {
   /** 由 content 包校验过的内容包；引擎零内容感知，仅透明持有。 */
@@ -33,6 +34,12 @@ export interface CreateGameOptions {
   readonly seed?: number;
   /** 注入随机源（测试用）；注入后引擎不再维护种子持久化。 */
   readonly rng?: () => number;
+  /**
+   * 静态全局修饰符贡献（issue #13 接缝）：宗门加成/转生天赋/测试桩等
+   * 无实体状态的产出方从这里注入，全部经聚合管线（ADR-011）结算；
+   * 装备/丹药 buff 等实体产出方由后续票在引擎内部从状态派生，不走此参数。
+   */
+  readonly contributions?: readonly Contribution[];
 }
 
 export interface Game {
@@ -64,9 +71,10 @@ export function createGame(options: CreateGameOptions): Game {
   const content = options.content;
   const events = new EventBus();
 
+  const contributions: readonly Contribution[] = options.contributions ?? [];
   const state: GameState = options.save
-    ? restoreState(content, options.save, options.seed ?? 1)
-    : initialState(content, options.seed ?? 1);
+    ? restoreState(content, options.save, options.seed ?? 1, contributions)
+    : initialState(content, options.seed ?? 1, contributions);
   let time = options.save?.time ?? 0;
 
   const injectedRng = options.rng;
@@ -78,7 +86,7 @@ export function createGame(options: CreateGameOptions): Game {
     return value;
   };
 
-  const hpCap = (): number => playerMaxHp(content, state.skills);
+  const hpCap = (): number => playerMaxHp(content, state.skills, contributions);
   const xpOf = (skillId: string): number => state.skills[skillId]?.xp ?? 0;
   const levelOf = (skillId: string): number => levelFromXp(xpOf(skillId));
 
