@@ -6,7 +6,7 @@
 
 ### Issue tracker
 
-GitHub Issues，用 `gh` CLI 读写（仓库当前尚无 git remote，接入 GitHub 后生效）。见 `docs/agents/issue-tracker.md`。
+GitHub Issues，用 `gh` CLI 读写。远端：`tomatoj23/Idle_Real`（main）。见 `docs/agents/issue-tracker.md`。
 
 ### Triage labels
 

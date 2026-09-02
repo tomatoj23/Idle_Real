@@ -13,7 +13,7 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
-**注意（本仓库现状）**：截至配置时本目录还不是 git 仓库、没有远端。上述命令在接入 GitHub（`git init` + 推送远端 + `gh auth login`）之前无法使用；在那之前，issue 类操作应退回本地 markdown（`.scratch/`）或直接询问用户。
+**本仓库远端**：`https://github.com/tomatoj23/Idle_Real.git`（main 分支，2026-09-02 接入）。
 
 ## Pull requests as a triage surface
 
