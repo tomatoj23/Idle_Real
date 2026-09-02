@@ -27,11 +27,16 @@ describe('createGame', () => {
     expect(game.events.drain().map((event) => event.time)).toEqual([100, 150]);
   });
 
-  it('从存档恢复游戏内时间，快照可再次导出', () => {
-    const save = { version: 1 as const, time: 1234, state: { realm: '练气' } };
-    const game = createGame({ content: minimalContent, save });
+  it('从存档恢复状态，快照可再次导出（含 savedAt；未知键透传）', () => {
+    const clock = new ManualClock(500);
+    const save = { version: 1 as const, time: 1234, savedAt: 500, state: { gp: 42, realm: '练气' } };
+    const game = createGame({ content: minimalContent, save, clock });
 
-    expect(game.snapshot()).toEqual(save);
+    const snapshot = game.snapshot();
+    expect(snapshot.version).toBe(1);
+    expect(snapshot.time).toBe(1234);
+    expect(snapshot.savedAt).toBe(500);
+    expect(snapshot.state).toMatchObject({ gp: 42, realm: '练气' });
   });
 
   it('订阅者实时收到推送，退订后不再接收', () => {

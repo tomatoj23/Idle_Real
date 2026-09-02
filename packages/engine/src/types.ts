@@ -30,6 +30,11 @@ export interface SaveData {
   readonly version: 1;
   /** 存档时的游戏内时间（毫秒）。 */
   readonly time: number;
+  /**
+   * 保存时刻的墙钟时间（clock.now()）。
+   * 离线补偿结算（ADR-013）的基准：重开时以 now - savedAt 折算欠账。
+   */
+  readonly savedAt?: number;
   /** 引擎扩展的透明状态区：引擎写入，UI 只读。 */
   readonly state: Readonly<Record<string, unknown>>;
 }

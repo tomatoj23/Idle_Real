@@ -1,20 +1,65 @@
 import './style.css';
-import { createGame } from '@wendao/engine';
+import {
+  attachAutoSave,
+  createGame,
+  localStorageSaveAdapter,
+  type GameAction,
+} from '@wendao/engine';
 import { loadDefaultContent } from '@wendao/content';
+import { buildUi } from './ui';
+
+const SAVE_KEY = 'wendao_changsheng_v2';
+const TICK_MS = 250;
+const AUTOSAVE_MS = 15000;
+const MAX_CATCHUP_MS = 5000;
 
 const app = document.querySelector<HTMLDivElement>('#app');
 
-// 启动强校验接缝（issue #2）：loadDefaultContent 内部先过 validateContentPack
-// 再返回，坏内容绝不进入运行时；失败时红屏列出字段级错误。
-let smoke = '';
 try {
+  if (!app) throw new Error('缺少 #app 挂载点');
+
+  // 启动强校验接缝（issue #2）：坏内容绝不进入运行时。
   const content = loadDefaultContent();
-  const game = createGame({ content });
-  game.tick(16);
-  const events = game.events.drain();
-  smoke =
-    `引擎冒烟：tick 事件 ×${events.length}；内容包：技能 ${content.skills.length}` +
-    ` · 物品 ${content.items.length} · 配方 ${content.recipes.length} · 敌人 ${content.enemies.length}`;
+
+  const adapter = localStorageSaveAdapter(SAVE_KEY);
+  const save = adapter.load() ?? undefined;
+  const game = createGame({
+    content,
+    save,
+    // 仅无档首启生效；应用层负责给一个随机味种子（引擎内三禁不放行）。
+    seed: Math.floor(Math.random() * 0x7fffffff),
+  });
+
+  const autoSave = attachAutoSave(game, adapter, AUTOSAVE_MS);
+  window.addEventListener('beforeunload', () => autoSave.flush());
+
+  // UI 只消费 events + snapshot（事件→日志/浮提示/重绘的接线在 buildUi 内）。
+  const ui = buildUi(app, content, () => game.snapshot(), game.events);
+  ui.bindActions((action: GameAction) => game.dispatch(action));
+
+  // 关闭期间的离线欠账：UI 订阅就绪后按墙钟差一次性补偿（ADR-013 观察时补偿）。
+  if (save?.savedAt !== undefined) {
+    const elapsed = Date.now() - save.savedAt;
+    if (elapsed > 0) game.settleOffline(elapsed);
+  }
+
+  // 挂机主循环：正常间隔直接 tick；超长间隔（后台强节流/系统休眠）封顶
+  // 在线步进，余量走 settleOffline 补偿——欠账不丢（ADR-013）。
+  let last = Date.now();
+  window.setInterval(() => {
+    const now = Date.now();
+    const elapsed = now - last;
+    last = now;
+    if (elapsed <= 0) return;
+    if (elapsed <= MAX_CATCHUP_MS) {
+      game.tick(elapsed);
+    } else {
+      game.tick(MAX_CATCHUP_MS);
+      game.settleOffline(elapsed - MAX_CATCHUP_MS);
+    }
+  }, TICK_MS);
+
+  ui.render();
 } catch (err) {
   console.error(err);
   if (app) {
@@ -23,12 +68,4 @@ try {
       <pre class="content-error">内容包校验失败，启动中止：\n${err instanceof Error ? err.message : String(err)}</pre>
     `;
   }
-}
-
-if (app && smoke !== '') {
-  app.innerHTML = `
-    <h1>问道长生</h1>
-    <p>新版引擎重建中——可玩切片将在后续版本开放。</p>
-    <p class="smoke">${smoke}</p>
-  `;
 }
