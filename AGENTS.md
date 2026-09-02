@@ -1,6 +1,6 @@
 # SmallRpg（《问道长生》）
 
-纯前端零依赖零构建的放置修仙网页游戏：双击 `index.html` 即玩。数值集中在 `js/data.js`，引擎与 UI 在 `js/game.js`，样式在 `css/style.css`，另有 `darkabyss/` 子目录。
+纯前端零依赖零构建的放置修仙网页游戏：双击 `index.html` 即玩。数值集中在 `js/data.js`，引擎与 UI 在 `js/game.js`，样式在 `css/style.css`。
 
 ## Agent skills
 
