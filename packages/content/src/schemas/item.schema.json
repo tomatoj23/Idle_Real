@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ItemsSection",
+  "description": "content 包 items 节：物品定义（mat 材料 / pill 丹药 / equip 装备）。类型相关字段（slot/bonuses/effect/heal）的按型约束由 validateContentPack 语义检查补全。",
+  "type": "array",
+  "minItems": 1,
+  "items": { "$ref": "#/definitions/item" },
+  "definitions": {
+    "item": {
+      "type": "object",
+      "required": ["id", "name", "icon", "type", "sell"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "稳定标识符：掉落表/配方/存档引用均用它"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 12
+        },
+        "icon": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2
+        },
+        "type": {
+          "enum": ["mat", "pill", "equip"]
+        },
+        "sell": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "出售价（灵石）"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "slot": {
+          "enum": ["weapon", "body", "accessory"],
+          "description": "equip 类：佩戴槽位"
+        },
+        "bonuses": { "$ref": "#/definitions/bonuses" },
+        "effect": { "$ref": "#/definitions/effect" },
+        "heal": { "$ref": "#/definitions/heal" }
+      }
+    },
+    "bonuses": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "description": "装备基础加成；至少一项",
+      "properties": {
+        "atk": { "type": "integer", "minimum": 0 },
+        "def": { "type": "integer", "minimum": 0 },
+        "hp": { "type": "integer", "minimum": 0 },
+        "crit": { "type": "integer", "minimum": 0, "maximum": 100, "description": "暴击率（百分点）" }
+      }
+    },
+    "effect": {
+      "type": "object",
+      "required": ["duration"],
+      "additionalProperties": false,
+      "description": "丹药持续增益",
+      "properties": {
+        "duration": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "增益时长（毫秒）"
+        },
+        "multipliers": { "$ref": "#/definitions/multipliers" },
+        "crit": { "type": "integer", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "multipliers": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "description": "属性倍率区，值必须 > 1",
+      "properties": {
+        "gatherXp": { "type": "number", "exclusiveMinimum": 1 },
+        "atk": { "type": "number", "exclusiveMinimum": 1 },
+        "def": { "type": "number", "exclusiveMinimum": 1 }
+      }
+    },
+    "heal": {
+      "type": "object",
+      "required": ["percent"],
+      "additionalProperties": false,
+      "description": "即时恢复：按气血上限百分比",
+      "properties": {
+        "percent": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

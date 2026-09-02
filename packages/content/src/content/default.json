@@ -1,0 +1,294 @@
+{
+  "skills": [
+    {
+      "id": "qi",
+      "name": "炼气",
+      "icon": "气",
+      "kind": "gather",
+      "description": "吐纳天地灵气，是修行之基",
+      "activities": [
+        { "name": "吐纳聚灵", "unlockLevel": 1, "interval": 2000, "exp": 5, "output": { "item": "qi1", "count": 1 } },
+        { "name": "凝灵成雾", "unlockLevel": 20, "interval": 3500, "exp": 14, "output": { "item": "qi2", "count": 1 } },
+        { "name": "摘星引罡", "unlockLevel": 45, "interval": 5500, "exp": 36, "output": { "item": "qi3", "count": 1 } }
+      ]
+    },
+    {
+      "id": "herb",
+      "name": "采药",
+      "icon": "药",
+      "kind": "gather",
+      "description": "寻访灵草异卉，以备丹炉",
+      "activities": [
+        { "name": "采青灵草", "unlockLevel": 1, "interval": 3000, "exp": 6, "output": { "item": "herb1", "count": 1 }, "byproduct": { "item": "silk", "chance": 0.5 } },
+        { "name": "采紫云花", "unlockLevel": 15, "interval": 4000, "exp": 15, "output": { "item": "herb2", "count": 1 }, "byproduct": { "item": "silk", "chance": 0.4 } },
+        { "name": "采玄冰莲", "unlockLevel": 35, "interval": 6000, "exp": 40, "output": { "item": "herb3", "count": 1 }, "byproduct": { "item": "bingsilk", "chance": 0.5 } },
+        { "name": "采万年灵芝", "unlockLevel": 60, "interval": 9000, "exp": 90, "output": { "item": "herb4", "count": 1 }, "byproduct": { "item": "bingsilk", "chance": 0.35 } }
+      ]
+    },
+    {
+      "id": "mine",
+      "name": "挖矿",
+      "icon": "矿",
+      "kind": "gather",
+      "description": "凿取山川金石，锻器之资",
+      "activities": [
+        { "name": "凿凡铁", "unlockLevel": 1, "interval": 2500, "exp": 6, "output": { "item": "ore1", "count": 1 } },
+        { "name": "采玄铁", "unlockLevel": 18, "interval": 4000, "exp": 16, "output": { "item": "ore2", "count": 1 } },
+        { "name": "取星辰砂", "unlockLevel": 40, "interval": 6500, "exp": 42, "output": { "item": "ore3", "count": 1 } },
+        { "name": "采灵晶", "unlockLevel": 65, "interval": 9500, "exp": 100, "output": { "item": "ore4", "count": 1 } }
+      ]
+    },
+    {
+      "id": "alchemy",
+      "name": "炼丹",
+      "icon": "丹",
+      "kind": "craft",
+      "description": "以丹炉炼化草木妖丹"
+    },
+    {
+      "id": "smith",
+      "name": "炼器",
+      "icon": "器",
+      "kind": "craft",
+      "description": "锻法器利剑，以助斗法"
+    },
+    {
+      "id": "combat",
+      "name": "斗法",
+      "icon": "斗",
+      "kind": "combat",
+      "description": "斩妖除魔，问道长生"
+    }
+  ],
+  "items": [
+    { "id": "qi1", "name": "散灵", "icon": "灵", "type": "mat", "sell": 2, "description": "最粗浅的天地灵气" },
+    { "id": "qi2", "name": "凝灵", "icon": "灵", "type": "mat", "sell": 9, "description": "凝练成团的精纯灵气" },
+    { "id": "qi3", "name": "天罡灵气", "icon": "罡", "type": "mat", "sell": 30, "description": "九天罡风中孕育的灵气之精" },
+    { "id": "herb1", "name": "青灵草", "icon": "青", "type": "mat", "sell": 4, "description": "常见灵草，药性温和" },
+    { "id": "herb2", "name": "紫云花", "icon": "紫", "type": "mat", "sell": 15, "description": "生于紫云崖畔，见光则隐" },
+    { "id": "herb3", "name": "玄冰莲", "icon": "冰", "type": "mat", "sell": 45, "description": "寒潭深处千年一开" },
+    { "id": "herb4", "name": "万年灵芝", "icon": "芝", "type": "mat", "sell": 120, "description": "吸纳万年月华的灵芝王" },
+    { "id": "silk", "name": "灵蚕丝", "icon": "蚕", "type": "mat", "sell": 6, "description": "灵蚕食灵草所吐之丝，可织法衣" },
+    { "id": "bingsilk", "name": "冰蚕丝", "icon": "冰", "type": "mat", "sell": 60, "description": "冰蚕食玄冰莲而生，丝寒韧如钢" },
+    { "id": "ore1", "name": "凡铁", "icon": "铁", "type": "mat", "sell": 5, "description": "凡间铁矿，勉强可用" },
+    { "id": "ore2", "name": "玄铁", "icon": "玄", "type": "mat", "sell": 20, "description": "色黑如墨，坚逾精钢" },
+    { "id": "ore3", "name": "星辰砂", "icon": "星", "type": "mat", "sell": 60, "description": "陨星碎屑，隐有星辉" },
+    { "id": "ore4", "name": "灵晶", "icon": "晶", "type": "mat", "sell": 180, "description": "天地灵气凝结之晶" },
+    { "id": "core1", "name": "浊妖丹", "icon": "丹", "type": "mat", "sell": 25, "description": "低阶妖兽内丹" },
+    { "id": "core2", "name": "煞妖丹", "icon": "煞", "type": "mat", "sell": 90, "description": "中阶妖兽内丹，煞气凝然" },
+    { "id": "core3", "name": "魔妖丹", "icon": "魔", "type": "mat", "sell": 320, "description": "大妖内丹，魔气冲霄" },
+
+    { "id": "pill_heal", "name": "回气丹", "icon": "回", "type": "pill", "sell": 18, "description": "服用后恢复三成气血", "heal": { "percent": 0.3 } },
+    { "id": "pill_qi", "name": "聚气丹", "icon": "聚", "type": "pill", "sell": 50, "description": "五分钟内采集类经验 +25%", "effect": { "duration": 300000, "multipliers": { "gatherXp": 1.25 } } },
+    { "id": "pill_atk", "name": "破煞丹", "icon": "破", "type": "pill", "sell": 130, "description": "五分钟内攻击 +20%", "effect": { "duration": 300000, "multipliers": { "atk": 1.2 } } },
+    { "id": "pill_def", "name": "凝神丹", "icon": "凝", "type": "pill", "sell": 180, "description": "五分钟内防御 +30%", "effect": { "duration": 300000, "multipliers": { "def": 1.3 } } },
+    { "id": "pill_gold", "name": "九转金丹", "icon": "金", "type": "pill", "sell": 700, "description": "五分钟内攻防 +40%、暴击 +10%", "effect": { "duration": 300000, "multipliers": { "atk": 1.4, "def": 1.4 }, "crit": 10 } },
+
+    { "id": "sword1", "name": "青锋剑", "icon": "剑", "type": "equip", "slot": "weapon", "sell": 30, "bonuses": { "atk": 6 } },
+    { "id": "sword2", "name": "玄铁重剑", "icon": "剑", "type": "equip", "slot": "weapon", "sell": 120, "bonuses": { "atk": 18 } },
+    { "id": "sword3", "name": "星辰剑", "icon": "剑", "type": "equip", "slot": "weapon", "sell": 400, "bonuses": { "atk": 45 } },
+    { "id": "sword4", "name": "诛仙剑", "icon": "剑", "type": "equip", "slot": "weapon", "sell": 1500, "bonuses": { "atk": 105 } },
+    { "id": "body1", "name": "布道袍", "icon": "衣", "type": "equip", "slot": "body", "sell": 35, "bonuses": { "def": 6, "hp": 25 } },
+    { "id": "body2", "name": "玄铁甲", "icon": "甲", "type": "equip", "slot": "body", "sell": 140, "bonuses": { "def": 16, "hp": 70 } },
+    { "id": "body3", "name": "星辰法衣", "icon": "袍", "type": "equip", "slot": "body", "sell": 450, "bonuses": { "def": 40, "hp": 180 } },
+    { "id": "body4", "name": "不灭金身甲", "icon": "铠", "type": "equip", "slot": "body", "sell": 1600, "bonuses": { "def": 90, "hp": 450 } },
+    { "id": "acc1", "name": "聚灵玉佩", "icon": "玉", "type": "equip", "slot": "accessory", "sell": 100, "bonuses": { "crit": 5 } },
+    { "id": "acc2", "name": "破妄金瞳", "icon": "瞳", "type": "equip", "slot": "accessory", "sell": 320, "bonuses": { "crit": 10 } },
+    { "id": "acc3", "name": "混沌钟铃", "icon": "铃", "type": "equip", "slot": "accessory", "sell": 1200, "bonuses": { "crit": 18, "atk": 15, "def": 15 } },
+
+    { "id": "scorp_tail", "name": "蝎尾刺", "icon": "刺", "type": "equip", "slot": "weapon", "sell": 25, "description": "妖物专属掉落，不可炼制", "bonuses": { "atk": 5 } },
+    { "id": "wolf_fang", "name": "妖狼牙坠", "icon": "坠", "type": "equip", "slot": "accessory", "sell": 60, "description": "妖物专属掉落，不可炼制", "bonuses": { "crit": 4, "atk": 2 } },
+    { "id": "corpse_nail", "name": "尸骨魔爪", "icon": "爪", "type": "equip", "slot": "weapon", "sell": 130, "description": "妖物专属掉落，不可炼制", "bonuses": { "atk": 15 } },
+    { "id": "ghost_mask", "name": "鬼面傩具", "icon": "面", "type": "equip", "slot": "accessory", "sell": 160, "description": "妖物专属掉落，不可炼制", "bonuses": { "def": 8, "crit": 6 } },
+    { "id": "blood_gourd", "name": "血魔血葫", "icon": "葫", "type": "equip", "slot": "weapon", "sell": 420, "description": "妖物专属掉落，不可炼制", "bonuses": { "atk": 40 } },
+    { "id": "luo_shayi", "name": "阴罗纱衣", "icon": "纱", "type": "equip", "slot": "body", "sell": 460, "description": "妖物专属掉落，不可炼制", "bonuses": { "def": 30, "hp": 220 } },
+    { "id": "mojun_blade", "name": "魔君残刃", "icon": "刃", "type": "equip", "slot": "weapon", "sell": 780, "description": "妖物专属掉落，不可炼制", "bonuses": { "atk": 70 } },
+    { "id": "mojun_guan", "name": "魔君骨冠", "icon": "冠", "type": "equip", "slot": "accessory", "sell": 1250, "description": "妖物专属掉落，不可炼制", "bonuses": { "atk": 10, "def": 10, "crit": 8 } },
+    { "id": "taotie_fang", "name": "饕餮獠牙", "icon": "牙", "type": "equip", "slot": "weapon", "sell": 1550, "description": "妖物专属掉落，不可炼制", "bonuses": { "atk": 95, "crit": 5 } },
+    { "id": "taotie_pi", "name": "饕餮皮裘", "icon": "裘", "type": "equip", "slot": "body", "sell": 1650, "description": "妖物专属掉落，不可炼制", "bonuses": { "def": 75, "hp": 500 } }
+  ],
+  "recipes": [
+    { "name": "炼制回气丹", "skill": "alchemy", "unlockLevel": 1, "output": { "item": "pill_heal", "count": 1 }, "materials": { "herb1": 2 }, "successRate": 0.75, "interval": 3000, "exp": 8 },
+    { "name": "炼制聚气丹", "skill": "alchemy", "unlockLevel": 12, "output": { "item": "pill_qi", "count": 1 }, "materials": { "herb1": 1, "herb2": 1 }, "successRate": 0.65, "interval": 4500, "exp": 20 },
+    { "name": "炼制破煞丹", "skill": "alchemy", "unlockLevel": 28, "output": { "item": "pill_atk", "count": 1 }, "materials": { "herb2": 2, "core1": 1 }, "successRate": 0.6, "interval": 6000, "exp": 45 },
+    { "name": "炼制凝神丹", "skill": "alchemy", "unlockLevel": 42, "output": { "item": "pill_def", "count": 1 }, "materials": { "herb3": 2 }, "successRate": 0.55, "interval": 7500, "exp": 80 },
+    { "name": "炼制九转金丹", "skill": "alchemy", "unlockLevel": 65, "output": { "item": "pill_gold", "count": 1 }, "materials": { "herb4": 2, "ore4": 1, "core2": 1 }, "successRate": 0.45, "interval": 12000, "exp": 220 },
+
+    { "name": "锻青锋剑", "skill": "smith", "unlockLevel": 1, "output": { "item": "sword1", "count": 1 }, "materials": { "ore1": 4, "qi1": 5 }, "successRate": 1, "interval": 4000, "exp": 10 },
+    { "name": "缝布道袍", "skill": "smith", "unlockLevel": 5, "output": { "item": "body1", "count": 1 }, "materials": { "silk": 3, "qi1": 6 }, "successRate": 1, "interval": 4500, "exp": 12 },
+    { "name": "琢聚灵玉佩", "skill": "smith", "unlockLevel": 12, "output": { "item": "acc1", "count": 1 }, "materials": { "qi1": 12, "ore1": 3 }, "successRate": 1, "interval": 5000, "exp": 20 },
+    { "name": "锻玄铁重剑", "skill": "smith", "unlockLevel": 20, "output": { "item": "sword2", "count": 1 }, "materials": { "ore2": 6, "qi1": 18 }, "successRate": 1, "interval": 6000, "exp": 35 },
+    { "name": "锻玄铁甲", "skill": "smith", "unlockLevel": 26, "output": { "item": "body2", "count": 1 }, "materials": { "ore2": 5, "qi1": 16 }, "successRate": 1, "interval": 6000, "exp": 38 },
+    { "name": "琢破妄金瞳", "skill": "smith", "unlockLevel": 36, "output": { "item": "acc2", "count": 1 }, "materials": { "qi2": 15, "ore2": 6 }, "successRate": 1, "interval": 7000, "exp": 60 },
+    { "name": "锻星辰剑", "skill": "smith", "unlockLevel": 45, "output": { "item": "sword3", "count": 1 }, "materials": { "ore3": 8, "qi2": 20 }, "successRate": 1, "interval": 8000, "exp": 100 },
+    { "name": "织星辰法衣", "skill": "smith", "unlockLevel": 52, "output": { "item": "body3", "count": 1 }, "materials": { "bingsilk": 4, "qi2": 18 }, "successRate": 1, "interval": 8500, "exp": 120 },
+    { "name": "铸混沌钟铃", "skill": "smith", "unlockLevel": 66, "output": { "item": "acc3", "count": 1 }, "materials": { "qi3": 20, "ore4": 5 }, "successRate": 1, "interval": 10000, "exp": 220 },
+    { "name": "锻诛仙剑", "skill": "smith", "unlockLevel": 75, "output": { "item": "sword4", "count": 1 }, "materials": { "ore4": 10, "qi3": 20, "core3": 2 }, "successRate": 1, "interval": 14000, "exp": 380 },
+    { "name": "锻不灭金身甲", "skill": "smith", "unlockLevel": 82, "output": { "item": "body4", "count": 1 }, "materials": { "ore4": 8, "qi3": 16 }, "successRate": 1, "interval": 15000, "exp": 420 }
+  ],
+  "enemies": [
+    {
+      "id": "e1", "name": "青鬃狼", "icon": "狼", "level": 1, "kind": "claw",
+      "hp": 60, "atk": 9, "def": 2, "attackInterval": 2800, "exp": 16, "gold": { "min": 4, "max": 10 },
+      "drops": [ { "item": "core1", "chance": 0.25 }, { "item": "herb1", "chance": 0.4 } ]
+    },
+    {
+      "id": "e2", "name": "赤尾妖蝎", "icon": "蝎", "level": 8, "kind": "claw",
+      "hp": 140, "atk": 17, "def": 6, "attackInterval": 2600, "exp": 40, "gold": { "min": 12, "max": 24 },
+      "drops": [ { "item": "core1", "chance": 0.35 }, { "item": "herb2", "chance": 0.3 } ]
+    },
+    {
+      "id": "e3", "name": "鬼面修士", "icon": "鬼", "level": 18, "kind": "magic",
+      "hp": 280, "atk": 32, "def": 14, "attackInterval": 2400, "exp": 95, "gold": { "min": 28, "max": 55 },
+      "drops": [ { "item": "core1", "chance": 0.5 }, { "item": "pill_heal", "chance": 0.15 }, { "item": "herb2", "chance": 0.25 } ]
+    },
+    {
+      "id": "e4", "name": "尸傀", "icon": "尸", "level": 30, "kind": "claw",
+      "hp": 560, "atk": 55, "def": 26, "attackInterval": 2600, "exp": 190, "gold": { "min": 55, "max": 95 },
+      "drops": [ { "item": "core2", "chance": 0.3 }, { "item": "ore2", "chance": 0.35 } ]
+    },
+    {
+      "id": "e5", "name": "血魔", "icon": "血", "level": 45, "kind": "magic",
+      "hp": 1050, "atk": 88, "def": 46, "attackInterval": 2400, "exp": 380, "gold": { "min": 110, "max": 190 },
+      "drops": [ { "item": "core2", "chance": 0.45 }, { "item": "herb3", "chance": 0.25 } ]
+    },
+    {
+      "id": "e6", "name": "阴罗妖将", "icon": "罗", "level": 60, "kind": "magic",
+      "hp": 2000, "atk": 135, "def": 82, "attackInterval": 2200, "exp": 700, "gold": { "min": 220, "max": 380 },
+      "drops": [ { "item": "core3", "chance": 0.3 }, { "item": "herb4", "chance": 0.15 } ]
+    },
+    {
+      "id": "e7", "name": "魔君残魂", "icon": "魔", "level": 78, "kind": "magic",
+      "hp": 3800, "atk": 205, "def": 145, "attackInterval": 2200, "exp": 1300, "gold": { "min": 420, "max": 720 },
+      "drops": [ { "item": "core3", "chance": 0.45 }, { "item": "ore4", "chance": 0.2 } ]
+    },
+    {
+      "id": "e8", "name": "上古凶兽·饕餮", "icon": "凶", "level": 92, "kind": "claw",
+      "hp": 6000, "atk": 240, "def": 150, "attackInterval": 2400, "exp": 2600, "gold": { "min": 850, "max": 1500 },
+      "drops": [ { "item": "core3", "chance": 0.8 }, { "item": "pill_gold", "chance": 0.2 } ]
+    }
+  ],
+  "gearDrops": [
+    { "enemy": "e1", "chance": 0.1, "pool": [ "scorp_tail", "wolf_fang" ] },
+    { "enemy": "e2", "chance": 0.1, "pool": [ "scorp_tail", "wolf_fang" ] },
+    { "enemy": "e3", "chance": 0.09, "pool": [ "corpse_nail", "ghost_mask" ] },
+    { "enemy": "e4", "chance": 0.09, "pool": [ "corpse_nail", "ghost_mask" ] },
+    { "enemy": "e5", "chance": 0.08, "pool": [ "blood_gourd", "luo_shayi" ] },
+    { "enemy": "e6", "chance": 0.08, "pool": [ "blood_gourd", "luo_shayi" ] },
+    { "enemy": "e7", "chance": 0.07, "pool": [ "mojun_blade", "mojun_guan" ] },
+    { "enemy": "e8", "chance": 0.15, "pool": [ "taotie_fang", "taotie_pi" ] }
+  ],
+  "combatText": {
+    "verbs": {
+      "sword": [
+        { "v": "刺", "limbs": [ "咽喉", "胸口", "后心", "小腹" ] },
+        { "v": "点", "limbs": [ "咽喉", "眉心", "腕脉" ] },
+        { "v": "撩", "limbs": [ "面门", "下颌" ] },
+        { "v": "抹", "limbs": [ "咽喉", "小腹" ] },
+        { "v": "扫", "limbs": [ "腰肋", "下盘", "双膝" ] },
+        { "v": "劈", "limbs": [ "面门", "肩头", "天灵" ] }
+      ],
+      "fist": [
+        { "v": "击", "limbs": [ "面门", "胸口", "小腹" ] },
+        { "v": "推", "limbs": [ "胸口", "肩头" ] },
+        { "v": "拍", "limbs": [ "天灵", "后心" ] }
+      ],
+      "claw": [
+        { "v": "抓", "limbs": [ "面门", "肩头", "胸口" ] },
+        { "v": "撕", "limbs": [ "腰肋", "手臂" ] },
+        { "v": "扑", "limbs": [ "咽喉", "胸口" ] },
+        { "v": "咬", "limbs": [ "手臂", "小腿" ] },
+        { "v": "扫", "limbs": [ "下盘", "腰肋" ] }
+      ],
+      "magic": [
+        { "v": "摄", "limbs": [ "眉心", "胸口" ] },
+        { "v": "卷", "limbs": [ "周身", "双足" ] },
+        { "v": "蚀", "limbs": [ "护体灵光", "周身灵机" ] },
+        { "v": "罩", "limbs": [ "周身要害" ] },
+        { "v": "点", "limbs": [ "眉心", "咽喉" ] }
+      ]
+    },
+    "moves": {
+      "fist": [ "搏兔一击", "石破天惊" ],
+      "sword1": [ "青虹一闪", "春草拂浪" ],
+      "sword2": [ "玄铁崩山", "力劈华山" ],
+      "sword3": [ "星河倒卷", "流光七杀" ],
+      "sword4": [ "诛仙一线", "万剑归宗" ],
+      "scorp_tail": [ "毒尾点穴" ],
+      "corpse_nail": [ "白骨摧心" ],
+      "blood_gourd": [ "血河翻浪" ],
+      "mojun_blade": [ "残月断魂" ],
+      "taotie_fang": [ "吞天一咬" ],
+      "e1": [ "饿虎扑食" ],
+      "e2": [ "毒尾横扫" ],
+      "e3": [ "摄魂指" ],
+      "e4": [ "腐骨尸爪" ],
+      "e5": [ "血遁噬魂" ],
+      "e6": [ "阴罗鬼爪" ],
+      "e7": [ "万魔噬心" ],
+      "e8": [ "吞天噬地" ]
+    },
+    "openings": [
+      "你渊渟岳峙，气机先锁对方周身要害",
+      "你灵力灌体，剑身嗡然轻鸣",
+      "你足尖一点，身形快若惊鸿",
+      "你屏息凝神，周身灵压骤然一沉"
+    ],
+    "critIntro": [
+      "你气机鼓荡，一式全力施为",
+      "你剑随身走，灵光暴涨"
+    ],
+    "cons": {
+      "hit": {
+        "light": [
+          "{defender}浑不在意，身上只添了一道浅痕，受创{d}点。",
+          "{defender}侧身欲避，终究慢了半分，受创{d}点。",
+          "剑气及体，{defender}闷哼一声，受创{d}点。"
+        ],
+        "mid": [
+          "{defender}闷哼一声，连退两步，受创{d}点。",
+          "{defender}踉跄半步，嘴角渗血，受创{d}点。",
+          "{defender}护体灵光一阵涟漪，受创{d}点。"
+        ],
+        "heavy": [
+          "{defender}喷出一口鲜血，倒退丈许，受创{d}点。",
+          "{defender}脸色煞白，踉跄几立不稳，受创{d}点。"
+        ],
+        "deadly": [
+          "{defender}气血翻涌，摇摇欲坠，这一击受创{d}点。",
+          "{defender}元气如潮水般溃散，受创{d}点。"
+        ]
+      },
+      "hurt": {
+        "light": [
+          "你灵机微转仍被扫中，受创{d}点。",
+          "你侧身避开大半，仍受创{d}点。"
+        ],
+        "mid": [
+          "你闷哼一声，气血微乱，受创{d}点。",
+          "你横剑格挡，仍被震得气血翻涌，受创{d}点。"
+        ],
+        "heavy": [
+          "你护体灵光剧震，喷出一口鲜血，受创{d}点。",
+          "你倒退数步方才稳住身形，受创{d}点。"
+        ],
+        "deadly": [
+          "你真元溃散，眼前阵阵发黑，受创{d}点。",
+          "你丹府震荡，摇摇欲坠，受创{d}点。"
+        ]
+      }
+    },
+    "fatal": {
+      "hit": "{defender}发出一声哀鸣，浑身灵光溃散如雪——这致命一击受创{d}点！",
+      "hurt": "你眼前一黑，五脏如遭锤击，受创{d}点——再挨一下只怕要道消身殒！"
+    }
+  },
+  "shop": [
+    { "item": "pill_heal", "price": 45 },
+    { "item": "pill_qi", "price": 120 },
+    { "item": "pill_atk", "price": 320 },
+    { "item": "pill_def", "price": 450 },
+    { "item": "silk", "price": 15 },
+    { "item": "bingsilk", "price": 90 }
+  ]
+}

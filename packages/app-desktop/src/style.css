@@ -31,3 +31,15 @@ p {
   color: #6f8f6a;
   font-size: 0.85rem;
 }
+
+.content-error {
+  color: #d98a8a;
+  font-size: 0.85rem;
+  text-align: left;
+  background: #241717;
+  border: 1px solid #5a2c2c;
+  border-radius: 6px;
+  padding: 1em 1.2em;
+  max-width: 640px;
+  white-space: pre-wrap;
+}

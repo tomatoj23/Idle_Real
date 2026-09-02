@@ -1,0 +1,140 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CombatTextSection",
+  "description": "content 包 combatText 节：战斗文案词库（CTEXT 体系数据化）。招式注册键的存在性（武器/敌人 id、fist 兜底）由语义校验补全。",
+  "type": "object",
+  "required": ["verbs", "moves", "openings", "critIntro", "cons", "fatal"],
+  "additionalProperties": false,
+  "properties": {
+    "verbs": {
+      "type": "object",
+      "required": ["sword", "fist", "claw", "magic"],
+      "additionalProperties": false,
+      "description": "动词部位池：sword 佩剑 / fist 拳脚 / claw 妖兽爪牙 / magic 阴风法术。四系恒需（fist 兼作兜底）",
+      "properties": {
+        "sword": { "$ref": "#/definitions/verbList" },
+        "fist": { "$ref": "#/definitions/verbList" },
+        "claw": { "$ref": "#/definitions/verbList" },
+        "magic": { "$ref": "#/definitions/verbList" }
+      }
+    },
+    "moves": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "招式名注册表：键为 fist、武器物品 id 或敌人 id；未注册者由引擎回退 fist",
+      "additionalProperties": { "$ref": "#/definitions/moveNames" }
+    },
+    "openings": {
+      "$ref": "#/definitions/lines",
+      "description": "起势（重击时加一段）"
+    },
+    "critIntro": {
+      "$ref": "#/definitions/lines",
+      "description": "暴击起势"
+    },
+    "cons": {
+      "type": "object",
+      "required": ["hit", "hurt"],
+      "additionalProperties": false,
+      "description": "后果词库：按伤害档分池，hit 打妖物 / hurt 玩家挨打",
+      "properties": {
+        "hit": { "$ref": "#/definitions/hitTiers" },
+        "hurt": { "$ref": "#/definitions/hurtTiers" }
+      }
+    },
+    "fatal": {
+      "type": "object",
+      "required": ["hit", "hurt"],
+      "additionalProperties": false,
+      "description": "致命一击专属（剩余生命=危 且 伤害=重/濒死）",
+      "properties": {
+        "hit": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "(?=.*\\{defender\\})(?=.*\\{d\\})"
+        },
+        "hurt": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\{d\\}"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "verbList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["v", "limbs"],
+        "additionalProperties": false,
+        "properties": {
+          "v": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4,
+            "description": "动作动词（单字为主）"
+          },
+          "limbs": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1, "maxLength": 6 }
+          }
+        }
+      }
+    },
+    "moveNames": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1, "maxLength": 12 }
+    },
+    "lines": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1, "maxLength": 60 }
+    },
+    "hitTiers": {
+      "type": "object",
+      "required": ["light", "mid", "heavy", "deadly"],
+      "additionalProperties": false,
+      "properties": {
+        "light": { "$ref": "#/definitions/hitLines" },
+        "mid": { "$ref": "#/definitions/hitLines" },
+        "heavy": { "$ref": "#/definitions/hitLines" },
+        "deadly": { "$ref": "#/definitions/hitLines" }
+      }
+    },
+    "hurtTiers": {
+      "type": "object",
+      "required": ["light", "mid", "heavy", "deadly"],
+      "additionalProperties": false,
+      "properties": {
+        "light": { "$ref": "#/definitions/hurtLines" },
+        "mid": { "$ref": "#/definitions/hurtLines" },
+        "heavy": { "$ref": "#/definitions/hurtLines" },
+        "deadly": { "$ref": "#/definitions/hurtLines" }
+      }
+    },
+    "hitLines": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80,
+        "pattern": "(?=.*\\{defender\\})(?=.*\\{d\\})"
+      }
+    },
+    "hurtLines": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80,
+        "pattern": "\\{d\\}"
+      }
+    }
+  }
+}

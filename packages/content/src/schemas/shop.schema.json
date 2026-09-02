@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ShopSection",
+  "description": "content 包 shop 节：坊市可购买物品。物品 id 存在性由语义校验补全。",
+  "type": "array",
+  "items": { "$ref": "#/definitions/shopEntry" },
+  "definitions": {
+    "shopEntry": {
+      "type": "object",
+      "required": ["item", "price"],
+      "additionalProperties": false,
+      "properties": {
+        "item": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "物品 id"
+        },
+        "price": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "售价（灵石）"
+        }
+      }
+    }
+  }
+}

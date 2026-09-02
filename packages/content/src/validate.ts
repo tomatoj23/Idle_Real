@@ -23,6 +23,8 @@ export interface JsonSchema {
   readonly maxLength?: number;
   readonly minItems?: number;
   readonly maxItems?: number;
+  readonly minProperties?: number;
+  readonly patternProperties?: Readonly<Record<string, JsonSchema>>;
   readonly pattern?: string;
   readonly $ref?: string;
   readonly definitions?: Readonly<Record<string, JsonSchema>>;
@@ -231,6 +233,12 @@ const CONSTRAINT_RULES: readonly ConstraintRule[] = [
     violated: (v, b) => (v as unknown[]).length > (b as number),
     message: (b) => `至多允许 ${b} 项`,
   },
+  {
+    keyword: 'minProperties',
+    pick: (s) => s.minProperties,
+    violated: (v, b) => isPlainObject(v) && Object.keys(v).length < (b as number),
+    message: (b) => `至少需要 ${b} 个字段`,
+  },
 ];
 
 function checkConstraints(
@@ -263,7 +271,8 @@ function checkObject(json: Record<string, unknown>, schema: JsonSchema, path: st
 
   for (const [key, value] of Object.entries(json)) {
     const childPath = `${path}/${key}`;
-    const childSchema = schema.properties?.[key];
+    // 子 schema 优先级：properties > patternProperties > additionalProperties。
+    const childSchema = schema.properties?.[key] ?? matchPatternProperty(key, schema);
     if (childSchema) {
       ctx.depth += 1;
       validateNode(value, childSchema, childPath, ctx);
@@ -280,6 +289,15 @@ function checkObject(json: Record<string, unknown>, schema: JsonSchema, path: st
       ctx.depth -= 1;
     }
   }
+}
+
+function matchPatternProperty(key: string, schema: JsonSchema): JsonSchema | undefined {
+  for (const [pattern, childSchema] of Object.entries(schema.patternProperties ?? {})) {
+    if (new RegExp(pattern).test(key)) {
+      return childSchema;
+    }
+  }
+  return undefined;
 }
 
 function isPlainObject(json: unknown): json is Record<string, unknown> {

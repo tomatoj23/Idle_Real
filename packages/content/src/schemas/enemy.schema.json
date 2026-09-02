@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EnemiesSection",
+  "description": "content 包 enemies 节：敌人数值、常规掉落与受击方式。每个敌人 id 须在 combatText.moves 注册招式名。",
+  "type": "array",
+  "minItems": 1,
+  "items": { "$ref": "#/definitions/enemy" },
+  "definitions": {
+    "enemy": {
+      "type": "object",
+      "required": ["id", "name", "icon", "level", "kind", "hp", "atk", "def", "attackInterval", "exp", "gold", "drops"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 12
+        },
+        "icon": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2
+        },
+        "level": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 99
+        },
+        "kind": {
+          "enum": ["claw", "magic"],
+          "description": "claw 爪牙 / magic 阴风法术（决定动词池）"
+        },
+        "hp": { "type": "number", "minimum": 1 },
+        "atk": { "type": "number", "minimum": 1 },
+        "def": { "type": "number", "minimum": 0 },
+        "attackInterval": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "攻击间隔（毫秒）"
+        },
+        "exp": {
+          "type": "number",
+          "minimum": 0,
+          "description": "击杀修为"
+        },
+        "gold": {
+          "type": "object",
+          "required": ["min", "max"],
+          "additionalProperties": false,
+          "description": "击杀掉落灵石区间",
+          "properties": {
+            "min": { "type": "integer", "minimum": 0 },
+            "max": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "drops": {
+          "type": "array",
+          "description": "常规物品掉落表",
+          "items": { "$ref": "#/definitions/drop" }
+        }
+      }
+    },
+    "drop": {
+      "type": "object",
+      "required": ["item", "chance"],
+      "additionalProperties": false,
+      "properties": {
+        "item": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "chance": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

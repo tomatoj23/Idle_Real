@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RecipesSection",
+  "description": "content 包 recipes 节：炼丹/炼器配方。材料表键为物品 id（存在性与所属技艺检查由语义校验补全）。",
+  "type": "array",
+  "minItems": 1,
+  "items": { "$ref": "#/definitions/recipe" },
+  "definitions": {
+    "recipe": {
+      "type": "object",
+      "required": ["name", "skill", "unlockLevel", "output", "materials", "successRate", "interval", "exp"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 12
+        },
+        "skill": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "所属技艺 id（须为 craft 类技能）"
+        },
+        "unlockLevel": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 99
+        },
+        "output": { "$ref": "#/definitions/stack" },
+        "materials": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "材料表：物品 id → 数量（失败时损失）",
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*$": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        },
+        "successRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "基础成功率；必定成功（炼器）填 1"
+        },
+        "interval": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "单次炼制耗时（毫秒）"
+        },
+        "exp": {
+          "type": "number",
+          "minimum": 0,
+          "description": "单次炼制修为"
+        }
+      }
+    },
+    "stack": {
+      "type": "object",
+      "required": ["item", "count"],
+      "additionalProperties": false,
+      "properties": {
+        "item": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "count": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}
