@@ -233,6 +233,12 @@ describe('validateContentPack · 去重与形态', () => {
     expectError(validateContentPack(busyCraft), '/skills/1/activities', 'shape');
   });
 
+  it('敌人灵石区间 min > max → shape', () => {
+    const pack = makePack();
+    pack.enemies[0].gold = { min: 10, max: 4 };
+    expectError(validateContentPack(pack), '/enemies/0/gold', 'shape');
+  });
+
   it('缺少内容节 → required', () => {
     const pack = makePack();
     delete pack.shop;

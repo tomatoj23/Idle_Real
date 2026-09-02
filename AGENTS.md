@@ -1,6 +1,6 @@
 # SmallRpg（《问道长生》）
 
-纯前端零依赖零构建的放置修仙网页游戏：双击 `index.html` 即玩。数值集中在 `js/data.js`，引擎与 UI 在 `js/game.js`，样式在 `css/style.css`。
+放置修仙游戏（双端路线：桌面 Electron / 移动 Capacitor），工程为 npm workspaces + TypeScript + vite：`packages/engine`（零内容感知的机制核心）、`packages/content`（内容包 schema + 校验 + 默认数值，见 `packages/content/src/content/default.json`）、`packages/editor`（内容编辑器）、`packages/app-desktop`（游戏壳）。旧版 `js/`、`index.html` 仅作设计参考，不再维护（ADR-003/008）。
 
 ## Agent skills
 

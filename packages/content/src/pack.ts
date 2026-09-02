@@ -131,7 +131,7 @@ function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
   checkShop(pack.shop, itemIndex, errors);
   checkWeaponMoves(weaponIds, pack.items, moves, errors);
   checkMoveRegistry(moves, weaponIds, enemyIndex, errors);
-  checkFallbackNet(pack, errors);
+  checkFistFallback(moves, errors);
 }
 
 /** id → 首次出现的下标。 */
@@ -315,6 +315,13 @@ function checkEnemies(
         message: `敌人 "${enemy.id}" 未在 combatText.moves 注册招式名`,
       });
     }
+    if (enemy.gold.min > enemy.gold.max) {
+      errors.push({
+        path: `/enemies/${i}/gold`,
+        keyword: 'shape',
+        message: `灵石区间 min(${enemy.gold.min}) 不得大于 max(${enemy.gold.max})`,
+      });
+    }
   });
 }
 
@@ -402,23 +409,19 @@ function checkMoveRegistry(
   }
 }
 
-/** 引擎安全兜底约定：fist 兜底招式与四系动词池必须恒在。 */
-function checkFallbackNet(pack: ContentPack, errors: ContentError[]): void {
-  if (!hasMove(pack.combatText.moves, 'fist')) {
+/**
+ * 引擎安全兜底约定：fist 兜底招式必须恒在（未注册招式一律回退拳脚）。
+ * 四系动词池由 combat-text schema 的 required + minItems 保证，此处不重复。
+ */
+function checkFistFallback(
+  moves: Readonly<Record<string, readonly string[]>>,
+  errors: ContentError[],
+): void {
+  if (!hasMove(moves, 'fist')) {
     errors.push({
       path: '/combatText/moves',
       keyword: 'xref',
       message: '缺少 fist 兜底招式（引擎约定：未注册招式一律回退拳脚）',
     });
-  }
-  const verbs = pack.combatText.verbs;
-  for (const style of ['sword', 'fist', 'claw', 'magic'] as const) {
-    if (!Array.isArray(verbs[style]) || verbs[style].length === 0) {
-      errors.push({
-        path: `/combatText/verbs/${style}`,
-        keyword: 'xref',
-        message: `动词池 ${style} 缺失或为空（战斗文案不可用）`,
-      });
-    }
   }
 }
