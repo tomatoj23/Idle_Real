@@ -25,6 +25,15 @@ export interface GameEvent {
   readonly data?: Readonly<Record<string, unknown>>;
 }
 
+/** 玩家属性面板（#4）：经修饰符管线聚合后的快照读数。 */
+export interface PlayerStatsView {
+  readonly atk: number;
+  readonly def: number;
+  /** 暴击率百分点（已钳上限）。 */
+  readonly crit: number;
+  readonly maxHp: number;
+}
+
 /** 存档快照。 */
 export interface SaveData {
   readonly version: 1;
@@ -37,6 +46,8 @@ export interface SaveData {
   readonly savedAt?: number;
   /** 引擎扩展的透明状态区：引擎写入，UI 只读。 */
   readonly state: Readonly<Record<string, unknown>>;
+  /** 玩家属性面板（#4）：应用层展示用，非存档必需。 */
+  readonly stats?: PlayerStatsView;
 }
 
 /**

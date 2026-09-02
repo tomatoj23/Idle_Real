@@ -8,16 +8,16 @@
 import type { ContentPack } from '@wendao/content';
 import {
   EventBus,
+  RARITIES,
   expBase,
   expToNext,
   levelFromXp,
-  playerMaxHp,
   type GameAction,
   type GameState,
   type SaveData,
 } from '@wendao/engine';
 
-export type TabId = 'skills' | 'bag' | 'shop';
+export type TabId = 'skills' | 'combat' | 'bag' | 'shop';
 
 export interface Ui {
   bindActions(handler: (action: GameAction) => void): void;
@@ -30,6 +30,7 @@ export interface Ui {
 }
 
 const MAX_LOG = 40;
+const MAX_FLOG = 60;
 
 const fmtSeconds = (ms: number): string => {
   const s = ms / 1000;
@@ -50,6 +51,7 @@ export function buildUi(
   const itemById = new Map(content.items.map((item) => [item.id, item]));
   const skillById = new Map(content.skills.map((skill) => [skill.id, skill]));
   const gatherSkills = content.skills.filter((skill) => skill.kind === 'gather');
+  const combatSkillId = content.skills.find((skill) => skill.kind === 'combat')?.id ?? '';
 
   let activeTab: TabId = 'skills';
   let selectedSkillId = gatherSkills[0]?.id ?? '';
@@ -61,12 +63,15 @@ export function buildUi(
     <header class="topbar">
       <div class="brand"><span class="sigil sigil-brand">道</span><span class="brand-name">问道长生</span></div>
       <div class="res">
+        <div class="res-item" title="攻 / 防 / 会心"><span class="sigil sigil-res">斗</span><b id="res-stats"></b></div>
         <div class="res-item" title="灵石"><span class="sigil sigil-res">石</span><b id="res-gp">0</b></div>
         <div class="res-item" title="气血"><span class="sigil sigil-res sigil-hp">血</span><div class="hpbar"><i id="res-hp"></i></div><span id="res-hp-text"></span></div>
       </div>
     </header>
+    <div class="buffbar" id="buffbar"></div>
     <nav class="tabs" id="tabs">
       <button class="tab" data-act="tab" data-tab="skills">修炼</button>
+      <button class="tab" data-act="tab" data-tab="combat">斗法</button>
       <button class="tab" data-act="tab" data-tab="bag">乾坤袋</button>
       <button class="tab" data-act="tab" data-tab="shop">坊市</button>
     </nav>
@@ -86,8 +91,10 @@ export function buildUi(
     return el;
   };
   const gpEl = $<HTMLElement>('#res-gp');
+  const statsEl = $<HTMLElement>('#res-stats');
   const hpFill = $<HTMLElement>('#res-hp');
   const hpText = $<HTMLElement>('#res-hp-text');
+  const buffbarEl = $<HTMLElement>('#buffbar');
   const pageEl = $<HTMLElement>('#page-root');
   const logEl = $<HTMLElement>('#log');
   const toastsEl = $<HTMLElement>('#toasts');
@@ -128,6 +135,30 @@ export function buildUi(
       case 'buy':
         handler({ type: 'shop:buy', payload: { item: el.dataset.item } });
         break;
+      case 'fight':
+        handler({ type: 'combat:start', payload: { enemyId: el.dataset.enemy } });
+        break;
+      case 'flee':
+        handler({ type: 'combat:stop' });
+        break;
+      case 'toggle-auto':
+        handler({ type: 'combat:auto' });
+        break;
+      case 'toggle-auto-eat':
+        handler({ type: 'combat:auto-eat' });
+        break;
+      case 'eat':
+        handler({ type: 'pill:eat', payload: { item: el.dataset.item } });
+        break;
+      case 'wear':
+        handler({ type: 'gear:equip', payload: { uid: Number(el.dataset.uid) } });
+        break;
+      case 'take-off':
+        handler({ type: 'gear:unequip', payload: { slot: el.dataset.slot } });
+        break;
+      case 'sell-gear':
+        handler({ type: 'gear:sell', payload: { uid: Number(el.dataset.uid) } });
+        break;
     }
   });
 
@@ -145,18 +176,57 @@ export function buildUi(
     const data = event.data ?? {};
     switch (event.type) {
       case 'loot':
-        if (data.source === 'byproduct') {
+        if (data.source === 'gear') {
+          flog(`妖物遗落【${data.itemName}】`, 't-gold');
+          log(`夺得【${data.itemName}】`, 't-gold');
+          if (data.rarity === 'epic') toast(`天降异宝！【${data.itemName}】`);
+        } else if (data.source === 'byproduct') {
           log(`偶得 ${nameOf(data.item)}×${data.count}`, 't-jade');
-        } else {
+        } else if (data.source === 'drop') {
           log(`得 ${nameOf(data.item)}×${data.count}`);
         }
+        break;
+      case 'attack':
+        // 战斗叙事：完整文案入战斗日志（伤害已嵌入 {d} 槽，非干瘪直出）
+        flog(String(data.text ?? ''), data.side === 'player' ? (data.crit ? 't-gold' : 't-jade') : 't-red');
+        break;
+      case 'combat-note':
+        flog(String(data.text ?? ''), 't-sys');
+        break;
+      case 'victory': {
+        const compare = data.compare ? `（${data.compare}）` : '';
+        flog(`【${data.enemyName}】轰然倒地！${data.summary}${compare}`, 't-gold');
+        log(`击倒【${data.enemyName}】：${data.summary}${compare}`, 't-gold');
+        break;
+      }
+      case 'defeat':
+        flog(`你不敌【${data.enemyName}】，真元耗尽，被同门救回`, 't-red');
+        toast('斗法落败，幸得同门相救', 'red');
+        break;
+      case 'pill:eat':
+        if (data.kind === 'heal') {
+          flog(`服下【${data.itemName}】，回气 ${data.healed} 点`, 't-sys');
+        } else {
+          toast(`服下【${data.itemName}】`);
+          log(`服下【${data.itemName}】，药力${data.minutes}分`, 't-jade');
+        }
+        break;
+      case 'equip:wear':
+        toast(`已佩【${data.name}】`);
+        log(`佩上【${data.name}】`, 't-jade');
+        break;
+      case 'equip:remove':
+        log(`卸下【${data.name ?? ''}】`);
+        break;
+      case 'exp':
+        if (data.skillId === combatSkillId) flog(`斗法修为 +${data.exp}`, 't-sys');
         break;
       case 'levelup':
         toast(`【${data.skillName}】修为精进，升至 ${data.level} 层`);
         log(`【${data.skillName}】升至 ${data.level} 层`, 't-gold');
         break;
       case 'sell':
-        log(`卖出 ${data.itemName}×${data.count}，得 ${data.gained} 灵石`);
+        log(`卖出 ${data.itemName}，得 ${data.gained} 灵石`);
         break;
       case 'buy':
         log(`购入 ${data.itemName}×${data.count}，花去 ${data.cost} 灵石`);
@@ -185,7 +255,7 @@ export function buildUi(
 
   /* ---------- 渲染 ---------- */
 
-  const signature = (st: GameState): string =>
+  const signature = (st: GameState, snap: SaveData): string =>
     JSON.stringify([
       activeTab,
       selectedSkillId,
@@ -193,32 +263,77 @@ export function buildUi(
       Object.entries(st.items).sort(),
       Object.entries(st.skills).map(([id, p]) => [id, p.xp]).sort(),
       st.activity ? [st.activity.skillId, st.activity.index] : null,
+      st.combat ? [st.combat.enemyId, Math.floor(st.combat.ehp), st.combat.respT > 0] : null,
+      Object.entries(st.equips),
+      st.gear.length,
+      st.gearSeq,
+      Object.keys(st.buffs).sort(),
+      st.autoFight,
+      st.autoEat,
+      Object.keys(st.lastEncounter).length,
+      snap.stats ?? null,
     ]);
 
   function render(): void {
-    const st = getSnapshot().state as unknown as GameState;
+    const snap = getSnapshot();
+    const st = snap.state as unknown as GameState;
 
     gpEl.textContent = Math.floor(st.gp).toLocaleString('zh-CN');
-    const cap = playerMaxHp(content, st.skills);
+    const cap = snap.stats?.maxHp ?? Math.max(1, Math.floor(st.hp));
     hpFill.style.width = `${Math.max(0, Math.min(100, (st.hp / cap) * 100))}%`;
     hpText.textContent = `${Math.floor(st.hp)}/${cap}`;
+    if (snap.stats) {
+      statsEl.textContent = `${snap.stats.atk}/${snap.stats.def}/${snap.stats.crit}%`;
+    }
+    renderBuffbar(st, snap.time);
 
     for (const el of tabButtons) {
       el.classList.toggle('active', el.dataset.tab === activeTab);
     }
 
-    const sig = signature(st);
+    const sig = signature(st, snap);
     if (sig !== lastSig) {
       lastSig = sig;
-      renderPage(st);
+      renderPage(st, snap);
     }
     updateActivityBars(st);
+    updateEnemyBar(st);
+    syncFlogScroll();
   }
 
-  function renderPage(st: GameState): void {
+  /** 顶栏丹药增益条：剩余时长轻量刷新（每帧），结构变化由 signature 驱动。 */
+  function renderBuffbar(st: GameState, now: number): void {
+    const entries = Object.entries(st.buffs);
+    if (buffbarEl.childElementCount !== entries.length) {
+      buffbarEl.innerHTML = entries
+        .map(([id]) => {
+          const item = itemById.get(id);
+          return `<span class="buff-chip" data-buff="${id}">${esc(item?.icon ?? '丹')} ${esc(item?.name ?? id)} <b></b></span>`;
+        })
+        .join('');
+    }
+    for (const el of Array.from(buffbarEl.children) as HTMLElement[]) {
+      const id = el.dataset.buff ?? '';
+      const left = Math.max(0, Math.ceil(((st.buffs[id] ?? 0) - now) / 1000));
+      const label = el.querySelector('b');
+      if (label) label.textContent = left >= 60 ? `${Math.floor(left / 60)} 分` : `${left} 秒`;
+    }
+  }
+
+  function renderPage(st: GameState, snap: SaveData): void {
     if (activeTab === 'skills') pageEl.innerHTML = renderSkills(st);
+    else if (activeTab === 'combat') pageEl.innerHTML = renderCombat(st, snap);
     else if (activeTab === 'bag') pageEl.innerHTML = renderBag(st);
     else pageEl.innerHTML = renderShop(st);
+    if (activeTab === 'combat') {
+      // 页面重建会丢滚动位置与日志内容：全量重放战斗日志并恢复到底部。
+      const box = pageEl.querySelector<HTMLElement>('#flog');
+      if (box) {
+        box.innerHTML = '';
+        for (const line of flogBuffer) appendFlogLine(box, line.text, line.cls);
+      }
+      syncFlogScroll();
+    }
   }
 
   function renderSkills(st: GameState): string {
@@ -309,6 +424,145 @@ export function buildUi(
       </section>`;
   }
 
+  /* ---------- 斗法页（issue #4） ---------- */
+
+  /** 战斗日志内存缓冲：页面未挂载时暂存，进页全量重放（容量受控）。 */
+  const flogBuffer: Array<{ text: string; cls: string }> = [];
+
+  function flog(text: string, cls = ''): void {
+    flogBuffer.push({ text, cls });
+    if (flogBuffer.length > MAX_FLOG) flogBuffer.splice(0, flogBuffer.length - MAX_FLOG);
+    const el = pageEl.querySelector<HTMLElement>('#flog');
+    if (el) {
+      appendFlogLine(el, text, cls);
+      syncFlogScroll();
+    }
+  }
+
+  function appendFlogLine(box: HTMLElement, text: string, cls: string): void {
+    const div = document.createElement('div');
+    if (cls) div.className = cls;
+    div.textContent = text;
+    box.appendChild(div);
+    while (box.children.length > MAX_FLOG) box.firstElementChild?.remove();
+  }
+
+  /** 战斗日志自动滚底（旧版踩坑回归：页面重建后必须恢复到底部）。 */
+  function syncFlogScroll(): void {
+    const el = pageEl.querySelector<HTMLElement>('#flog');
+    if (el) el.scrollTop = el.scrollHeight;
+  }
+
+  function renderCombat(st: GameState, snap: SaveData): string {
+    const combat = st.combat;
+    const clv = levelFromXp(st.skills['combat']?.xp ?? 0);
+
+    const pills = content.items
+      .filter((item) => item.type === 'pill' && (st.items[item.id] ?? 0) > 0)
+      .map(
+        (item) =>
+          `<button class="btn btn-pill" data-act="eat" data-item="${item.id}">${esc(item.icon)} ${esc(item.name)} ×${st.items[item.id]}</button>`,
+      )
+      .join('');
+
+    const toggles = `
+      <div class="combat-toggles">
+        <button class="btn btn-ghost${st.autoFight ? ' on' : ''}" data-act="toggle-auto">自动再战${st.autoFight ? ' · 开' : ' · 关'}</button>
+        <button class="btn btn-ghost${st.autoEat ? ' on' : ''}" data-act="toggle-auto-eat">自动嗑丹${st.autoEat ? ' · 开' : ' · 关'}</button>
+      </div>`;
+
+    if (combat) {
+      const enemy = content.enemies.find((entry) => entry.id === combat.enemyId);
+      if (!enemy) return '<section class="page"><p class="empty">妖物不知所踪。</p></section>';
+      const ehpPct = Math.max(0, Math.min(100, (combat.ehp / enemy.hp) * 100));
+      const resting = combat.respT > 0;
+      const hpPct = Math.max(0, Math.min(100, (st.hp / (snap.stats?.maxHp ?? enemy.hp)) * 100));
+      return `
+        <section class="page">
+          <h2 class="page-title">斗法</h2>
+          <article class="enemy-card fighting">
+            <div class="enemy-face"><span class="sigil sigil-big">${esc(enemy.icon)}</span></div>
+            <div class="enemy-main">
+              <div class="enemy-head"><b>${esc(enemy.name)}</b><span class="enemy-lv">${enemy.level} 层</span>${resting ? '<em class="act-badge">休整中</em>' : ''}</div>
+              <div class="bar bar-red"><i data-bar="enemy" style="width:${ehpPct}%"></i></div>
+              <div class="enemy-sub">敌 ${Math.max(0, Math.ceil(combat.ehp))}/${enemy.hp}</div>
+              <div class="bar bar-jade"><i style="width:${hpPct}%"></i></div>
+              <div class="enemy-sub">己方 ${Math.floor(st.hp)}/${snap.stats?.maxHp ?? '—'} · 攻 ${snap.stats?.atk ?? '—'} 防 ${snap.stats?.def ?? '—'} 会心 ${snap.stats?.crit ?? '—'}%</div>
+            </div>
+            <div class="enemy-ops">
+              <button class="btn btn-ghost" data-act="flee">撤退</button>
+            </div>
+          </article>
+          ${toggles}
+          ${pills ? `<div class="pill-bar">${pills}</div>` : '<p class="page-sub">囊中无丹。</p>'}
+          <div class="flog" id="flog"></div>
+        </section>`;
+    }
+
+    const cards = content.enemies
+      .map((enemy) => {
+        const locked = clv + 2 < enemy.level;
+        const gold = enemy.gold ?? { min: 0, max: 0 };
+        const drops = (enemy.drops ?? [])
+          .map((drop) => itemById.get(drop.item)?.name ?? drop.item)
+          .slice(0, 3)
+          .join('、');
+        return `<article class="enemy-card${locked ? ' locked' : ''}">
+          <div class="enemy-face"><span class="sigil sigil-big">${esc(enemy.icon)}</span></div>
+          <div class="enemy-main">
+            <div class="enemy-head"><b>${esc(enemy.name)}</b><span class="enemy-lv">${enemy.level} 层</span></div>
+            <div class="enemy-sub">气血 ${enemy.hp} · 攻 ${enemy.atk} · 防 ${enemy.def} · 修为 +${enemy.exp}</div>
+            <div class="enemy-sub">灵石 ${gold.min}~${gold.max}${drops ? ` · 掉落 ${esc(drops)}` : ''}</div>
+          </div>
+          <div class="enemy-ops">
+            ${
+              locked
+                ? `<span class="act-lockmsg">需 ${enemy.level - 2} 层</span>`
+                : `<button class="btn" data-act="fight" data-enemy="${enemy.id}">挑战</button>`
+            }
+          </div>
+        </article>`;
+      })
+      .join('');
+
+    return `
+      <section class="page">
+        <h2 class="page-title">斗法</h2>
+        <p class="page-sub">斩妖除魔，问道长生。当前斗法 ${clv} 层。</p>
+        <div class="enemy-grid">${cards}</div>
+        <div class="pill-bar">${pills || ''}</div>
+      </section>`;
+  }
+
+  /* ---------- 乾坤袋：装备实例卡 ---------- */
+
+  const rarityClass = (rarity: string): string =>
+    ['common', 'fine', 'rare', 'epic'].includes(rarity) ? `r-${rarity}` : 'r-common';
+  const rarityName = (rarity: string): string => RARITIES[rarity as keyof typeof RARITIES]?.name ?? '寻常';
+
+  const STAT_LABEL: Readonly<Record<string, string>> = { atk: '攻', def: '防', hp: '血', crit: '暴' };
+
+  function gearCardHtml(st: GameState, gear: { uid: number; itemId: string; rarity: string; affixes: readonly { name: string; stat: string; val: number }[] }): string {
+    const item = itemById.get(gear.itemId);
+    const worn = Object.entries(st.equips).find(([, uid]) => uid === gear.uid);
+    const mult = RARITIES[gear.rarity as keyof typeof RARITIES]?.mult ?? 1;
+    const baseRows = Object.entries(item?.bonuses ?? {})
+      .filter(([, v]) => (v ?? 0) > 0)
+      .map(([stat, v]) => `${STAT_LABEL[stat] ?? stat}+${Math.round((v ?? 0) * mult)}`);
+    const affixRows = gear.affixes.map((a) => `<span class="txt-dim">${esc(a.name)}</span> ${STAT_LABEL[a.stat] ?? a.stat}+${a.val}${a.stat === 'crit' ? '%' : ''}`);
+    const rows = [...baseRows, ...affixRows].join('、') || '无属性';
+    return `<div class="gear-card ${rarityClass(gear.rarity)}">
+      <span class="sigil sigil-sm">${esc(item?.icon ?? '器')}</span>
+      <span class="gear-name">${rarityName(gear.rarity)}·${esc(item?.name ?? gear.itemId)}<small>${rows}</small></span>
+      <span class="bag-ops">
+        ${worn
+          ? `<button class="btn btn-ghost" data-act="take-off" data-slot="${worn[0]}">卸下</button>`
+          : `<button class="btn" data-act="wear" data-uid="${gear.uid}">佩戴</button>`}
+        ${worn ? '' : `<button class="btn btn-ghost" data-act="sell-gear" data-uid="${gear.uid}">卖出</button>`}
+      </span>
+    </div>`;
+  }
+
   function renderBag(st: GameState): string {
     const owned = content.items.filter((item) => (st.items[item.id] ?? 0) > 0);
     const groups: Array<{ title: string; types: readonly string[] }> = [
@@ -336,7 +590,21 @@ export function buildUi(
         return rows ? `<h3 class="group-title">${title}</h3>${rows}` : '';
       })
       .join('');
-    return `<section class="page"><h2 class="page-title">乾坤袋</h2>${body || '<p class="empty">乾坤袋空空如也——先去「修炼」采些灵材。</p>'}</section>`;
+    const worn = Object.entries(st.equips)
+      .map(([slot, uid]) => st.gear.find((entry) => entry.uid === uid))
+      .filter((gear): gear is NonNullable<typeof gear> => gear !== undefined)
+      .map((gear) => gearCardHtml(st, gear))
+      .join('');
+    const loose = st.gear
+      .filter((gear) => !Object.values(st.equips).includes(gear.uid))
+      .map((gear) => gearCardHtml(st, gear))
+      .join('');
+    const gearSection =
+      worn || loose
+        ? `<h3 class="group-title">法器 · 佩戴中</h3>${worn || '<p class="empty">未佩戴法器。</p>'}
+           <h3 class="group-title">法器 · 囊中</h3>${loose || '<p class="empty">囊中别无长物。</p>'}`
+        : '';
+    return `<section class="page"><h2 class="page-title">乾坤袋</h2>${body}${gearSection || '<p class="empty">乾坤袋空空如也——先去「修炼」采些灵材。</p>'}</section>`;
   }
 
   function renderShop(st: GameState): string {
@@ -355,6 +623,15 @@ export function buildUi(
       })
       .join('');
     return `<section class="page"><h2 class="page-title">坊市</h2><p class="page-sub">以灵石易物，解燃眉之需。</p>${rows}</section>`;
+  }
+
+  /** 敌方血条轻量更新（战斗页存在时每帧刷新）。 */
+  function updateEnemyBar(st: GameState): void {
+    const bar = pageEl.querySelector<HTMLElement>('[data-bar="enemy"]');
+    if (!bar || !st.combat) return;
+    const enemy = content.enemies.find((entry) => entry.id === st.combat?.enemyId);
+    if (!enemy) return;
+    bar.style.width = `${Math.max(0, Math.min(100, (st.combat.ehp / enemy.hp) * 100))}%`;
   }
 
   function updateActivityBars(st: GameState): void {

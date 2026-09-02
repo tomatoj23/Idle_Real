@@ -39,12 +39,35 @@ export interface SkillView {
   readonly activities?: readonly ActivityView[];
 }
 
+export interface ItemBonusesView {
+  readonly atk?: number;
+  readonly def?: number;
+  readonly hp?: number;
+  readonly crit?: number;
+}
+
+/** 丹药持续增益（duration 毫秒；multipliers 键 = 属性 id，值 = 倍率）。 */
+export interface ItemEffectView {
+  readonly duration: number;
+  readonly multipliers?: Readonly<Record<string, number>>;
+  /** 额外暴击率（百分点）。 */
+  readonly crit?: number;
+}
+
 export interface ItemView {
   readonly id: string;
   readonly name: string;
   readonly icon: string;
   readonly type: string;
   readonly sell: number;
+  /** equip 类：佩戴槽位 id。 */
+  readonly slot?: string;
+  /** equip 类：基础加成模板（稀有度/词条在实例化时另行掷定）。 */
+  readonly bonuses?: ItemBonusesView;
+  /** pill 类：持续增益。 */
+  readonly effect?: ItemEffectView;
+  /** pill 类：即时恢复（percent = 气血上限比例）。 */
+  readonly heal?: { readonly percent: number };
 }
 
 export interface ShopEntryView {
@@ -113,6 +136,80 @@ export function combatLevelOf(
 ): number {
   const combat = skillsOf(content).find((skill) => skill.kind === 'combat');
   return combat ? levelFromXp(skills[combat.id]?.xp ?? 0) : 0;
+}
+
+/* ---------- 敌人（issue #4） ---------- */
+
+/** 敌人掉落行：物品 id + 掉率。 */
+export interface EnemyDropView {
+  readonly item: string;
+  readonly chance: number;
+}
+
+export interface EnemyView {
+  readonly id: string;
+  readonly name: string;
+  readonly icon: string;
+  readonly level: number;
+  /** 动词池键（claw/magic…）；缺省按 claw。 */
+  readonly kind?: string;
+  readonly hp: number;
+  readonly atk: number;
+  readonly def: number;
+  /** 攻击间隔（毫秒）。 */
+  readonly attackInterval?: number;
+  readonly exp: number;
+  /** 击杀灵石掉落区间。 */
+  readonly gold?: { readonly min: number; readonly max: number };
+  readonly drops?: readonly EnemyDropView[];
+  /** 系别（#15 起启用）；缺省 = 凡击。 */
+  readonly element?: string;
+}
+
+export function enemiesOf(content: GameContent): readonly EnemyView[] {
+  const enemies = (content as { enemies?: unknown }).enemies;
+  return Array.isArray(enemies) ? (enemies as EnemyView[]) : [];
+}
+
+export function findEnemy(content: GameContent, enemyId: string): EnemyView | undefined {
+  return enemiesOf(content).find((enemy) => enemy.id === enemyId);
+}
+
+/* ---------- 异宝掉落表 ---------- */
+
+export interface GearDropView {
+  readonly enemy: string;
+  readonly chance: number;
+  readonly pool: readonly string[];
+}
+
+export function gearDropsOf(content: GameContent): readonly GearDropView[] {
+  const drops = (content as { gearDrops?: unknown }).gearDrops;
+  return Array.isArray(drops) ? (drops as GearDropView[]) : [];
+}
+
+export function findGearDrop(content: GameContent, enemyId: string): GearDropView | undefined {
+  return gearDropsOf(content).find((drop) => drop.enemy === enemyId);
+}
+
+/* ---------- 战斗词库（CTEXT 数据化，issue #2/#4） ---------- */
+
+/**
+ * 战斗词库视图：按内容包约定形状读取 combatText 节，
+ * 缺节返回空对象（combat.ts 全链路安全兜底）。
+ */
+export function combatTextOf(content: GameContent): {
+  readonly verbs?: unknown;
+  readonly moves?: unknown;
+  readonly openings?: unknown;
+  readonly critIntro?: unknown;
+  readonly cons?: unknown;
+  readonly fatal?: unknown;
+} {
+  const text = (content as { combatText?: unknown }).combatText;
+  return text && typeof text === 'object' && !Array.isArray(text)
+    ? (text as { verbs?: unknown; moves?: unknown; openings?: unknown; critIntro?: unknown; cons?: unknown; fatal?: unknown })
+    : {};
 }
 
 /**

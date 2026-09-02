@@ -5,23 +5,59 @@ import {
   HP_REGEN_FRACTION_PER_SEC,
   MAX_LEVEL,
   levelFromXp,
+  maxHpForLevel,
 } from './progression.js';
 import {
+  combatLevelOf,
+  combatTextOf,
   findActivity,
+  findEnemy,
+  findGearDrop,
   findItem,
   findShopEntry,
   playerMaxHp,
+  skillsOf,
   type ActivityView,
+  type EnemyView,
+  type ItemView,
   type SkillView,
 } from './contentView.js';
+import {
+  AUTO_EAT_HP_FRACTION,
+  CRIT_CAP,
+  CRIT_MULTIPLIER,
+  LOW_HP_FRACTION,
+  PLAYER_ATTACK_INTERVAL,
+  VICTORY_REST_MS,
+  calcDmg,
+  compareEncounterText,
+  hitTierOf,
+  makeAttackText,
+  pickText,
+  rollCrit,
+  summarizeRounds,
+  type DamageTier,
+} from './combat.js';
+import {
+  gearContributions,
+  gearName,
+  gearSell,
+  makeGear,
+  type GearInstance,
+} from './gear.js';
 import {
   cloneState,
   initialState,
   restoreState,
+  type CombatState,
   type GameState,
 } from './state.js';
-import type { Clock, GameAction, GameContent, SaveData } from './types.js';
-import type { Contribution } from './modifiers.js';
+import type { Clock, GameAction, GameContent, PlayerStatsView, SaveData } from './types.js';
+import {
+  aggregateStats,
+  type AggregationContext,
+  type Contribution,
+} from './modifiers.js';
 
 export interface CreateGameOptions {
   /** 由 content 包校验过的内容包；引擎零内容感知，仅透明持有。 */
@@ -85,10 +121,117 @@ export function createGame(options: CreateGameOptions): Game {
     state.rngSeed = rng.state(); // 随机状态随档持久化（ADR-013）
     return value;
   };
-
-  const hpCap = (): number => playerMaxHp(content, state.skills, contributions);
+  const hpCap = (): number => playerStats(hpContext()).maxHp;
   const xpOf = (skillId: string): number => state.skills[skillId]?.xp ?? 0;
   const levelOf = (skillId: string): number => levelFromXp(xpOf(skillId));
+  if (options.save) {
+    // 恢复后按当前佩戴/增益重 clamp 气血（state.ts 只兜无装备基线上限）。
+    state.hp = Math.min(state.hp, Math.max(1, playerStats({ moveId: weaponMoveKey() }).maxHp));
+  }
+
+  const combatSkill = (): SkillView | undefined => skillsOf(content).find((skill) => skill.kind === 'combat');
+  const combatText = combatTextOf(content);
+
+  /** 气血上限语境：佩戴武器视为持续生效的 moveId 语境；脱战无来袭系别。 */
+  const hpContext = (): AggregationContext => ({ moveId: weaponMoveKey() });
+
+  /* ---------- 玩家属性：装备 + 丹药 buff + 静态注入 → 单一聚合管线（ADR-011） ---------- */
+
+  /** 佩戴中的装备实例（槽位与装备定义一致才有效）。 */
+  function wornGear(): Array<{ readonly gear: GearInstance; readonly item: ItemView; readonly slot: string }> {
+    const out: Array<{ gear: GearInstance; item: ItemView; slot: string }> = [];
+    for (const [slot, uid] of Object.entries(state.equips)) {
+      const gear = state.gear.find((entry) => entry.uid === uid);
+      if (!gear) continue;
+      const item = findItem(content, gear.itemId);
+      if (!item || item.slot !== slot) continue;
+      out.push({ gear, item, slot });
+    }
+    return out;
+  }
+
+  /** 佩戴中的武器；无则拳脚（招式注册键与动词池随之兜底）。 */
+  function wornWeapon(): { readonly gear: GearInstance; readonly item: ItemView } | undefined {
+    const uid = state.equips['weapon'];
+    if (uid === undefined) return undefined;
+    return wornGear().find((entry) => entry.gear.uid === uid);
+  }
+
+  /** 玩家招式注册键：佩戴武器 itemId，否则 'fist'（未注册由文案层再兜底）。 */
+  function weaponMoveKey(): string {
+    return wornWeapon()?.item.id ?? 'fist';
+  }
+
+  /**
+   * 全部属性贡献：静态注入（createGame.contributions）+ 装备实例投影
+   * （flat）+ 生效中的丹药 buff（倍率区 mult / 暴击百分点 flat）。
+   * 顺带清理过期 buff（读时清理，旧版同策略）。
+   */
+  function playerContributions(): Contribution[] {
+    const out: Contribution[] = [...contributions];
+    for (const { gear, item } of wornGear()) {
+      out.push(...gearContributions(gear, item.bonuses ?? {}, item.name));
+    }
+    for (const [pillId, until] of Object.entries(state.buffs)) {
+      if (until <= time) {
+        delete state.buffs[pillId]; // 过期 buff 读时清理，不落盘
+        continue;
+      }
+      const item = findItem(content, pillId);
+      const effect = item?.effect;
+      if (!item || !effect) continue;
+      const source = { id: pillId, kind: 'pill', name: item.name };
+      for (const [stat, mult] of Object.entries(effect.multipliers ?? {})) {
+        if (typeof mult === 'number' && mult > 0) {
+          out.push({ modifier: { stat, zone: 'mult', value: mult }, source });
+        }
+      }
+      if (typeof effect.crit === 'number' && effect.crit !== 0) {
+        out.push({ modifier: { stat: 'crit', zone: 'flat', value: effect.crit }, source });
+      }
+    }
+    return out;
+  }
+
+  /** 玩家属性基线（旧版数值沿革）：攻 8+3·层 / 防 2+1.2·层 / 血曲线 / 暴 5。 */
+  function statBase(): Record<string, number> {
+    const clv = combatLevelOf(content, state.skills);
+    return { atk: 8 + clv * 3, def: 2 + clv * 1.2, hp: maxHpForLevel(clv), crit: 5 };
+  }
+
+  /**
+   * 聚合玩家属性（crit 钳上限）。context 缺省为无语境面板读数；
+   * 战斗内攻击侧带 {moveId}、防御侧带 {element}（条件修饰符门控）。
+   */
+  function playerStats(context: AggregationContext = {}): PlayerStatsView {
+    const breakdown = aggregateStats(statBase(), playerContributions(), context);
+    return {
+      atk: Math.round(breakdown.atk?.value ?? 0),
+      def: Math.round(breakdown.def?.value ?? 0),
+      crit: Math.min(CRIT_CAP, Math.round(breakdown.crit?.value ?? 0)),
+      maxHp: Math.round(breakdown.hp?.value ?? 0),
+    };
+  }
+
+  /** 战斗双方语境合成：攻侧 moveId、防侧来袭 element（一次取齐）。 */
+  function combatStats(enemy: EnemyView): {
+    atk: number;
+    crit: number;
+    def: number;
+    maxHp: number;
+  } {
+    const moveKey = weaponMoveKey();
+    const atkSide = aggregateStats(statBase(), playerContributions(), { moveId: moveKey });
+    const defSide = aggregateStats(statBase(), playerContributions(), {
+      element: enemy.element,
+    });
+    return {
+      atk: Math.round(atkSide.atk?.value ?? 0),
+      crit: Math.min(CRIT_CAP, Math.round(atkSide.crit?.value ?? 0)),
+      def: Math.round(defSide.def?.value ?? 0),
+      maxHp: Math.round(defSide.hp?.value ?? 0),
+    };
+  }
 
   function addItem(itemId: string, count: number): void {
     if (!(count > 0)) return;
@@ -159,7 +302,15 @@ export function createGame(options: CreateGameOptions): Game {
     return { itemId, count };
   }
 
-  /** 单轮采集完成：产出 → 副产出（掷点）→ 修为。 */
+  /** gear:equip / gear:sell 共用的 uid 载荷解析（uid 必须 +arg 转数字，旧版教训）。 */
+  function readUidPayload(payload: unknown): number | undefined {
+    const p = payload as { uid?: unknown } | undefined;
+    const uid = p?.uid;
+    if (typeof uid !== 'number' || !Number.isInteger(uid) || uid <= 0) return undefined;
+    return uid;
+  }
+
+  /** 单轮采集完成：产出 → 副产出（掷点）→ 修为（采集类 buff 经管线加成）。 */
   function completeActivityOnce(skill: SkillView, activity: ActivityView): void {
     addItem(activity.output.item, activity.output.count);
     emitLoot(activity.output.item, activity.output.count, 'activity');
@@ -167,7 +318,8 @@ export function createGame(options: CreateGameOptions): Game {
       addItem(activity.byproduct.item, 1);
       emitLoot(activity.byproduct.item, 1, 'byproduct');
     }
-    grantExp(skill, activity.exp, false);
+    const xpMult = aggregateStats({ gatherXp: 1 }, playerContributions(), {}).gatherXp?.value ?? 1;
+    grantExp(skill, Math.round(activity.exp * xpMult), false);
     events.emit({
       type: 'activity-complete',
       time,
@@ -192,14 +344,296 @@ export function createGame(options: CreateGameOptions): Game {
     }
   }
 
+  /* ---------- 丹药（#4）：即时恢复 / 持续 buff ---------- */
+
+  /** 嗑丹。silent = 自动嗑丹（战斗日志由 attack/note 承载，不弹 reject）。 */
+  function eatPill(pillId: string, silent: boolean): void {
+    const item = findItem(content, pillId);
+    if (!item || item.type !== 'pill') {
+      if (!silent) reject('pill:eat', 'not-pill', '此非丹药');
+      return;
+    }
+    if ((state.items[pillId] ?? 0) <= 0) {
+      if (!silent) reject('pill:eat', 'no-item', '丹药已尽');
+      return;
+    }
+    if (item.heal) {
+      const cap = playerStats(hpContext()).maxHp;
+      if (state.hp >= cap) {
+        if (!silent) reject('pill:eat', 'full-hp', '气血充盈，无需服药');
+        return;
+      }
+      takeItem(pillId, 1);
+      const healed = Math.min(cap, state.hp + Math.round(cap * item.heal.percent)) - state.hp;
+      state.hp += healed;
+      events.emit({
+        type: 'pill:eat',
+        time,
+        data: { item: pillId, itemName: item.name, kind: 'heal', healed },
+      });
+      if (silent) {
+        events.emit({
+          type: 'combat-note',
+          time,
+          data: { text: `你服下一枚【${item.name}】，气息稍定`, kind: 'pill' },
+        });
+      }
+    } else if (item.effect) {
+      takeItem(pillId, 1);
+      state.buffs[pillId] = time + item.effect.duration; // 同名丹药覆盖续时（旧版语义）
+      events.emit({
+        type: 'pill:eat',
+        time,
+        data: { item: pillId, itemName: item.name, kind: 'buff', minutes: Math.round(item.effect.duration / 60000) },
+      });
+    }
+  }
+
+  /* ---------- 战斗（#4）：回合解算 / 文案 / 胜负结算 ---------- */
+
+  function emitNote(text: string, enemyId?: string): void {
+    events.emit({ type: 'combat-note', time, data: enemyId ? { text, enemyId } : { text } });
+  }
+
+  function stopCombat(note?: string): void {
+    const c = state.combat;
+    if (!c) return;
+    state.combat = null;
+    emitNote(note ?? '你收势撤出战团', c.enemyId);
+  }
+
+  /** 玩家一击：暴击 roll → 伤害 → 伤害档累计 → 文案 → 胜负判定。 */
+  function playerAttackRound(enemy: EnemyView, c: CombatState): void {
+    const moveKey = weaponMoveKey();
+    const weapon = wornWeapon();
+    const { atk, crit: critChance } = combatStats(enemy);
+    const dmgBase = calcDmg(atk, enemy.def, random);
+    const crit = rollCrit(critChance, random);
+    const dmg = crit ? Math.round(dmgBase * CRIT_MULTIPLIER) : dmgBase;
+    c.ehp -= dmg;
+    c.rounds += 1;
+    if (crit) c.crits += 1;
+    const tier = hitTierOf(dmg, atk, enemy.def);
+    c.tiers[tier] += 1;
+    const text = makeAttackText(
+      combatText,
+      {
+        side: 'player',
+        enemyName: enemy.name,
+        moveKey,
+        verbStyle: weapon ? 'sword' : 'fist',
+        weaponName: weapon ? weapon.item.name : '拳脚',
+        dmg,
+        crit,
+        atk,
+        defenderDef: enemy.def,
+        defenderHp: Math.max(0, c.ehp),
+        defenderMaxHp: enemy.hp,
+      },
+      random,
+    );
+    events.emit({
+      type: 'attack',
+      time,
+      data: { side: 'player', enemyId: enemy.id, enemyName: enemy.name, text, dmg, crit, tier },
+    });
+    if (c.ehp <= 0) victory(enemy, c);
+  }
+
+  /** 敌人一击：减伤解算 → 文案 → 玩家倒下判定。 */
+  function enemyAttackRound(enemy: EnemyView, c: CombatState): void {
+    const { def, maxHp } = combatStats(enemy);
+    const dmg = calcDmg(enemy.atk, def, random);
+    state.hp -= dmg;
+    const tier = hitTierOf(dmg, enemy.atk, def);
+    const text = makeAttackText(
+      combatText,
+      {
+        side: 'enemy',
+        enemyName: enemy.name,
+        moveKey: enemy.id,
+        verbStyle: enemy.kind ?? 'claw',
+        weaponName: '',
+        dmg,
+        crit: false,
+        atk: enemy.atk,
+        defenderDef: def,
+        defenderHp: Math.max(0, state.hp),
+        defenderMaxHp: maxHp,
+      },
+      random,
+    );
+    events.emit({
+      type: 'attack',
+      time,
+      data: { side: 'enemy', enemyId: enemy.id, enemyName: enemy.name, text, dmg, tier },
+    });
+    if (state.hp <= 0) defeat(enemy, c);
+  }
+
+  /** 胜利结算：灵石/材料/异宝掉落 + 斗法修为 + 签名画像与同对手对照。 */
+  function victory(enemy: EnemyView, c: CombatState): void {
+    const gold = enemy.gold;
+    const gpGain = gold
+      ? Math.floor(gold.min + random() * (gold.max - gold.min + 1))
+      : 0;
+    state.gp += gpGain;
+
+    const drops: string[] = [];
+    for (const drop of enemy.drops ?? []) {
+      if (drop.item && random() < drop.chance) {
+        addItem(drop.item, 1);
+        emitLoot(drop.item, 1, 'drop');
+        drops.push(drop.item);
+      }
+    }
+
+    let gearDropName: string | undefined;
+    const gearDrop = findGearDrop(content, enemy.id);
+    if (gearDrop && random() < gearDrop.chance) {
+      const itemId = pickText(gearDrop.pool, random);
+      const item = itemId ? findItem(content, itemId) : undefined;
+      if (item) {
+        state.gearSeq += 1;
+        const gear = makeGear(item.id, item.bonuses ?? {}, state.gearSeq, random);
+        state.gear.push(gear);
+        gearDropName = gearName(item.name, gear.rarity);
+        events.emit({
+          type: 'loot',
+          time,
+          data: {
+            item: item.id,
+            itemName: gearDropName,
+            count: 1,
+            source: 'gear',
+            rarity: gear.rarity,
+            uid: gear.uid,
+          },
+        });
+      }
+    }
+
+    const skill = combatSkill();
+    if (skill) grantExp(skill, enemy.exp, false);
+
+    const tally = { rounds: c.rounds, crits: c.crits, tiers: c.tiers };
+    const summary = summarizeRounds(tally);
+    const prev = state.lastEncounter[enemy.id];
+    const compare = compareEncounterText(prev, c.rounds);
+    state.lastEncounter[enemy.id] = { rounds: c.rounds, won: true, at: time };
+    c.respT = VICTORY_REST_MS; // 战斗态保留（ehp ≤ 0），休整后按 autoFight 决定去留
+
+    events.emit({
+      type: 'victory',
+      time,
+      data: {
+        enemyId: enemy.id,
+        enemyName: enemy.name,
+        gp: gpGain,
+        rounds: c.rounds,
+        exp: skill ? enemy.exp : 0,
+        summary,
+        drops,
+        ...(gearDropName !== undefined ? { gearDropName } : {}),
+        ...(prev !== undefined ? { prevEncounter: prev } : {}),
+        ...(compare !== undefined ? { compare } : {}),
+      },
+    });
+  }
+
+  /** 落败：残血被救回，对照记录 won=false（「前番不敌」的基准）。 */
+  function defeat(enemy: EnemyView, c: CombatState): void {
+    const maxHp = combatStats(enemy).maxHp;
+    state.hp = Math.max(1, Math.round(maxHp * LOW_HP_FRACTION));
+    state.combat = null;
+    state.lastEncounter[enemy.id] = { rounds: c.rounds, won: false, at: time };
+    events.emit({
+      type: 'defeat',
+      time,
+      data: { enemyId: enemy.id, enemyName: enemy.name },
+    });
+  }
+
+  /**
+   * 战斗大步长结算：按「下一次出招」逐事件推进，dt 消化完或战斗结束为止
+   * （与 settleActivity 同语义：假时钟全速模拟一次 tick 可补多轮）。
+   * 休整期（respT）内不回血不接战，到期按 autoFight 决定再战或离场。
+   */
+  function settleCombat(dt: number): void {
+    let remaining = dt;
+    let guard = 0;
+    while (remaining > 0 && state.combat && guard++ < 1_000_000) {
+      const c = state.combat;
+      const enemy = findEnemy(content, c.enemyId);
+      if (!enemy) {
+        state.combat = null; // 内容包已变更：安全弃置
+        return;
+      }
+      if (c.respT > 0) {
+        const step = Math.min(remaining, c.respT);
+        c.respT -= step;
+        remaining -= step;
+        if (c.respT <= 0) {
+          if (state.autoFight) {
+            // 自动再战前复查气血：残血且无自动补给时退避（挂机不送死）。
+            if (state.hp < playerStats(hpContext()).maxHp * LOW_HP_FRACTION) {
+              stopCombat('你气血未复，暂且退避调息');
+              return;
+            }
+            c.ehp = enemy.hp;
+            c.pt = 0;
+            c.et = 0;
+            c.rounds = 0;
+            c.crits = 0;
+            c.tiers = { light: 0, mid: 0, heavy: 0, deadly: 0 };
+            emitNote(`你略定心神，再度向【${enemy.name}】出手`, enemy.id);
+          } else {
+            stopCombat('你见好就收，飘然离场');
+            return;
+          }
+        }
+        continue;
+      }
+      // 自动嗑丹（血线触发；目标为背包中首个 heal 类丹药，引擎零内容感知）
+      if (state.autoEat && state.hp < playerStats(hpContext()).maxHp * AUTO_EAT_HP_FRACTION) {
+        const healPill = Object.keys(state.items).find((itemId) => {
+          if (!((state.items[itemId] ?? 0) > 0)) return false;
+          const item = findItem(content, itemId);
+          return item?.type === 'pill' && item.heal !== undefined;
+        });
+        if (healPill) eatPill(healPill, true);
+      }
+      if (!state.combat) return;
+      // 推进到下一个事件点（玩家出招 / 敌人出招 / dt 消化完）
+      const pWait = PLAYER_ATTACK_INTERVAL - c.pt;
+      const eWait = Math.max(1, enemy.attackInterval ?? PLAYER_ATTACK_INTERVAL) - c.et;
+      const step = Math.min(remaining, pWait, eWait);
+      c.pt += step;
+      c.et += step;
+      remaining -= step;
+      if (c.pt >= PLAYER_ATTACK_INTERVAL) {
+        c.pt -= PLAYER_ATTACK_INTERVAL;
+        playerAttackRound(enemy, c);
+        if (!state.combat) return;
+      }
+      if (c.et >= (enemy.attackInterval ?? PLAYER_ATTACK_INTERVAL)) {
+        c.et -= enemy.attackInterval ?? PLAYER_ATTACK_INTERVAL;
+        enemyAttackRound(enemy, c);
+        if (!state.combat) return;
+      }
+    }
+  }
+
   /**
    * 离线补偿结算（ADR-013 观察时补偿）：O(1) 算清欠账——
    * 完整轮次产出直接累加；副产出用 floor(期望) + 余数伯努利一次掷定，
    * 不逐轮回放。气血按脱战回满。只产出一条 offline-settled 汇总事件。
    */
   function settleOffline(elapsedMs: number): void {
+    if (elapsedMs <= 0) return;
+    if (state.combat) state.combat = null; // 离线不可战斗：视作离场休整，回满血由下方统一处理
     const active = state.activity;
-    if (!active || elapsedMs <= 0) return;
+    if (!active) return;
     const found = findActivity(content, active.skillId, active.index);
     if (!found) {
       state.activity = null;
@@ -263,18 +697,25 @@ export function createGame(options: CreateGameOptions): Game {
         return;
       }
       time += dt;
-      // 脱战回血（本切片恒脱战；#4 战斗票接管"战斗中不回血"语义）。
-      const cap = hpCap();
-      if (state.hp < cap) {
-        state.hp = Math.min(cap, state.hp + cap * HP_REGEN_FRACTION_PER_SEC * (dt / 1000));
+      if (state.combat) {
+        // 战斗中：不回血不采药，由战斗循环推进（#4 接管战斗语义）。
+        settleCombat(dt);
+      } else {
+        // 脱战回血。
+        const cap = hpCap();
+        if (state.hp < cap) {
+          state.hp = Math.min(cap, state.hp + cap * HP_REGEN_FRACTION_PER_SEC * (dt / 1000));
+        }
+        settleActivity(dt);
       }
-      settleActivity(dt);
       events.emit({ type: 'tick', time, data: { dt } });
     },
 
     dispatch(action: GameAction): void {
       switch (action.type) {
         case 'activity:start': {
+          // 战斗与采集互斥：开修行即收势离战。
+          if (state.combat) stopCombat('你收势离战，转赴修行');
           const payload = action.payload as { skillId?: unknown; index?: unknown } | undefined;
           if (
             !payload ||
@@ -397,6 +838,161 @@ export function createGame(options: CreateGameOptions): Game {
           return;
         }
 
+        case 'combat:start': {
+          const payload = action.payload as { enemyId?: unknown } | undefined;
+          const enemyId = payload?.enemyId;
+          if (typeof enemyId !== 'string') {
+            reject(action.type, 'bad-payload', '指令无效');
+            return;
+          }
+          const enemy = findEnemy(content, enemyId);
+          if (!enemy) {
+            reject(action.type, 'not-found', '查无此妖');
+            return;
+          }
+          const clv = combatLevelOf(content, state.skills);
+          if (clv + 2 < enemy.level) {
+            reject(action.type, 'level', `境界太低（需 ${enemy.level - 2} 层斗法），恐有性命之虞`);
+            return;
+          }
+          if (state.combat?.enemyId === enemyId) return; // 幂等
+          if (state.hp < playerStats(hpContext()).maxHp * LOW_HP_FRACTION) {
+            reject(action.type, 'low-hp', '气血未复，先调息片刻');
+            return;
+          }
+          if (state.activity) {
+            const act = state.activity;
+            state.activity = null; // 战斗与采集互斥
+            events.emit({
+              type: 'activity-stop',
+              time,
+              data: { skillId: act.skillId, activityName: act.name },
+            });
+          }
+          state.combat = {
+            enemyId,
+            ehp: enemy.hp,
+            pt: 0,
+            et: 0,
+            respT: 0,
+            rounds: 0,
+            crits: 0,
+            tiers: { light: 0, mid: 0, heavy: 0, deadly: 0 },
+          };
+          emitNote(`剑拔弩张——你与【${enemy.name}】战至一处`, enemy.id);
+          return;
+        }
+
+        case 'combat:stop': {
+          stopCombat();
+          return;
+        }
+
+        case 'combat:auto': {
+          state.autoFight = !state.autoFight;
+          return;
+        }
+
+        case 'combat:auto-eat': {
+          state.autoEat = !state.autoEat;
+          return;
+        }
+
+        case 'pill:eat': {
+          const payload = action.payload as { item?: unknown } | undefined;
+          if (typeof payload?.item !== 'string') {
+            reject(action.type, 'bad-payload', '指令无效');
+            return;
+          }
+          eatPill(payload.item, false);
+          return;
+        }
+
+        case 'gear:equip': {
+          const uid = readUidPayload(action.payload);
+          if (uid === undefined) {
+            reject(action.type, 'bad-payload', '指令无效');
+            return;
+          }
+          const gear = state.gear.find((entry) => entry.uid === uid);
+          if (!gear) {
+            reject(action.type, 'not-found', '查无此器');
+            return;
+          }
+          const item = findItem(content, gear.itemId);
+          const slot = item?.slot;
+          if (!item || !slot) {
+            reject(action.type, 'bad-payload', '此物非可佩之器');
+            return;
+          }
+          if (state.equips[slot] === uid) return; // 已佩戴幂等
+          state.equips[slot] = uid; // 同槽替换
+          state.hp = Math.min(state.hp, hpCap());
+          events.emit({
+            type: 'equip:wear',
+            time,
+            data: { uid, slot, name: gearName(item.name, gear.rarity) },
+          });
+          return;
+        }
+
+        case 'gear:unequip': {
+          const payload = action.payload as { slot?: unknown } | undefined;
+          const slot = payload?.slot;
+          if (typeof slot !== 'string') {
+            reject(action.type, 'bad-payload', '指令无效');
+            return;
+          }
+          const uid = state.equips[slot];
+          if (uid === undefined) return; // 空槽幂等
+          const gear = state.gear.find((entry) => entry.uid === uid);
+          delete state.equips[slot];
+          state.hp = Math.min(state.hp, hpCap());
+          events.emit({
+            type: 'equip:remove',
+            time,
+            data: {
+              slot,
+              uid,
+              ...(gear ? { name: gearName(findItem(content, gear.itemId)?.name ?? gear.itemId, gear.rarity) } : {}),
+            },
+          });
+          return;
+        }
+
+        case 'gear:sell': {
+          const uid = readUidPayload(action.payload);
+          if (uid === undefined) {
+            reject(action.type, 'bad-payload', '指令无效');
+            return;
+          }
+          const gear = state.gear.find((entry) => entry.uid === uid);
+          if (!gear) {
+            reject(action.type, 'not-found', '查无此器');
+            return;
+          }
+          if (Object.values(state.equips).includes(uid)) {
+            reject(action.type, 'worn', '佩戴中的法器不可卖出');
+            return;
+          }
+          const item = findItem(content, gear.itemId);
+          const gained = gearSell(item?.sell ?? 0, gear.rarity);
+          state.gear = state.gear.filter((entry) => entry.uid !== uid);
+          state.gp += gained;
+          events.emit({
+            type: 'sell',
+            time,
+            data: {
+              item: gear.itemId,
+              itemName: gearName(item?.name ?? gear.itemId, gear.rarity),
+              count: 1,
+              gained,
+              gp: state.gp,
+            },
+          });
+          return;
+        }
+
         default:
           reject(action.type, 'unknown-action', '未知指令');
       }
@@ -409,6 +1005,8 @@ export function createGame(options: CreateGameOptions): Game {
         time,
         savedAt: clock.now(),
         state: cloneState(state) as unknown as Readonly<Record<string, unknown>>,
+        // 属性面板（#4 验收：佩戴稀有度武器 → snapshot 反映倍率+词条）。
+        stats: playerStats(),
       };
     },
   };
