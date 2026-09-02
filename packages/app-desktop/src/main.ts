@@ -63,9 +63,11 @@ try {
 } catch (err) {
   console.error(err);
   if (app) {
+    // 此兜底捕获整个启动链（内容校验/存档恢复/平台探测），
+    // 不要把所有异常都说成内容包问题（曾把 Illegal invocation 误标）。
     app.innerHTML = `
       <h1>问道长生</h1>
-      <pre class="content-error">内容包校验失败，启动中止：\n${err instanceof Error ? err.message : String(err)}</pre>
+      <pre class="content-error">启动中止：\n${err instanceof Error ? err.message : String(err)}</pre>
     `;
   }
 }

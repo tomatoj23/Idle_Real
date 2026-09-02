@@ -53,8 +53,8 @@ function platformOf(): {
       ? (v as EventTargetLike)
       : undefined;
   const doc = asEvents(g['document']);
-  const timer = g['setInterval'] as TimerLike['setInterval'] | undefined;
-  const clear = g['clearInterval'] as TimerLike['clearInterval'] | undefined;
+  const timer = g['setInterval'];
+  const clear = g['clearInterval'];
   return {
     storage: asStorage(g['localStorage']),
     document:
@@ -62,9 +62,15 @@ function platformOf(): {
         ? (doc as DocumentLike)
         : undefined,
     window: asEvents(g['window']),
+    // 原生定时器方法必须 bind 宿主再解构：脱离 window 调用会抛
+    // "Illegal invocation"（真实浏览器严格校验 this，happy-dom 不校验，
+    // 测试环境遮蔽此类问题——2026-09-03 首跑真机暴露）。
     timer:
       typeof timer === 'function' && typeof clear === 'function'
-        ? { setInterval: timer, clearInterval: clear }
+        ? {
+            setInterval: (timer as TimerLike['setInterval']).bind(g),
+            clearInterval: (clear as TimerLike['clearInterval']).bind(g),
+          }
         : undefined,
   };
 }
