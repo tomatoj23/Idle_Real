@@ -69,7 +69,7 @@ content 包的字段级约定。**schema 变更三处同步纪律（ADR-015）**
 `source{id,kind,uid?,name?}`，聚合快照 breakdown.applied 保留命中明细——
 事件流消费属性效果时第一天就携带完整语境（SexyMUD ADR-0006 教训）。
 引擎接缝：`playerMaxHp(content, skills, contributions?, context?)` 已走管线；
-静态全局产出方（宗门/转生天赋）经 `createGame({modifiers})` 注入；
+静态全局产出方（宗门/转生天赋）经 `createGame({contributions})` 注入；
 装备/丹药 buff（#4）在引擎内部从状态派生 Contribution，禁止另开直算路径。
 
 ## config 槽位数据化（#16）
