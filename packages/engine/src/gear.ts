@@ -36,13 +36,14 @@ export interface GearInstance {
   readonly affixes: readonly Affix[];
 }
 
-/** 装备模板加成形状（与 content 包 Item.bonuses 同形，接口无索引签名可直接传）。 */
-export interface GearBonuses {
-  readonly atk?: number;
-  readonly def?: number;
-  readonly hp?: number;
-  readonly crit?: number;
-}
+/**
+ * 装备模板加成形状（#021 批 4，N3 五处副本单一来源裁决）：键 = stat id
+ * （开放键域，与 content 包 bonuses / affixPool.stat 同源），值 = flat 基础量。
+ * 与 Modifier 的形状统一决策：bonuses 是装备模板的 flat 简写（省 zone/condition，
+ * 投影时折算稀有度倍率后走 ADR-011 单管线），键域与 Modifier.stat 同一注册表
+ * （消费点清单见 docs/agents/content.md）。
+ */
+export type GearBonuses = Readonly<Record<string, number>>;
 
 /* ---------- 掷点（随机源一律注入，ADR-013） ---------- */
 
@@ -91,18 +92,22 @@ export const BASE_AFFIX_PARAMS: AffixParams = {
   variance: 0.2,
 };
 
-/** 基础加成的量级标尺（攻/防原值参与，hp/crit 按参数折算，兜底下限）。 */
+/**
+ * 基础加成的量级标尺（逐项折算，#021 批 4 开放键域）：hp÷divider、
+ * crit×critScale 按参数折算（量纲差异归引擎机制 stat），其余 stat（含
+ * 新增键）原值参与，兜底下限封底。
+ */
 function baseScaleOf(bonuses: GearBonuses, p: AffixParams): number {
   // 使用点防崩（先例 rollRarity 的 weight>0 过滤）：divider ≤ 0 会产生
   // Infinity 标尺并持久化进词条值，回落基线 divider（包校验关卡本应拒绝）。
   const divider = p.hpDivider > 0 ? p.hpDivider : BASE_AFFIX_PARAMS.hpDivider;
-  return Math.max(
-    bonuses.atk ?? 0,
-    bonuses.def ?? 0,
-    (bonuses.hp ?? 0) / divider,
-    (bonuses.crit ?? 0) * p.critScale,
-    p.baseScaleFloor,
-  );
+  let scale = p.baseScaleFloor;
+  for (const [stat, value] of Object.entries(bonuses)) {
+    if (typeof value !== 'number' || !(value > 0)) continue;
+    const scaled = stat === 'hp' ? value / divider : stat === 'crit' ? value * p.critScale : value;
+    if (scaled > scale) scale = scaled;
+  }
+  return scale;
 }
 
 /**
@@ -180,8 +185,9 @@ export function gearContributions(
       source: { id: gear.itemId, kind: 'equip', uid: gear.uid, name: gearName(content, itemName, gear.rarity) },
     });
   };
-  for (const stat of ['atk', 'def', 'hp', 'crit'] as const) {
-    const base = bonuses[stat];
+  for (const [stat, base] of Object.entries(bonuses)) {
+    // 开放键域投影（#021 批 4，N3 消费封死清退）：模板 bonuses 逐键投影，
+    // 新增 stat 键 = 纯 JSON 改动（消费点清单见 content.md 注册表）。
     if (typeof base === 'number' && base > 0) push(stat, Math.round(base * mult));
   }
   for (const affix of gear.affixes) {

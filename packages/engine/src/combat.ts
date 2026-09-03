@@ -87,6 +87,13 @@ export function isCriticalHp(hp: number, max: number, m: DamageMechanics = BASE_
 /* ---------- 通用词库抽取器 ---------- */
 
 /**
+ * 引擎战斗兜底键（ADR-010 安全兜底约定：未注册招式/动词池一律回退拳脚）。
+ * 内容包校验保证 moves[FIST_KEY] 与 verbs[FIST_KEY] 恒在（#021 批 4：动词池
+ * 键域开放后仅 fist 恒需）；引擎内所有 fist 兜底取值统一引用本常量。
+ */
+export const FIST_KEY = 'fist';
+
+/**
  * 通用「过滤后随机抽取」：池非法（非数组/空/含非字符串）时过滤剔除，
  * 剔完为空返回 undefined，调用方自行兜底。所有词库抽取共用此入口。
  */
@@ -137,7 +144,7 @@ export interface AttackTextArgs {
   readonly enemyName: string;
   /** 招式注册键：武器物品 id / 敌人 id / 'fist'。未注册回退 fist。 */
   readonly moveKey: string;
-  /** 动词池键：sword/fist/claw/magic。未注册回退 fist。 */
+  /** 动词池键（开放键域，#021 批 4）：内容声明，未注册回退 fist。 */
   readonly verbStyle: string;
   /** 兵器展示名（玩家无武器为「拳脚」）。 */
   readonly weaponName: string;
@@ -160,7 +167,7 @@ interface VerbLike {
 function pickVerb(pools: CombatTextPools, style: string, random: () => number): { verb: string; limb: string } {
   const verbs = pools.verbs as Record<string, readonly VerbLike[]> | undefined;
   const list = verbs && typeof verbs === 'object' ? verbs[style] : undefined;
-  const fallbackList = verbs && typeof verbs === 'object' ? verbs['fist'] : undefined;
+  const fallbackList = verbs && typeof verbs === 'object' ? verbs[FIST_KEY] : undefined;
   const entry = pickVerbEntry(list, random) ?? pickVerbEntry(fallbackList, random);
   if (entry) return entry;
   // 词库全缺：非文案占位（键名回显，ADR-016 裁决 ④），不内置中文兜底句。
@@ -179,7 +186,7 @@ function pickVerbEntry(list: unknown, random: () => number): { verb: string; lim
 /** 招式名抽取：moves[moveKey] 未注册回退 moves.fist（安全兜底约定）；全缺回显注册键。 */
 export function extractMoveName(pools: CombatTextPools, moveKey: string, random: () => number): string {
   const moves = pools.moves as Record<string, unknown> | undefined;
-  const pool = moves && typeof moves === 'object' ? (moves[moveKey] ?? moves['fist']) : undefined;
+  const pool = moves && typeof moves === 'object' ? (moves[moveKey] ?? moves[FIST_KEY]) : undefined;
   // 兜底：键名回显（ADR-016 裁决 ④），不再冻结默认包招式名。
   return pickText(pool, random) ?? moveKey;
 }

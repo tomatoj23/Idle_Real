@@ -26,6 +26,7 @@ import {
   calcDmg,
   compareEncounterText,
   fillTemplate,
+  FIST_KEY,
   hitTierOf,
   makeAttackText,
   pickText,
@@ -191,9 +192,19 @@ export function createGame(options: CreateGameOptions): Game {
     return wornGear().find((entry) => entry.gear.uid === uid);
   }
 
-  /** 玩家招式注册键：佩戴武器 itemId，否则 'fist'（未注册由文案层再兜底）。 */
+  /** 玩家招式注册键：佩戴武器 itemId，否则兜底键（未注册由文案层再兜底）。 */
   function weaponMoveKey(): string {
-    return wornWeapon()?.item.id ?? 'fist';
+    return wornWeapon()?.item.id ?? FIST_KEY;
+  }
+
+  /**
+   * 玩家动词池键（#021 批 4 解绑 'sword'/'fist' 内嵌映射）：佩戴武器读
+   * 内容声明的 verbStyle（开放键域，如法杖走 magic 池 = 纯 JSON 改动）；
+   * 无武器 / 缺声明 / 声明非法回落引擎兜底键（未注册由文案层再兜底）。
+   */
+  function playerVerbStyle(): string {
+    const declared = wornWeapon()?.item.verbStyle;
+    return typeof declared === 'string' && declared.length > 0 ? declared : FIST_KEY;
   }
 
   /**
@@ -465,7 +476,7 @@ export function createGame(options: CreateGameOptions): Game {
         side: 'player',
         enemyName: enemy.name,
         moveKey,
-        verbStyle: weapon ? 'sword' : 'fist',
+        verbStyle: playerVerbStyle(),
         weaponName: weapon ? weapon.item.name : fistName,
         dmg,
         crit,
@@ -497,7 +508,9 @@ export function createGame(options: CreateGameOptions): Game {
         side: 'enemy',
         enemyName: enemy.name,
         moveKey: enemy.id,
-        verbStyle: enemy.kind ?? 'claw',
+        // 动词池键 = 敌人内容声明的 kind（开放键域，#021 批 4）；'claw' 不再是
+        // 引擎缺省词汇，防御路径回落引擎兜底键（未注册由文案层再兜底）。
+        verbStyle: enemy.kind ?? FIST_KEY,
         weaponName: '',
         dmg,
         crit: false,

@@ -147,6 +147,14 @@ function makePack(): Record<string, any> {
   return JSON.parse(JSON.stringify(BASE_PACK));
 }
 
+/** 与 BASE_PACK 槽位引用（weapon/body）配套的槽位定义。 */
+function THREE_SLOTS(): unknown {
+  return [
+    { id: 'weapon', name: '法器' },
+    { id: 'body', name: '护体' },
+  ];
+}
+
 function expectError(result: ReturnType<typeof validateContentPack>, path: string, keyword: string): void {
   expect(result.ok).toBe(false);
   if (result.ok) {
@@ -301,10 +309,17 @@ describe('validateContentPack · 引擎兜底约定', () => {
     expectError(validateContentPack(pack), '/combatText/moves', 'xref');
   });
 
-  it('动词池缺失 → schema 层 required 先行拦截', () => {
+  it('缺 fist 兜底动词池 → schema 层 required 先行拦截（#021 批 4：键域开放后仅 fist 恒需）', () => {
+    const pack = makePack();
+    delete pack.combatText.verbs.fist;
+    expectError(validateContentPack(pack), '/combatText/verbs/fist', 'required');
+  });
+
+  it('非兜底动词池缺失 → 合法（键域开放，存在性按引用强制）', () => {
     const pack = makePack();
     delete pack.combatText.verbs.magic;
-    expectError(validateContentPack(pack), '/combatText/verbs/magic', 'required');
+    const result = validateContentPack(pack);
+    expect(result.ok).toBe(true);
   });
 
   it('动词池为空数组 → schema 层 minItems 拦截', () => {
@@ -345,16 +360,81 @@ describe('validateContentPack · 稀有度/词条池词表（#018，ADR-016 词�
     expectError(validateContentPack(pack), '/rarities/4', 'duplicate');
   });
 
-  it('词条 stat 越出装备四键域 → enum（affix.stat 引用合法）', () => {
+  it('词条 stat 违反键形态 → pattern（#021 批 4：键域开放后 schema 只钉形态）', () => {
     const pack = makePack();
-    pack.affixPool[0].stat = 'luck';
-    expectError(validateContentPack(pack), '/affixPool/0/stat', 'enum');
+    pack.affixPool[0].stat = 'Luck';
+    expectError(validateContentPack(pack), '/affixPool/0/stat', 'pattern');
   });
 
   it('词条池空数组 → minItems', () => {
     const pack = makePack();
     pack.affixPool = [];
     expectError(validateContentPack(pack), '/affixPool', 'minItems');
+  });
+});
+
+describe('validateContentPack · 批 4 语义键域（#021）', () => {
+  it('新增 stat 键（幸运）贯通：bonuses / affixPool.stat / multipliers 全部纯 JSON 放行', () => {
+    const pack = makePack();
+    pack.items[2].bonuses = { atk: 6, luck: 5 }; // equip 加成新键
+    pack.affixPool.push({ name: '天幸', stat: 'luck', scale: 0.3 }); // 词条池新键
+    pack.items[4].effect = { duration: 60000, multipliers: { hp: 1.5 } }; // 丹药倍率新键
+    const result = validateContentPack(pack);
+    expect(result.ok).toBe(true);
+  });
+
+  it('equip.verbStyle 未在 verbs 注册 → 字段级 xref（存在性校验拦截坏引用）', () => {
+    const pack = makePack();
+    pack.items[2].verbStyle = 'staff';
+    expectError(validateContentPack(pack), '/items/2/verbStyle', 'xref');
+  });
+
+  it('equip.verbStyle 注册新风格（staff + verbs.staff 池）→ 放行（键域开放演示）', () => {
+    const pack = makePack();
+    pack.items[2].verbStyle = 'staff';
+    pack.combatText.verbs.staff = [{ v: '点', limbs: ['眉心'] }];
+    const result = validateContentPack(pack);
+    expect(result.ok).toBe(true);
+  });
+
+  it('enemy.kind 未在 verbs 注册 → 字段级 xref', () => {
+    const pack = makePack();
+    pack.enemies[0].kind = 'tentacle';
+    expectError(validateContentPack(pack), '/enemies/0/kind', 'xref');
+  });
+
+  it('enemy.kind 指向新注册风格 → 放行（改敌人受击风格 = 纯 JSON）', () => {
+    const pack = makePack();
+    pack.enemies[0].kind = 'staff';
+    pack.combatText.verbs.staff = [{ v: '卷', limbs: ['周身'] }];
+    const result = validateContentPack(pack);
+    expect(result.ok).toBe(true);
+  });
+
+  it('enemy.level 超 config.progression.maxLevel → shape（层数上限单一来源，schema 魔法数 99 清退）', () => {
+    const pack = makePack();
+    pack.config = { slots: THREE_SLOTS(), progression: { maxLevel: 50 } };
+    pack.enemies[0].level = 92;
+    expectError(validateContentPack(pack), '/enemies/0/level', 'shape');
+  });
+
+  it('活动/配方 unlockLevel 超 config.progression.maxLevel → shape（同族魔法数 99 清退）', () => {
+    const pack = makePack();
+    pack.config = { slots: THREE_SLOTS(), progression: { maxLevel: 2 } };
+    pack.skills[0].activities[0].unlockLevel = 5;
+    expectError(validateContentPack(pack), '/skills/0/activities/0/unlockLevel', 'shape');
+    expectError(validateContentPack(pack), '/recipes/0/unlockLevel', 'shape');
+  });
+
+  it('enemy.level 不超上限 / config 缺省时跳过对照', () => {
+    const bounded = makePack();
+    bounded.config = { slots: THREE_SLOTS(), progression: { maxLevel: 99 } };
+    bounded.enemies[0].level = 99;
+    expect(validateContentPack(bounded).ok).toBe(true);
+
+    const unbounded = makePack();
+    unbounded.enemies[0].level = 120; // 无 config → 无法取得上限，不对照
+    expect(validateContentPack(unbounded).ok).toBe(true);
   });
 });
 

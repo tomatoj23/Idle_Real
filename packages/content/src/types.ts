@@ -111,20 +111,15 @@ export type InscriptionTiers = readonly [
   readonly Modifier[],
 ];
 
-/** 装备基础加成（模板字段；稀有度与词条为运行时实例化产物，其档位词表按 ADR-016 归内容包）。 */
-export interface Bonuses {
-  readonly atk?: number;
-  readonly def?: number;
-  readonly hp?: number;
-  readonly crit?: number;
-}
+/**
+ * 装备基础加成（模板字段；稀有度与词条为运行时实例化产物，其档位词表按 ADR-016 归内容包）。
+ * #021 批 4 键域开放：键 = stat id（与 Modifier.stat / affixPool.stat 同一注册表，
+ * 消费点清单见 docs/agents/content.md），值 = flat 基础量（整数 ≥ 0）。
+ */
+export type Bonuses = Readonly<Record<string, number>>;
 
-/** 丹药持续增益的倍率区。 */
-export interface PillMultipliers {
-  readonly gatherXp?: number;
-  readonly atk?: number;
-  readonly def?: number;
-}
+/** 丹药持续增益的倍率区（#021 批 4 键域开放：键 = stat id，值须 > 1）。 */
+export type PillMultipliers = Readonly<Record<string, number>>;
 
 /** 丹药持续增益（duration 毫秒）。 */
 export interface PillEffect {
@@ -155,6 +150,11 @@ export interface Item {
   readonly slot?: EquipSlot;
   /** equip 类：基础加成。 */
   readonly bonuses?: Bonuses;
+  /**
+   * equip 类（引擎只消费 weapon 槽位物品）：动词池键（#021 批 4 开放键域，
+   * 须在 combatText.verbs 注册）；缺省 = 引擎兜底键 fist 池。
+   */
+  readonly verbStyle?: VerbStyle;
   /** pill 类：持续增益。 */
   readonly effect?: PillEffect;
   /** pill 类：即时恢复。 */
@@ -193,7 +193,11 @@ export interface Recipe {
 
 /* ---------- 敌人与掉落 ---------- */
 
-export type EnemyKind = 'claw' | 'magic';
+/**
+ * 敌人动词风格（#021 批 4 开放键域，ADR-016 裁决 ⑦）：取值 = combatText.verbs
+ * 池键，存在性由包校验强制；'claw'/'magic' 只是官方包的内容约定。
+ */
+export type EnemyKind = string;
 
 export interface ItemDrop {
   readonly item: string;
@@ -257,7 +261,7 @@ export interface RarityDef {
 
 /**
  * 随机词条池（affixPool 节条目）：实例化按稀有度词条数掷不重复 stat 词条。
- * stat 键域 = 装备加成四键（atk/def/hp/crit，crit 为百分点），schema 层钉死。
+ * stat 键域开放（#021 批 4）：与装备 bonuses 键域同源，schema 层只钉键形态。
  */
 export interface AffixDef {
   readonly name: string;
@@ -274,8 +278,11 @@ export interface VerbEntry {
   readonly limbs: readonly string[];
 }
 
-/** 动词池四系：sword 佩剑 / fist 拳脚 / claw 妖兽爪牙 / magic 阴风法术。 */
-export type VerbStyle = 'sword' | 'fist' | 'claw' | 'magic';
+/**
+ * 动词池键（#021 批 4 开放键域，ADR-016 裁决 ⑦）：新增动词风格 = 新 JSON 键，
+ * schema 仅强制引擎兜底键 `fist` 恒需； sword/fist/claw/magic 为官方包约定。
+ */
+export type VerbStyle = string;
 
 /** 伤害档：按相对期望伤害分池。 */
 export type DamageTier = 'light' | 'mid' | 'heavy' | 'deadly';

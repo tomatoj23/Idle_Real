@@ -40,11 +40,13 @@ describe('默认内容包 · 验收（issue #2）', () => {
     expect(Object.keys(recipeByName['锻不灭金身甲'].materials)).toContain('ore4');
   });
 
-  it('引擎兜底网：fist 招式与四系动词池齐备', () => {
+  it('引擎兜底网：fist 招式与官方包动词池齐备（键域开放后 fist 为 schema 唯一恒需）', () => {
     const pack = loadDefaultContent();
     expect(pack.combatText.moves.fist).toEqual(['搏兔一击', '石破天惊']);
-    for (const style of ['sword', 'fist', 'claw', 'magic'] as const) {
-      expect(pack.combatText.verbs[style].length).toBeGreaterThan(0);
+    expect(pack.combatText.verbs.fist?.length).toBeGreaterThan(0);
+    // 官方包约定四池（非 schema 强制）。
+    for (const style of ['sword', 'claw', 'magic'] as const) {
+      expect(pack.combatText.verbs[style]?.length).toBeGreaterThan(0);
     }
   });
 

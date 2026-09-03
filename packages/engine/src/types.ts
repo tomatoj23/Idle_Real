@@ -58,7 +58,8 @@ export interface SaveData {
  * - 出招文案与战斗解算查找招式名时，若内容包未注册当前武器或敌人 id
  *   （combatText.moves），一律回退拳脚动作（moves.fist + verbs.fist），
  *   不得抛错或渲染空文案；
- * - 内容包校验保证 moves.fist 与 verbs 四系动词池恒存在，
+ * - 内容包校验保证 moves.fist 与 verbs.fist 兜底动词池恒存在
+ *   （动词池键域开放后仅 fist 恒需，#021 批 4），
  *   兜底路径永远可用（见 @wendao/content 的 validateContentPack）。
  */
 export type GameContent = object;

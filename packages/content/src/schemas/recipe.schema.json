@@ -24,7 +24,7 @@
         "unlockLevel": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 99
+          "description": "解锁所需技艺层数；上限单一来源 = config.progression.maxLevel（语义校验对照，schema 魔法数 99 已清退，#021 批 4）"
         },
         "output": { "$ref": "#/definitions/stack" },
         "materials": {

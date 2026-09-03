@@ -11,7 +11,13 @@
  *    - 掉落池 id 必须存在于 items（异宝池还须为 equip 类）；
  *    - 武器 id 与敌人 id 必须在 combatText.moves 注册招式名；
  *    - moves 注册键不得悬空（只能是 fist、武器 id 或敌人 id）；
- *    - fist 兜底招式与四系动词池恒需存在（引擎安全兜底约定）；
+ *    - fist 兜底招式与 fist 兜底动词池恒需存在（引擎安全兜底约定；
+ *      动词池键域开放后 schema 仅强制 fist，#021 批 4）；
+ *    - 动词风格存在性（#021 批 4，键域开放的存在性关卡）：equip 的
+ *      verbStyle 与敌人的 kind 都必须命中 combatText.verbs 非空池；
+ *    - 层数上限单一来源（#021 批 4，P2-1）：config.progression.maxLevel
+ *      存在时，enemy.level 与活动/配方的 unlockLevel 都不得超过它
+ *      （schema 魔法数 99 已清退；config 缺省时无从取得，跳过对照）；
  *    - 配方材料、产出、所属技艺，活动产出/副产出，敌人掉落，坊市
  *      货架的物品 id 必须存在（旧版 data.js 曾因材料 id 打错而埋雷，
  *      教训固化为校验）；
@@ -23,8 +29,8 @@
  *    - 稀有度/词条池词表（#018，ADR-016 裁决 ①：词表零默认）：rarities 与
  *      affixPool 两节 validate 强制恒在；权重正数由 schema 关卡保证
  *      （rollRarity 按占比归一化的前提），rarities 的 id 去重（存档键
- *      GearInstance.rarity 引用它），affix.stat 引用合法由 schema enum
- *      （装备加成四键域）钉死；
+ *      GearInstance.rarity 引用它），affix.stat 键域开放后由 schema 只钉
+ *      键形态（#021 批 4），生效须引擎消费点（content.md 注册表）；
  *    - config 玩法参数子节（#020，ADR-016 裁决 ① 分策）：combat/
  *      progression/affix 子节全可选（缺省 = 引擎基线），伤害档阈值
  *      跨字段递增由语义检查补全；
@@ -157,16 +163,22 @@ function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
 
   const weaponIds = checkItemShapes(pack.items, slotIds, errors);
 
-  checkSkills(pack.skills, itemIndex, errors);
-  checkRecipes(pack.recipes, itemIndex, skillIndex, pack.skills, errors);
+  // 层数上限单一来源（#021 批 4，P2-1）：config.progression.maxLevel 存在时，
+  // enemy.level 与活动/配方 unlockLevel 一律对照它（schema 魔法数 99 已清退）。
+  const maxLevel = pack.config?.progression?.maxLevel;
+
+  checkSkills(pack.skills, itemIndex, maxLevel, errors);
+  checkRecipes(pack.recipes, itemIndex, skillIndex, pack.skills, maxLevel, errors);
 
   const moves = pack.combatText.moves;
-  checkEnemies(pack.enemies, itemIndex, moves, errors);
+  const verbs = pack.combatText.verbs;
+  checkEnemies(pack.enemies, itemIndex, moves, maxLevel, errors);
   checkGearDrops(pack.gearDrops, itemIndex, enemyIndex, pack.items, errors);
   checkShop(pack.shop, itemIndex, errors);
   checkWeaponMoves(weaponIds, pack.items, moves, errors);
   checkMoveRegistry(moves, weaponIds, enemyIndex, errors);
   checkFistFallback(moves, errors);
+  checkVerbStyles(pack.items, pack.enemies, verbs, errors);
 
   checkPrototypes(pack.skills, '/skills', errors);
   checkPrototypes(pack.items, '/items', errors);
@@ -390,6 +402,7 @@ function checkPrototypes(
 function checkSkills(
   skills: readonly Skill[],
   items: ReadonlyMap<string, number>,
+  maxLevel: number | undefined,
   errors: ContentError[],
 ): void {
   skills.forEach((skill, i) => {
@@ -409,6 +422,14 @@ function checkSkills(
       });
     }
     for (const [j, activity] of (skill.activities ?? []).entries()) {
+      // 层数上限单一来源（#021 批 4，P2-1）：schema 魔法数 99 清退后对照 config。
+      if (maxLevel !== undefined && activity.unlockLevel > maxLevel) {
+        errors.push({
+          path: `/skills/${i}/activities/${j}/unlockLevel`,
+          keyword: 'shape',
+          message: `解锁层数 ${activity.unlockLevel} 超过层数上限（config.progression.maxLevel = ${maxLevel}）`,
+        });
+      }
       if (!items.has(activity.output.item)) {
         errors.push({
           path: `/skills/${i}/activities/${j}/output/item`,
@@ -433,9 +454,18 @@ function checkRecipes(
   items: ReadonlyMap<string, number>,
   skills: ReadonlyMap<string, number>,
   skillDefs: readonly Skill[],
+  maxLevel: number | undefined,
   errors: ContentError[],
 ): void {
   recipes.forEach((recipe, i) => {
+    // 层数上限单一来源（#021 批 4，P2-1）：同 checkSkills。
+    if (maxLevel !== undefined && recipe.unlockLevel > maxLevel) {
+      errors.push({
+        path: `/recipes/${i}/unlockLevel`,
+        keyword: 'shape',
+        message: `解锁层数 ${recipe.unlockLevel} 超过层数上限（config.progression.maxLevel = ${maxLevel}）`,
+      });
+    }
     if (!items.has(recipe.output.item)) {
       errors.push({
         path: `/recipes/${i}/output/item`,
@@ -478,6 +508,7 @@ function checkEnemies(
   enemies: ContentPack['enemies'],
   items: ReadonlyMap<string, number>,
   moves: Readonly<Record<string, readonly string[]>>,
+  maxLevel: number | undefined,
   errors: ContentError[],
 ): void {
   enemies.forEach((enemy, i) => {
@@ -502,6 +533,16 @@ function checkEnemies(
         path: `/enemies/${i}/gold`,
         keyword: 'shape',
         message: `灵石区间 min(${enemy.gold.min}) 不得大于 max(${enemy.gold.max})`,
+      });
+    }
+    // 层数上限单一来源（#021 批 4，P2-1）：schema 魔法数 99 清退后，
+    // 上限对照 config.progression.maxLevel；config 缺省时无法取得上限，跳过
+    // （引擎侧层数只影响开战门控，超高层数内容不可达但不致崩）。
+    if (maxLevel !== undefined && enemy.level > maxLevel) {
+      errors.push({
+        path: `/enemies/${i}/level`,
+        keyword: 'shape',
+        message: `敌人层数 ${enemy.level} 超过层数上限（config.progression.maxLevel = ${maxLevel}）`,
       });
     }
   });
@@ -593,7 +634,8 @@ function checkMoveRegistry(
 
 /**
  * 引擎安全兜底约定：fist 兜底招式必须恒在（未注册招式一律回退拳脚）。
- * 四系动词池由 combat-text schema 的 required + minItems 保证，此处不重复。
+ * fist 兜底动词池由 combat-text schema 的 required + minItems 保证
+ * （键域开放后仅 fist 恒需，#021 批 4），此处不重复。
  */
 function checkFistFallback(
   moves: Readonly<Record<string, readonly string[]>>,
@@ -606,4 +648,39 @@ function checkFistFallback(
       message: '缺少 fist 兜底招式（引擎约定：未注册招式一律回退拳脚）',
     });
   }
+}
+
+/**
+ * 动词风格存在性（#021 批 4，键域开放的存在性关卡，ADR-016 裁决 ⑦）：
+ * schema 只钉键形态不钉取值，引用合法性在此收口——equip 声明的 verbStyle
+ * 与敌人的 kind 都必须命中 combatText.verbs 非空池（坏引用大声失败）。
+ */
+function checkVerbStyles(
+  items: readonly Item[],
+  enemies: ContentPack['enemies'],
+  verbs: ContentPack['combatText']['verbs'],
+  errors: ContentError[],
+): void {
+  const hasPool = (style: string): boolean => {
+    const pool = verbs[style];
+    return Array.isArray(pool) && pool.length > 0;
+  };
+  items.forEach((item, i) => {
+    if (item.verbStyle !== undefined && !hasPool(item.verbStyle)) {
+      errors.push({
+        path: `/items/${i}/verbStyle`,
+        keyword: 'xref',
+        message: `动词风格 "${item.verbStyle}" 未在 combatText.verbs 注册`,
+      });
+    }
+  });
+  enemies.forEach((enemy, i) => {
+    if (!hasPool(enemy.kind)) {
+      errors.push({
+        path: `/enemies/${i}/kind`,
+        keyword: 'xref',
+        message: `敌人 "${enemy.id}" 的动词风格 "${enemy.kind}" 未在 combatText.verbs 注册`,
+      });
+    }
+  });
 }

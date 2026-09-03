@@ -8,14 +8,11 @@
   "properties": {
     "verbs": {
       "type": "object",
-      "required": ["sword", "fist", "claw", "magic"],
+      "required": ["fist"],
       "additionalProperties": false,
-      "description": "动词部位池：sword 佩剑 / fist 拳脚 / claw 妖兽爪牙 / magic 阴风法术。四系恒需（fist 兼作兜底）",
-      "properties": {
-        "sword": { "$ref": "#/definitions/verbList" },
-        "fist": { "$ref": "#/definitions/verbList" },
-        "claw": { "$ref": "#/definitions/verbList" },
-        "magic": { "$ref": "#/definitions/verbList" }
+      "description": "动词部位池（#021 批 4 键域开放，ADR-016 裁决 ⑦）：新增动词风格 = 新 JSON 键；仅引擎兜底键 fist 恒需（安全兜底约定），其余键在被 item.verbStyle / enemy.kind 引用时由语义校验强制存在；sword/fist/claw/magic 为官方包约定",
+      "patternProperties": {
+        "^[a-z][a-zA-Z0-9_]*$": { "$ref": "#/definitions/verbList" }
       }
     },
     "moves": {

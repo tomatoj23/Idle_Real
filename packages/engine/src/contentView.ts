@@ -12,7 +12,7 @@ import {
   type ProgressionParams,
 } from './progression.js';
 import { BASE_DAMAGE_MECHANICS, type DamageMechanics } from './combat.js';
-import { BASE_AFFIX_PARAMS, type AffixParams } from './gear.js';
+import { BASE_AFFIX_PARAMS, type AffixParams, type GearBonuses } from './gear.js';
 import {
   aggregateStat,
   type AggregationContext,
@@ -46,12 +46,11 @@ export interface SkillView {
   readonly activities?: readonly ActivityView[];
 }
 
-export interface ItemBonusesView {
-  readonly atk?: number;
-  readonly def?: number;
-  readonly hp?: number;
-  readonly crit?: number;
-}
+/**
+ * 物品基础加成视图（#021 批 4 键域开放）：与 gear.ts GearBonuses 同一
+ * 类型（单一来源），键 = stat id，值 = flat 基础量。
+ */
+export type ItemBonusesView = GearBonuses;
 
 /** 丹药持续增益（duration 毫秒；multipliers 键 = 属性 id，值 = 倍率）。 */
 export interface ItemEffectView {
@@ -71,6 +70,11 @@ export interface ItemView {
   readonly slot?: string;
   /** equip 类：基础加成模板（稀有度/词条在实例化时另行掷定）。 */
   readonly bonuses?: ItemBonusesView;
+  /**
+   * equip 类（引擎只消费 weapon 槽位物品）：动词池键（开放键域，#021 批 4）。
+   * 缺省/非法 = 引擎兜底键 fist 池；存在性由内容包校验强制。
+   */
+  readonly verbStyle?: string;
   /** pill 类：持续增益。 */
   readonly effect?: ItemEffectView;
   /** pill 类：即时恢复（percent = 气血上限比例）。 */
@@ -158,7 +162,11 @@ export interface EnemyView {
   readonly name: string;
   readonly icon: string;
   readonly level: number;
-  /** 动词池键（claw/magic…）；缺省按 claw。 */
+  /**
+   * 动词池键（开放键域，#021 批 4，ADR-016 裁决 ⑦）：须在内容包
+   * combatText.verbs 注册（校验关卡）；'claw'/'magic' 只是官方包的内容
+   * 约定，引擎不感知。缺省（防御路径）按引擎兜底 fist 池。
+   */
   readonly kind?: string;
   readonly hp: number;
   readonly atk: number;

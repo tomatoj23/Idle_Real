@@ -38,11 +38,12 @@
         "level": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 99
+          "description": "层数；上限单一来源 = config.progression.maxLevel（语义校验对照，schema 魔法数 99 已清退，#021 批 4）"
         },
         "kind": {
-          "enum": ["claw", "magic"],
-          "description": "claw 爪牙 / magic 阴风法术（决定动词池）"
+          "type": "string",
+          "pattern": "^[a-z][a-zA-Z0-9_]*$",
+          "description": "动词池键（#021 批 4 开放键域，ADR-016 裁决 ⑦）：须在 combatText.verbs 注册（语义校验）；claw/magic 仅为官方包内容约定，新增风格 = 新 JSON 键"
         },
         "element": {
           "enum": ["metal", "wood", "water", "fire", "earth", "wind", "thunder"],

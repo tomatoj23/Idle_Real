@@ -64,7 +64,8 @@
         "prototypeKey": { "$ref": "#/definitions/prototypeKey" },
         "prototypeParent": { "$ref": "#/definitions/prototypeParent" },
         "slot": { "$ref": "#/definitions/slot" },
-        "bonuses": { "$ref": "#/definitions/bonuses" }
+        "bonuses": { "$ref": "#/definitions/bonuses" },
+        "verbStyle": { "$ref": "#/definitions/verbStyle" }
       }
     },
     "blank": {
@@ -146,16 +147,21 @@
       "pattern": "^[a-z][a-z0-9_]*$",
       "description": "佩戴槽位 id（config.slots 数据化，起步 weapon/body/accessory，为法宝/外袍留门）"
     },
+    "verbStyle": {
+      "type": "string",
+      "pattern": "^[a-z][a-zA-Z0-9_]*$",
+      "description": "动词池键（#021 批 4 开放键域，combatText.verbs）：仅 weapon 槽位物品被引擎消费；未注册即语义校验 xref；缺省 = 引擎兜底键 fist 池"
+    },
     "bonuses": {
       "type": "object",
       "minProperties": 1,
       "additionalProperties": false,
-      "description": "装备基础加成；至少一项",
+      "description": "装备基础加成（#021 批 4 键域开放）：键 = stat id（键形态：小写字母开头，允许驼峰/下划线，gatherXp 先例），值 = flat 基础量（整数 ≥ 0），经 ADR-011 管线投影；新增 stat 键 = 纯 JSON 改动，生效须引擎消费点（消费点注册表见 docs/agents/content.md）",
+      "patternProperties": {
+        "^[a-z][a-zA-Z0-9_]*$": { "type": "integer", "minimum": 0 }
+      },
       "properties": {
-        "atk": { "type": "integer", "minimum": 0 },
-        "def": { "type": "integer", "minimum": 0 },
-        "hp": { "type": "integer", "minimum": 0 },
-        "crit": { "type": "integer", "minimum": 0, "maximum": 100, "description": "暴击率（百分点）" }
+        "crit": { "type": "integer", "minimum": 0, "maximum": 100, "description": "暴击率（百分点）；100 = 百分点量纲物理上限，非引擎钳制值——有效上限由 config.combat.critCap 钳制（#021 批 4 单一来源澄清）" }
       }
     },
     "effect": {
@@ -170,18 +176,16 @@
           "description": "增益时长（毫秒）"
         },
         "multipliers": { "$ref": "#/definitions/multipliers" },
-        "crit": { "type": "integer", "minimum": 0, "maximum": 100 }
+        "crit": { "type": "integer", "minimum": 0, "maximum": 100, "description": "额外暴击率（百分点）；100 = 量纲物理上限，有效上限由 config.combat.critCap 钳制（与 bonuses.crit 同律，#021 批 4）" }
       }
     },
     "multipliers": {
       "type": "object",
       "minProperties": 1,
       "additionalProperties": false,
-      "description": "属性倍率区，值必须 > 1",
-      "properties": {
-        "gatherXp": { "type": "number", "exclusiveMinimum": 1 },
-        "atk": { "type": "number", "exclusiveMinimum": 1 },
-        "def": { "type": "number", "exclusiveMinimum": 1 }
+      "description": "属性倍率区（#021 批 4 键域开放）：键 = stat id（键形态：小写字母开头，允许驼峰/下划线），值必须 > 1；键域 = 引擎消费点清单（gatherXp/atk/def 等已接线，见 docs/agents/content.md 注册表），全新 stat 生效须引擎新增消费点",
+      "patternProperties": {
+        "^[a-z][a-zA-Z0-9_]*$": { "type": "number", "exclusiveMinimum": 1 }
       }
     },
     "heal": {
@@ -268,8 +272,8 @@
       "properties": {
         "stat": {
           "type": "string",
-          "pattern": "^[a-z][a-z0-9_]*$",
-          "description": "目标属性 id（atk/def/hp/crit/gatherXp…）"
+          "pattern": "^[a-z][a-zA-Z0-9_]*$",
+          "description": "目标属性 id（atk/def/hp/crit/gatherXp…；键形态与 bonuses/affixPool.stat 同源，#021 批 4 对齐——旧形态误拒驼峰键 gatherXp）"
         },
         "zone": {
           "enum": ["flat", "addPct", "mult"],

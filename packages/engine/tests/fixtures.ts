@@ -55,8 +55,8 @@ export function makeCombatPack(): GameContent {
     items: [
       ...makePack().items,
       { id: 'core1', name: '浊妖丹', icon: '丹', type: 'mat', sell: 25 },
-      { id: 'sword1', name: '青锋剑', icon: '剑', type: 'equip', slot: 'weapon', sell: 30, bonuses: { atk: 6 } },
-      { id: 'scorp_tail', name: '蝎尾刺', icon: '刺', type: 'equip', slot: 'weapon', sell: 25, bonuses: { atk: 5 } },
+      { id: 'sword1', name: '青锋剑', icon: '剑', type: 'equip', slot: 'weapon', sell: 30, verbStyle: 'sword', bonuses: { atk: 6 } },
+      { id: 'scorp_tail', name: '蝎尾刺', icon: '刺', type: 'equip', slot: 'weapon', sell: 25, verbStyle: 'sword', bonuses: { atk: 5 } },
       {
         id: 'pill_atk',
         name: '破煞丹',

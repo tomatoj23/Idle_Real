@@ -28,7 +28,7 @@ engine `EnemyView` 未投影，靠 #15 票驱动补齐）。
 |---|---|---|---|
 | `mat` | 材料 | 公共字段（id/name/icon/type/sell） | — |
 | `pill` | 丹药 | 公共字段 | effect、heal（至少其一，语义检查） |
-| `equip` | 装备 | 公共字段 | slot、bonuses（须都有，语义检查） |
+| `equip` | 装备 | 公共字段 | slot、bonuses（须都有，语义检查）、verbStyle（#021 批 4） |
 | `blank` | **器胚**（装备底材模板） | 公共字段 + slot + floorRange + tierRange | preferredTags、inherentModifiers |
 | `inscription` | **铭纹**（装备词缀模板） | 公共字段 + tiers | feature、tags |
 
@@ -104,11 +104,34 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 | 字段 | 形态 | 约定 |
 |---|---|---|
 | `name` | string（1~6 字） | 词条名，随词条值展示 |
-| `stat` | enum：`atk`/`def`/`hp`/`crit` | **affix.stat 引用合法**的校验关卡（schema enum 钉死装备加成四键域；crit 为百分点）。扩域须同步 UI `STAT_LABEL` 与引擎 baseScale 标尺（单一来源裁决随批 4） |
+| `stat` | string（`^[a-z][a-zA-Z0-9_]*$`） | **stat id，键域开放（#021 批 4）**：与装备 `bonuses` 键域同源，schema 只钉键形态；hp/crit 参与词条标尺折算（hp÷hpDivider / crit×critScale），其余 stat 原值参与；生效须引擎消费点（见下「stat 消费点注册表」）。UI 展示缺键回退 stat id |
 | `scale` | number（> 0） | 量级系数：词条值 = max(1, round(基础标尺 × scale × 随机波动))；波动幅度与标尺折算系数（hp÷5/crit×0.8/兜底 3）已随 #020 config 化（`config.affix` 子节） |
 
 实例化按稀有度 `affix` 数量掷**不重复 stat** 词条；同 stat 多条目合法（掷点去重
 发生在运行时）。
+
+### stat 消费点注册表（#021 批 4 单一来源裁决，N3/N4 收口）
+
+**键域 = 引擎消费点清单**。装备 `bonuses`、丹药 `multipliers`、词条池
+`affixPool.stat` 三处键域已全部开放为 stat id（schema patternProperties，键形态
+`^[a-z][a-zA-Z0-9_]*$`：小写字母开头，允许驼峰/下划线——`gatherXp` 先例，旧
+`[a-z0-9_]` 形态会误拒驼峰键），写入零改动；**stat 生效必须有引擎消费点**：
+
+| stat | 消费点 | 说明 |
+|---|---|---|
+| `atk` / `def` | engine `game.ts` statBase → playerStats | 战斗面板攻/防 |
+| `hp` | 同上（气血曲线基线上叠加） | 词条标尺按 hp÷hpDivider 折算 |
+| `crit` | 同上（钳 `config.combat.critCap`） | 百分点；标尺按 crit×critScale 折算 |
+| `gatherXp` | engine `game.ts` completeActivityOnce（倍率基线 1） | 采集修为加成 |
+
+- 全新 stat（如"幸运"）：bonuses/multipliers/affixPool **纯 JSON 写入即被投影**
+  （引擎零拦截，词条可掷、贡献入管线），但**面板生效须引擎新增消费点**（改码）
+  并在本表登记——这是固有约束：无消费点的属性是死数据。
+- `bonuses` 与 Modifier 的形状统一决策（审计 §七 #14 前置②）：bonuses 是装备
+  模板的 **flat 简写**（省 zone/condition，投影时折算稀有度倍率后走 ADR-011
+  单管线），键域与 `Modifier.stat` 同一注册表；不改为 Modifier[] 数组（避免
+  无谓的内容格式迁移）。
+- UI `STAT_LABEL` 缺键回退 stat id（键域开放的可接受降级）。
 
 ### 引擎判例（round3 A1，#14 动工时引用）
 
@@ -122,6 +145,22 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 **文案零引擎硬编码**：战斗叙事/系统提示改文案 = 纯 JSON 改动。引擎对缺失内容
 一律非文案占位降级（键名回显或空串跳过；如招式名兜底回显注册键、模板缺失
 退化为伤害数字），防御路径保留但不再内置中文兜底句。
+
+### 动词池与动词风格开放键域（#021 批 4，ADR-016 裁决 ⑦）
+
+- `combatText.verbs`：键域开放——**新增动词风格 = 新 JSON 键**（如 `staff`）；
+  schema 仅强制引擎兜底键 `fist` 恒需（required + minItems），其余键在被引用时
+  由语义校验强制存在。sword/fist/claw/magic 只是官方包约定。
+- 动词风格声明（P1-2 玩家映射解绑）：
+  - **玩家** = 佩戴武器（weapon 槽 equip）的 `verbStyle` 字段（开放键域，validate
+    强制 verbs 池存在）；缺声明/非法回落引擎兜底键 `fist` 池。引擎内嵌的
+    'sword'/'fist' 规则已清退——"法杖走 magic 池" = 纯 JSON 改动。
+    官方包全部武器显式声明 `"verbStyle": "sword"`。
+  - **敌人** = `kind` 字段（开放键域，validate 强制 verbs 池存在）；引擎不再内嵌
+    缺省 'claw'（防御路径回落 fist 池）。'claw'/'magic' 是官方包约定而非引擎词汇。
+  - 槽位 role 推断（有武器→读槽位 role）随 #14 的 SlotDef.role 一并落地，
+    批 4 只做"读 def + fist 兜底"。
+- 键形态：`^[a-z][a-zA-Z0-9_]*$`（与 stat 键形态统一）。
 
 ### combatText 扩节（六键 → 十键，schema required）
 
@@ -157,9 +196,12 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 
 - 槽位 id 数据化，新槽 = 新 JSON（法宝/外袍留门）；`items[].slot` 引用槽位 id。
 - `config` 为**可选节**：缺省时跳过槽位 xref 检查（既有包零破坏），引擎按无槽位兜底。
+  `progression.maxLevel` 存在时同时作为敌人层数上限的**单一来源**（#021 批 4：
+  enemy.schema 魔法数 99 已清退，语义校验对照该值；config 缺省时无从取得，跳过对照）。
 - 起步三槽：`weapon` 法器 / `body` 护体 / `accessory` 灵饰。
 - 注意：武器招式注册（`combatText.moves` 键）目前锚定槽位 id `weapon`；
-  若未来槽位改名/多武器槽，须同步放宽该锚定（#14 装备票消费时处理）。
+  若未来槽位改名/多武器槽，须同步放宽该锚定（**#14 装备票消费时处理，#021 批 4
+  维持登记不撤销**——SlotDef.role 未随批 4 落地，'weapon' 双写仍在）。
 
 ### 玩法参数三子节（#020 批 3，ADR-016 裁决 ① 分策）
 
@@ -192,6 +234,8 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 
 | 字段 | 形态 | 约定 |
 |---|---|---|
+| `kind` | string（`^[a-z][a-zA-Z0-9_]*$`） | 动词池键（#021 批 4 开放键域）：须在 `combatText.verbs` 注册（语义校验 xref）；'claw'/'magic' 为官方包约定 |
+| `level` | integer（≥ 1） | 层数；上限**单一来源** = `config.progression.maxLevel`（#021 批 4：语义校验对照，config 缺省时跳过；schema 魔法数 99 已清退）。另一有效上限来自开战门控 `clv + levelGateOffset ≥ level` |
 | `element` | enum：metal/wood/water/fire/earth/wind/thunder | 系别（金木水火土风雷，ADR-012）；**不填=凡击无系别**；只给 Boss/特色怪配 |
 | `affinities` | `{[系别]: −100~100}` | 系别亲和：受该系攻击的伤害调整百分点（负=抗性，正=易伤）；键由 patternProperties 钉死七系 |
 

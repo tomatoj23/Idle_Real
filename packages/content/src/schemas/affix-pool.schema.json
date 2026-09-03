@@ -19,8 +19,8 @@
         },
         "stat": {
           "type": "string",
-          "enum": ["atk", "def", "hp", "crit"],
-          "description": "属性 id：装备加成四键域（crit 为百分点）。affix.stat 引用合法的校验关卡；扩域须同步 UI STAT_LABEL 与引擎 baseScale 标尺"
+          "pattern": "^[a-z][a-zA-Z0-9_]*$",
+          "description": "属性 id（#021 批 4 键域开放；键形态：小写字母开头，允许驼峰/下划线）：与装备 bonuses 键域同源；hp/crit 参与词条标尺折算（hp÷hpDivider / crit×critScale），其余 stat 原值参与；生效须引擎消费点（注册表见 docs/agents/content.md）。UI 展示缺键回退 stat id"
         },
         "scale": {
           "type": "number",
