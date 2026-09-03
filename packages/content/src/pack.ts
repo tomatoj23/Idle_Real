@@ -41,6 +41,7 @@ import raritySchemaJson from './schemas/rarity.schema.json';
 import recipeSchemaJson from './schemas/recipe.schema.json';
 import shopSchemaJson from './schemas/shop.schema.json';
 import skillSchemaJson from './schemas/skill.schema.json';
+import textsSchemaJson from './schemas/texts.schema.json';
 import type { Config, ContentPack, Item, Modifier, Range, Skill } from './types.js';
 import { validateContent } from './validate.js';
 import type { ContentError, JsonSchema } from './validate.js';
@@ -53,6 +54,7 @@ const gearDropSchema = gearDropSchemaJson as unknown as JsonSchema;
 const raritySchema = raritySchemaJson as unknown as JsonSchema;
 const affixPoolSchema = affixPoolSchemaJson as unknown as JsonSchema;
 const combatTextSchema = combatTextSchemaJson as unknown as JsonSchema;
+const textsSchema = textsSchemaJson as unknown as JsonSchema;
 const shopSchema = shopSchemaJson as unknown as JsonSchema;
 const configSchema = configSchemaJson as unknown as JsonSchema;
 
@@ -66,6 +68,7 @@ const SECTION_SCHEMAS = {
   rarities: raritySchema,
   affixPool: affixPoolSchema,
   combatText: combatTextSchema,
+  texts: textsSchema,
   shop: shopSchema,
   config: configSchema,
 } as const;

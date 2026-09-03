@@ -17,7 +17,8 @@ engine `EnemyView` 未投影，靠 #15 票驱动补齐）。
 | `gearDrops` | 是 | gear-drop.schema.json | 异宝掉落表（无 id 关系行） |
 | `rarities` | 是 | rarity.schema.json | 稀有度档位词表（#018，ADR-016 词表零默认） |
 | `affixPool` | 是 | affix-pool.schema.json | 装备随机词条池（同上） |
-| `combatText` | 是 | combat-text.schema.json | CTEXT 战斗文案词库 |
+| `combatText` | 是 | combat-text.schema.json | CTEXT 战斗文案词库（#019 批 2 扩十键：+句式模板/系统 note/战后摘要/对照语） |
+| `texts` | 是 | texts.schema.json | 系统展示文案（#019 批 2）：兵刃兜底名 + reject 协议 code → 文案映射 |
 | `shop` | 是 | shop.schema.json | 坊市货架（无 id 关系行） |
 | `config` | **否** | config.schema.json | 全局配置；缺省=无槽位数据（引擎安全兜底） |
 
@@ -115,6 +116,33 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 为参数位；权重表/概率/档名/卖价系数/量级系数归 content。"炼器等级抬稀有度"的
 外部加权输入位（旧版 js/game.js:84-95）留待 #5/#14 接入 rollRarity 签名，届时
 系数本身随批 3 config 化，勿写死函数体。
+
+## combatText 扩节与 texts 系统文案（#019 批 2，ADR-016 裁决 ④）
+
+**文案零引擎硬编码**：战斗叙事/系统提示改文案 = 纯 JSON 改动。引擎对缺失内容
+一律非文案占位降级（键名回显或空串跳过；如招式名兜底回显注册键、模板缺失
+退化为伤害数字），防御路径保留但不再内置中文兜底句。
+
+### combatText 扩节（六键 → 十键，schema required）
+
+| 键 | 形状 | 说明 |
+|---|---|---|
+| `templates` | 五池：playerLight/playerHeavy/playerCrit/enemyLight/enemyHeavy | 出招句式模板。槽位：`{move}` 招式名、`{weapon}` 兵刃名、`{verb}` 动词、`{defender}` 受击妖名、`{enemy}` 妖名、`{limb}` 部位、`{opening}` 起势（heavy 池）、`{critIntro}` 暴击起势（crit 池）。schema pattern 强制必要槽位 |
+| `notes` | 七池：retreat/retreatToGather/retreatWounded/retreatVictory/reengage/start/autoPill | 系统 combat-note 叙事。start/reengage 带 `{enemy}`、autoPill 带 `{item}` |
+| `summary` | tiers（四档画句池）+ base/crit 整行模板 | 战后一行签名画像：引擎按主导伤害档取画句填 `{flavor}`，`{rounds}`/`{crits}` 填数值 |
+| `compare` | 四池：revenge/faster/slower/even | 同对手再战对照语：`{rounds}` 今番、`{prev}` 前番回合数；无从对照返回空（事件不带 compare） |
+
+### texts（系统展示文案）
+
+| 字段 | 形状 | 说明 |
+|---|---|---|
+| `fistName` | string（1~6 字） | 无佩戴武器时的兵刃展示名（weaponName 槽兜底值） |
+| `reject` | 动作协议键 → 理由 code → 文案模板 | 展示文案映射。动作键域 schema 钉死：activity:start / bag:sell / shop:buy / combat:start / pill:eat / gear:equip / gear:sell / `'*'`（跨动作兜底，bad-payload 等通用文案）；理由 code 键域开放 |
+| `reject` 槽位 | `{level}` `{activity}` `{item}` `{owned}` `{cost}` `{gp}` | 由引擎按协议语境填入； combat:start 的 `{level}` = `enemy.level − 门控偏移`（偏移量只在引擎判定处单一来源，文案侧零副本——N1 文案侧裁决） |
+
+- 命中序：精确动作 → `'*'` → **键名回显**（`{action}/{reason}`，防御可见）。
+- 协议 code 本体归引擎，本节只承载展示文案；code 未命中/缺节绝不崩，toast
+  退化为协议键名。
 
 ## config 槽位数据化（#16）
 

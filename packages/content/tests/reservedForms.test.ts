@@ -93,6 +93,42 @@ function makeBasePack(): Record<string, any> {
         hit: '{defender}发出一声哀鸣——这致命一击受创{d}点！',
         hurt: '你眼前一黑，受创{d}点。',
       },
+      templates: {
+        playerLight: ['你一招「{move}」，{weapon}{verb}向{defender}的{limb}。'],
+        playerHeavy: ['{opening}——一招「{move}」，{weapon}{verb}向{defender}的{limb}。'],
+        playerCrit: ['{critIntro}——「{move}」倏然施出，{weapon}{verb}向{defender}的{limb}！'],
+        enemyLight: ['{enemy}一式「{move}」，{verb}向你的{limb}。'],
+        enemyHeavy: ['{enemy}凶性大发——「{move}」猛然施出，{verb}向你的{limb}！'],
+      },
+      notes: {
+        retreat: ['你收势撤出战团'],
+        retreatToGather: ['你收势离战，转赴修行'],
+        retreatWounded: ['你气血未复，暂且退避调息'],
+        retreatVictory: ['你见好就收，飘然离场'],
+        reengage: ['你略定心神，再度向【{enemy}】出手'],
+        start: ['剑拔弩张——你与【{enemy}】战至一处'],
+        autoPill: ['你服下一枚【{item}】，气息稍定'],
+      },
+      summary: {
+        tiers: {
+          light: ['招式绵密，轻痕积胜'],
+          mid: ['招招见血，稳中求进'],
+          heavy: ['大开大合，重创连绵'],
+          deadly: ['招招奔要害，锋芒毕露'],
+        },
+        base: ['{rounds} 合击倒 · {flavor}'],
+        crit: ['{rounds} 合击倒 · {flavor} · {crits} 次会心'],
+      },
+      compare: {
+        revenge: ['前番不敌，今 {rounds} 合雪耻'],
+        faster: ['前番苦战 {prev} 合，今 {rounds} 合击倒'],
+        slower: ['今番 {rounds} 合方克，比前番 {prev} 合多费周章'],
+        even: ['与前番 {rounds} 合如出一辙'],
+      },
+    },
+    texts: {
+      fistName: '拳脚',
+      reject: { '*': { 'bad-payload': '指令无效', 'unknown-action': '未知指令' } },
     },
     shop: [],
   };

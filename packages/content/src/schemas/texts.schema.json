@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TextsSection",
+  "description": "content 包 texts 节（#019 批 2）：系统展示文案，协议 code → 文案映射。协议 code 本体归引擎（不在内容里定义新 code），本节只承载展示文案；code 未命中时引擎按键名回显降级（ADR-016 裁决 ④ 防御路径）。",
+  "type": "object",
+  "required": ["fistName", "reject"],
+  "additionalProperties": false,
+  "properties": {
+    "fistName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 6,
+      "description": "无佩戴武器时的兵刃展示名（makeAttackText weaponName 槽兜底值）"
+    },
+    "reject": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(activity:start|bag:sell|shop:buy|combat:start|pill:eat|gear:equip|gear:sell|\\*)$": {
+          "$ref": "#/definitions/reasonMap"
+        }
+      },
+      "description": "reject 展示文案：动作协议键 → 理由 code → 文案模板；'*' 为跨动作兜底键（bad-payload/unknown-action 等通用文案），命中序 = 精确动作优先、'*' 次之、键名回显殿后。模板槽位 {level}/{activity}/{item}/{owned}/{cost}/{gp} 由引擎按协议语境填入"
+    }
+  },
+  "definitions": {
+    "reasonMap": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 60
+      },
+      "description": "理由 code → 展示文案（code 键域开放：引擎协议 code 演进不破本节；typo 键静默回退键名回显，诊断可见）"
+    }
+  }
+}

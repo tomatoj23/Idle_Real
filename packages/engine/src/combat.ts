@@ -1,16 +1,17 @@
 /**
- * 回合战斗机制（issue #4）。
+ * 回合战斗机制（issue #4；#019 批 2 文案收编后零内置文案）。
  *
- * 纯机制层：伤害公式 / 伤害档 / 词库抽取 / 战斗摘要（词库文本属内容包，
- * ADR-016 批 2 / 票 #019 收编；本文件内置的中文模板与兜底句属待清偿违规），
- * 不触碰游戏状态（状态机与事件在 game.ts）。随机一律走注入的 RNG
- * （ADR-013 三禁），时间常量用毫秒。
+ * 纯机制层：伤害公式 / 伤害档 / 词库抽取 / 战斗摘要。文案词库全部来自
+ * 内容包（combatText 十键：词库 + 句式模板 + 系统 note + 战后摘要 +
+ * 对照语，ADR-016 / 票 #019），不触碰游戏状态（状态机与事件在 game.ts）。
+ * 随机一律走注入的 RNG（ADR-013 三禁），时间常量用毫秒。
  *
  * 文案体系沿用旧版 CTEXT 语义（借鉴 SexyMUD ADR-0011）：
  * 出招句 + 受击者主语后果句独立成句，「」招式名，伤害档分池，
  * 致命一击门控（剩余生命=危 且 伤害=重/濒死）。
  * 引擎零内容感知：词库按内容包约定形状读取，缺节/非法一律安全兜底
- * （types.ts 战斗兜底约定：未注册招式回退拳脚）。
+ * （types.ts 战斗兜底约定：未注册招式回退拳脚）。兜底值一律**非文案占位**
+ * （ADR-016 裁决 ④：键名回显或空串跳过），引擎不内置任何中文句子。
  */
 
 /* ---------- 数值基线（旧版 data.js/game.js 沿革） ---------- */
@@ -85,6 +86,18 @@ export function pickText(pool: unknown, random: () => number): string | undefine
 
 /* ---------- 战斗文案 ---------- */
 
+/**
+ * 模板槽位填充：把 `{key}` 槽替换为 vars[key]。值为空串即跳过该槽
+ * （ADR-016 裁决 ④ 防御路径：缺词库时槽位退化，不造句）。
+ */
+export function fillTemplate(template: string, vars: Readonly<Record<string, string>>): string {
+  let out = template;
+  for (const [key, value] of Object.entries(vars)) {
+    out = out.replaceAll(`{${key}}`, value);
+  }
+  return out;
+}
+
 /** 战斗词库的透明视图（content.combatText 按形状读取）。 */
 export interface CombatTextPools {
   readonly verbs?: unknown;
@@ -93,6 +106,14 @@ export interface CombatTextPools {
   readonly critIntro?: unknown;
   readonly cons?: unknown;
   readonly fatal?: unknown;
+  /** 出招句式模板池（#019：playerLight/playerHeavy/playerCrit/enemyLight/enemyHeavy）。 */
+  readonly templates?: unknown;
+  /** 系统 note 叙事池（#019，game.ts 消费）。 */
+  readonly notes?: unknown;
+  /** 战后摘要池（#019：tiers + base/crit 模板）。 */
+  readonly summary?: unknown;
+  /** 同对手对照语池（#019：revenge/faster/slower/even）。 */
+  readonly compare?: unknown;
 }
 
 /** 文案生成入参：双方身份、数值与随机源。 */
@@ -129,7 +150,8 @@ function pickVerb(pools: CombatTextPools, style: string, random: () => number): 
   const fallbackList = verbs && typeof verbs === 'object' ? verbs['fist'] : undefined;
   const entry = pickVerbEntry(list, random) ?? pickVerbEntry(fallbackList, random);
   if (entry) return entry;
-  return { verb: '击', limb: '要害' }; // 词库全缺的最简兜底
+  // 词库全缺：非文案占位（键名回显，ADR-016 裁决 ④），不内置中文兜底句。
+  return { verb: 'v', limb: 'limb' };
 }
 
 function pickVerbEntry(list: unknown, random: () => number): { verb: string; limb: string } | undefined {
@@ -141,11 +163,12 @@ function pickVerbEntry(list: unknown, random: () => number): { verb: string; lim
   return { verb: entry.v, limb };
 }
 
-/** 招式名抽取：moves[moveKey] 未注册回退 moves.fist（安全兜底约定）。 */
+/** 招式名抽取：moves[moveKey] 未注册回退 moves.fist（安全兜底约定）；全缺回显注册键。 */
 export function extractMoveName(pools: CombatTextPools, moveKey: string, random: () => number): string {
   const moves = pools.moves as Record<string, unknown> | undefined;
   const pool = moves && typeof moves === 'object' ? (moves[moveKey] ?? moves['fist']) : undefined;
-  return pickText(pool, random) ?? '搏兔一击';
+  // 兜底：键名回显（ADR-016 裁决 ④），不再冻结默认包招式名。
+  return pickText(pool, random) ?? moveKey;
 }
 
 function tierText(pools: CombatTextPools, side: 'player' | 'enemy', tier: DamageTier, random: () => number): string | undefined {
@@ -163,9 +186,17 @@ function fatalText(pools: CombatTextPools, side: 'player' | 'enemy'): string | u
   return typeof text === 'string' && text.length > 0 ? text : undefined;
 }
 
+/** 模板池抽取：templates[key] 非法/缺失返回 undefined（防御路径）。 */
+function pickTemplate(pools: CombatTextPools, key: string, random: () => number): string | undefined {
+  const templates = pools.templates as Record<string, unknown> | undefined;
+  const pool = templates && typeof templates === 'object' ? templates[key] : undefined;
+  return pickText(pool, random);
+}
+
 /**
- * 生成一次出招的完整文案：出招句 + 受击者主语后果句。
- * 门控：受击者残血（≤15%）且重/濒死 → fatal 专属词库（致命一击）。
+ * 生成一次出招的完整文案：出招句（templates 模板出池，#019）+
+ * 受击者主语后果句。门控：受击者残血（≤15%）且重/濒死 → fatal 专属词库。
+ * 全部词库缺失时退化为非文案占位（伤害数字），绝不内置中文句子。
  */
 export function makeAttackText(
   pools: CombatTextPools,
@@ -176,31 +207,43 @@ export function makeAttackText(
   const { verb, limb } = pickVerb(pools, args.verbStyle, random);
   const move = extractMoveName(pools, args.moveKey, random);
 
-  let line: string;
-  if (args.side === 'player') {
-    if (tier === 'deadly' || args.crit) {
-      line = `${pickText(pools.critIntro, random) ?? '你气机鼓荡'}——「${move}」倏然施出，${args.weaponName}${verb}向${args.enemyName}的${limb}！`;
-    } else if (tier === 'heavy') {
-      line = `${pickText(pools.openings, random) ?? '你灵机鼓荡'}——一招「${move}」，${args.weaponName}${verb}向${args.enemyName}的${limb}。`;
-    } else {
-      line = `你一招「${move}」，${args.weaponName}${verb}向${args.enemyName}的${limb}。`;
-    }
-  } else {
-    line =
-      tier === 'heavy' || tier === 'deadly'
-        ? `${args.enemyName}凶性大发——「${move}」猛然施出，${verb}向你的${limb}！`
-        : `${args.enemyName}一式「${move}」，${verb}向你的${limb}。`;
-  }
+  // 模板选择：玩家 crit/deadly 走暴击起势句、heavy 走起势句；妖物 heavy/deadly 同池。
+  const isPlayer = args.side === 'player';
+  const templateKey = isPlayer
+    ? tier === 'deadly' || args.crit
+      ? 'playerCrit'
+      : tier === 'heavy'
+        ? 'playerHeavy'
+        : 'playerLight'
+    : tier === 'heavy' || tier === 'deadly'
+      ? 'enemyHeavy'
+      : 'enemyLight';
+  const template = pickTemplate(pools, templateKey, random);
+  const line = template
+    ? fillTemplate(template, {
+        move,
+        weapon: args.weaponName,
+        verb,
+        limb,
+        defender: args.enemyName,
+        enemy: args.enemyName,
+        // 起势槽：缺词库时空串跳过（裁决 ④），不造兜底句。
+        opening: tier === 'heavy' && isPlayer ? (pickText(pools.openings, random) ?? '') : '',
+        critIntro: tier === 'deadly' || args.crit ? (pickText(pools.critIntro, random) ?? '') : '',
+      })
+    : '';
 
   const critical = isCriticalHp(args.defenderHp, args.defenderMaxHp);
   const fatalGated = critical && (tier === 'heavy' || tier === 'deadly');
   const fatal = fatalGated ? fatalText(pools, args.side) : undefined;
-  if (fatal !== undefined) {
-    return line + fatal.replaceAll('{defender}', args.enemyName).replaceAll('{d}', String(args.dmg));
-  }
-  const cons = tierText(pools, args.side, tier, random);
-  const fallback = args.side === 'player' ? '{defender}受创{d}点。' : '你受创{d}点。';
-  return line + (cons ?? fallback).replaceAll('{defender}', args.enemyName).replaceAll('{d}', String(args.dmg));
+  const tail = fatal !== undefined
+    ? fatal.replaceAll('{defender}', args.enemyName).replaceAll('{d}', String(args.dmg))
+    : // 后果池缺失：退化 `{d}` 裸伤害占位（裁决 ④），不再内置中文模板。
+      (tierText(pools, args.side, tier, random) ?? '{d}')
+        .replaceAll('{defender}', args.enemyName)
+        .replaceAll('{d}', String(args.dmg));
+  const full = line + tail;
+  return full === '' ? String(args.dmg) : full;
 }
 
 /* ---------- 战斗摘要与同对手对照（调研合入 2026-09-02） ---------- */
@@ -214,24 +257,32 @@ export interface RoundTally {
 
 export const emptyTally = (): RoundTally => ({ rounds: 0, crits: 0, tiers: { light: 0, mid: 0, heavy: 0, deadly: 0 } });
 
-const TIER_FLAVOR: Readonly<Record<DamageTier, string>> = {
-  light: '招式绵密，轻痕积胜',
-  mid: '招招见血，稳中求进',
-  heavy: '大开大合，重创连绵',
-  deadly: '招招奔要害，锋芒毕露',
-};
-
 /**
- * 战后一行签名画像：由伤害构成（主导伤害档 + 会心数）产生，非纯数值统计。
+ * 战后一行签名画像（模板出池，#019）：由伤害构成（主导伤害档 + 会心数）
+ * 从 summary.tiers 取画句，套 base/crit 整行模板。
+ * summary 节缺失时退化为纯轮数（非文案占位，裁决 ④）。
  */
-export function summarizeRounds(tally: RoundTally): string {
+export function summarizeRounds(
+  tally: RoundTally,
+  pools: CombatTextPools | undefined,
+  random: () => number,
+): string {
   const { tiers } = tally;
   let dominant: DamageTier = 'light';
   for (const tier of ['mid', 'heavy', 'deadly'] as const) {
     if (tiers[tier] > tiers[dominant]) dominant = tier;
   }
-  const critPart = tally.crits > 0 ? ` · ${tally.crits} 次会心` : '';
-  return `${tally.rounds} 合击倒 · ${TIER_FLAVOR[dominant]}${critPart}`;
+  const summary = pools?.summary as
+    | { tiers?: Record<string, unknown>; base?: unknown; crit?: unknown }
+    | undefined;
+  const template = pickText(tally.crits > 0 ? summary?.crit : summary?.base, random);
+  if (template === undefined) return String(tally.rounds);
+  const flavor = pickText(summary?.tiers?.[dominant], random) ?? '';
+  return fillTemplate(template, {
+    rounds: String(tally.rounds),
+    flavor,
+    crits: String(tally.crits),
+  });
 }
 
 /** 同对手上一战记录（lastEncounter 值形状）。 */
@@ -243,11 +294,22 @@ export interface EncounterRecord {
   readonly at: number;
 }
 
-/** 对照语：同对手再战的回合数/胜负对照；无从对照返回 undefined。 */
-export function compareEncounterText(prev: EncounterRecord | undefined, rounds: number): string | undefined {
+/**
+ * 对照语（模板出池，#019）：同对手再战的回合数/胜负对照。
+ * 无从对照或 compare 节缺失（防御路径）返回 undefined——对照语是增强
+ * 信息，事件侧省略即可，不造兜底句。
+ */
+export function compareEncounterText(
+  prev: EncounterRecord | undefined,
+  rounds: number,
+  pools: CombatTextPools | undefined,
+  random: () => number,
+): string | undefined {
   if (!prev || typeof prev.rounds !== 'number' || prev.rounds <= 0) return undefined;
-  if (!prev.won) return `前番不敌，今 ${rounds} 合雪耻`;
-  if (rounds < prev.rounds) return `前番苦战 ${prev.rounds} 合，今 ${rounds} 合击倒`;
-  if (rounds > prev.rounds) return `今番 ${rounds} 合方克，比前番 ${prev.rounds} 合多费周章`;
-  return `与前番 ${rounds} 合如出一辙`;
+  const compare = pools?.compare as Record<string, unknown> | undefined;
+  if (!compare || typeof compare !== 'object') return undefined;
+  const key = !prev.won ? 'revenge' : rounds < prev.rounds ? 'faster' : rounds > prev.rounds ? 'slower' : 'even';
+  const template = pickText(compare[key], random);
+  if (template === undefined) return undefined;
+  return fillTemplate(template, { rounds: String(rounds), prev: String(prev.rounds) });
 }

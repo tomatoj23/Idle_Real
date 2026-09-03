@@ -44,6 +44,7 @@ export {
   shopOf,
   slotsOf,
   skillsOf,
+  textsOf,
 } from './contentView.js';
 export type {
   ActivityView,
@@ -88,6 +89,7 @@ export {
   compareEncounterText,
   emptyTally,
   extractMoveName,
+  fillTemplate,
   hitTierOf,
   isCriticalHp,
   makeAttackText,

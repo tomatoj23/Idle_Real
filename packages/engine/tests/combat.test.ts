@@ -78,6 +78,13 @@ describe('战斗文案', () => {
       hit: '{defender}灵光溃散——致命一击受创{d}点！',
       hurt: '你眼前一黑，受创{d}点——要道消身殒！',
     },
+    templates: {
+      playerLight: ['你一招「{move}」，{weapon}{verb}向{defender}的{limb}。'],
+      playerHeavy: ['{opening}——一招「{move}」，{weapon}{verb}向{defender}的{limb}。'],
+      playerCrit: ['{critIntro}——「{move}」倏然施出，{weapon}{verb}向{defender}的{limb}！'],
+      enemyLight: ['{enemy}一式「{move}」，{verb}向你的{limb}。'],
+      enemyHeavy: ['{enemy}凶性大发——「{move}」猛然施出，{verb}向你的{limb}！'],
+    },
   };
 
   const baseArgs = {
@@ -139,30 +146,71 @@ describe('战斗文案', () => {
     expect(text).toContain('你受创3点。');
   });
 
-  it('词库全缺：抽出招式回退且不抛错', () => {
-    expect(extractMoveName({}, 'e1', rng)).toBe('搏兔一击');
+  it('词库全缺：招式名回显注册键（非文案占位，#019）且不抛错', () => {
+    expect(extractMoveName({}, 'e1', rng)).toBe('e1');
     expect(extractMoveName({ moves: { fist: ['兜底'] } }, 'e1', rng)).toBe('兜底');
+  });
+
+  it('模板全缺：退化为伤害数字占位，不造中文句（#019）', () => {
+    const text = makeAttackText(
+      { verbs: { claw: [{ v: '抓', limbs: ['肩头'] }] }, moves: { e1: ['饿虎扑食'] } },
+      { ...baseArgs, dmg: 10 },
+      rng,
+    );
+    expect(text).toBe('10');
   });
 });
 
 describe('战斗摘要与同对手对照', () => {
-  it('签名画像由主导伤害档产生', () => {
+  const summaryPools = {
+    summary: {
+      tiers: {
+        light: ['招式绵密，轻痕积胜'],
+        mid: ['招招见血，稳中求进'],
+        heavy: ['大开大合，重创连绵'],
+        deadly: ['招招奔要害，锋芒毕露'],
+      },
+      base: ['{rounds} 合击倒 · {flavor}'],
+      crit: ['{rounds} 合击倒 · {flavor} · {crits} 次会心'],
+    },
+    compare: {
+      revenge: ['前番不敌，今 {rounds} 合雪耻'],
+      faster: ['前番苦战 {prev} 合，今 {rounds} 合击倒'],
+      slower: ['今番 {rounds} 合方克，比前番 {prev} 合多费周章'],
+      even: ['与前番 {rounds} 合如出一辙'],
+    },
+  };
+
+  it('签名画像由主导伤害档产生（模板出池，#019）', () => {
     const tally: RoundTally = {
       rounds: 11,
       crits: 2,
       tiers: { light: 2, mid: 3, heavy: 4, deadly: 2 },
     };
-    const summary = summarizeRounds(tally);
+    const summary = summarizeRounds(tally, summaryPools, rng);
     expect(summary).toContain('11 合');
     expect(summary).toContain('大开大合'); // heavy 主导
     expect(summary).toContain('2 次会心');
   });
 
-  it('对照语：回合数与胜负对照', () => {
-    expect(compareEncounterText(undefined, 11)).toBeUndefined();
-    expect(compareEncounterText({ rounds: 30, won: true, at: 0 }, 11)).toContain('前番苦战 30 合，今 11 合击倒');
-    expect(compareEncounterText({ rounds: 5, won: true, at: 0 }, 11)).toContain('多费周章');
-    expect(compareEncounterText({ rounds: 11, won: true, at: 0 }, 11)).toContain('如出一辙');
-    expect(compareEncounterText({ rounds: 30, won: false, at: 0 }, 11)).toContain('前番不敌');
+  it('summary 节缺失：退化为纯轮数（非文案占位，#019）', () => {
+    const tally: RoundTally = { rounds: 7, crits: 0, tiers: { light: 1, mid: 0, heavy: 0, deadly: 0 } };
+    expect(summarizeRounds(tally, undefined, rng)).toBe('7');
+  });
+
+  it('对照语：回合数与胜负对照（模板出池，#019）', () => {
+    expect(compareEncounterText(undefined, 11, summaryPools, rng)).toBeUndefined();
+    expect(compareEncounterText({ rounds: 30, won: true, at: 0 }, 11, summaryPools, rng)).toContain(
+      '前番苦战 30 合，今 11 合击倒',
+    );
+    expect(compareEncounterText({ rounds: 5, won: true, at: 0 }, 11, summaryPools, rng)).toContain('多费周章');
+    expect(compareEncounterText({ rounds: 11, won: true, at: 0 }, 11, summaryPools, rng)).toContain('如出一辙');
+    expect(compareEncounterText({ rounds: 30, won: false, at: 0 }, 11, summaryPools, rng)).toContain('前番不敌');
+  });
+
+  it('compare 节缺失：返回 undefined（增强信息，事件省略）', () => {
+    expect(
+      compareEncounterText({ rounds: 30, won: true, at: 0 }, 11, undefined, rng),
+    ).toBeUndefined();
   });
 });

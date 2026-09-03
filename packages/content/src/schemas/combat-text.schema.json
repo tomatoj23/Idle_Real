@@ -1,9 +1,9 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "CombatTextSection",
-  "description": "content 包 combatText 节：战斗文案词库（CTEXT 体系数据化）。招式注册键的存在性（武器/敌人 id、fist 兜底）由语义校验补全。",
+  "description": "content 包 combatText 节：战斗文案词库（CTEXT 体系数据化）。招式注册键的存在性（武器/敌人 id、fist 兜底）由语义校验补全。#019 批 2 扩：句式模板/系统 note/战后摘要/对照语出池，十键恒需。",
   "type": "object",
-  "required": ["verbs", "moves", "openings", "critIntro", "cons", "fatal"],
+  "required": ["verbs", "moves", "openings", "critIntro", "cons", "fatal", "templates", "notes", "summary", "compare"],
   "additionalProperties": false,
   "properties": {
     "verbs": {
@@ -59,6 +59,113 @@
           "pattern": "\\{d\\}"
         }
       }
+    },
+    "templates": {
+      "type": "object",
+      "required": ["playerLight", "playerHeavy", "playerCrit", "enemyLight", "enemyHeavy"],
+      "additionalProperties": false,
+      "description": "出招句式模板池（#019 出池）：引擎按出招方与伤害档选池抽取后填槽。槽位：{move} 招式名 / {weapon} 兵刃展示名 / {verb} 动词 / {defender} 受击妖名 / {enemy} 妖名 / {limb} 部位 / {opening} 起势（heavy 池）/ {critIntro} 暴击起势（crit 池）",
+      "properties": {
+        "playerLight": {
+          "$ref": "#/definitions/templateLines",
+          "description": "玩家普通句（轻/中档）",
+          "pattern": "(?=.*\\{move\\})(?=.*\\{weapon\\})(?=.*\\{verb\\})(?=.*\\{defender\\})(?=.*\\{limb\\})"
+        },
+        "playerHeavy": {
+          "$ref": "#/definitions/templateLines",
+          "description": "玩家重击句（heavy，带起势）",
+          "pattern": "(?=.*\\{opening\\})(?=.*\\{move\\})(?=.*\\{weapon\\})(?=.*\\{verb\\})(?=.*\\{defender\\})(?=.*\\{limb\\})"
+        },
+        "playerCrit": {
+          "$ref": "#/definitions/templateLines",
+          "description": "玩家暴击/濒死句（crit 或 deadly）",
+          "pattern": "(?=.*\\{critIntro\\})(?=.*\\{move\\})(?=.*\\{weapon\\})(?=.*\\{verb\\})(?=.*\\{defender\\})(?=.*\\{limb\\})"
+        },
+        "enemyLight": {
+          "$ref": "#/definitions/templateLines",
+          "description": "妖物普通句（轻/中档）",
+          "pattern": "(?=.*\\{enemy\\})(?=.*\\{move\\})(?=.*\\{verb\\})(?=.*\\{limb\\})"
+        },
+        "enemyHeavy": {
+          "$ref": "#/definitions/templateLines",
+          "description": "妖物重击/濒死句（heavy/deadly）",
+          "pattern": "(?=.*\\{enemy\\})(?=.*\\{move\\})(?=.*\\{verb\\})(?=.*\\{limb\\})"
+        }
+      }
+    },
+    "notes": {
+      "type": "object",
+      "required": ["retreat", "retreatToGather", "retreatWounded", "retreatVictory", "reengage", "start", "autoPill"],
+      "additionalProperties": false,
+      "description": "系统 combat-note 叙事池（#019 出池）：手动停战 / 转赴修行 / 残血退避 / 胜后离场 / 自动再战 / 开战 / 自动嗑丹",
+      "properties": {
+        "retreat": { "$ref": "#/definitions/noteLines", "description": "手动收势停战" },
+        "retreatToGather": { "$ref": "#/definitions/noteLines", "description": "开修行而收势离战" },
+        "retreatWounded": { "$ref": "#/definitions/noteLines", "description": "自动再战前残血退避" },
+        "retreatVictory": { "$ref": "#/definitions/noteLines", "description": "胜后休整期结束离场" },
+        "reengage": {
+          "$ref": "#/definitions/noteLines",
+          "description": "自动再战",
+          "pattern": "\\{enemy\\}"
+        },
+        "start": {
+          "$ref": "#/definitions/noteLines",
+          "description": "开战",
+          "pattern": "\\{enemy\\}"
+        },
+        "autoPill": {
+          "$ref": "#/definitions/noteLines",
+          "description": "自动嗑丹（战斗中静默服药）",
+          "pattern": "\\{item\\}"
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["tiers", "base", "crit"],
+      "additionalProperties": false,
+      "description": "战后一行签名画像（#019 出池）：tiers 按主导伤害档出画句；base/crit 为整行模板（crit 版多会心段）",
+      "properties": {
+        "tiers": { "$ref": "#/definitions/flavorTiers" },
+        "base": {
+          "$ref": "#/definitions/templateLines",
+          "description": "无会心整行模板",
+          "pattern": "(?=.*\\{rounds\\})(?=.*\\{flavor\\})"
+        },
+        "crit": {
+          "$ref": "#/definitions/templateLines",
+          "description": "带会心整行模板",
+          "pattern": "(?=.*\\{rounds\\})(?=.*\\{flavor\\})(?=.*\\{crits\\})"
+        }
+      }
+    },
+    "compare": {
+      "type": "object",
+      "required": ["revenge", "faster", "slower", "even"],
+      "additionalProperties": false,
+      "description": "同对手再战对照语（#019 出池）：雪耻 / 更快 / 更慢 / 持平",
+      "properties": {
+        "revenge": {
+          "$ref": "#/definitions/templateLines",
+          "description": "前番战败今雪耻",
+          "pattern": "(?=.*\\{rounds\\})(?=.*\\{prev\\})"
+        },
+        "faster": {
+          "$ref": "#/definitions/templateLines",
+          "description": "今番更快",
+          "pattern": "(?=.*\\{rounds\\})(?=.*\\{prev\\})"
+        },
+        "slower": {
+          "$ref": "#/definitions/templateLines",
+          "description": "今番更慢",
+          "pattern": "(?=.*\\{rounds\\})(?=.*\\{prev\\})"
+        },
+        "even": {
+          "$ref": "#/definitions/templateLines",
+          "description": "持平",
+          "pattern": "\\{rounds\\}"
+        }
+      }
     }
   },
   "definitions": {
@@ -93,6 +200,28 @@
       "type": "array",
       "minItems": 1,
       "items": { "type": "string", "minLength": 1, "maxLength": 60 }
+    },
+    "templateLines": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1, "maxLength": 80 }
+    },
+    "noteLines": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1, "maxLength": 60 }
+    },
+    "flavorTiers": {
+      "type": "object",
+      "required": ["light", "mid", "heavy", "deadly"],
+      "additionalProperties": false,
+      "description": "画句按主导伤害档分池",
+      "properties": {
+        "light": { "$ref": "#/definitions/lines" },
+        "mid": { "$ref": "#/definitions/lines" },
+        "heavy": { "$ref": "#/definitions/lines" },
+        "deadly": { "$ref": "#/definitions/lines" }
+      }
     },
     "hitTiers": {
       "type": "object",

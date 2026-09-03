@@ -293,6 +293,77 @@
     "fatal": {
       "hit": "{defender}发出一声哀鸣，浑身灵光溃散如雪——这致命一击受创{d}点！",
       "hurt": "你眼前一黑，五脏如遭锤击，受创{d}点——再挨一下只怕要道消身殒！"
+    },
+    "templates": {
+      "playerLight": [ "你一招「{move}」，{weapon}{verb}向{defender}的{limb}。" ],
+      "playerHeavy": [ "{opening}——一招「{move}」，{weapon}{verb}向{defender}的{limb}。" ],
+      "playerCrit": [ "{critIntro}——「{move}」倏然施出，{weapon}{verb}向{defender}的{limb}！" ],
+      "enemyLight": [ "{enemy}一式「{move}」，{verb}向你的{limb}。" ],
+      "enemyHeavy": [ "{enemy}凶性大发——「{move}」猛然施出，{verb}向你的{limb}！" ]
+    },
+    "notes": {
+      "retreat": [ "你收势撤出战团" ],
+      "retreatToGather": [ "你收势离战，转赴修行" ],
+      "retreatWounded": [ "你气血未复，暂且退避调息" ],
+      "retreatVictory": [ "你见好就收，飘然离场" ],
+      "reengage": [ "你略定心神，再度向【{enemy}】出手" ],
+      "start": [ "剑拔弩张——你与【{enemy}】战至一处" ],
+      "autoPill": [ "你服下一枚【{item}】，气息稍定" ]
+    },
+    "summary": {
+      "tiers": {
+        "light": [ "招式绵密，轻痕积胜" ],
+        "mid": [ "招招见血，稳中求进" ],
+        "heavy": [ "大开大合，重创连绵" ],
+        "deadly": [ "招招奔要害，锋芒毕露" ]
+      },
+      "base": [ "{rounds} 合击倒 · {flavor}" ],
+      "crit": [ "{rounds} 合击倒 · {flavor} · {crits} 次会心" ]
+    },
+    "compare": {
+      "revenge": [ "前番不敌，今 {rounds} 合雪耻" ],
+      "faster": [ "前番苦战 {prev} 合，今 {rounds} 合击倒" ],
+      "slower": [ "今番 {rounds} 合方克，比前番 {prev} 合多费周章" ],
+      "even": [ "与前番 {rounds} 合如出一辙" ]
+    }
+  },
+  "texts": {
+    "fistName": "拳脚",
+    "reject": {
+      "*": {
+        "bad-payload": "指令无效",
+        "unknown-action": "未知指令"
+      },
+      "pill:eat": {
+        "not-pill": "此非丹药",
+        "no-item": "丹药已尽",
+        "full-hp": "气血充盈，无需服药"
+      },
+      "activity:start": {
+        "not-found": "查无此法",
+        "level": "修为不足，需 {level} 层方可「{activity}」"
+      },
+      "bag:sell": {
+        "not-found": "查无此物",
+        "no-item": "乾坤袋中「{item}」不足（仅有 {owned} 件）"
+      },
+      "shop:buy": {
+        "not-in-shop": "坊市未售此物",
+        "no-gold": "灵石不足（需 {cost}，现有 {gp}）"
+      },
+      "combat:start": {
+        "not-found": "查无此妖",
+        "level": "境界太低（需 {level} 层斗法），恐有性命之虞",
+        "low-hp": "气血未复，先调息片刻"
+      },
+      "gear:equip": {
+        "not-found": "查无此器",
+        "not-wearable": "此物非可佩之器"
+      },
+      "gear:sell": {
+        "not-found": "查无此器",
+        "worn": "佩戴中的法器不可卖出"
+      }
     }
   },
   "shop": [

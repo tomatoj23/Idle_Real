@@ -41,6 +41,7 @@ export type {
   SkillKind,
   SlotDef,
   Stack,
+  TextsSection,
   VerbEntry,
   VerbStyle,
 } from './types.js';

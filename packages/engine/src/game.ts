@@ -17,6 +17,7 @@ import {
   findShopEntry,
   playerMaxHp,
   skillsOf,
+  textsOf,
   type ActivityView,
   type EnemyView,
   type ItemView,
@@ -31,6 +32,7 @@ import {
   VICTORY_REST_MS,
   calcDmg,
   compareEncounterText,
+  fillTemplate,
   hitTierOf,
   makeAttackText,
   pickText,
@@ -131,6 +133,38 @@ export function createGame(options: CreateGameOptions): Game {
 
   const combatSkill = (): SkillView | undefined => skillsOf(content).find((skill) => skill.kind === 'combat');
   const combatText = combatTextOf(content);
+  const texts = textsOf(content);
+
+  /** 无武器兵刃展示名（texts.fistName，#019）：形状非法时键名回显（裁决 ④）。 */
+  const fistName: string =
+    typeof texts.fistName === 'string' && texts.fistName.length > 0 ? texts.fistName : 'fistName';
+
+  /**
+   * reject 展示文案（texts.reject 映射，#019）：命中序 = 精确动作 →
+   * `'*'` 跨动作兜底 → 键名回显 `{action}/{reason}`（裁决 ④ 防御可见）。
+   */
+  function rejectText(
+    action: string,
+    reason: string,
+    vars?: Readonly<Record<string, string>>,
+  ): string {
+    const rejectMap = texts.reject as Record<string, unknown> | undefined;
+    const resolve = (entry: unknown): string | undefined => {
+      const reasonMap = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : undefined;
+      const template = reasonMap?.[reason];
+      if (typeof template !== 'string' || template.length === 0) return undefined;
+      return fillTemplate(template, vars ?? {});
+    };
+    return resolve(rejectMap?.[action]) ?? resolve(rejectMap?.['*']) ?? `${action}/${reason}`;
+  }
+
+  /** 系统 note 叙事（combatText.notes 池，#019）：池缺失/抽空回显池键名（裁决 ④）。 */
+  function noteFrom(key: string, vars?: Readonly<Record<string, string>>): string {
+    const notes = combatText.notes as Record<string, unknown> | undefined;
+    const pool = notes && typeof notes === 'object' ? notes[key] : undefined;
+    const template = pickText(pool, random);
+    return template === undefined ? key : fillTemplate(template, vars ?? {});
+  }
 
   /** 气血上限语境：佩戴武器视为持续生效的 moveId 语境；脱战无来袭系别。 */
   const hpContext = (): AggregationContext => ({ moveId: weaponMoveKey() });
@@ -273,8 +307,13 @@ export function createGame(options: CreateGameOptions): Game {
     }
   }
 
-  function reject(actionType: string, reason: string, message: string): void {
-    events.emit({ type: 'reject', time, data: { action: actionType, reason, message } });
+  /** 拒绝事件：展示文案由 texts 节按 action+reason 解析（#019），协议 code 保留。 */
+  function reject(actionType: string, reason: string, vars?: Readonly<Record<string, string>>): void {
+    events.emit({
+      type: 'reject',
+      time,
+      data: { action: actionType, reason, message: rejectText(actionType, reason, vars) },
+    });
   }
 
   function emitLoot(item: string, count: number, source: string): void {
@@ -350,17 +389,17 @@ export function createGame(options: CreateGameOptions): Game {
   function eatPill(pillId: string, silent: boolean): void {
     const item = findItem(content, pillId);
     if (!item || item.type !== 'pill') {
-      if (!silent) reject('pill:eat', 'not-pill', '此非丹药');
+      if (!silent) reject('pill:eat', 'not-pill');
       return;
     }
     if ((state.items[pillId] ?? 0) <= 0) {
-      if (!silent) reject('pill:eat', 'no-item', '丹药已尽');
+      if (!silent) reject('pill:eat', 'no-item');
       return;
     }
     if (item.heal) {
       const cap = playerStats(hpContext()).maxHp;
       if (state.hp >= cap) {
-        if (!silent) reject('pill:eat', 'full-hp', '气血充盈，无需服药');
+        if (!silent) reject('pill:eat', 'full-hp');
         return;
       }
       takeItem(pillId, 1);
@@ -375,7 +414,7 @@ export function createGame(options: CreateGameOptions): Game {
         events.emit({
           type: 'combat-note',
           time,
-          data: { text: `你服下一枚【${item.name}】，气息稍定`, kind: 'pill' },
+          data: { text: noteFrom('autoPill', { item: item.name }), kind: 'pill' },
         });
       }
     } else if (item.effect) {
@@ -399,7 +438,7 @@ export function createGame(options: CreateGameOptions): Game {
     const c = state.combat;
     if (!c) return;
     state.combat = null;
-    emitNote(note ?? '你收势撤出战团', c.enemyId);
+    emitNote(note ?? noteFrom('retreat'), c.enemyId);
   }
 
   /** 玩家一击：暴击 roll → 伤害 → 伤害档累计 → 文案 → 胜负判定。 */
@@ -422,7 +461,7 @@ export function createGame(options: CreateGameOptions): Game {
         enemyName: enemy.name,
         moveKey,
         verbStyle: weapon ? 'sword' : 'fist',
-        weaponName: weapon ? weapon.item.name : '拳脚',
+        weaponName: weapon ? weapon.item.name : fistName,
         dmg,
         crit,
         atk,
@@ -517,9 +556,9 @@ export function createGame(options: CreateGameOptions): Game {
     if (skill) grantExp(skill, enemy.exp, false);
 
     const tally = { rounds: c.rounds, crits: c.crits, tiers: c.tiers };
-    const summary = summarizeRounds(tally);
+    const summary = summarizeRounds(tally, combatText, random);
     const prev = state.lastEncounter[enemy.id];
-    const compare = compareEncounterText(prev, c.rounds);
+    const compare = compareEncounterText(prev, c.rounds, combatText, random);
     state.lastEncounter[enemy.id] = { rounds: c.rounds, won: true, at: time };
     c.respT = VICTORY_REST_MS; // 战斗态保留（ehp ≤ 0），休整后按 autoFight 决定去留
 
@@ -577,7 +616,7 @@ export function createGame(options: CreateGameOptions): Game {
           if (state.autoFight) {
             // 自动再战前复查气血：残血且无自动补给时退避（挂机不送死）。
             if (state.hp < playerStats(hpContext()).maxHp * LOW_HP_FRACTION) {
-              stopCombat('你气血未复，暂且退避调息');
+              stopCombat(noteFrom('retreatWounded'));
               return;
             }
             c.ehp = enemy.hp;
@@ -586,9 +625,9 @@ export function createGame(options: CreateGameOptions): Game {
             c.rounds = 0;
             c.crits = 0;
             c.tiers = { light: 0, mid: 0, heavy: 0, deadly: 0 };
-            emitNote(`你略定心神，再度向【${enemy.name}】出手`, enemy.id);
+            emitNote(noteFrom('reengage', { enemy: enemy.name }), enemy.id);
           } else {
-            stopCombat('你见好就收，飘然离场');
+            stopCombat(noteFrom('retreatVictory'));
             return;
           }
         }
@@ -715,7 +754,7 @@ export function createGame(options: CreateGameOptions): Game {
       switch (action.type) {
         case 'activity:start': {
           // 战斗与采集互斥：开修行即收势离战。
-          if (state.combat) stopCombat('你收势离战，转赴修行');
+          if (state.combat) stopCombat(noteFrom('retreatToGather'));
           const payload = action.payload as { skillId?: unknown; index?: unknown } | undefined;
           if (
             !payload ||
@@ -724,20 +763,19 @@ export function createGame(options: CreateGameOptions): Game {
             !Number.isInteger(payload.index) ||
             payload.index < 0
           ) {
-            reject(action.type, 'bad-payload', '指令无效');
+            reject(action.type, 'bad-payload');
             return;
           }
           const found = findActivity(content, payload.skillId, payload.index);
           if (!found) {
-            reject(action.type, 'not-found', '查无此法');
+            reject(action.type, 'not-found');
             return;
           }
           if (levelOf(found.skill.id) < found.activity.unlockLevel) {
-            reject(
-              action.type,
-              'level',
-              `修为不足，需 ${found.activity.unlockLevel} 层方可「${found.activity.name}」`,
-            );
+            reject(action.type, 'level', {
+              level: String(found.activity.unlockLevel),
+              activity: found.activity.name,
+            });
             return;
           }
           // 同一活动进行中：幂等派发（不清进度、不发事件）。
@@ -785,18 +823,18 @@ export function createGame(options: CreateGameOptions): Game {
         case 'bag:sell': {
           const parsed = readItemPayload(action.payload);
           if (!parsed) {
-            reject(action.type, 'bad-payload', '指令无效');
+            reject(action.type, 'bad-payload');
             return;
           }
           const { itemId, count } = parsed;
           const item = findItem(content, itemId);
           if (!item) {
-            reject(action.type, 'not-found', '查无此物');
+            reject(action.type, 'not-found');
             return;
           }
           const owned = state.items[itemId] ?? 0;
           if (count > owned) {
-            reject(action.type, 'no-item', `乾坤袋中「${item.name}」不足（仅有 ${owned} 件）`);
+            reject(action.type, 'no-item', { item: item.name, owned: String(owned) });
             return;
           }
           takeItem(itemId, count);
@@ -813,19 +851,19 @@ export function createGame(options: CreateGameOptions): Game {
         case 'shop:buy': {
           const parsed = readItemPayload(action.payload);
           if (!parsed) {
-            reject(action.type, 'bad-payload', '指令无效');
+            reject(action.type, 'bad-payload');
             return;
           }
           const { itemId, count } = parsed;
           const entry = findShopEntry(content, itemId);
           if (!entry) {
-            reject(action.type, 'not-in-shop', '坊市未售此物');
+            reject(action.type, 'not-in-shop');
             return;
           }
           const item = findItem(content, itemId);
           const cost = entry.price * count;
           if (state.gp < cost) {
-            reject(action.type, 'no-gold', `灵石不足（需 ${cost}，现有 ${state.gp}）`);
+            reject(action.type, 'no-gold', { cost: String(cost), gp: String(state.gp) });
             return;
           }
           state.gp -= cost;
@@ -842,22 +880,25 @@ export function createGame(options: CreateGameOptions): Game {
           const payload = action.payload as { enemyId?: unknown } | undefined;
           const enemyId = payload?.enemyId;
           if (typeof enemyId !== 'string') {
-            reject(action.type, 'bad-payload', '指令无效');
+            reject(action.type, 'bad-payload');
             return;
           }
           const enemy = findEnemy(content, enemyId);
           if (!enemy) {
-            reject(action.type, 'not-found', '查无此妖');
+            reject(action.type, 'not-found');
             return;
           }
+          // 开战门控（N1 文案侧联动，#019）：判定偏移量（+2）只在此处单一来源，
+          // 文案侧经 {level} 槽取 enemy.level − 门控偏移，无二次硬编码（#020 参数化判定侧）。
+          const GATE_OFFSET = 2;
           const clv = combatLevelOf(content, state.skills);
-          if (clv + 2 < enemy.level) {
-            reject(action.type, 'level', `境界太低（需 ${enemy.level - 2} 层斗法），恐有性命之虞`);
+          if (clv + GATE_OFFSET < enemy.level) {
+            reject(action.type, 'level', { level: String(enemy.level - GATE_OFFSET) });
             return;
           }
           if (state.combat?.enemyId === enemyId) return; // 幂等
           if (state.hp < playerStats(hpContext()).maxHp * LOW_HP_FRACTION) {
-            reject(action.type, 'low-hp', '气血未复，先调息片刻');
+            reject(action.type, 'low-hp');
             return;
           }
           if (state.activity) {
@@ -879,7 +920,7 @@ export function createGame(options: CreateGameOptions): Game {
             crits: 0,
             tiers: { light: 0, mid: 0, heavy: 0, deadly: 0 },
           };
-          emitNote(`剑拔弩张——你与【${enemy.name}】战至一处`, enemy.id);
+          emitNote(noteFrom('start', { enemy: enemy.name }), enemy.id);
           return;
         }
 
@@ -901,7 +942,7 @@ export function createGame(options: CreateGameOptions): Game {
         case 'pill:eat': {
           const payload = action.payload as { item?: unknown } | undefined;
           if (typeof payload?.item !== 'string') {
-            reject(action.type, 'bad-payload', '指令无效');
+            reject(action.type, 'bad-payload');
             return;
           }
           eatPill(payload.item, false);
@@ -911,18 +952,20 @@ export function createGame(options: CreateGameOptions): Game {
         case 'gear:equip': {
           const uid = readUidPayload(action.payload);
           if (uid === undefined) {
-            reject(action.type, 'bad-payload', '指令无效');
+            reject(action.type, 'bad-payload');
             return;
           }
           const gear = state.gear.find((entry) => entry.uid === uid);
           if (!gear) {
-            reject(action.type, 'not-found', '查无此器');
+            reject(action.type, 'not-found');
             return;
           }
           const item = findItem(content, gear.itemId);
           const slot = item?.slot;
           if (!item || !slot) {
-            reject(action.type, 'bad-payload', '此物非可佩之器');
+            // uid 有效但物品不可佩戴：协议 code 细化为 not-wearable（#019），
+            // 文案单独挂 texts.reject['gear:equip']/not-wearable，不与 '*' 兜底混用。
+            reject(action.type, 'not-wearable');
             return;
           }
           if (state.equips[slot] === uid) return; // 已佩戴幂等
@@ -940,7 +983,7 @@ export function createGame(options: CreateGameOptions): Game {
           const payload = action.payload as { slot?: unknown } | undefined;
           const slot = payload?.slot;
           if (typeof slot !== 'string') {
-            reject(action.type, 'bad-payload', '指令无效');
+            reject(action.type, 'bad-payload');
             return;
           }
           const uid = state.equips[slot];
@@ -963,16 +1006,16 @@ export function createGame(options: CreateGameOptions): Game {
         case 'gear:sell': {
           const uid = readUidPayload(action.payload);
           if (uid === undefined) {
-            reject(action.type, 'bad-payload', '指令无效');
+            reject(action.type, 'bad-payload');
             return;
           }
           const gear = state.gear.find((entry) => entry.uid === uid);
           if (!gear) {
-            reject(action.type, 'not-found', '查无此器');
+            reject(action.type, 'not-found');
             return;
           }
           if (Object.values(state.equips).includes(uid)) {
-            reject(action.type, 'worn', '佩戴中的法器不可卖出');
+            reject(action.type, 'worn');
             return;
           }
           const item = findItem(content, gear.itemId);
@@ -994,7 +1037,7 @@ export function createGame(options: CreateGameOptions): Game {
         }
 
         default:
-          reject(action.type, 'unknown-action', '未知指令');
+          reject(action.type, 'unknown-action');
       }
     },
 

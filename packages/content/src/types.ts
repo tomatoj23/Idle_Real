@@ -298,6 +298,71 @@ export interface CombatText {
   };
   /** 致命一击专属（剩余生命=危 且 伤害=重/濒死时启用）。 */
   readonly fatal: { readonly hit: string; readonly hurt: string };
+  /**
+   * 出招句式模板池（#019 批 2 出池）：引擎按出招方与伤害档选池抽取后填槽。
+   * 槽位：{move}{weapon}{verb}{defender}{limb}{opening}{critIntro}{enemy}。
+   */
+  readonly templates: {
+    /** 玩家普通句（轻/中档）。 */
+    readonly playerLight: readonly string[];
+    /** 玩家重击句（heavy，带 {opening} 起势槽）。 */
+    readonly playerHeavy: readonly string[];
+    /** 玩家暴击/濒死句（crit 或 deadly，带 {critIntro} 槽）。 */
+    readonly playerCrit: readonly string[];
+    /** 妖物普通句（轻/中档）。 */
+    readonly enemyLight: readonly string[];
+    /** 妖物重击/濒死句（heavy/deadly）。 */
+    readonly enemyHeavy: readonly string[];
+  };
+  /** 系统 combat-note 叙事池（#019 出池）。 */
+  readonly notes: {
+    /** 手动收势停战。 */
+    readonly retreat: readonly string[];
+    /** 开修行而收势离战。 */
+    readonly retreatToGather: readonly string[];
+    /** 自动再战前残血退避。 */
+    readonly retreatWounded: readonly string[];
+    /** 胜后休整期结束离场。 */
+    readonly retreatVictory: readonly string[];
+    /** 自动再战（{enemy} 槽）。 */
+    readonly reengage: readonly string[];
+    /** 开战（{enemy} 槽）。 */
+    readonly start: readonly string[];
+    /** 自动嗑丹（{item} 槽）。 */
+    readonly autoPill: readonly string[];
+  };
+  /** 战后一行签名画像（#019 出池）：主导伤害档出画句 + 整行模板。 */
+  readonly summary: {
+    readonly tiers: Readonly<Record<DamageTier, readonly string[]>>;
+    /** 无会心整行模板（{rounds}{flavor}）。 */
+    readonly base: readonly string[];
+    /** 带会心整行模板（{rounds}{flavor}{crits}）。 */
+    readonly crit: readonly string[];
+  };
+  /** 同对手再战对照语（#019 出池）：{rounds} 今回合数 / {prev} 前番回合数。 */
+  readonly compare: {
+    readonly revenge: readonly string[];
+    readonly faster: readonly string[];
+    readonly slower: readonly string[];
+    readonly even: readonly string[];
+  };
+}
+
+/* ---------- 系统展示文案（#019 批 2） ---------- */
+
+/**
+ * texts 节：协议 code → 展示文案映射。
+ * 协议 code 本体归引擎；code 未命中时引擎按键名回显降级（ADR-016 裁决 ④）。
+ */
+export interface TextsSection {
+  /** 无佩戴武器时的兵刃展示名（makeAttackText weaponName 槽兜底值）。 */
+  readonly fistName: string;
+  /**
+   * reject 展示文案：动作协议键 → 理由 code → 文案模板；
+   * `'*'` 为跨动作兜底键；槽位 {level}/{activity}/{item}/{owned}/{cost}/{gp}
+   * 由引擎按协议语境填入。
+   */
+  readonly reject: Readonly<Record<string, Readonly<Record<string, string>>>>;
 }
 
 /* ---------- 坊市 ---------- */
@@ -333,6 +398,8 @@ export interface ContentPack {
   /** 随机词条池（同上，节恒在）。 */
   readonly affixPool: readonly AffixDef[];
   readonly combatText: CombatText;
+  /** 系统展示文案（#019 批 2）：reject 展示与兵刃兜底名，必需节。 */
+  readonly texts: TextsSection;
   readonly shop: readonly ShopEntry[];
   /** 全局配置（槽位数据化）；可选节，省略=无槽位数据（引擎安全兜底）。 */
   readonly config?: Config;

@@ -249,6 +249,7 @@ export function findRarity(content: GameContent, rarity: string): RarityView | u
 /**
  * 战斗词库视图：按内容包约定形状读取 combatText 节，
  * 缺节返回空对象（combat.ts 全链路安全兜底）。
+ * #019 批 2 扩：templates/notes/summary/compare 四键（文案模板出池）。
  */
 export function combatTextOf(content: GameContent): {
   readonly verbs?: unknown;
@@ -257,10 +258,39 @@ export function combatTextOf(content: GameContent): {
   readonly critIntro?: unknown;
   readonly cons?: unknown;
   readonly fatal?: unknown;
+  readonly templates?: unknown;
+  readonly notes?: unknown;
+  readonly summary?: unknown;
+  readonly compare?: unknown;
 } {
   const text = (content as { combatText?: unknown }).combatText;
   return text && typeof text === 'object' && !Array.isArray(text)
-    ? (text as { verbs?: unknown; moves?: unknown; openings?: unknown; critIntro?: unknown; cons?: unknown; fatal?: unknown })
+    ? (text as {
+        verbs?: unknown;
+        moves?: unknown;
+        openings?: unknown;
+        critIntro?: unknown;
+        cons?: unknown;
+        fatal?: unknown;
+        templates?: unknown;
+        notes?: unknown;
+        summary?: unknown;
+        compare?: unknown;
+      })
+    : {};
+}
+
+/**
+ * 系统展示文案视图（#019 批 2）：texts 节按形状读取，
+ * 缺节返回空对象（game.ts 按键名回显降级，零崩溃）。
+ */
+export function textsOf(content: GameContent): {
+  readonly fistName?: unknown;
+  readonly reject?: unknown;
+} {
+  const texts = (content as { texts?: unknown }).texts;
+  return texts && typeof texts === 'object' && !Array.isArray(texts)
+    ? (texts as { fistName?: unknown; reject?: unknown })
     : {};
 }
 
