@@ -39,7 +39,7 @@
 **违反的明文**：SPEC.md:55（"参数与数据全部来自 content 包"）、SPEC.md:63（"稀有度/词条/伤害档等'档位词表'也是 content"）、rebuild-research.md §1.4（"稀有度/槽位作为 config 节数据化"）。旧版这些值都在 `js/data.js:156-169`（**内容文件**），重写时被搬进引擎。
 **扩散面**：`state.ts:209`（存档规范化 `entry.rarity in RARITIES`）、`index.ts:100-110`（导出表）、`app-desktop/ui.ts:540-541`（rarityClass 白名单 + '寻常' 兜底）、`ui.ts:548`（gearCard 用引擎表**计算** mult 展示值——不只是名字/class，运行时数值依赖）、`ui.ts:182`（'天降异宝' epic 特判）、#11 编辑器（schema 无稀有度 → 表单永远做不了）。
 **源注释问题**：`gear.ts:4-6`"稀有度表与词条池属引擎机制侧"——把"实例化机制（掷点管线，设计正确）"与"档位表/词池/概率（应属内容）"混为一谈；`content/src/types.ts:114` 注释同病。**两处注释在修复前须先废**。
-**内容表达力缺口（同族论据）**：`gearDrops` 表只有 enemy/chance/pool，无稀有度权重——内容包表达不了"这把异宝必出罕见/掉率偏高档"；且旧版 rollRarity 本有"炼器等级抬稀有度"的外部加权输入（js/data.js:156-161，research §1.1 引用），引擎版丢失了参数位——佐证 rollRarity 本该是"接收权重表 + 外部加权的参数化机制"，而非常量封装。
+**内容表达力缺口（同族论据）**：`gearDrops` 表只有 enemy/chance/pool，无稀有度权重——内容包表达不了"这把异宝必出罕见/掉率偏高档"；且旧版 rollRarity 本有"炼器等级抬稀有度"的外部加权输入（加权调用与系数在 js/game.js:84-95，research §1.1 引用；round3 B3 勘误：data.js:156-161 是 RARITY 表定义本身），引擎版丢失了参数位——佐证 rollRarity 本该是"接收权重表 + 外部加权的参数化机制"，而非常量封装。
 
 ### P0-2 战斗叙事词库（combat.ts）
 
@@ -79,7 +79,7 @@ enemy schema `level maximum 99` ↔ 引擎 `MAX_LEVEL=99`；item schema `crit ma
 
 ### P2-2 ADR-015"三处同步"清单缺引擎消费点
 
-content.md 定义三处同步（schemas / types.ts / content.md），但 engine 消费视图（contentView 的 View 类型、state.ts 规范化）不在清单内。实证：enemy schema 已含 `affinities`，engine `EnemyView` 无该字段投影——目前靠票驱动（#15），纪律文档应注明"引擎消费点随消费票同步"。
+content.md 定义三处同步（schemas / types.ts / content.md），但 engine 消费视图（contentView 的 View 类型、state.ts 规范化）不在清单内。实证：enemy schema 已含 `affinities`，engine `EnemyView` 无该字段投影——目前靠票驱动（schema 由 #16 交付、消费随 #15；round3 A2 勘误），纪律文档应注明"引擎消费点随消费票同步"。
 
 ## 四、文档层发现（第三轮核心增量）
 
@@ -121,7 +121,7 @@ content.md 定义三处同步（schemas / types.ts / content.md），但 engine 
 
 | 票 | 现状 | 前置/风险 |
 |---|---|---|
-| **#15 系别** | schema 预留完成（element/affinities + condition/Modifier + patternProperties 七系）；engine 零感知 | 缺口清单：① `EnemyView` 补 affinities 投影；② 雷金水风四系的机制原语（暴击加成/破防 debuff 位/攻击间隔 modifier——research §2.4 说清了是引擎**原语池**而非系别分支）；③ elementFlavor 词库节（combatText 扩节，三处同步）；④ **实现纪律：禁 `switch(element)` 分发**——element→primitive 绑定必须走 content Feature |
+| **#15 系别**（schema 由 #16 交付——round3 A2 勘误） | schema 预留完成（element/affinities + condition/Modifier + patternProperties 七系）；engine 零感知 | 缺口清单：① `EnemyView` 补 affinities 投影；② 雷金水风四系的机制原语（暴击加成/破防 debuff 位/攻击间隔 modifier——research §2.4 说清了是引擎**原语池**而非系别分支）；③ elementFlavor 词库节（combatText 扩节，三处同步）；④ **实现纪律：禁 `switch(element)` 分发**——element→primitive 绑定必须走 content Feature |
 | **#5 craft** | 无违规预埋（Recipe 成功率/耗时/产出全在内容） | 引擎补 craft 活动循环（successRate roll / 失败耗料 / 产出走 makeGear 或 addItem）——低风险；勿把"炼器必成"类规则写进引擎 |
 | **#14 装备构筑** | blocked by #4(已关)+#5 | **三个前置**：① P0-1 裁决 + 稀有度/词条池数据化（否则引擎 AFFIX_POOL 与内容铭纹体系两套词缀并存）；② GearBonuses（flat 四键）与 Modifier（三区带 condition）形状统一决策；③ 'weapon' 锚定放宽（content.md 已登记）。research §1.4 分期"第一波内容扩铭纹池是纯内容"只有在前置①后成立 |
 | **#11 编辑器** | 占位页（main.ts 11 行） | schema 完整性依赖 P0-1（稀有度不在 schema → 表单做不了） |
