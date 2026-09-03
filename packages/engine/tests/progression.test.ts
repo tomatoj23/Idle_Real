@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  MAX_LEVEL,
+  BASE_PROGRESSION,
   expBase,
   expToNext,
   levelFromXp,
@@ -25,8 +25,8 @@ describe('修为曲线（issue #3）', () => {
   });
 
   it('封顶 99 层', () => {
-    expect(levelFromXp(Number.MAX_SAFE_INTEGER)).toBe(MAX_LEVEL);
-    expect(expToNext(MAX_LEVEL)).toBe(Number.POSITIVE_INFINITY);
+    expect(levelFromXp(Number.MAX_SAFE_INTEGER)).toBe(BASE_PROGRESSION.maxLevel);
+    expect(expToNext(BASE_PROGRESSION.maxLevel)).toBe(Number.POSITIVE_INFINITY);
   });
 
   it('气血上限：100 + 12×斗法层数', () => {

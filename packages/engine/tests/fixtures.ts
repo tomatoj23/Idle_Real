@@ -95,6 +95,21 @@ export function makeCombatPack(): GameContent {
         gold: { min: 1, max: 2 },
         drops: [],
       },
+      // #020 门控参数用例：3 层敌人——基线偏移 2 下 clv1 可战，偏移 0 下锁定。
+      {
+        id: 'e3',
+        name: '赤炎虎',
+        icon: '虎',
+        level: 3,
+        kind: 'claw',
+        hp: 90,
+        atk: 13,
+        def: 4,
+        attackInterval: 3000,
+        exp: 40,
+        gold: { min: 8, max: 18 },
+        drops: [],
+      },
     ],
     // 异宝掉率调高，便于回归统计断言（期望 = 场数 × 0.5）。
     gearDrops: [{ enemy: 'e1', chance: 0.5, pool: ['scorp_tail'] }],
@@ -119,7 +134,7 @@ export function makeCombatPack(): GameContent {
         claw: [{ v: '抓', limbs: ['肩头'] }],
         magic: [{ v: '摄', limbs: ['眉心'] }],
       },
-      moves: { fist: ['搏兔一击'], e1: ['饿虎扑食'], efatal: ['噬血狂扑'] },
+      moves: { fist: ['搏兔一击'], e1: ['饿虎扑食'], efatal: ['噬血狂扑'], e3: ['虎啸山林'] },
       openings: ['你气沉丹田'],
       critIntro: ['你气机鼓荡'],
       cons: {
@@ -174,10 +189,14 @@ export function makeCombatPack(): GameContent {
         even: ['与前番 {rounds} 合如出一辙'],
       },
     },
-    // #019 批 2 texts 节（形状合规）：reject 展示文案走 '*' 兜底键。
+    // #019 批 2 texts 节（形状合规）：reject 展示文案走 '*' 兜底键；
+    // #020 补 combat:start/level 模板验证 {level} 槽 = 敌层 − 门控偏移。
     texts: {
       fistName: '拳脚',
-      reject: { '*': { 'bad-payload': '指令无效', 'unknown-action': '未知指令' } },
+      reject: {
+        '*': { 'bad-payload': '指令无效', 'unknown-action': '未知指令' },
+        'combat:start': { level: '境界太低（需 {level} 层斗法），恐有性命之虞' },
+      },
     },
   } as GameContent;
 }

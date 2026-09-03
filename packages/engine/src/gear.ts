@@ -65,22 +65,63 @@ export function rollRarity(content: GameContent, random: () => number): Rarity {
   return last ? last.id : '';
 }
 
-/** 基础加成的量级标尺（旧版：攻/防/血÷5/暴×0.8 的最大者，兜底 3）。 */
-function baseScaleOf(bonuses: GearBonuses): number {
-  return Math.max(bonuses.atk ?? 0, bonuses.def ?? 0, (bonuses.hp ?? 0) / 5, (bonuses.crit ?? 0) * 0.8, 3);
+/* ---------- 词条机制参数（#020 批 3：引擎基线 + config.affix 覆盖） ---------- */
+
+/**
+ * 装备随机词条机制参数：config.affix 同名字段覆盖引擎基线
+ * （ADR-016 裁决 ① 分策）。量级标尺系数与波动幅度是机制参数位；
+ * 每条词条的量级系数（scale）本身仍归内容词条池（#018）。
+ */
+export interface AffixParams {
+  /** 基础标尺：hp 加成参与取值前先除以该值。 */
+  readonly hpDivider: number;
+  /** 基础标尺：crit 加成参与取值前先乘该系数。 */
+  readonly critScale: number;
+  /** 基础标尺兜底下限。 */
+  readonly baseScaleFloor: number;
+  /** 词条值随机波动幅度（乘数 1−v ~ 1+v）。 */
+  readonly variance: number;
+}
+
+/** 引擎基线（旧版 gearStats 沿革：hp÷5 / crit×0.8 / 兜底 3、±20% 波动）。 */
+export const BASE_AFFIX_PARAMS: AffixParams = {
+  hpDivider: 5,
+  critScale: 0.8,
+  baseScaleFloor: 3,
+  variance: 0.2,
+};
+
+/** 基础加成的量级标尺（攻/防原值参与，hp/crit 按参数折算，兜底下限）。 */
+function baseScaleOf(bonuses: GearBonuses, p: AffixParams): number {
+  // 使用点防崩（先例 rollRarity 的 weight>0 过滤）：divider ≤ 0 会产生
+  // Infinity 标尺并持久化进词条值，回落基线 divider（包校验关卡本应拒绝）。
+  const divider = p.hpDivider > 0 ? p.hpDivider : BASE_AFFIX_PARAMS.hpDivider;
+  return Math.max(
+    bonuses.atk ?? 0,
+    bonuses.def ?? 0,
+    (bonuses.hp ?? 0) / divider,
+    (bonuses.crit ?? 0) * p.critScale,
+    p.baseScaleFloor,
+  );
 }
 
 /**
  * 词条数值：max(1, round(基础标尺 × scale × 波动))。量级系数（scale）来自
- * 内容词条池；±20% 波动与基础标尺暂属引擎机制参数（批 3 参数数据化）。
+ * 内容词条池；波动幅度由 config.affix.variance 承载（#020）。
  */
-function rollAffixVal(baseScale: number, entry: AffixPoolView, random: () => number): number {
-  return Math.max(1, Math.round(baseScale * entry.scale * (0.8 + random() * 0.4)));
+function rollAffixVal(
+  baseScale: number,
+  entry: AffixPoolView,
+  random: () => number,
+  p: AffixParams,
+): number {
+  return Math.max(1, Math.round(baseScale * entry.scale * (1 - p.variance + random() * p.variance * 2)));
 }
 
 /**
  * 生成装备实例：roll 稀有度（或调用方指定）→ 按稀有度词条数从内容词条池
  * 掷不重复 stat 词条。uid 由调用方（game 状态机）分配并写入 gearSeq。
+ * affix 缺省用引擎基线（config.affix 缺省时的等价路径）。
  */
 export function makeGear(
   content: GameContent,
@@ -89,9 +130,10 @@ export function makeGear(
   uid: number,
   random: () => number,
   rarity: Rarity = rollRarity(content, random),
+  affix: AffixParams = BASE_AFFIX_PARAMS,
 ): GearInstance {
   const affixCount = findRarity(content, rarity)?.affix ?? 0;
-  const scale = baseScaleOf(bonuses);
+  const scale = baseScaleOf(bonuses, affix);
   const affixes: Affix[] = [];
   if (affixCount > 0) {
     const pool = affixPoolOf(content);
@@ -101,7 +143,7 @@ export function makeGear(
       const entry = pool[Math.floor(random() * pool.length) % pool.length];
       if (!entry || used.has(entry.stat)) continue;
       used.add(entry.stat);
-      affixes.push({ name: entry.name, stat: entry.stat, val: rollAffixVal(scale, entry, random) });
+      affixes.push({ name: entry.name, stat: entry.stat, val: rollAffixVal(scale, entry, random, affix) });
     }
   }
   return { uid, itemId, rarity, affixes };

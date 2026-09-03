@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ConfigSection",
-  "description": "content 包 config 节：全局配置。槽位数据化起步（issue #16），#13 起槽位列表驱动引擎遍历（加/减槽引擎零改动）。本节在包级校验中可选：省略=无槽位数据（引擎安全兜底）。",
+  "description": "content 包 config 节：全局配置。槽位数据化起步（issue #16），#13 起槽位列表驱动引擎遍历（加/减槽引擎零改动）；#020 起承载玩法参数三子节（combat/progression/affix，ADR-016 裁决 ① 分策：数值参数引擎内置基线 + config 覆盖，子节与字段全可选，缺省 = 引擎基线）。本节在包级校验中可选：省略 = 无槽位数据且参数走引擎基线。",
   "type": "object",
   "required": ["slots"],
   "additionalProperties": false,
@@ -33,6 +33,181 @@
             "maxLength": 2,
             "description": "单字图标（汉字，可选）"
           }
+        }
+      }
+    },
+    "combat": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "战斗机制与属性基线参数（#020）。毫秒/百分点计量；缺省 = 引擎基线：间隔 2200、减伤 K 120、波动 ±10%、暴击 ×1.6 / 上限 75、危血 15%、开战门控与败北回血 30%、自动嗑丹 50%、休整 1500ms、门控偏移 +2、伤害档 0.95/1.05/1.5、属性 攻 8+3·层 / 防 2+1.2·层 / 暴 5、autoFight/autoEat 缺省 true",
+      "properties": {
+        "playerAttackInterval": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "玩家攻击间隔（毫秒）；敌人未配 attackInterval 时的缺省出招间隔"
+        },
+        "defenseK": {
+          "type": "number",
+          "minimum": 0,
+          "description": "减伤常数：伤害 ×(1 − def/(def+K))"
+        },
+        "damageVariance": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "伤害波动幅度：乘数 1−v ~ 1+v"
+        },
+        "critMultiplier": {
+          "type": "number",
+          "minimum": 1,
+          "description": "暴击倍率"
+        },
+        "critCap": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "暴击率上限（百分点）"
+        },
+        "criticalHpFraction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "危血线：受击者剩余生命 ≤ 该比例视为「危」（致命一击门控）"
+        },
+        "lowHpFraction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "开战气血门控与败北回血线（最大气血比例）"
+        },
+        "autoEatHpFraction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "自动嗑丹触发血线（最大气血比例）"
+        },
+        "victoryRestMs": {
+          "type": "number",
+          "minimum": 0,
+          "description": "胜利后休整时长（毫秒，再战间隔）"
+        },
+        "levelGateOffset": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "开战门控偏移：斗法层数 + 偏移 ≥ 敌人层数方可开战；reject 文案 {level} 槽 = 敌层数 − 偏移"
+        },
+        "tierLightMax": {
+          "type": "number",
+          "minimum": 0,
+          "description": "伤害档阈值：相对期望伤害 < 此值 = light（语义校验须 < tierMidMax）"
+        },
+        "tierMidMax": {
+          "type": "number",
+          "minimum": 0,
+          "description": "伤害档阈值（语义校验须 < tierHeavyMax）"
+        },
+        "tierHeavyMax": {
+          "type": "number",
+          "minimum": 0,
+          "description": "伤害档阈值：≥ 此值 = deadly"
+        },
+        "statAtkBase": {
+          "type": "number",
+          "minimum": 0,
+          "description": "玩家属性基线：atk = statAtkBase + statAtkPerLevel × 斗法层数"
+        },
+        "statAtkPerLevel": {
+          "type": "number",
+          "minimum": 0
+        },
+        "statDefBase": {
+          "type": "number",
+          "minimum": 0,
+          "description": "def = statDefBase + statDefPerLevel × 斗法层数"
+        },
+        "statDefPerLevel": {
+          "type": "number",
+          "minimum": 0
+        },
+        "statCritBase": {
+          "type": "number",
+          "minimum": 0,
+          "description": "暴击率基线（百分点）"
+        },
+        "autoFight": {
+          "type": "boolean",
+          "description": "自动再战缺省开关：新档初建与存档未写该字段时的恢复值"
+        },
+        "autoEat": {
+          "type": "boolean",
+          "description": "自动嗑丹缺省开关：新档初建与存档未写该字段时的恢复值"
+        }
+      }
+    },
+    "progression": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "修为曲线与气血映射（#020）。缺省 = 引擎基线：层数上限 99、升层修为 floor(10·L^1.8 + 15·L)、气血 100 + 12·层、脱战回血 4%/s",
+      "properties": {
+        "maxLevel": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "修为层数上限"
+        },
+        "xpPowCoef": {
+          "type": "number",
+          "minimum": 0,
+          "description": "升层所需修为 = floor(xpPowCoef × L^xpExponent + xpLinearCoef × L)，L 为当前层"
+        },
+        "xpExponent": {
+          "type": "number",
+          "minimum": 0
+        },
+        "xpLinearCoef": {
+          "type": "number",
+          "minimum": 0
+        },
+        "hpBase": {
+          "type": "number",
+          "minimum": 0,
+          "description": "气血上限 = hpBase + hpPerLevel × 斗法层数"
+        },
+        "hpPerLevel": {
+          "type": "number",
+          "minimum": 0
+        },
+        "hpRegenPerSec": {
+          "type": "number",
+          "minimum": 0,
+          "description": "脱战回血：每秒回复最大气血的比例"
+        }
+      }
+    },
+    "affix": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "装备随机词条机制参数（#020）。缺省 = 引擎基线：标尺 hp÷5 / crit×0.8 / 兜底 3、波动 ±20%",
+      "properties": {
+        "hpDivider": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "基础标尺：hp 加成参与取值前先除以该值"
+        },
+        "critScale": {
+          "type": "number",
+          "minimum": 0,
+          "description": "基础标尺：crit 加成参与取值前先乘该系数"
+        },
+        "baseScaleFloor": {
+          "type": "number",
+          "minimum": 0,
+          "description": "基础标尺兜底下限"
+        },
+        "variance": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "词条值随机波动幅度（±v：乘数 1−v ~ 1+v）"
         }
       }
     }

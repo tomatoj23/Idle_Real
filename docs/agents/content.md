@@ -20,7 +20,7 @@ engine `EnemyView` 未投影，靠 #15 票驱动补齐）。
 | `combatText` | 是 | combat-text.schema.json | CTEXT 战斗文案词库（#019 批 2 扩十键：+句式模板/系统 note/战后摘要/对照语） |
 | `texts` | 是 | texts.schema.json | 系统展示文案（#019 批 2）：兵刃兜底名 + reject 协议 code → 文案映射 |
 | `shop` | 是 | shop.schema.json | 坊市货架（无 id 关系行） |
-| `config` | **否** | config.schema.json | 全局配置；缺省=无槽位数据（引擎安全兜底） |
+| `config` | **否** | config.schema.json | 全局配置：槽位（#16）+ 玩法参数三子节 combat/progression/affix（#020，缺省=引擎基线） |
 
 ## items 五形态（#16 起 oneOf 分流，判别式 = `type`）
 
@@ -104,8 +104,8 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 | 字段 | 形态 | 约定 |
 |---|---|---|
 | `name` | string（1~6 字） | 词条名，随词条值展示 |
-| `stat` | enum：`atk`/`def`/`hp`/`crit` | **affix.stat 引用合法**的校验关卡（schema enum 钉死装备加成四键域；crit 为百分点）。扩域须同步 UI `STAT_LABEL` 与引擎 baseScale 标尺（批 3 参数数据化时统一解决） |
-| `scale` | number（> 0） | 量级系数：词条值 = max(1, round(基础标尺 × scale × (0.8~1.2 随机波动)))；±20% 波动与基础标尺（atk/def/hp÷5/crit×0.8/兜底 3）目前属引擎机制参数，批 3 config 化 |
+| `stat` | enum：`atk`/`def`/`hp`/`crit` | **affix.stat 引用合法**的校验关卡（schema enum 钉死装备加成四键域；crit 为百分点）。扩域须同步 UI `STAT_LABEL` 与引擎 baseScale 标尺（单一来源裁决随批 4） |
+| `scale` | number（> 0） | 量级系数：词条值 = max(1, round(基础标尺 × scale × 随机波动))；波动幅度与标尺折算系数（hp÷5/crit×0.8/兜底 3）已随 #020 config 化（`config.affix` 子节） |
 
 实例化按稀有度 `affix` 数量掷**不重复 stat** 词条；同 stat 多条目合法（掷点去重
 发生在运行时）。
@@ -144,10 +144,15 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 - 协议 code 本体归引擎，本节只承载展示文案；code 未命中/缺节绝不崩，toast
   退化为协议键名。
 
-## config 槽位数据化（#16）
+## config 槽位数据化（#16）与玩法参数数据化（#020）
 
 ```json
-"config": { "slots": [ { "id": "weapon", "name": "法器", "icon": "兵" } ] }
+"config": {
+  "slots": [ { "id": "weapon", "name": "法器", "icon": "兵" } ],
+  "combat": { "playerAttackInterval": 2200, "levelGateOffset": 2, "...": "…" },
+  "progression": { "maxLevel": 99, "xpPowCoef": 10, "...": "…" },
+  "affix": { "hpDivider": 5, "variance": 0.2 }
+}
 ```
 
 - 槽位 id 数据化，新槽 = 新 JSON（法宝/外袍留门）；`items[].slot` 引用槽位 id。
@@ -155,6 +160,33 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 - 起步三槽：`weapon` 法器 / `body` 护体 / `accessory` 灵饰。
 - 注意：武器招式注册（`combatText.moves` 键）目前锚定槽位 id `weapon`；
   若未来槽位改名/多武器槽，须同步放宽该锚定（#14 装备票消费时处理）。
+
+### 玩法参数三子节（#020 批 3，ADR-016 裁决 ① 分策）
+
+**缺省策略 = 引擎基线 + config 覆盖**：三个子节与其字段全部可选，缺省字段逐项回落
+引擎基线（基线即旧版 data.js 数值）；非法值（类型错/NaN）在引擎侧逐字段回落基线，
+数值**边界**（min/max/互斥）由 schema 与包校验关卡拒绝（ADR-010 分工：schema 管边界、
+引擎管形状防御），引擎使用点仅对除零类参数防崩（如 affix.hpDivider ≤ 0 回落基线）——
+改战斗/成长/词条参数 = 纯 JSON 改动，引擎零改动。
+默认包**显式写出全部基线值**（数值回归内容文件，作参数调档的起点）。
+
+| 子节 | 字段域 | 引擎基线 |
+|---|---|---|
+| `combat` | playerAttackInterval / defenseK / damageVariance / critMultiplier / critCap / criticalHpFraction / lowHpFraction / autoEatHpFraction / victoryRestMs / levelGateOffset / tierLightMax / tierMidMax / tierHeavyMax / statAtkBase / statAtkPerLevel / statDefBase / statDefPerLevel / statCritBase / autoFight / autoEat | 2200ms / 120 / ±10% / ×1.6 / 75 / 15% / 30% / 50% / 1500ms / +2 / 0.95·1.05·1.5 / 攻 8+3·层 / 防 2+1.2·层 / 暴 5 / true / true |
+| `progression` | maxLevel / xpPowCoef / xpExponent / xpLinearCoef / hpBase / hpPerLevel / hpRegenPerSec | 99 / 10 / 1.8 / 15（升层需 floor(10·L^1.8+15·L)）/ 100 / 12（气血 100+12·层）/ 4%/s |
+| `affix` | hpDivider / critScale / baseScaleFloor / variance | 5 / 0.8 / 3（基础标尺 = max(攻防原值, hp÷5, crit×0.8, 3)）/ ±20% |
+
+- 计量：毫秒与百分点；`damageVariance`/`variance` 为对称波动幅度 v（乘数 1−v ~ 1+v）。
+- 跨字段语义检查：伤害档阈值须严格递增（tierLightMax < tierMidMax < tierHeavyMax，
+  pack 校验 shape）；其余边界由 schema 关卡保证。
+- statBase 语境：`statAtk*`/`statDef*`/`statCritBase` 按斗法层数线性成长，与
+  progression 的气血曲线在引擎 statBase 处汇合（攻击/防御/暴击归 combat、气血归
+  progression，按消费侧归属分节）。
+- autoFight/autoEat 裁决（#020）：自动化开关的**缺省值**归 `config.combat`
+  （新档初建与存档未写该字段两落点），玩家在局内的手动开关仍随档保存。
+- N1 判定侧收敛：开战门控偏移 `levelGateOffset` 参数化；引擎 `enemyGateOf(content,
+  skills, enemyId)` 是锁定判定/需层数展示的**单一来源**（与 combat:start 判定同公式），
+  UI 禁止复制 clv+offset 公式（AUD 审计 N1 四处副本收敛为引擎一处）。
 
 ## enemies 系别字段（#16，可选零破坏）
 

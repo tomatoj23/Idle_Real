@@ -8,7 +8,7 @@
  * 未知顶层键透明透传（向后兼容未来节的存档）。
  */
 import type { GameContent, SaveData } from './types.js';
-import { findActivity, findEnemy, findItem, playerMaxHp, raritiesOf, skillsOf } from './contentView.js';
+import { combatParamsOf, findActivity, findEnemy, findItem, playerMaxHp, raritiesOf, skillsOf } from './contentView.js';
 import { type Affix, type GearInstance, type Rarity } from './gear.js';
 import type { DamageTier, EncounterRecord, RoundTally } from './combat.js';
 import type { Contribution } from './modifiers.js';
@@ -85,6 +85,8 @@ export function initialState(
   for (const skill of skillsOf(content)) {
     skills[skill.id] = { xp: 0 };
   }
+  // 自动化开关缺省读 config.combat（#020：玩法缺省值归内容，引擎基线 true）。
+  const cparams = combatParamsOf(content);
   return {
     gp: 0,
     hp: playerMaxHp(content, skills, contributions),
@@ -97,8 +99,8 @@ export function initialState(
     equips: {},
     buffs: {},
     combat: null,
-    autoFight: true,
-    autoEat: true,
+    autoFight: cparams.autoFight,
+    autoEat: cparams.autoEat,
     lastEncounter: {},
   };
 }
@@ -284,8 +286,9 @@ function restoreCombatState(
     };
   }
 
-  state.autoFight = typeof raw.autoFight === 'boolean' ? raw.autoFight : true;
-  state.autoEat = typeof raw.autoEat === 'boolean' ? raw.autoEat : true;
+  // 存档未写该字段时回落 initialState 的 config 缺省值（#020）。
+  state.autoFight = typeof raw.autoFight === 'boolean' ? raw.autoFight : state.autoFight;
+  state.autoEat = typeof raw.autoEat === 'boolean' ? raw.autoEat : state.autoEat;
 
   // —— 同对手对照：键须指向现存敌人；负/零回合记录无意义不收编。
   if (isObj(raw.lastEncounter)) {

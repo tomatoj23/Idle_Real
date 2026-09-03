@@ -25,6 +25,9 @@
  *      （rollRarity 按占比归一化的前提），rarities 的 id 去重（存档键
  *      GearInstance.rarity 引用它），affix.stat 引用合法由 schema enum
  *      （装备加成四键域）钉死；
+ *    - config 玩法参数子节（#020，ADR-016 裁决 ① 分策）：combat/
+ *      progression/affix 子节全可选（缺省 = 引擎基线），伤害档阈值
+ *      跨字段递增由语义检查补全；
  *    - 原型继承三检（#16，ADR-015/SexyMUD ADR-0030）：prototypeKey 须等
  *      于自身 id、prototypeParent 须指向同集合内已声明 prototypeKey 的
  *      条目、父链不得成环（展平留待后续票，此处为门禁侧保险）。
@@ -204,6 +207,8 @@ function pushDuplicates(
 /**
  * 槽位数据化（#16）：config 存在时返回槽位 id 集合并查重；
  * 缺省时返回 undefined（跳过槽位跨引用检查，对既有包零破坏）。
+ * 玩法参数子节（#020）：字段边界由 schema 关卡保证，此处只补
+ * schema 表达不了的跨字段规则——伤害档阈值须严格递增。
  */
 function checkConfig(
   config: Config | undefined,
@@ -213,6 +218,19 @@ function checkConfig(
     return undefined;
   }
   pushDuplicates(config.slots, '/config/slots', errors);
+  const combat = config.combat;
+  if (
+    combat?.tierLightMax !== undefined &&
+    combat.tierMidMax !== undefined &&
+    combat.tierHeavyMax !== undefined &&
+    !(combat.tierLightMax < combat.tierMidMax && combat.tierMidMax < combat.tierHeavyMax)
+  ) {
+    errors.push({
+      path: '/config/combat/tierLightMax',
+      keyword: 'shape',
+      message: `伤害档阈值须严格递增（light ${combat.tierLightMax} < mid ${combat.tierMidMax} < heavy ${combat.tierHeavyMax}）`,
+    });
+  }
   return new Set(config.slots.map((slot) => slot.id));
 }
 

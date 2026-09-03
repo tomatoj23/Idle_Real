@@ -372,7 +372,7 @@ export interface ShopEntry {
   readonly price: number;
 }
 
-/* ---------- 全局配置（槽位数据化） ---------- */
+/* ---------- 全局配置（槽位数据化 + 玩法参数） ---------- */
 
 /** 槽位定义（config.slots 条目）；icon 未显式写入即不落盘（ADR-013）。 */
 export interface SlotDef {
@@ -381,8 +381,87 @@ export interface SlotDef {
   readonly icon?: string;
 }
 
+/**
+ * 战斗机制与属性基线参数（config.combat 子节，#020 批 3）。
+ * 全部字段可选：缺省 = 引擎基线（ADR-016 裁决 ① 分策：数值参数引擎
+ * 内置基线 + config 覆盖）。毫秒/百分点计量。
+ */
+export interface CombatConfig {
+  /** 玩家攻击间隔（毫秒）；敌人未配 attackInterval 时的缺省出招间隔。 */
+  readonly playerAttackInterval?: number;
+  /** 减伤常数：伤害 ×(1 − def/(def+K))。 */
+  readonly defenseK?: number;
+  /** 伤害波动幅度（乘数 1−v ~ 1+v）。 */
+  readonly damageVariance?: number;
+  /** 暴击倍率。 */
+  readonly critMultiplier?: number;
+  /** 暴击率上限（百分点）。 */
+  readonly critCap?: number;
+  /** 危血线：剩余生命 ≤ 该比例视为「危」（致命一击门控）。 */
+  readonly criticalHpFraction?: number;
+  /** 开战气血门控与败北回血线（最大气血比例）。 */
+  readonly lowHpFraction?: number;
+  /** 自动嗑丹触发血线（最大气血比例）。 */
+  readonly autoEatHpFraction?: number;
+  /** 胜利后休整时长（毫秒）。 */
+  readonly victoryRestMs?: number;
+  /** 开战门控偏移：斗法层数 + 偏移 ≥ 敌人层数方可开战。 */
+  readonly levelGateOffset?: number;
+  /** 伤害档阈值：相对期望伤害 < 此值 = light（须 < tierMidMax，语义校验）。 */
+  readonly tierLightMax?: number;
+  /** 伤害档阈值（须 < tierHeavyMax，语义校验）。 */
+  readonly tierMidMax?: number;
+  /** 伤害档阈值：≥ 此值 = deadly。 */
+  readonly tierHeavyMax?: number;
+  /** 玩家属性基线：atk = statAtkBase + statAtkPerLevel × 斗法层数。 */
+  readonly statAtkBase?: number;
+  readonly statAtkPerLevel?: number;
+  /** def = statDefBase + statDefPerLevel × 斗法层数。 */
+  readonly statDefBase?: number;
+  readonly statDefPerLevel?: number;
+  /** 暴击率基线（百分点）。 */
+  readonly statCritBase?: number;
+  /** 自动再战缺省开关（新档初建与存档未写该字段时的恢复值）。 */
+  readonly autoFight?: boolean;
+  /** 自动嗑丹缺省开关（同上）。 */
+  readonly autoEat?: boolean;
+}
+
+/** 修为曲线与气血映射（config.progression 子节，#020）。缺省 = 引擎基线。 */
+export interface ProgressionConfig {
+  /** 修为层数上限。 */
+  readonly maxLevel?: number;
+  /** 升层所需修为 = floor(xpPowCoef × L^xpExponent + xpLinearCoef × L)，L 为当前层。 */
+  readonly xpPowCoef?: number;
+  readonly xpExponent?: number;
+  readonly xpLinearCoef?: number;
+  /** 气血上限 = hpBase + hpPerLevel × 斗法层数。 */
+  readonly hpBase?: number;
+  readonly hpPerLevel?: number;
+  /** 脱战回血：每秒回复最大气血的比例。 */
+  readonly hpRegenPerSec?: number;
+}
+
+/** 装备随机词条机制参数（config.affix 子节，#020）。缺省 = 引擎基线。 */
+export interface AffixConfig {
+  /** 基础标尺：hp 加成参与取值前先除以该值。 */
+  readonly hpDivider?: number;
+  /** 基础标尺：crit 加成参与取值前先乘该系数。 */
+  readonly critScale?: number;
+  /** 基础标尺兜底下限。 */
+  readonly baseScaleFloor?: number;
+  /** 词条值随机波动幅度（乘数 1−v ~ 1+v）。 */
+  readonly variance?: number;
+}
+
 export interface Config {
   readonly slots: readonly SlotDef[];
+  /** 战斗机制与属性基线参数；缺省 = 引擎基线。 */
+  readonly combat?: CombatConfig;
+  /** 修为曲线与气血映射；缺省 = 引擎基线。 */
+  readonly progression?: ProgressionConfig;
+  /** 装备词条机制参数；缺省 = 引擎基线。 */
+  readonly affix?: AffixConfig;
 }
 
 /* ---------- 内容包整体 ---------- */

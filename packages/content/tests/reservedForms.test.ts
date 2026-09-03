@@ -378,6 +378,77 @@ describe('#16 · config 槽位节', () => {
   });
 });
 
+/* ==================== config 玩法参数子节（#020） ==================== */
+
+describe('#020 · config combat/progression/affix 子节', () => {
+  it('三子节全可选：缺省照常通过（参数走引擎基线）', () => {
+    const pack = makeBasePack();
+    pack.config = { slots: [{ id: 'weapon', name: '法器' }] };
+    expect(validateContentPack(pack).ok).toBe(true);
+  });
+
+  it('合法参数子节通过（含全字段）', () => {
+    const pack = makeBasePack();
+    pack.config = {
+      slots: [{ id: 'weapon', name: '法器' }],
+      combat: {
+        playerAttackInterval: 2000,
+        defenseK: 100,
+        damageVariance: 0.15,
+        critMultiplier: 2,
+        critCap: 60,
+        criticalHpFraction: 0.2,
+        lowHpFraction: 0.25,
+        autoEatHpFraction: 0.6,
+        victoryRestMs: 1000,
+        levelGateOffset: 1,
+        tierLightMax: 0.9,
+        tierMidMax: 1.1,
+        tierHeavyMax: 1.6,
+        statAtkBase: 10,
+        statAtkPerLevel: 2,
+        statDefBase: 1,
+        statDefPerLevel: 1,
+        statCritBase: 3,
+        autoFight: false,
+        autoEat: false,
+      },
+      progression: { maxLevel: 60, xpPowCoef: 12, xpExponent: 1.7, xpLinearCoef: 10, hpBase: 80, hpPerLevel: 15, hpRegenPerSec: 0.05 },
+      affix: { hpDivider: 4, critScale: 0.5, baseScaleFloor: 2, variance: 0.1 },
+    };
+    const result = validateContentPack(pack);
+    expect(result.ok, JSON.stringify(result.ok ? [] : result.errors)).toBe(true);
+  });
+
+  it('子节未知字段被拒（additionalProperties:false 收紧不放宽）', () => {
+    const pack = makeBasePack();
+    pack.config = { slots: [{ id: 'weapon', name: '法器' }], combat: { critRate: 10 } };
+    expectError(validateContentPack(pack), '/config/combat/critRate', 'additionalProperties');
+  });
+
+  it('伤害档阈值不严格递增 → shape', () => {
+    const pack = makeBasePack();
+    pack.config = {
+      slots: [{ id: 'weapon', name: '法器' }],
+      combat: { tierLightMax: 1.2, tierMidMax: 1.05, tierHeavyMax: 1.5 },
+    };
+    expectError(validateContentPack(pack), '/config/combat/tierLightMax', 'shape');
+  });
+
+  it('越界值被拒：damageVariance > 1、hpDivider 0、levelGateOffset 负数', () => {
+    const slots = [{ id: 'weapon', name: '法器' }];
+    const packA = makeBasePack();
+    packA.config = { slots, combat: { damageVariance: 1.5 } };
+    expectError(validateContentPack(packA), '/config/combat/damageVariance', 'maximum');
+    const packB = makeBasePack();
+    packB.config = { slots, affix: { hpDivider: 0 } };
+    expectError(validateContentPack(packB), '/config/affix/hpDivider', 'exclusiveMinimum');
+    const packC = makeBasePack();
+    packC.config = { slots, combat: { levelGateOffset: -1 } };
+    expectError(validateContentPack(packC), '/config/combat/levelGateOffset', 'minimum');
+  });
+});
+
 /* ==================== prototype 字段（门禁侧三检） ==================== */
 
 describe('#16 · prototype 字段预留（ADR-015 / SexyMUD ADR-0030）', () => {

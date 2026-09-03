@@ -8,12 +8,15 @@
 import type { ContentPack } from '@wendao/content';
 import {
   EventBus,
+  enemyGateOf,
   expBase,
   expToNext,
   findRarity,
   levelFromXp,
+  progressionParamsOf,
   type GameAction,
   type GameState,
+  type ProgressionParams,
   type SaveData,
 } from '@wendao/engine';
 
@@ -58,6 +61,9 @@ export function buildUi(
   // 档位解析（命中→缺档回退第一档→空表 undefined）直接复用引擎 findRarity，
   // 空表按中性值降级（r-none 着色、省略档名前缀）。
   const rarityDefOf = (rarity: string) => findRarity(content, rarity);
+
+  // 修为曲线参数与内容包同源（#020）：UI 只传参，不复制曲线系数。
+  const prog: ProgressionParams = progressionParamsOf(content);
 
   let activeTab: TabId = 'skills';
   let selectedSkillId = gatherSkills[0]?.id ?? '';
@@ -349,9 +355,9 @@ export function buildUi(
     if (!skill) return '<section class="page"><p class="empty">内容包中没有可修的技艺。</p></section>';
 
     const xp = st.skills[skill.id]?.xp ?? 0;
-    const level = levelFromXp(xp);
-    const need = expToNext(level);
-    const into = xp - expBase(level);
+    const level = levelFromXp(xp, prog);
+    const need = expToNext(level, prog);
+    const into = xp - expBase(level, prog);
     const expPct = Number.isFinite(need) ? Math.min(100, (into / need) * 100) : 100;
 
     const act = st.activity;
@@ -363,7 +369,7 @@ export function buildUi(
       .map((s) => {
         const locked = s.kind !== 'gather';
         const selected = s.id === skill.id;
-        const lv = levelFromXp(st.skills[s.id]?.xp ?? 0);
+        const lv = levelFromXp(st.skills[s.id]?.xp ?? 0, prog);
         return `<button class="chip${selected ? ' selected' : ''}${locked ? ' locked' : ''}"
           data-act="skill" data-skill="${s.id}"${locked ? ' data-disabled="y"' : ''}>
           <span class="sigil sigil-sm">${esc(s.icon)}</span><span>${esc(s.name)}</span>
@@ -464,7 +470,7 @@ export function buildUi(
   function renderCombat(st: GameState, snap: SaveData): string {
     const combat = st.combat;
     // N2 修复（#018）：斗法修为读数按 combatSkillId 解析，禁硬编码内容 id。
-    const clv = levelFromXp(st.skills[combatSkillId]?.xp ?? 0);
+    const clv = levelFromXp(st.skills[combatSkillId]?.xp ?? 0, prog);
 
     const pills = content.items
       .filter((item) => item.type === 'pill' && (st.items[item.id] ?? 0) > 0)
@@ -510,13 +516,15 @@ export function buildUi(
 
     const cards = content.enemies
       .map((enemy) => {
-        const locked = clv + 2 < enemy.level;
+        // 开战门控走引擎 enemyGateOf（N1 收敛，#020）：锁定判定与需层数展示
+        // 与引擎 combat:start 判定同源，UI 零公式复算。
+        const gate = enemyGateOf(content, st.skills, enemy.id);
         const gold = enemy.gold ?? { min: 0, max: 0 };
         const drops = (enemy.drops ?? [])
           .map((drop) => itemById.get(drop.item)?.name ?? drop.item)
           .slice(0, 3)
           .join('、');
-        return `<article class="enemy-card${locked ? ' locked' : ''}">
+        return `<article class="enemy-card${gate.locked ? ' locked' : ''}">
           <div class="enemy-face"><span class="sigil sigil-big">${esc(enemy.icon)}</span></div>
           <div class="enemy-main">
             <div class="enemy-head"><b>${esc(enemy.name)}</b><span class="enemy-lv">${enemy.level} 层</span></div>
@@ -525,8 +533,8 @@ export function buildUi(
           </div>
           <div class="enemy-ops">
             ${
-              locked
-                ? `<span class="act-lockmsg">需 ${enemy.level - 2} 层</span>`
+              gate.locked
+                ? `<span class="act-lockmsg">需 ${gate.requiredLevel} 层</span>`
                 : `<button class="btn" data-act="fight" data-enemy="${enemy.id}">挑战</button>`
             }
           </div>

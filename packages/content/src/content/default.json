@@ -379,6 +379,43 @@
       { "id": "weapon", "name": "法器", "icon": "兵" },
       { "id": "body", "name": "护体", "icon": "甲" },
       { "id": "accessory", "name": "灵饰", "icon": "饰" }
-    ]
+    ],
+    "combat": {
+      "playerAttackInterval": 2200,
+      "defenseK": 120,
+      "damageVariance": 0.1,
+      "critMultiplier": 1.6,
+      "critCap": 75,
+      "criticalHpFraction": 0.15,
+      "lowHpFraction": 0.3,
+      "autoEatHpFraction": 0.5,
+      "victoryRestMs": 1500,
+      "levelGateOffset": 2,
+      "tierLightMax": 0.95,
+      "tierMidMax": 1.05,
+      "tierHeavyMax": 1.5,
+      "statAtkBase": 8,
+      "statAtkPerLevel": 3,
+      "statDefBase": 2,
+      "statDefPerLevel": 1.2,
+      "statCritBase": 5,
+      "autoFight": true,
+      "autoEat": true
+    },
+    "progression": {
+      "maxLevel": 99,
+      "xpPowCoef": 10,
+      "xpExponent": 1.8,
+      "xpLinearCoef": 15,
+      "hpBase": 100,
+      "hpPerLevel": 12,
+      "hpRegenPerSec": 0.04
+    },
+    "affix": {
+      "hpDivider": 5,
+      "critScale": 0.8,
+      "baseScaleFloor": 3,
+      "variance": 0.2
+    }
   }
 }

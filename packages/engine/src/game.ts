@@ -1,21 +1,20 @@
 import { EventBus } from './events.js';
 import { realClock } from './clock.js';
 import { createRng } from './rng.js';
+import { levelFromXp, maxHpForLevel } from './progression.js';
 import {
-  HP_REGEN_FRACTION_PER_SEC,
-  MAX_LEVEL,
-  levelFromXp,
-  maxHpForLevel,
-} from './progression.js';
-import {
+  affixParamsOf,
   combatLevelOf,
+  combatParamsOf,
   combatTextOf,
+  enemyGateOf,
   findActivity,
   findEnemy,
   findGearDrop,
   findItem,
   findShopEntry,
   playerMaxHp,
+  progressionParamsOf,
   skillsOf,
   textsOf,
   type ActivityView,
@@ -24,12 +23,6 @@ import {
   type SkillView,
 } from './contentView.js';
 import {
-  AUTO_EAT_HP_FRACTION,
-  CRIT_CAP,
-  CRIT_MULTIPLIER,
-  LOW_HP_FRACTION,
-  PLAYER_ATTACK_INTERVAL,
-  VICTORY_REST_MS,
   calcDmg,
   compareEncounterText,
   fillTemplate,
@@ -45,6 +38,7 @@ import {
   gearName,
   gearSell,
   makeGear,
+  rollRarity,
   type GearInstance,
 } from './gear.js';
 import {
@@ -109,6 +103,12 @@ export function createGame(options: CreateGameOptions): Game {
   const content = options.content;
   const events = new EventBus();
 
+  // 玩法参数一次解析（#020 批 3，ADR-016 裁决 ① 分策）：
+  // config 缺省字段逐项回落引擎基线，改参数 = 纯 JSON 改动。
+  const cparams = combatParamsOf(content);
+  const pparams = progressionParamsOf(content);
+  const aparams = affixParamsOf(content);
+
   const contributions: readonly Contribution[] = options.contributions ?? [];
   const state: GameState = options.save
     ? restoreState(content, options.save, options.seed ?? 1, contributions)
@@ -125,7 +125,7 @@ export function createGame(options: CreateGameOptions): Game {
   };
   const hpCap = (): number => playerStats(hpContext()).maxHp;
   const xpOf = (skillId: string): number => state.skills[skillId]?.xp ?? 0;
-  const levelOf = (skillId: string): number => levelFromXp(xpOf(skillId));
+  const levelOf = (skillId: string): number => levelFromXp(xpOf(skillId), pparams);
   if (options.save) {
     // 恢复后按当前佩戴/增益重 clamp 气血（state.ts 只兜无装备基线上限）。
     state.hp = Math.min(state.hp, Math.max(1, playerStats({ moveId: weaponMoveKey() }).maxHp));
@@ -227,10 +227,15 @@ export function createGame(options: CreateGameOptions): Game {
     return out;
   }
 
-  /** 玩家属性基线（旧版数值沿革）：攻 8+3·层 / 防 2+1.2·层 / 血曲线 / 暴 5。 */
+  /** 玩家属性基线：攻/防/暴读 config.combat，气血曲线读 config.progression（#020）。 */
   function statBase(): Record<string, number> {
     const clv = combatLevelOf(content, state.skills);
-    return { atk: 8 + clv * 3, def: 2 + clv * 1.2, hp: maxHpForLevel(clv), crit: 5 };
+    return {
+      atk: cparams.statAtkBase + clv * cparams.statAtkPerLevel,
+      def: cparams.statDefBase + clv * cparams.statDefPerLevel,
+      hp: maxHpForLevel(clv, pparams),
+      crit: cparams.statCritBase,
+    };
   }
 
   /**
@@ -242,7 +247,7 @@ export function createGame(options: CreateGameOptions): Game {
     return {
       atk: Math.round(breakdown.atk?.value ?? 0),
       def: Math.round(breakdown.def?.value ?? 0),
-      crit: Math.min(CRIT_CAP, Math.round(breakdown.crit?.value ?? 0)),
+      crit: Math.min(cparams.critCap, Math.round(breakdown.crit?.value ?? 0)),
       maxHp: Math.round(breakdown.hp?.value ?? 0),
     };
   }
@@ -261,7 +266,7 @@ export function createGame(options: CreateGameOptions): Game {
     });
     return {
       atk: Math.round(atkSide.atk?.value ?? 0),
-      crit: Math.min(CRIT_CAP, Math.round(atkSide.crit?.value ?? 0)),
+      crit: Math.min(cparams.critCap, Math.round(atkSide.crit?.value ?? 0)),
       def: Math.round(defSide.def?.value ?? 0),
       maxHp: Math.round(defSide.hp?.value ?? 0),
     };
@@ -284,7 +289,7 @@ export function createGame(options: CreateGameOptions): Game {
 
   function grantExp(skill: SkillView, amount: number, quiet: boolean): void {
     if (!(amount > 0)) return;
-    const before = levelFromXp(xpOf(skill.id));
+    const before = levelFromXp(xpOf(skill.id), pparams);
     const entry = state.skills[skill.id] ?? { xp: 0 };
     entry.xp += amount;
     state.skills[skill.id] = entry;
@@ -295,13 +300,13 @@ export function createGame(options: CreateGameOptions): Game {
         data: { skillId: skill.id, skillName: skill.name, amount },
       });
     }
-    const after = levelFromXp(entry.xp);
-    if (after > before && before < MAX_LEVEL) {
+    const after = levelFromXp(entry.xp, pparams);
+    if (after > before && before < pparams.maxLevel) {
       if (!quiet) {
         events.emit({
           type: 'levelup',
           time,
-          data: { skillId: skill.id, skillName: skill.name, level: Math.min(after, MAX_LEVEL) },
+          data: { skillId: skill.id, skillName: skill.name, level: Math.min(after, pparams.maxLevel) },
         });
       }
     }
@@ -446,13 +451,13 @@ export function createGame(options: CreateGameOptions): Game {
     const moveKey = weaponMoveKey();
     const weapon = wornWeapon();
     const { atk, crit: critChance } = combatStats(enemy);
-    const dmgBase = calcDmg(atk, enemy.def, random);
+    const dmgBase = calcDmg(atk, enemy.def, random, cparams);
     const crit = rollCrit(critChance, random);
-    const dmg = crit ? Math.round(dmgBase * CRIT_MULTIPLIER) : dmgBase;
+    const dmg = crit ? Math.round(dmgBase * cparams.critMultiplier) : dmgBase;
     c.ehp -= dmg;
     c.rounds += 1;
     if (crit) c.crits += 1;
-    const tier = hitTierOf(dmg, atk, enemy.def);
+    const tier = hitTierOf(dmg, atk, enemy.def, cparams);
     c.tiers[tier] += 1;
     const text = makeAttackText(
       combatText,
@@ -470,6 +475,7 @@ export function createGame(options: CreateGameOptions): Game {
         defenderMaxHp: enemy.hp,
       },
       random,
+      cparams,
     );
     events.emit({
       type: 'attack',
@@ -482,9 +488,9 @@ export function createGame(options: CreateGameOptions): Game {
   /** 敌人一击：减伤解算 → 文案 → 玩家倒下判定。 */
   function enemyAttackRound(enemy: EnemyView, c: CombatState): void {
     const { def, maxHp } = combatStats(enemy);
-    const dmg = calcDmg(enemy.atk, def, random);
+    const dmg = calcDmg(enemy.atk, def, random, cparams);
     state.hp -= dmg;
-    const tier = hitTierOf(dmg, enemy.atk, def);
+    const tier = hitTierOf(dmg, enemy.atk, def, cparams);
     const text = makeAttackText(
       combatText,
       {
@@ -501,6 +507,7 @@ export function createGame(options: CreateGameOptions): Game {
         defenderMaxHp: maxHp,
       },
       random,
+      cparams,
     );
     events.emit({
       type: 'attack',
@@ -534,7 +541,8 @@ export function createGame(options: CreateGameOptions): Game {
       const item = itemId ? findItem(content, itemId) : undefined;
       if (item) {
         state.gearSeq += 1;
-        const gear = makeGear(content, item.id, item.bonuses ?? {}, state.gearSeq, random);
+        // 词条标尺/波动走 config.affix（#020）；rarity 显式 roll 与缺省参数位求值同序。
+        const gear = makeGear(content, item.id, item.bonuses ?? {}, state.gearSeq, random, rollRarity(content, random), aparams);
         state.gear.push(gear);
         gearDropName = gearName(content, item.name, gear.rarity);
         events.emit({
@@ -560,7 +568,7 @@ export function createGame(options: CreateGameOptions): Game {
     const prev = state.lastEncounter[enemy.id];
     const compare = compareEncounterText(prev, c.rounds, combatText, random);
     state.lastEncounter[enemy.id] = { rounds: c.rounds, won: true, at: time };
-    c.respT = VICTORY_REST_MS; // 战斗态保留（ehp ≤ 0），休整后按 autoFight 决定去留
+    c.respT = cparams.victoryRestMs; // 战斗态保留（ehp ≤ 0），休整后按 autoFight 决定去留
 
     events.emit({
       type: 'victory',
@@ -583,7 +591,7 @@ export function createGame(options: CreateGameOptions): Game {
   /** 落败：残血被救回，对照记录 won=false（「前番不敌」的基准）。 */
   function defeat(enemy: EnemyView, c: CombatState): void {
     const maxHp = combatStats(enemy).maxHp;
-    state.hp = Math.max(1, Math.round(maxHp * LOW_HP_FRACTION));
+    state.hp = Math.max(1, Math.round(maxHp * cparams.lowHpFraction));
     state.combat = null;
     state.lastEncounter[enemy.id] = { rounds: c.rounds, won: false, at: time };
     events.emit({
@@ -615,7 +623,7 @@ export function createGame(options: CreateGameOptions): Game {
         if (c.respT <= 0) {
           if (state.autoFight) {
             // 自动再战前复查气血：残血且无自动补给时退避（挂机不送死）。
-            if (state.hp < playerStats(hpContext()).maxHp * LOW_HP_FRACTION) {
+            if (state.hp < playerStats(hpContext()).maxHp * cparams.lowHpFraction) {
               stopCombat(noteFrom('retreatWounded'));
               return;
             }
@@ -634,7 +642,7 @@ export function createGame(options: CreateGameOptions): Game {
         continue;
       }
       // 自动嗑丹（血线触发；目标为背包中首个 heal 类丹药，引擎零内容感知）
-      if (state.autoEat && state.hp < playerStats(hpContext()).maxHp * AUTO_EAT_HP_FRACTION) {
+      if (state.autoEat && state.hp < playerStats(hpContext()).maxHp * cparams.autoEatHpFraction) {
         const healPill = Object.keys(state.items).find((itemId) => {
           if (!((state.items[itemId] ?? 0) > 0)) return false;
           const item = findItem(content, itemId);
@@ -644,19 +652,20 @@ export function createGame(options: CreateGameOptions): Game {
       }
       if (!state.combat) return;
       // 推进到下一个事件点（玩家出招 / 敌人出招 / dt 消化完）
-      const pWait = PLAYER_ATTACK_INTERVAL - c.pt;
-      const eWait = Math.max(1, enemy.attackInterval ?? PLAYER_ATTACK_INTERVAL) - c.et;
+      // 敌人缺省攻击间隔 = 玩家间隔（config.combat.playerAttackInterval，#020）。
+      const pWait = cparams.playerAttackInterval - c.pt;
+      const eWait = Math.max(1, enemy.attackInterval ?? cparams.playerAttackInterval) - c.et;
       const step = Math.min(remaining, pWait, eWait);
       c.pt += step;
       c.et += step;
       remaining -= step;
-      if (c.pt >= PLAYER_ATTACK_INTERVAL) {
-        c.pt -= PLAYER_ATTACK_INTERVAL;
+      if (c.pt >= cparams.playerAttackInterval) {
+        c.pt -= cparams.playerAttackInterval;
         playerAttackRound(enemy, c);
         if (!state.combat) return;
       }
-      if (c.et >= (enemy.attackInterval ?? PLAYER_ATTACK_INTERVAL)) {
-        c.et -= enemy.attackInterval ?? PLAYER_ATTACK_INTERVAL;
+      if (c.et >= (enemy.attackInterval ?? cparams.playerAttackInterval)) {
+        c.et -= enemy.attackInterval ?? cparams.playerAttackInterval;
         enemyAttackRound(enemy, c);
         if (!state.combat) return;
       }
@@ -707,7 +716,7 @@ export function createGame(options: CreateGameOptions): Game {
     const after = levelFromXp(xpOf(skill.id));
     const levels =
       after > before
-        ? [{ skillId: skill.id, skillName: skill.name, level: Math.min(after, MAX_LEVEL) }]
+        ? [{ skillId: skill.id, skillName: skill.name, level: Math.min(after, pparams.maxLevel) }]
         : [];
 
     events.emit({
@@ -743,7 +752,7 @@ export function createGame(options: CreateGameOptions): Game {
         // 脱战回血。
         const cap = hpCap();
         if (state.hp < cap) {
-          state.hp = Math.min(cap, state.hp + cap * HP_REGEN_FRACTION_PER_SEC * (dt / 1000));
+          state.hp = Math.min(cap, state.hp + cap * pparams.hpRegenPerSec * (dt / 1000));
         }
         settleActivity(dt);
       }
@@ -888,16 +897,16 @@ export function createGame(options: CreateGameOptions): Game {
             reject(action.type, 'not-found');
             return;
           }
-          // 开战门控（N1 文案侧联动，#019）：判定偏移量（+2）只在此处单一来源，
-          // 文案侧经 {level} 槽取 enemy.level − 门控偏移，无二次硬编码（#020 参数化判定侧）。
-          const GATE_OFFSET = 2;
-          const clv = combatLevelOf(content, state.skills);
-          if (clv + GATE_OFFSET < enemy.level) {
-            reject(action.type, 'level', { level: String(enemy.level - GATE_OFFSET) });
+          // 开战门控（N1 判定侧单一来源，#020）：判定与 UI 锁定态共用 enemyGateOf
+          // 同一实现（偏移量读 config.combat.levelGateOffset），reject 文案
+          // {level} = enemy.level − 偏移（引擎内不再有第二份 clv+offset 公式）。
+          const gate = enemyGateOf(content, state.skills, enemyId);
+          if (gate.locked) {
+            reject(action.type, 'level', { level: String(gate.requiredLevel) });
             return;
           }
           if (state.combat?.enemyId === enemyId) return; // 幂等
-          if (state.hp < playerStats(hpContext()).maxHp * LOW_HP_FRACTION) {
+          if (state.hp < playerStats(hpContext()).maxHp * cparams.lowHpFraction) {
             reject(action.type, 'low-hp');
             return;
           }

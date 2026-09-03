@@ -14,41 +14,49 @@
  * （ADR-016 裁决 ④：键名回显或空串跳过），引擎不内置任何中文句子。
  */
 
-/* ---------- 数值基线（旧版 data.js/game.js 沿革） ---------- */
+/* ---------- 数值机制参数（#020 批 3：引擎基线 + config.combat 覆盖） ---------- */
 
-/** 玩家攻击间隔（旧版 2.2s）。 */
-export const PLAYER_ATTACK_INTERVAL = 2200;
+/**
+ * 伤害解算机制参数：config.combat 同名字段覆盖引擎基线
+ * （ADR-016 裁决 ① 分策）。本接口只承载 combat.ts 函数体消费的字段
+ * （减伤/波动/伤害档阈值/危血线）；间隔/暴击倍率等由 game.ts 直接读
+ * contentView 的战斗参数视图。
+ */
+export interface DamageMechanics {
+  /** 减伤常数：伤害 ×(1 − def/(def+K))。 */
+  readonly defenseK: number;
+  /** 伤害波动幅度（乘数 1−v ~ 1+v）。 */
+  readonly damageVariance: number;
+  /** 伤害档阈值：相对期望伤害 < 此值 = light。 */
+  readonly tierLightMax: number;
+  readonly tierMidMax: number;
+  /** 伤害档阈值：≥ 此值 = deadly。 */
+  readonly tierHeavyMax: number;
+  /** 危血线：剩余生命 ≤ 该比例视为「危」（致命一击门控）。 */
+  readonly criticalHpFraction: number;
+}
 
-/** 减伤常数：伤害 ×(1 − def/(def+K))。 */
-export const DEFENSE_K = 120;
-
-/** 伤害波动幅度（±10%）。 */
-export const DAMAGE_VARIANCE = 0.1;
-
-/** 暴击倍率。 */
-export const CRIT_MULTIPLIER = 1.6;
-
-/** 暴击率上限（百分点）。 */
-export const CRIT_CAP = 75;
-
-/** 危血线：剩余生命 ≤ 15% 视为「危」（致命一击门控）。 */
-export const CRITICAL_HP_FRACTION = 0.15;
-
-/** 开战气血门控与败北回血线（30%）。 */
-export const LOW_HP_FRACTION = 0.3;
-
-/** 自动嗑丹血线（50%）。 */
-export const AUTO_EAT_HP_FRACTION = 0.5;
-
-/** 胜利后休整（再战间隔）。 */
-export const VICTORY_REST_MS = 1500;
+/** 引擎基线（旧版 data.js 沿革）；config 缺省时使用。 */
+export const BASE_DAMAGE_MECHANICS: DamageMechanics = {
+  defenseK: 120,
+  damageVariance: 0.1,
+  tierLightMax: 0.95,
+  tierMidMax: 1.05,
+  tierHeavyMax: 1.5,
+  criticalHpFraction: 0.15,
+};
 
 /* ---------- 伤害解算 ---------- */
 
-/** 一次伤害掷点：atk ×(0.9~1.1) ×减伤，下限 1。 */
-export function calcDmg(atk: number, def: number, random: () => number): number {
-  const variance = 1 - DAMAGE_VARIANCE + random() * DAMAGE_VARIANCE * 2;
-  const mitigation = 1 - def / (def + DEFENSE_K);
+/** 一次伤害掷点：atk ×(1−v~1+v) ×减伤，下限 1。 */
+export function calcDmg(
+  atk: number,
+  def: number,
+  random: () => number,
+  m: DamageMechanics = BASE_DAMAGE_MECHANICS,
+): number {
+  const variance = 1 - m.damageVariance + random() * m.damageVariance * 2;
+  const mitigation = 1 - def / (def + m.defenseK);
   return Math.max(1, Math.round(atk * variance * mitigation));
 }
 
@@ -60,15 +68,20 @@ export function rollCrit(critChancePct: number, random: () => number): boolean {
 export type DamageTier = 'light' | 'mid' | 'heavy' | 'deadly';
 
 /** 伤害档：相对期望伤害（已计防御减免）。 */
-export function hitTierOf(dmg: number, atk: number, def: number): DamageTier {
-  const expected = Math.max(1, atk * (1 - def / (def + DEFENSE_K)));
+export function hitTierOf(
+  dmg: number,
+  atk: number,
+  def: number,
+  m: DamageMechanics = BASE_DAMAGE_MECHANICS,
+): DamageTier {
+  const expected = Math.max(1, atk * (1 - def / (def + m.defenseK)));
   const r = dmg / expected;
-  return r < 0.95 ? 'light' : r < 1.05 ? 'mid' : r < 1.5 ? 'heavy' : 'deadly';
+  return r < m.tierLightMax ? 'light' : r < m.tierMidMax ? 'mid' : r < m.tierHeavyMax ? 'heavy' : 'deadly';
 }
 
 /** 剩余生命档（仅致命一击门控使用）。 */
-export function isCriticalHp(hp: number, max: number): boolean {
-  return max > 0 && hp / max <= CRITICAL_HP_FRACTION;
+export function isCriticalHp(hp: number, max: number, m: DamageMechanics = BASE_DAMAGE_MECHANICS): boolean {
+  return max > 0 && hp / max <= m.criticalHpFraction;
 }
 
 /* ---------- 通用词库抽取器 ---------- */
@@ -202,8 +215,9 @@ export function makeAttackText(
   pools: CombatTextPools,
   args: AttackTextArgs,
   random: () => number,
+  m: DamageMechanics = BASE_DAMAGE_MECHANICS,
 ): string {
-  const tier = hitTierOf(args.dmg, args.atk, args.defenderDef);
+  const tier = hitTierOf(args.dmg, args.atk, args.defenderDef, m);
   const { verb, limb } = pickVerb(pools, args.verbStyle, random);
   const move = extractMoveName(pools, args.moveKey, random);
 
@@ -233,7 +247,7 @@ export function makeAttackText(
       })
     : '';
 
-  const critical = isCriticalHp(args.defenderHp, args.defenderMaxHp);
+  const critical = isCriticalHp(args.defenderHp, args.defenderMaxHp, m);
   const fatalGated = critical && (tier === 'heavy' || tier === 'deadly');
   const fatal = fatalGated ? fatalText(pools, args.side) : undefined;
   const tail = fatal !== undefined

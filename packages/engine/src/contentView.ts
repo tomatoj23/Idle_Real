@@ -5,7 +5,14 @@
  * 约定形状读取注入对象；缺节/缺字段一律安全兜底，绝不因内容缺失崩溃。
  */
 import type { GameContent } from './types.js';
-import { levelFromXp, maxHpForLevel } from './progression.js';
+import {
+  BASE_PROGRESSION,
+  levelFromXp,
+  maxHpForLevel,
+  type ProgressionParams,
+} from './progression.js';
+import { BASE_DAMAGE_MECHANICS, type DamageMechanics } from './combat.js';
+import { BASE_AFFIX_PARAMS, type AffixParams } from './gear.js';
 import {
   aggregateStat,
   type AggregationContext,
@@ -129,13 +136,13 @@ export function slotsOf(content: GameContent): readonly SlotView[] {
   return Array.isArray(slots) ? (slots as SlotView[]) : [];
 }
 
-/** 斗法层数（内容包里 kind=combat 的技能；无则按 0 层）。 */
+/** 斗法层数（内容包里 kind=combat 的技能；无则按 0 层）。修为曲线读 config.progression。 */
 export function combatLevelOf(
   content: GameContent,
   skills: Readonly<Record<string, { xp?: number }>>,
 ): number {
   const combat = skillsOf(content).find((skill) => skill.kind === 'combat');
-  return combat ? levelFromXp(skills[combat.id]?.xp ?? 0) : 0;
+  return combat ? levelFromXp(skills[combat.id]?.xp ?? 0, progressionParamsOf(content)) : 0;
 }
 
 /* ---------- 敌人（issue #4） ---------- */
@@ -309,7 +316,119 @@ export function playerMaxHp(
   contributions: readonly Contribution[] = [],
   context: AggregationContext = {},
 ): number {
-  const base = maxHpForLevel(combatLevelOf(content, skills));
+  const base = maxHpForLevel(combatLevelOf(content, skills), progressionParamsOf(content));
   const { value } = aggregateStat('hp', base, contributions, context);
   return Math.round(value); // 三区浮点运算的累积误差不容差 1 点
+}
+
+/* ---------- 玩法参数视图（#020 批 3，ADR-016 裁决 ① 分策：引擎基线 + config 覆盖） ---------- */
+
+/**
+ * 战斗参数视图（已解析基线）：config.combat 缺省字段逐项回落引擎基线。
+ * 结构上兼容 DamageMechanics，可直接传给 combat.ts 解算函数。
+ */
+export interface CombatParamsView extends DamageMechanics {
+  /** 玩家攻击间隔（毫秒）；敌人未配 attackInterval 时的缺省出招间隔。 */
+  readonly playerAttackInterval: number;
+  readonly critMultiplier: number;
+  readonly critCap: number;
+  readonly lowHpFraction: number;
+  readonly autoEatHpFraction: number;
+  readonly victoryRestMs: number;
+  readonly levelGateOffset: number;
+  readonly statAtkBase: number;
+  readonly statAtkPerLevel: number;
+  readonly statDefBase: number;
+  readonly statDefPerLevel: number;
+  readonly statCritBase: number;
+  readonly autoFight: boolean;
+  readonly autoEat: boolean;
+}
+
+/** 引擎基线（旧版 data.js 沿革）：间隔 2200、暴击 ×1.6/上限 75、门控偏移 +2 等。 */
+export const BASE_COMBAT_PARAMS: CombatParamsView = {
+  ...BASE_DAMAGE_MECHANICS,
+  playerAttackInterval: 2200,
+  critMultiplier: 1.6,
+  critCap: 75,
+  lowHpFraction: 0.3,
+  autoEatHpFraction: 0.5,
+  victoryRestMs: 1500,
+  levelGateOffset: 2,
+  statAtkBase: 8,
+  statAtkPerLevel: 3,
+  statDefBase: 2,
+  statDefPerLevel: 1.2,
+  statCritBase: 5,
+  autoFight: true,
+  autoEat: true,
+};
+
+/** 战斗参数：config.combat 覆盖基线（字段全可选，缺省 = 引擎基线）。 */
+export function combatParamsOf(content: GameContent): CombatParamsView {
+  const combat = (content as { config?: { combat?: unknown } }).config?.combat;
+  return resolveParams(combat, BASE_COMBAT_PARAMS);
+}
+
+/** 修为曲线与气血映射参数：config.progression 覆盖基线。 */
+export function progressionParamsOf(content: GameContent): ProgressionParams {
+  const progression = (content as { config?: { progression?: unknown } }).config?.progression;
+  return resolveParams(progression, BASE_PROGRESSION);
+}
+
+/** 装备词条机制参数：config.affix 覆盖基线。 */
+export function affixParamsOf(content: GameContent): AffixParams {
+  const affix = (content as { config?: { affix?: unknown } }).config?.affix;
+  return resolveParams(affix, BASE_AFFIX_PARAMS);
+}
+
+/**
+ * 逐字段回落解析：以基线对象为键域模板，config 子节同名字段合法
+ * （number 有限 / boolean）才覆盖，其余原样回落基线。
+ * 非法子节整体（非对象/数组）= 全基线，绝不因形状错误崩溃。
+ */
+function resolveParams<T extends object>(raw: unknown, base: T): T {
+  const out: Record<string, unknown> = {};
+  const source = raw !== null && typeof raw === 'object' && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>)
+    : undefined;
+  for (const [key, fallback] of Object.entries(base)) {
+    const value = source?.[key];
+    if (typeof fallback === 'boolean') {
+      out[key] = typeof value === 'boolean' ? value : fallback;
+    } else {
+      out[key] = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+    }
+  }
+  return out as T;
+}
+
+/* ---------- 开战门控（N1 判定侧单一来源，#020） ---------- */
+
+/** 敌人开战门控视图：锁定判定与展示所需层数（与引擎 combat:start 判定同源）。 */
+export interface EnemyGateView {
+  /** 斗法层数 + 门控偏移 < 敌人层数 → 锁定（引擎 combat:start 拒绝同一公式）。 */
+  readonly locked: boolean;
+  /** 展示用最低斗法层数：敌人层数 − 门控偏移（钳 0）。 */
+  readonly requiredLevel: number;
+}
+
+/**
+ * 敌人开战门控（引擎单一来源）：UI 锁定态/需层数展示一律调此函数，
+ * 禁止复制 clv+offset 公式（N1 收敛，#020）。敌人不存在时按锁定兜底
+ * （渲染防御路径，引擎 dispatch 侧 not-found 兜底语义一致）。
+ */
+export function enemyGateOf(
+  content: GameContent,
+  skills: Readonly<Record<string, { xp?: number }>>,
+  enemyId: string,
+): EnemyGateView {
+  const enemy = findEnemy(content, enemyId);
+  const offset = combatParamsOf(content).levelGateOffset;
+  if (!enemy) return { locked: true, requiredLevel: 0 };
+  const clv = combatLevelOf(content, skills);
+  return {
+    locked: clv + offset < enemy.level,
+    requiredLevel: Math.max(0, enemy.level - offset),
+  };
 }
