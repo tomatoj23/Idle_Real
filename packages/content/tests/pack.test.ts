@@ -63,6 +63,18 @@ const BASE_PACK: unknown = {
     },
   ],
   gearDrops: [{ enemy: 'e1', chance: 0.1, pool: ['sword1'] }],
+  rarities: [
+    { id: 'common', name: '寻常', weight: 70, mult: 1, affix: 0, sell: 1 },
+    { id: 'fine', name: '精良', weight: 20, mult: 1.15, affix: 1, sell: 2 },
+    { id: 'rare', name: '罕见', weight: 8, mult: 1.3, affix: 2, sell: 4 },
+    { id: 'epic', name: '绝世', weight: 2, mult: 1.5, affix: 3, sell: 10, showcase: true },
+  ],
+  affixPool: [
+    { name: '锐锋', stat: 'atk', scale: 0.3 },
+    { name: '罡气', stat: 'def', scale: 0.3 },
+    { name: '浑厚', stat: 'hp', scale: 1.5 },
+    { name: '通明', stat: 'crit', scale: 0.25 },
+  ],
   combatText: {
     verbs: {
       sword: [{ v: '刺', limbs: ['咽喉'] }],
@@ -263,6 +275,50 @@ describe('validateContentPack · 引擎兜底约定', () => {
     const pack = makePack();
     pack.combatText.verbs.magic = [];
     expectError(validateContentPack(pack), '/combatText/verbs/magic', 'minItems');
+  });
+});
+
+describe('validateContentPack · 稀有度/词条池词表（#018，ADR-016 词表零默认）', () => {
+  it('缺 rarities 节 → required（节恒在强制）', () => {
+    const pack = makePack();
+    delete pack.rarities;
+    expectError(validateContentPack(pack), '/rarities', 'required');
+  });
+
+  it('缺 affixPool 节 → required（节恒在强制）', () => {
+    const pack = makePack();
+    delete pack.affixPool;
+    expectError(validateContentPack(pack), '/affixPool', 'required');
+  });
+
+  it('rarities 空数组 → minItems（词表恒非空，缺档回退才有第一档可退）', () => {
+    const pack = makePack();
+    pack.rarities = [];
+    expectError(validateContentPack(pack), '/rarities', 'minItems');
+  });
+
+  it('权重非正 → exclusiveMinimum（权重归一化掷点的前提）', () => {
+    const pack = makePack();
+    pack.rarities[0].weight = 0;
+    expectError(validateContentPack(pack), '/rarities/0/weight', 'exclusiveMinimum');
+  });
+
+  it('稀有度 id 重复 → duplicate（GearInstance.rarity 存档键唯一）', () => {
+    const pack = makePack();
+    pack.rarities.push({ ...pack.rarities[0] });
+    expectError(validateContentPack(pack), '/rarities/4', 'duplicate');
+  });
+
+  it('词条 stat 越出装备四键域 → enum（affix.stat 引用合法）', () => {
+    const pack = makePack();
+    pack.affixPool[0].stat = 'luck';
+    expectError(validateContentPack(pack), '/affixPool/0/stat', 'enum');
+  });
+
+  it('词条池空数组 → minItems', () => {
+    const pack = makePack();
+    pack.affixPool = [];
+    expectError(validateContentPack(pack), '/affixPool', 'minItems');
   });
 });
 

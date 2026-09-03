@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AffixPoolSection",
+  "description": "content 包 affixPool 节：装备随机词条池（ADR-016 裁决 ①：词表零默认，节恒在）。实例化时按稀有度词条数掷不重复 stat 词条。",
+  "type": "array",
+  "minItems": 1,
+  "items": { "$ref": "#/definitions/affix" },
+  "definitions": {
+    "affix": {
+      "type": "object",
+      "required": ["name", "stat", "scale"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 6,
+          "description": "词条名（中文，如 锐锋）；随词条值一起在实例上展示"
+        },
+        "stat": {
+          "type": "string",
+          "enum": ["atk", "def", "hp", "crit"],
+          "description": "属性 id：装备加成四键域（crit 为百分点）。affix.stat 引用合法的校验关卡；扩域须同步 UI STAT_LABEL 与引擎 baseScale 标尺"
+        },
+        "scale": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "量级系数：词条值 = max(1, round(基础标尺 × scale × (0.8~1.2 随机波动)))"
+        }
+      }
+    }
+  }
+}

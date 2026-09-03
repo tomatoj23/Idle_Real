@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RaritiesSection",
+  "description": "content 包 rarities 节：稀有度档位词表（ADR-016 裁决 ①：词表零默认，节恒在；引擎缺档回退第一档属安全兜底路径而非默认表）。数组顺序即档位顺序。掷点按 weight 占比归一化（引擎 rollRarity 除以总权重），无需配成 1。",
+  "type": "array",
+  "minItems": 1,
+  "items": { "$ref": "#/definitions/rarity" },
+  "definitions": {
+    "rarity": {
+      "type": "object",
+      "required": ["id", "name", "weight", "mult", "affix", "sell"],
+      "additionalProperties": false,
+      "description": "稀有度档位：id 一经发布不可变（GearInstance.rarity 存档键 + UI r-* 着色类后缀）",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "档位 id：开放键域，由内容包定义"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 6,
+          "description": "档名（中文，如 寻常/精良）；引擎以「档名·物品名」拼接展示"
+        },
+        "weight": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "掷点权重（正数，按占比归一化；权重归一化可行性的前提，validate 关卡保证）"
+        },
+        "mult": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "基础加成倍率：实例化投影 flat = round(基础 × mult)"
+        },
+        "affix": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "随机词条数（0 = 无词条）"
+        },
+        "sell": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "卖价倍率：卖价 = max(1, round(物品卖价 × sell))"
+        },
+        "showcase": {
+          "type": "boolean",
+          "description": "UI 特判开关（ADR-016 裁决 ④）：true 时 UI 作「天降异宝」级特判（弹 toast/着色加强）；缺省 = 普通档（bool 缺省即 false，不写即不落盘包体积）"
+        }
+      }
+    }
+  }
+}

@@ -233,6 +233,39 @@ export interface GearDrop {
   readonly pool: readonly string[];
 }
 
+/* ---------- 稀有度与词条池（#018 批 1，ADR-016 裁决 ①：词表零默认，节恒在） ---------- */
+
+/**
+ * 稀有度档位（rarities 节条目）：档名/概率/倍率/词条数/卖价全部由内容包
+ * 定义，引擎只保留掷点机制与缺档回退第一档的安全兜底（ADR-016）。
+ * id 一经发布不可变（GearInstance.rarity 存档键 + UI r-* 着色类后缀）。
+ */
+export interface RarityDef {
+  readonly id: string;
+  readonly name: string;
+  /** 掷点权重（正数；引擎按占比归一化掷档，无需配成 1）。 */
+  readonly weight: number;
+  /** 基础加成倍率：实例化投影 flat = round(基础 × mult)。 */
+  readonly mult: number;
+  /** 随机词条数（0 = 无词条）。 */
+  readonly affix: number;
+  /** 卖价倍率：卖价 = max(1, round(物品卖价 × sell))。 */
+  readonly sell: number;
+  /** UI 特判开关（ADR-016 裁决 ④）：true 时 UI 作「天降异宝」级特判；缺省 = 普通档。 */
+  readonly showcase?: boolean;
+}
+
+/**
+ * 随机词条池（affixPool 节条目）：实例化按稀有度词条数掷不重复 stat 词条。
+ * stat 键域 = 装备加成四键（atk/def/hp/crit，crit 为百分点），schema 层钉死。
+ */
+export interface AffixDef {
+  readonly name: string;
+  readonly stat: string;
+  /** 量级系数：词条值 = max(1, round(基础标尺 × scale × 随机波动))。 */
+  readonly scale: number;
+}
+
 /* ---------- 战斗文案（CTEXT 体系数据化） ---------- */
 
 /** 动词条目：v 为动作动词，limbs 为该动词的部位白名单。 */
@@ -295,6 +328,10 @@ export interface ContentPack {
   readonly recipes: readonly Recipe[];
   readonly enemies: readonly Enemy[];
   readonly gearDrops: readonly GearDrop[];
+  /** 稀有度档位词表（ADR-016 裁决 ①：validate 强制恒在，引擎零默认）。 */
+  readonly rarities: readonly RarityDef[];
+  /** 随机词条池（同上，节恒在）。 */
+  readonly affixPool: readonly AffixDef[];
   readonly combatText: CombatText;
   readonly shop: readonly ShopEntry[];
   /** 全局配置（槽位数据化）；可选节，省略=无槽位数据（引擎安全兜底）。 */

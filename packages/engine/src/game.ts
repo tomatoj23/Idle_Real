@@ -170,7 +170,7 @@ export function createGame(options: CreateGameOptions): Game {
   function playerContributions(): Contribution[] {
     const out: Contribution[] = [...contributions];
     for (const { gear, item } of wornGear()) {
-      out.push(...gearContributions(gear, item.bonuses ?? {}, item.name));
+      out.push(...gearContributions(content, gear, item.bonuses ?? {}, item.name));
     }
     for (const [pillId, until] of Object.entries(state.buffs)) {
       if (until <= time) {
@@ -495,9 +495,9 @@ export function createGame(options: CreateGameOptions): Game {
       const item = itemId ? findItem(content, itemId) : undefined;
       if (item) {
         state.gearSeq += 1;
-        const gear = makeGear(item.id, item.bonuses ?? {}, state.gearSeq, random);
+        const gear = makeGear(content, item.id, item.bonuses ?? {}, state.gearSeq, random);
         state.gear.push(gear);
-        gearDropName = gearName(item.name, gear.rarity);
+        gearDropName = gearName(content, item.name, gear.rarity);
         events.emit({
           type: 'loot',
           time,
@@ -931,7 +931,7 @@ export function createGame(options: CreateGameOptions): Game {
           events.emit({
             type: 'equip:wear',
             time,
-            data: { uid, slot, name: gearName(item.name, gear.rarity) },
+            data: { uid, slot, name: gearName(content, item.name, gear.rarity) },
           });
           return;
         }
@@ -954,7 +954,7 @@ export function createGame(options: CreateGameOptions): Game {
             data: {
               slot,
               uid,
-              ...(gear ? { name: gearName(findItem(content, gear.itemId)?.name ?? gear.itemId, gear.rarity) } : {}),
+              ...(gear ? { name: gearName(content, findItem(content, gear.itemId)?.name ?? gear.itemId, gear.rarity) } : {}),
             },
           });
           return;
@@ -976,7 +976,7 @@ export function createGame(options: CreateGameOptions): Game {
             return;
           }
           const item = findItem(content, gear.itemId);
-          const gained = gearSell(item?.sell ?? 0, gear.rarity);
+          const gained = gearSell(content, item?.sell ?? 0, gear.rarity);
           state.gear = state.gear.filter((entry) => entry.uid !== uid);
           state.gp += gained;
           events.emit({
@@ -984,7 +984,7 @@ export function createGame(options: CreateGameOptions): Game {
             time,
             data: {
               item: gear.itemId,
-              itemName: gearName(item?.name ?? gear.itemId, gear.rarity),
+              itemName: gearName(content, item?.name ?? gear.itemId, gear.rarity),
               count: 1,
               gained,
               gp: state.gp,

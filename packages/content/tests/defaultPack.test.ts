@@ -19,6 +19,8 @@ describe('默认内容包 · 验收（issue #2）', () => {
     expect(pack.recipes).toHaveLength(16);
     expect(pack.enemies).toHaveLength(8);
     expect(pack.gearDrops).toHaveLength(8);
+    expect(pack.rarities).toHaveLength(4);
+    expect(pack.affixPool).toHaveLength(4);
     expect(pack.shop).toHaveLength(6);
   });
 
@@ -253,6 +255,26 @@ describe('默认内容包 · 数值基线', () => {
       ['e6', 0.08, ['blood_gourd', 'luo_shayi']],
       ['e7', 0.07, ['mojun_blade', 'mojun_guan']],
       ['e8', 0.15, ['taotie_fang', 'taotie_pi']],
+    ]);
+  });
+
+  it('稀有度词表全表（对照旧引擎掷点基线 70/20/8/2，#018 数据化）', () => {
+    expect(pack.rarities).toEqual([
+      { id: 'common', name: '寻常', weight: 70, mult: 1, affix: 0, sell: 1 },
+      { id: 'fine', name: '精良', weight: 20, mult: 1.15, affix: 1, sell: 2 },
+      { id: 'rare', name: '罕见', weight: 8, mult: 1.3, affix: 2, sell: 4 },
+      { id: 'epic', name: '绝世', weight: 2, mult: 1.5, affix: 3, sell: 10, showcase: true },
+    ]);
+    // ADR-016 裁决 ④：UI 特判走显式 bool，不写 = 普通档。
+    expect(pack.rarities.filter((r) => r.showcase).map((r) => r.id)).toEqual(['epic']);
+  });
+
+  it('词条池全表（scale 对照旧引擎量级系数，#018 数据化）', () => {
+    expect(pack.affixPool).toEqual([
+      { name: '锐锋', stat: 'atk', scale: 0.3 },
+      { name: '罡气', stat: 'def', scale: 0.3 },
+      { name: '浑厚', stat: 'hp', scale: 1.5 },
+      { name: '通明', stat: 'crit', scale: 0.25 },
     ]);
   });
 

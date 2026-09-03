@@ -60,6 +60,11 @@ function makeBasePack(): Record<string, any> {
       },
     ],
     gearDrops: [],
+    rarities: [
+      { id: 'common', name: '寻常', weight: 70, mult: 1, affix: 0, sell: 1 },
+      { id: 'epic', name: '绝世', weight: 2, mult: 1.5, affix: 3, sell: 10, showcase: true },
+    ],
+    affixPool: [{ name: '锐锋', stat: 'atk', scale: 0.3 }],
     combatText: {
       verbs: {
         sword: [{ v: '刺', limbs: ['咽喉'] }],

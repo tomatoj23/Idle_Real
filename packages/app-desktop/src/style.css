@@ -470,6 +470,7 @@ body {
 .gear-name { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13px; }
 .gear-name small { color: var(--muted); font-weight: 400; }
 .r-common { border-left-color: var(--faint); }
+.r-none { border-left-color: var(--faint); }
 .r-fine { border-left-color: var(--jade); }
 .r-fine .gear-name { color: var(--jade); }
 .r-rare { border-left-color: #6f9fd8; }

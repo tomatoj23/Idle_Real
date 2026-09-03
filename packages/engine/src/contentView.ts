@@ -192,6 +192,58 @@ export function findGearDrop(content: GameContent, enemyId: string): GearDropVie
   return gearDropsOf(content).find((drop) => drop.enemy === enemyId);
 }
 
+/* ---------- 稀有度与词条池（#018 批 1，ADR-016 词表零默认） ---------- */
+
+/** 稀有度档位视图（content 包 rarities 节条目，形状与 @wendao/content 的 RarityDef 同形）。 */
+export interface RarityView {
+  readonly id: string;
+  readonly name: string;
+  /** 掷点权重（rollRarity 按占比归一化）。 */
+  readonly weight: number;
+  /** 基础加成倍率。 */
+  readonly mult: number;
+  /** 随机词条数。 */
+  readonly affix: number;
+  /** 卖价倍率。 */
+  readonly sell: number;
+  /** UI 特判开关（ADR-016 裁决 ④）。 */
+  readonly showcase?: boolean;
+}
+
+/** 随机词条池条目视图（content 包 affixPool 节条目）。 */
+export interface AffixPoolView {
+  readonly name: string;
+  readonly stat: string;
+  /** 量级系数：词条值 = max(1, round(基础标尺 × scale × 波动))。 */
+  readonly scale: number;
+}
+
+/**
+ * 稀有度词表：由内容包 rarities 节驱动（换档位/概率 = 纯 JSON 改动，
+ * ADR-016 裁决 ① 词表零默认）。缺省安全兜底：缺节/形状非法 → 空表，
+ * 引擎按中性值降级，绝不因内容缺失崩溃。
+ */
+export function raritiesOf(content: GameContent): readonly RarityView[] {
+  const rarities = (content as { rarities?: unknown }).rarities;
+  return Array.isArray(rarities) ? (rarities as RarityView[]) : [];
+}
+
+/** 随机词条池：同上，缺节 → 空池。 */
+export function affixPoolOf(content: GameContent): readonly AffixPoolView[] {
+  const pool = (content as { affixPool?: unknown }).affixPool;
+  return Array.isArray(pool) ? (pool as AffixPoolView[]) : [];
+}
+
+/**
+ * 档位解析：命中返回该档；未命中（存档坏键/内容包改档位）回退**第一档**
+ * ——安全兜底路径而非默认表（ADR-016）；空表返回 undefined（更深一层的
+ * 中性降级：mult/sell 取 1、零词条、展示名省略前缀）。
+ */
+export function findRarity(content: GameContent, rarity: string): RarityView | undefined {
+  const table = raritiesOf(content);
+  return table.find((def) => def.id === rarity) ?? table[0];
+}
+
 /* ---------- 战斗词库（CTEXT 数据化，issue #2/#4） ---------- */
 
 /**

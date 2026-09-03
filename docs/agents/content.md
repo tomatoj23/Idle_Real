@@ -15,6 +15,8 @@ engine `EnemyView` 未投影，靠 #15 票驱动补齐）。
 | `recipes` | 是 | recipe.schema.json | 配方（无 id 的关系行，不参与原型继承） |
 | `enemies` | 是 | enemy.schema.json | 敌人 |
 | `gearDrops` | 是 | gear-drop.schema.json | 异宝掉落表（无 id 关系行） |
+| `rarities` | 是 | rarity.schema.json | 稀有度档位词表（#018，ADR-016 词表零默认） |
+| `affixPool` | 是 | affix-pool.schema.json | 装备随机词条池（同上） |
 | `combatText` | 是 | combat-text.schema.json | CTEXT 战斗文案词库 |
 | `shop` | 是 | shop.schema.json | 坊市货架（无 id 关系行） |
 | `config` | **否** | config.schema.json | 全局配置；缺省=无槽位数据（引擎安全兜底） |
@@ -73,6 +75,46 @@ engine `EnemyView` 未投影，靠 #15 票驱动补齐）。
 引擎接缝：`playerMaxHp(content, skills, contributions?, context?)` 已走管线；
 静态全局产出方（宗门/转生天赋）经 `createGame({contributions})` 注入；
 装备/丹药 buff（#4）在引擎内部从状态派生 Contribution，禁止另开直算路径。
+
+## rarities / affixPool 词表数据化（#018，ADR-016）
+
+**ADR-016 裁决 ①（词表零默认）**：档名/概率/倍率/词条数/卖价/量级系数全部由
+content 包定义，引擎不持任何默认表。两节均为**必需节**（validate 强制恒在）；
+引擎对缺失档位按"回退第一档"安全兜底（兜底是路径不是数据），空表时按中性值
+降级（mult/sell=1、零词条、展示名缺省省略前缀）——绝不因内容缺失崩溃。
+
+### rarities（稀有度档位）
+
+| 字段 | 形态 | 约定 |
+|---|---|---|
+| `id` | string（`^[a-z][a-z0-9_]*$`） | 档位 id，**发布后不可变**：存档键（`GearInstance.rarity`）+ UI `r-*` 着色类后缀；id 去重（语义检查） |
+| `name` | string（1~6 字） | 档名；引擎拼「档名·物品名」展示 |
+| `weight` | number（> 0） | 掷点权重，**按占比归一化**（引擎 rollRarity 除以总权重），无需配成 1；正数性由 schema 关卡保证（归一化掷点的前提） |
+| `mult` | number（> 0） | 基础加成倍率：实例化投影 flat = round(基础 × mult)（ADR-011 单管线） |
+| `affix` | integer（≥ 0） | 随机词条数；实例化时从 affixPool 掷不重复 stat 词条 |
+| `sell` | number（> 0） | 卖价倍率：卖价 = max(1, round(物品卖价 × sell)) |
+| `showcase` | bool（可选） | **UI 特判开关（裁决 ④）**：true 时 UI 作「天降异宝」级特判；UI 不再用 id 字面量（如 `'epic'`）特判 |
+
+数组顺序即档位顺序：缺档回退取**第一项**；旧档位从词表移除后，存量存档的该档
+装备恢复时自动回退第一档（存档不炸，数值按第一档重投影）。
+
+### affixPool（随机词条池）
+
+| 字段 | 形态 | 约定 |
+|---|---|---|
+| `name` | string（1~6 字） | 词条名，随词条值展示 |
+| `stat` | enum：`atk`/`def`/`hp`/`crit` | **affix.stat 引用合法**的校验关卡（schema enum 钉死装备加成四键域；crit 为百分点）。扩域须同步 UI `STAT_LABEL` 与引擎 baseScale 标尺（批 3 参数数据化时统一解决） |
+| `scale` | number（> 0） | 量级系数：词条值 = max(1, round(基础标尺 × scale × (0.8~1.2 随机波动)))；±20% 波动与基础标尺（atk/def/hp÷5/crit×0.8/兜底 3）目前属引擎机制参数，批 3 config 化 |
+
+实例化按稀有度 `affix` 数量掷**不重复 stat** 词条；同 stat 多条目合法（掷点去重
+发生在运行时）。
+
+### 引擎判例（round3 A1，#14 动工时引用）
+
+`rollRarity`（权重掷点机制）与 `makeGear`（词条实例化管线）归引擎，接收内容表
+为参数位；权重表/概率/档名/卖价系数/量级系数归 content。"炼器等级抬稀有度"的
+外部加权输入位（旧版 js/game.js:84-95）留待 #5/#14 接入 rollRarity 签名，届时
+系数本身随批 3 config 化，勿写死函数体。
 
 ## config 槽位数据化（#16）
 

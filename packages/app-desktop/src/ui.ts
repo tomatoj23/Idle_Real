@@ -8,9 +8,9 @@
 import type { ContentPack } from '@wendao/content';
 import {
   EventBus,
-  RARITIES,
   expBase,
   expToNext,
+  findRarity,
   levelFromXp,
   type GameAction,
   type GameState,
@@ -52,6 +52,12 @@ export function buildUi(
   const skillById = new Map(content.skills.map((skill) => [skill.id, skill]));
   const gatherSkills = content.skills.filter((skill) => skill.kind === 'gather');
   const combatSkillId = content.skills.find((skill) => skill.kind === 'combat')?.id ?? '';
+
+  // 稀有度词表由内容包 rarities 节驱动（#018，ADR-016 裁决 ①/④）：
+  // 档名/着色类/倍率来源/特判全部查内容 def，UI 零档位词、零引擎常量表；
+  // 档位解析（命中→缺档回退第一档→空表 undefined）直接复用引擎 findRarity，
+  // 空表按中性值降级（r-none 着色、省略档名前缀）。
+  const rarityDefOf = (rarity: string) => findRarity(content, rarity);
 
   let activeTab: TabId = 'skills';
   let selectedSkillId = gatherSkills[0]?.id ?? '';
@@ -179,7 +185,8 @@ export function buildUi(
         if (data.source === 'gear') {
           flog(`妖物遗落【${data.itemName}】`, 't-gold');
           log(`夺得【${data.itemName}】`, 't-gold');
-          if (data.rarity === 'epic') toast(`天降异宝！【${data.itemName}】`);
+          // 天降异宝特判由内容 def 的 showcase bool 驱动（ADR-016 裁决 ④）。
+          if (rarityDefOf(String(data.rarity))?.showcase) toast(`天降异宝！【${data.itemName}】`);
         } else if (data.source === 'byproduct') {
           log(`偶得 ${nameOf(data.item)}×${data.count}`, 't-jade');
         } else if (data.source === 'drop') {
@@ -219,7 +226,8 @@ export function buildUi(
         log(`卸下【${data.name ?? ''}】`);
         break;
       case 'exp':
-        if (data.skillId === combatSkillId) flog(`斗法修为 +${data.exp}`, 't-sys');
+        // 引擎 exp 事件的数值字段是 amount（grantExp 载荷），非 exp。
+        if (data.skillId === combatSkillId) flog(`斗法修为 +${data.amount}`, 't-sys');
         break;
       case 'levelup':
         toast(`【${data.skillName}】修为精进，升至 ${data.level} 层`);
@@ -455,7 +463,8 @@ export function buildUi(
 
   function renderCombat(st: GameState, snap: SaveData): string {
     const combat = st.combat;
-    const clv = levelFromXp(st.skills['combat']?.xp ?? 0);
+    // N2 修复（#018）：斗法修为读数按 combatSkillId 解析，禁硬编码内容 id。
+    const clv = levelFromXp(st.skills[combatSkillId]?.xp ?? 0);
 
     const pills = content.items
       .filter((item) => item.type === 'pill' && (st.items[item.id] ?? 0) > 0)
@@ -536,24 +545,30 @@ export function buildUi(
 
   /* ---------- 乾坤袋：装备实例卡 ---------- */
 
-  const rarityClass = (rarity: string): string =>
-    ['common', 'fine', 'rare', 'epic'].includes(rarity) ? `r-${rarity}` : 'r-common';
-  const rarityName = (rarity: string): string => RARITIES[rarity as keyof typeof RARITIES]?.name ?? '寻常';
+  /** 着色类 = `r-${档位 id}`（def 驱动）；缺档回退第一档；空表 r-none。 */
+  const rarityClass = (rarity: string): string => {
+    const def = rarityDefOf(rarity);
+    return def ? `r-${def.id}` : 'r-none';
+  };
+  const rarityName = (rarity: string): string => rarityDefOf(rarity)?.name ?? '';
 
   const STAT_LABEL: Readonly<Record<string, string>> = { atk: '攻', def: '防', hp: '血', crit: '暴' };
 
   function gearCardHtml(st: GameState, gear: { uid: number; itemId: string; rarity: string; affixes: readonly { name: string; stat: string; val: number }[] }): string {
     const item = itemById.get(gear.itemId);
     const worn = Object.entries(st.equips).find(([, uid]) => uid === gear.uid);
-    const mult = RARITIES[gear.rarity as keyof typeof RARITIES]?.mult ?? 1;
+    const mult = rarityDefOf(gear.rarity)?.mult ?? 1;
     const baseRows = Object.entries(item?.bonuses ?? {})
       .filter(([, v]) => (v ?? 0) > 0)
       .map(([stat, v]) => `${STAT_LABEL[stat] ?? stat}+${Math.round((v ?? 0) * mult)}`);
     const affixRows = gear.affixes.map((a) => `<span class="txt-dim">${esc(a.name)}</span> ${STAT_LABEL[a.stat] ?? a.stat}+${a.val}${a.stat === 'crit' ? '%' : ''}`);
     const rows = [...baseRows, ...affixRows].join('、') || '无属性';
+    const displayName = rarityName(gear.rarity)
+      ? `${rarityName(gear.rarity)}·${item?.name ?? gear.itemId}`
+      : item?.name ?? gear.itemId;
     return `<div class="gear-card ${rarityClass(gear.rarity)}">
       <span class="sigil sigil-sm">${esc(item?.icon ?? '器')}</span>
-      <span class="gear-name">${rarityName(gear.rarity)}·${esc(item?.name ?? gear.itemId)}<small>${rows}</small></span>
+      <span class="gear-name">${esc(displayName)}<small>${rows}</small></span>
       <span class="bag-ops">
         ${worn
           ? `<button class="btn btn-ghost" data-act="take-off" data-slot="${worn[0]}">卸下</button>`

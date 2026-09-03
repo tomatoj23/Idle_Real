@@ -8,8 +8,8 @@
  * 未知顶层键透明透传（向后兼容未来节的存档）。
  */
 import type { GameContent, SaveData } from './types.js';
-import { findActivity, findEnemy, findItem, playerMaxHp, skillsOf } from './contentView.js';
-import { RARITIES, type Affix, type GearInstance, type Rarity } from './gear.js';
+import { findActivity, findEnemy, findItem, playerMaxHp, raritiesOf, skillsOf } from './contentView.js';
+import { type Affix, type GearInstance, type Rarity } from './gear.js';
 import type { DamageTier, EncounterRecord, RoundTally } from './combat.js';
 import type { Contribution } from './modifiers.js';
 
@@ -196,7 +196,10 @@ function restoreCombatState(
   state: GameState,
   save: SaveData,
 ): void {
-  // —— 装备实例：物品须存在且为 equip；稀有度非法降级寻常；词条逐条校验。
+  // —— 装备实例：物品须存在且为 equip；稀有度须命中内容档位表，非法回退
+  // 第一档（#018，ADR-016：词表零默认，引擎不持默认表）；词条逐条校验。
+  const rarityTable = raritiesOf(content);
+  const fallbackRarity: Rarity = rarityTable[0]?.id ?? '';
   if (Array.isArray(raw.gear)) {
     for (const entry of raw.gear) {
       if (!isObj(entry)) continue;
@@ -206,9 +209,9 @@ function restoreCombatState(
       const item = findItem(content, itemId);
       if (!item || item.type !== 'equip') continue;
       const rarity: Rarity =
-        typeof entry.rarity === 'string' && entry.rarity in RARITIES
-          ? (entry.rarity as Rarity)
-          : 'common';
+        typeof entry.rarity === 'string' && rarityTable.some((def) => def.id === entry.rarity)
+          ? entry.rarity
+          : fallbackRarity;
       const affixes: Affix[] = [];
       if (Array.isArray(entry.affixes)) {
         for (const affix of entry.affixes) {

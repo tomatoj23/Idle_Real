@@ -20,17 +20,24 @@
  *      加法%区 ≥ −100；floorRange/tierRange 方向性 min ≤ max）；
  *    - 槽位数据化（#16）：equip/blank 的 slot 须在 config.slots 有定义
  *      （config 缺省时跳过，零破坏）；
+ *    - 稀有度/词条池词表（#018，ADR-016 裁决 ①：词表零默认）：rarities 与
+ *      affixPool 两节 validate 强制恒在；权重正数由 schema 关卡保证
+ *      （rollRarity 按占比归一化的前提），rarities 的 id 去重（存档键
+ *      GearInstance.rarity 引用它），affix.stat 引用合法由 schema enum
+ *      （装备加成四键域）钉死；
  *    - 原型继承三检（#16，ADR-015/SexyMUD ADR-0030）：prototypeKey 须等
  *      于自身 id、prototypeParent 须指向同集合内已声明 prototypeKey 的
  *      条目、父链不得成环（展平留待后续票，此处为门禁侧保险）。
  */
 
 import defaultPackJson from './content/default.json';
+import affixPoolSchemaJson from './schemas/affix-pool.schema.json';
 import combatTextSchemaJson from './schemas/combat-text.schema.json';
 import configSchemaJson from './schemas/config.schema.json';
 import enemySchemaJson from './schemas/enemy.schema.json';
 import gearDropSchemaJson from './schemas/gear-drop.schema.json';
 import itemSchemaJson from './schemas/item.schema.json';
+import raritySchemaJson from './schemas/rarity.schema.json';
 import recipeSchemaJson from './schemas/recipe.schema.json';
 import shopSchemaJson from './schemas/shop.schema.json';
 import skillSchemaJson from './schemas/skill.schema.json';
@@ -43,6 +50,8 @@ const itemSchema = itemSchemaJson as unknown as JsonSchema;
 const recipeSchema = recipeSchemaJson as unknown as JsonSchema;
 const enemySchema = enemySchemaJson as unknown as JsonSchema;
 const gearDropSchema = gearDropSchemaJson as unknown as JsonSchema;
+const raritySchema = raritySchemaJson as unknown as JsonSchema;
+const affixPoolSchema = affixPoolSchemaJson as unknown as JsonSchema;
 const combatTextSchema = combatTextSchemaJson as unknown as JsonSchema;
 const shopSchema = shopSchemaJson as unknown as JsonSchema;
 const configSchema = configSchemaJson as unknown as JsonSchema;
@@ -54,6 +63,8 @@ const SECTION_SCHEMAS = {
   recipes: recipeSchema,
   enemies: enemySchema,
   gearDrops: gearDropSchema,
+  rarities: raritySchema,
+  affixPool: affixPoolSchema,
   combatText: combatTextSchema,
   shop: shopSchema,
   config: configSchema,
@@ -135,6 +146,7 @@ function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
   pushDuplicates(pack.items, '/items', errors);
   pushDuplicates(pack.skills, '/skills', errors);
   pushDuplicates(pack.enemies, '/enemies', errors);
+  pushDuplicates(pack.rarities, '/rarities', errors);
   const slotIds = checkConfig(pack.config, errors);
 
   const weaponIds = checkItemShapes(pack.items, slotIds, errors);

@@ -24,8 +24,9 @@ export type { SeededRng } from './rng.js';
 export { attachAutoSave, localStorageSaveAdapter, memorySaveAdapter } from './save.js';
 export type { AutoSaveHandle, SaveAdapter } from './save.js';
 
-// 内容包结构视图与状态树（issue #3）
+// 内容包结构视图与状态树（issue #3；稀有度/词条池视图 #018 批 1）
 export {
+  affixPoolOf,
   combatLevelOf,
   combatTextOf,
   enemiesOf,
@@ -33,17 +34,20 @@ export {
   findEnemy,
   findGearDrop,
   findItem,
+  findRarity,
   findShopEntry,
   findSkill,
   gearDropsOf,
   itemsOf,
   playerMaxHp,
+  raritiesOf,
   shopOf,
   slotsOf,
   skillsOf,
 } from './contentView.js';
 export type {
   ActivityView,
+  AffixPoolView,
   ByproductView,
   EnemyDropView,
   EnemyView,
@@ -51,6 +55,7 @@ export type {
   ItemBonusesView,
   ItemEffectView,
   ItemView,
+  RarityView,
   ShopEntryView,
   SkillView,
   SlotView,
@@ -98,16 +103,13 @@ export type {
   RoundTally,
 } from './combat.js';
 export {
-  AFFIX_POOL,
-  RARITIES,
-  RARITY_ORDER,
   gearContributions,
   gearName,
   gearSell,
   makeGear,
   rollRarity,
 } from './gear.js';
-export type { Affix, AffixDef, GearInstance, Rarity, RarityDef } from './gear.js';
+export type { Affix, GearInstance, Rarity } from './gear.js';
 
 // 修饰符聚合管线（issue #13，ADR-011）
 export { aggregateStat, aggregateStats, conditionMatches } from './modifiers.js';

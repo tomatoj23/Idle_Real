@@ -27,9 +27,9 @@ describe('验收 · 假时钟 300 游戏秒打狼', () => {
     expect(data.gp).toBeGreaterThanOrEqual(4);
     expect(data.gp).toBeLessThanOrEqual(10);
     expect(data.summary).toBeTruthy();
-    // combat 经验事件（skills combat exp 增加）
+    // combat 经验事件（skills fight exp 增加；#018 起夹具技能 id = 'fight'）
     const snap = game.snapshot().state as unknown as GameState;
-    expect(snap.skills['combat']?.xp).toBeGreaterThan(0);
+    expect(snap.skills['fight']?.xp).toBeGreaterThan(0);
     expect(snap.lastEncounter['e1']).toMatchObject({ won: true });
   });
 
@@ -42,7 +42,7 @@ describe('验收 · 假时钟 300 游戏秒打狼', () => {
         gp: 0,
         hp: 112,
         items: { pill_atk: 1 },
-        skills: { combat: { xp: 0 } },
+        skills: { fight: { xp: 0 } },
         activity: null,
         // 罕见剑：atk round(6×1.3)=8 + 词条锐锋 3 → flat 11；crit 词条 4
         gear: [

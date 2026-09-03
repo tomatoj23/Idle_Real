@@ -11,6 +11,7 @@ export type { PackValidationResult } from './pack.js';
 export type {
   Activity,
   Affinities,
+  AffixDef,
   Bonuses,
   Byproduct,
   CombatText,
@@ -33,6 +34,7 @@ export type {
   PillEffect,
   PillMultipliers,
   Range,
+  RarityDef,
   Recipe,
   ShopEntry,
   Skill,

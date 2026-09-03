@@ -30,7 +30,8 @@ export function makePack(): GameContent {
           },
         ],
       },
-      { id: 'combat', name: '斗法', icon: '斗', kind: 'combat' },
+      // #018 N2 回归夹具：斗法技能 id 刻意 ≠ 'combat'（UI 硬编码 id 会被此改名揭穿）。
+      { id: 'fight', name: '斗法', icon: '斗', kind: 'combat' },
     ],
     items: [
       { id: 'herb1', name: '青灵草', icon: '青', type: 'mat', sell: 4 },
@@ -97,6 +98,19 @@ export function makeCombatPack(): GameContent {
     ],
     // 异宝掉率调高，便于回归统计断言（期望 = 场数 × 0.5）。
     gearDrops: [{ enemy: 'e1', chance: 0.5, pool: ['scorp_tail'] }],
+    // 稀有度/词条池词表（#018，ADR-016 词表零默认）：引擎机制读此表掷点与实例化。
+    rarities: [
+      { id: 'common', name: '寻常', weight: 70, mult: 1, affix: 0, sell: 1 },
+      { id: 'fine', name: '精良', weight: 20, mult: 1.15, affix: 1, sell: 2 },
+      { id: 'rare', name: '罕见', weight: 8, mult: 1.3, affix: 2, sell: 4 },
+      { id: 'epic', name: '绝世', weight: 2, mult: 1.5, affix: 3, sell: 10, showcase: true },
+    ],
+    affixPool: [
+      { name: '锐锋', stat: 'atk', scale: 0.3 },
+      { name: '罡气', stat: 'def', scale: 0.3 },
+      { name: '浑厚', stat: 'hp', scale: 1.5 },
+      { name: '通明', stat: 'crit', scale: 0.25 },
+    ],
     combatText: {
       verbs: {
         fist: [{ v: '击', limbs: ['面门'] }],
