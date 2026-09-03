@@ -111,7 +111,7 @@ export type InscriptionTiers = readonly [
   readonly Modifier[],
 ];
 
-/** 装备基础加成（稀有度与词条是运行时实例化概念，不属于内容包）。 */
+/** 装备基础加成（模板字段；稀有度与词条为运行时实例化产物，其档位词表按 ADR-016 归内容包）。 */
 export interface Bonuses {
   readonly atk?: number;
   readonly def?: number;

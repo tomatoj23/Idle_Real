@@ -2,7 +2,9 @@
 
 content 包的字段级约定。**schema 变更三处同步纪律（ADR-015）**：任何字段变更须同步
 `packages/content/src/schemas/*.schema.json`、`packages/content/src/types.ts`、
-本文件，三者缺一即返工。
+本文件，三者缺一即返工。**引擎消费点（contentView 的 View 类型、state.ts 规范化）
+不在三处清单内，随消费票同步**（P2-2 教训：enemy schema 已含 `affinities` 而
+engine `EnemyView` 未投影，靠 #15 票驱动补齐）。
 
 ## 节清单
 
