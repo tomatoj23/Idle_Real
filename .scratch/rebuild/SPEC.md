@@ -52,7 +52,7 @@
 ### 引擎（核心接缝）
 - 引擎公共 API 是唯一核心测试接缝：`createGame({ content, save?, clock? })` → `{ tick(dt), dispatch(action), events, snapshot }`。
 - `clock` 可注入（假时钟全速模拟）；`content` 为已校验的内容包对象；`events` 是结构化事件流（tick/attack/damage/loot/levelup/rebirth/unlock…），UI 与 Steam 成就都只消费事件流。
-- 挂机循环、战斗解算（含暴击/减伤公式）、稀有度 roll、经验曲线、转生结算、秘境层推进、成就判定，全部是引擎机制；**参数与数据全部来自 content 包**。
+- 挂机循环、战斗解算（含暴击/减伤公式）、稀有度 roll（掷点机制）、经验曲线函数、转生结算、秘境层推进、成就判定，是引擎**机制**；其全部**玩法参数与数据值**（概率/倍率/阈值/曲线系数/档位词表/文案）来自 content 包（ADR-016 分策：词表/文案 validate 强制恒在，数值参数引擎基线+config 覆盖）。〔2026-09-03 拆句：原"全部是引擎机制；参数与数据全部来自 content 包"一句两面，被 #3/#4 各取半句引用成矛盾定调——审计 P0-1 根因 A3〕
 - 引擎对缺内容有兜底（如未注册招式回退基础动作——旧版 bug 教训）。
 - 存档经 `SaveAdapter` 接口（memory / localStorage / Electron Steam Cloud / Capacitor Preferences 可换）。
 - 战斗文案系统数据化：模板片段+槽位+按伤害档分池的词库全部进 content 包；引擎提供"过滤后随机抽取"的通用抽取器（SexyMUD ADR-0011 思想）。
