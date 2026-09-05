@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ItemsSection",
-  "description": "content 包 items 节：物品定义。oneOf 按 type 分流五类形态：mat 材料 / pill 丹药 / equip 装备 / blank 器胚（装备底材模板）/ inscription 铭纹（装备词缀模板）。equip/pill 的按型必填（slot+bonuses、effect|heal）仍由 validateContentPack 语义检查补全（ADR-010 分工）；器胚/铭纹的核心形态在 schema 分支内直接必填（issue #16）。",
+  "description": "content 包 items 节：物品定义。oneOf 按 type 分流五类形态：mat 材料 / consumable 消耗品 / equip 装备 / blank 器胚（装备底材模板）/ inscription 铭纹（装备词缀模板）。equip/consumable 的按型必填（slot+bonuses、effect|heal）仍由 validateContentPack 语义检查补全（ADR-010 分工）；器胚/铭纹的核心形态在 schema 分支内直接必填（issue #16）。",
   "type": "array",
   "minItems": 1,
   "items": { "$ref": "#/definitions/item" },
@@ -9,7 +9,7 @@
     "item": {
       "oneOf": [
         { "$ref": "#/definitions/mat" },
-        { "$ref": "#/definitions/pill" },
+        { "$ref": "#/definitions/consumable" },
         { "$ref": "#/definitions/equip" },
         { "$ref": "#/definitions/blank" },
         { "$ref": "#/definitions/inscription" }
@@ -31,16 +31,16 @@
         "prototypeParent": { "$ref": "#/definitions/prototypeParent" }
       }
     },
-    "pill": {
+    "consumable": {
       "type": "object",
       "required": ["id", "name", "icon", "type", "sell"],
       "additionalProperties": false,
-      "description": "丹药：effect（持续增益）或 heal（即时恢复）至少其一（语义检查）",
+      "description": "消耗品：effect（持续增益）或 heal（即时恢复）至少其一（语义检查）",
       "properties": {
         "id": { "$ref": "#/definitions/id" },
         "name": { "$ref": "#/definitions/name" },
         "icon": { "$ref": "#/definitions/icon" },
-        "type": { "enum": ["pill"] },
+        "type": { "enum": ["consumable"] },
         "sell": { "$ref": "#/definitions/sell" },
         "description": { "$ref": "#/definitions/description" },
         "prototypeKey": { "$ref": "#/definitions/prototypeKey" },
@@ -150,7 +150,7 @@
     "verbStyle": {
       "type": "string",
       "pattern": "^[a-z][a-zA-Z0-9_]*$",
-      "description": "动词池键（#021 批 4 开放键域，combatText.verbs）：仅 weapon 槽位物品被引擎消费；未注册即语义校验 xref；缺省 = 引擎兜底键 fist 池"
+      "description": "动词池键（#021 批 4 开放键域，combatText.verbs）：仅 weapon 槽位物品被引擎消费；未注册即语义校验 xref；缺省 = 引擎兜底键 basic 池"
     },
     "bonuses": {
       "type": "object",
@@ -168,7 +168,7 @@
       "type": "object",
       "required": ["duration"],
       "additionalProperties": false,
-      "description": "丹药持续增益",
+      "description": "消耗品持续增益",
       "properties": {
         "duration": {
           "type": "number",

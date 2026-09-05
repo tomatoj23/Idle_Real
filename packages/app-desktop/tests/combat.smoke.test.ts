@@ -107,10 +107,7 @@ describe('UI 烟测（issue #4 战斗切片）', () => {
     expect(root.querySelector('#res-stats')!.textContent).toBe('11/3/5%');
   });
 
-  // #24 Batch1 过渡：engine 已切 consumable:eat/'consumable'，题材包 JSON 的
-  // type/id 改名在 Batch2 落地——端到端嗑丹链路批间暂断，Batch2 恢复本用例
-  // 并同步 pill_heal → consumable_heal 引用。
-  it.skip('战斗页丹药快捷栏：嗑丹回血', () => {
+  it('战斗页丹药快捷栏：嗑丹回血', () => {
     const clock = new ManualClock();
     const content = loadXiuxianPack();
     const base = createGame({ content, clock, seed: 3 }).snapshot();
@@ -118,7 +115,7 @@ describe('UI 烟测（issue #4 战斗切片）', () => {
       ...base,
       state: {
         ...(base.state as Record<string, unknown>),
-        items: { pill_heal: 1 },
+        items: { consumable_heal: 1 },
         hp: 50,
       },
     } as SaveData;
@@ -131,12 +128,12 @@ describe('UI 烟测（issue #4 战斗切片）', () => {
 
     root.querySelector<HTMLButtonElement>('.tab[data-tab="combat"]')!.click();
     ui.render();
-    const pillBtn = root.querySelector<HTMLButtonElement>('[data-act="eat"][data-item="pill_heal"]');
+    const pillBtn = root.querySelector<HTMLButtonElement>('[data-act="eat"][data-item="consumable_heal"]');
     expect(pillBtn).not.toBeNull();
     pillBtn!.click();
     ui.render();
     // 回气丹恢复 30% 上限：50 + 34 = 84
     expect(root.querySelector('#res-hp-text')!.textContent).toContain('84/');
-    expect(game.snapshot().state.items['pill_heal']).toBeUndefined();
+    expect(game.snapshot().state.items['consumable_heal']).toBeUndefined();
   });
 });

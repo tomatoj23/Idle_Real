@@ -473,7 +473,7 @@ export function buildUi(
     const clv = levelFromXp(st.skills[combatSkillId]?.xp ?? 0, prog);
 
     const pills = content.items
-      .filter((item) => item.type === 'pill' && (st.items[item.id] ?? 0) > 0)
+      .filter((item) => item.type === 'consumable' && (st.items[item.id] ?? 0) > 0)
       .map(
         (item) =>
           `<button class="btn btn-pill" data-act="eat" data-item="${item.id}">${esc(item.icon)} ${esc(item.name)} ×${st.items[item.id]}</button>`,
@@ -590,7 +590,7 @@ export function buildUi(
     const owned = content.items.filter((item) => (st.items[item.id] ?? 0) > 0);
     const groups: Array<{ title: string; types: readonly string[] }> = [
       { title: '材料', types: ['mat'] },
-      { title: '丹药', types: ['pill'] },
+      { title: '丹药', types: ['consumable'] },
     ];
     const body = groups
       .map(({ title, types }) => {

@@ -4,15 +4,15 @@
  * 两道关卡：
  * 1. **schema 校验**：各内容节对照 src/schema/ 下的 JSON Schema，
  *    逐字段上报（JSON Pointer 路径 + 关键字）。item 节按 type 走
- *    oneOf 五形态分流（mat/pill/equip/blank 器胚/inscription 铭纹），
+ *    oneOf 五形态分流（mat/consumable/equip/blank 器胚/inscription 铭纹），
  *    跨形态字段由分支 additionalProperties:false 直接拒绝。
  * 2. **语义校验**：schema 表达不了的跨引用与形态规则——
  *    - id 去重（items / skills / enemies / config.slots）；
  *    - 掉落池 id 必须存在于 items（异宝池还须为 equip 类）；
  *    - 武器 id 与敌人 id 必须在 combatText.moves 注册招式名；
- *    - moves 注册键不得悬空（只能是 fist、武器 id 或敌人 id）；
- *    - fist 兜底招式与 fist 兜底动词池恒需存在（引擎安全兜底约定；
- *      动词池键域开放后 schema 仅强制 fist，#021 批 4）；
+ *    - moves 注册键不得悬空（只能是 basic、武器 id 或敌人 id）；
+ *    - basic 兜底招式与 basic 兜底动词池恒需存在（引擎安全兜底约定；
+ *      动词池键域开放后 schema 仅强制 basic，#021 批 4）；
  *    - 动词风格存在性（#021 批 4，键域开放的存在性关卡）：equip 的
  *      verbStyle 与敌人的 kind 都必须命中 combatText.verbs 非空池；
  *    - 层数上限单一来源（#021 批 4，P2-1）：config.progression.maxLevel
@@ -21,7 +21,7 @@
  *    - 配方材料、产出、所属技艺，活动产出/副产出，敌人掉落，坊市
  *      货架的物品 id 必须存在（旧版 data.js 曾因材料 id 打错而埋雷，
  *      教训固化为校验）；
- *    - 物品按类型的字段形态（equip 须 slot+bonuses、pill 须
+ *    - 物品按类型的字段形态（equip 须 slot+bonuses、consumable 须
  *      effect/heal；器胚胚纹与铭纹各阶的修饰符区约束：乘法区 > 0、
  *      加法%区 ≥ −100；floorRange/tierRange 方向性 min ≤ max）；
  *    - 槽位数据化（#16）：equip/blank 的 slot 须在 config.slots 有定义
@@ -167,7 +167,7 @@ function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
   checkShop(pack.shop, itemIndex, errors);
   checkWeaponMoves(weaponIds, pack.items, moves, errors);
   checkMoveRegistry(moves, weaponIds, enemyIndex, errors);
-  checkFistFallback(moves, errors);
+  checkBasicFallback(moves, errors);
   checkVerbStyles(pack.items, pack.enemies, verbs, errors);
 
   checkPrototypes(pack.skills, '/skills', errors);
@@ -266,12 +266,12 @@ function checkItemShapes(
       if (item.bonuses === undefined) {
         errors.push({ path: at('bonuses'), keyword: 'shape', message: 'equip 类物品缺少 bonuses' });
       }
-    } else if (item.type === 'pill') {
+    } else if (item.type === 'consumable') {
       if (item.effect === undefined && item.heal === undefined) {
         errors.push({
           path: at('effect'),
           keyword: 'shape',
-          message: 'pill 类物品必须声明 effect（持续增益）或 heal（即时恢复）',
+          message: 'consumable 类物品必须声明 effect（持续增益）或 heal（即时恢复）',
         });
       }
     } else if (item.type === 'blank') {
@@ -612,30 +612,30 @@ function checkMoveRegistry(
   errors: ContentError[],
 ): void {
   for (const key of Object.keys(moves)) {
-    if (key !== 'fist' && !weaponIds.has(key) && !enemies.has(key)) {
+    if (key !== 'basic' && !weaponIds.has(key) && !enemies.has(key)) {
       errors.push({
         path: `/combatText/moves/${key}`,
         keyword: 'xref',
-        message: '招式注册键必须是 fist、武器物品 id 或敌人 id',
+        message: '招式注册键必须是 basic、武器物品 id 或敌人 id',
       });
     }
   }
 }
 
 /**
- * 引擎安全兜底约定：fist 兜底招式必须恒在（未注册招式一律回退拳脚）。
- * fist 兜底动词池由 combat-text schema 的 required + minItems 保证
- * （键域开放后仅 fist 恒需，#021 批 4），此处不重复。
+ * 引擎安全兜底约定：basic 兜底招式必须恒在（未注册招式一律回退基础动作）。
+ * basic 兜底动词池由 combat-text schema 的 required + minItems 保证
+ * （键域开放后仅 basic 恒需，#021 批 4），此处不重复。
  */
-function checkFistFallback(
+function checkBasicFallback(
   moves: Readonly<Record<string, readonly string[]>>,
   errors: ContentError[],
 ): void {
-  if (!hasMove(moves, 'fist')) {
+  if (!hasMove(moves, 'basic')) {
     errors.push({
       path: '/combatText/moves',
       keyword: 'xref',
-      message: '缺少 fist 兜底招式（引擎约定：未注册招式一律回退拳脚）',
+      message: '缺少 basic 兜底招式（引擎约定：未注册招式一律回退基础动作）',
     });
   }
 }

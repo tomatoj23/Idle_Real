@@ -27,13 +27,13 @@ engine `EnemyView` 未投影，靠 #15 票驱动补齐）。
 | type | 语义 | 分支必填 | 分支专有可选 |
 |---|---|---|---|
 | `mat` | 材料 | 公共字段（id/name/icon/type/sell） | — |
-| `pill` | 丹药 | 公共字段 | effect、heal（至少其一，语义检查） |
+| `consumable` | 消耗品（丹药等） | 公共字段 | effect、heal（至少其一，语义检查） |
 | `equip` | 装备 | 公共字段 | slot、bonuses（须都有，语义检查）、verbStyle（#021 批 4） |
 | `blank` | **器胚**（装备底材模板） | 公共字段 + slot + floorRange + tierRange | preferredTags、inherentModifiers |
 | `inscription` | **铭纹**（装备词缀模板） | 公共字段 + tiers | feature、tags |
 
 - 跨形态字段由 oneOf 分支 `additionalProperties:false` 在 schema 关卡拒绝；
-  分支内规则（equip 缺 bonuses、pill 无 effect/heal、区间方向、修饰符区约束）
+  分支内规则（equip 缺 bonuses、consumable 无 effect/heal、区间方向、修饰符区约束）
   由 `validateContentPack` 语义检查补全（ADR-010 分工）。
 - **空集合合法**：`preferredTags: []`、`inherentModifiers: []`、`tags: []` 均合法；
   `items: []` 仍被拒（#2 定下的节下限不放宽，每包至少一个物品）。
@@ -112,7 +112,7 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 
 ### stat 消费点注册表（#021 批 4 单一来源裁决，N3/N4 收口）
 
-**键域 = 引擎消费点清单**。装备 `bonuses`、丹药 `multipliers`、词条池
+**键域 = 引擎消费点清单**。装备 `bonuses`、消耗品 `multipliers`、词条池
 `affixPool.stat` 三处键域已全部开放为 stat id（schema patternProperties，键形态
 `^[a-z][a-zA-Z0-9_]*$`：小写字母开头，允许驼峰/下划线——`gatherXp` 先例，旧
 `[a-z0-9_]` 形态会误拒驼峰键），写入零改动；**stat 生效必须有引擎消费点**：
@@ -149,17 +149,17 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 ### 动词池与动词风格开放键域（#021 批 4，ADR-016 裁决 ⑦）
 
 - `combatText.verbs`：键域开放——**新增动词风格 = 新 JSON 键**（如 `staff`）；
-  schema 仅强制引擎兜底键 `fist` 恒需（required + minItems），其余键在被引用时
-  由语义校验强制存在。sword/fist/claw/magic 只是官方包约定。
+  schema 仅强制引擎兜底键 `basic` 恒需（required + minItems），其余键在被引用时
+  由语义校验强制存在。sword/basic/claw/magic 只是官方包约定。
 - 动词风格声明（P1-2 玩家映射解绑）：
   - **玩家** = 佩戴武器（weapon 槽 equip）的 `verbStyle` 字段（开放键域，validate
-    强制 verbs 池存在）；缺声明/非法回落引擎兜底键 `fist` 池。引擎内嵌的
+    强制 verbs 池存在）；缺声明/非法回落引擎兜底键 `basic` 池。引擎内嵌的
     'sword'/'fist' 规则已清退——"法杖走 magic 池" = 纯 JSON 改动。
     官方包全部武器显式声明 `"verbStyle": "sword"`。
   - **敌人** = `kind` 字段（开放键域，validate 强制 verbs 池存在）；引擎不再内嵌
-    缺省 'claw'（防御路径回落 fist 池）。'claw'/'magic' 是官方包约定而非引擎词汇。
+    缺省 'claw'（防御路径回落 basic 池）。'claw'/'magic' 是官方包约定而非引擎词汇。
   - 槽位 role 推断（有武器→读槽位 role）随 #14 的 SlotDef.role 一并落地，
-    批 4 只做"读 def + fist 兜底"。
+    批 4 只做"读 def + basic 兜底"。
 - 键形态：`^[a-z][a-zA-Z0-9_]*$`（与 stat 键形态统一）。
 
 ### combatText 扩节（六键 → 十键，schema required）
@@ -167,7 +167,7 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 | 键 | 形状 | 说明 |
 |---|---|---|
 | `templates` | 五池：playerLight/playerHeavy/playerCrit/enemyLight/enemyHeavy | 出招句式模板。槽位：`{move}` 招式名、`{weapon}` 兵刃名、`{verb}` 动词、`{defender}` 受击妖名、`{enemy}` 妖名、`{limb}` 部位、`{opening}` 起势（heavy 池）、`{critIntro}` 暴击起势（crit 池）。schema pattern 强制必要槽位 |
-| `notes` | 七池：retreat/retreatToGather/retreatWounded/retreatVictory/reengage/start/autoPill | 系统 combat-note 叙事。start/reengage 带 `{enemy}`、autoPill 带 `{item}` |
+| `notes` | 七池：retreat/retreatToGather/retreatWounded/retreatVictory/reengage/start/autoConsume | 系统 combat-note 叙事。start/reengage 带 `{enemy}`、autoConsume 带 `{item}` |
 | `summary` | tiers（四档画句池）+ base/crit 整行模板 | 战后一行签名画像：引擎按主导伤害档取画句填 `{flavor}`，`{rounds}`/`{crits}` 填数值 |
 | `compare` | 四池：revenge/faster/slower/even | 同对手再战对照语：`{rounds}` 今番、`{prev}` 前番回合数；无从对照返回空（事件不带 compare） |
 
@@ -175,9 +175,9 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 
 | 字段 | 形状 | 说明 |
 |---|---|---|
-| `fistName` | string（1~6 字） | 无佩戴武器时的兵刃展示名（weaponName 槽兜底值） |
-| `reject` | 动作协议键 → 理由 code → 文案模板 | 展示文案映射。动作键域 schema 钉死：activity:start / bag:sell / shop:buy / combat:start / pill:eat / gear:equip / gear:sell / `'*'`（跨动作兜底，bad-payload 等通用文案）；理由 code 键域开放 |
-| `reject` 槽位 | `{level}` `{activity}` `{item}` `{owned}` `{cost}` `{gp}` | 由引擎按协议语境填入； combat:start 的 `{level}` = `enemy.level − 门控偏移`（偏移量只在引擎判定处单一来源，文案侧零副本——N1 文案侧裁决） |
+| `basicName` | string（1~6 字） | 无佩戴武器时的兵刃展示名（weaponName 槽兜底值） |
+| `reject` | 动作协议键 → 理由 code → 文案模板 | 展示文案映射。动作键域 schema 钉死：activity:start / bag:sell / shop:buy / combat:start / consumable:eat / gear:equip / gear:sell / `'*'`（跨动作兜底，bad-payload 等通用文案）；理由 code 键域开放 |
+| `reject` 槽位 | `{level}` `{activity}` `{item}` `{owned}` `{cost}` `{gold}` | 由引擎按协议语境填入； combat:start 的 `{level}` = `enemy.level − 门控偏移`（偏移量只在引擎判定处单一来源，文案侧零副本——N1 文案侧裁决） |
 
 - 命中序：精确动作 → `'*'` → **键名回显**（`{action}/{reason}`，防御可见）。
 - 协议 code 本体归引擎，本节只承载展示文案；code 未命中/缺节绝不崩，toast

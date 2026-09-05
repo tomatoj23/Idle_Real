@@ -41,10 +41,10 @@ describe('修仙题材包 · 验收（issue #2）', () => {
     expect(Object.keys(recipeByName['锻不灭金身甲'].materials)).toContain('ore4');
   });
 
-  it('引擎兜底网：fist 招式与官方包动词池齐备（键域开放后 fist 为 schema 唯一恒需）', () => {
+  it('引擎兜底网：basic 招式与官方包动词池齐备（键域开放后 basic 为 schema 唯一恒需）', () => {
     const pack = loadXiuxianPack();
-    expect(pack.combatText.moves.fist).toEqual(['搏兔一击', '石破天惊']);
-    expect(pack.combatText.verbs.fist?.length).toBeGreaterThan(0);
+    expect(pack.combatText.moves.basic).toEqual(['搏兔一击', '石破天惊']);
+    expect(pack.combatText.verbs.basic?.length).toBeGreaterThan(0);
     // 官方包约定四池（非 schema 强制）。
     for (const style of ['sword', 'claw', 'magic'] as const) {
       expect(pack.combatText.verbs[style]?.length).toBeGreaterThan(0);
@@ -103,11 +103,11 @@ describe('修仙题材包 · 数值基线', () => {
       core1: ['mat', 25],
       core2: ['mat', 90],
       core3: ['mat', 320],
-      pill_heal: ['pill', 18],
-      pill_qi: ['pill', 50],
-      pill_atk: ['pill', 130],
-      pill_def: ['pill', 180],
-      pill_gold: ['pill', 700],
+      consumable_heal: ['consumable', 18],
+      consumable_qi: ['consumable', 50],
+      consumable_atk: ['consumable', 130],
+      consumable_def: ['consumable', 180],
+      consumable_gold: ['consumable', 700],
       sword1: ['equip', 30],
       sword2: ['equip', 120],
       sword3: ['equip', 400],
@@ -162,12 +162,12 @@ describe('修仙题材包 · 数值基线', () => {
     ]);
   });
 
-  it('丹药：回气丹恢复三成，增益丹时长五分钟', () => {
-    expect(itemById.pill_heal.heal).toEqual({ percent: 0.3 });
-    expect(itemById.pill_qi.effect).toEqual({ duration: 300000, multipliers: { gatherXp: 1.25 } });
-    expect(itemById.pill_atk.effect).toEqual({ duration: 300000, multipliers: { atk: 1.2 } });
-    expect(itemById.pill_def.effect).toEqual({ duration: 300000, multipliers: { def: 1.3 } });
-    expect(itemById.pill_gold.effect).toEqual({
+  it('消耗品：回气丹恢复三成，增益丹时长五分钟', () => {
+    expect(itemById.consumable_heal.heal).toEqual({ percent: 0.3 });
+    expect(itemById.consumable_qi.effect).toEqual({ duration: 300000, multipliers: { gatherXp: 1.25 } });
+    expect(itemById.consumable_atk.effect).toEqual({ duration: 300000, multipliers: { atk: 1.2 } });
+    expect(itemById.consumable_def.effect).toEqual({ duration: 300000, multipliers: { def: 1.3 } });
+    expect(itemById.consumable_gold.effect).toEqual({
       duration: 300000,
       multipliers: { atk: 1.4, def: 1.4 },
       crit: 10,
@@ -216,11 +216,11 @@ describe('修仙题材包 · 数值基线', () => {
       r.exp,
     ]);
     expect(rows).toEqual([
-      ['炼制回气丹', 'alchemy', 1, 'pill_heal', { herb1: 2 }, 0.75, 3000, 8],
-      ['炼制聚气丹', 'alchemy', 12, 'pill_qi', { herb1: 1, herb2: 1 }, 0.65, 4500, 20],
-      ['炼制破煞丹', 'alchemy', 28, 'pill_atk', { herb2: 2, core1: 1 }, 0.6, 6000, 45],
-      ['炼制凝神丹', 'alchemy', 42, 'pill_def', { herb3: 2 }, 0.55, 7500, 80],
-      ['炼制九转金丹', 'alchemy', 65, 'pill_gold', { herb4: 2, ore4: 1, core2: 1 }, 0.45, 12000, 220],
+      ['炼制回气丹', 'alchemy', 1, 'consumable_heal', { herb1: 2 }, 0.75, 3000, 8],
+      ['炼制聚气丹', 'alchemy', 12, 'consumable_qi', { herb1: 1, herb2: 1 }, 0.65, 4500, 20],
+      ['炼制破煞丹', 'alchemy', 28, 'consumable_atk', { herb2: 2, core1: 1 }, 0.6, 6000, 45],
+      ['炼制凝神丹', 'alchemy', 42, 'consumable_def', { herb3: 2 }, 0.55, 7500, 80],
+      ['炼制九转金丹', 'alchemy', 65, 'consumable_gold', { herb4: 2, ore4: 1, core2: 1 }, 0.45, 12000, 220],
       ['锻青锋剑', 'smith', 1, 'sword1', { ore1: 4, qi1: 5 }, 1, 4000, 10],
       ['缝布道袍', 'smith', 5, 'body1', { silk: 3, qi1: 6 }, 1, 4500, 12],
       ['琢聚灵玉佩', 'smith', 12, 'acc1', { qi1: 12, ore1: 3 }, 1, 5000, 20],
@@ -252,12 +252,12 @@ describe('修仙题材包 · 数值基线', () => {
     expect(rows).toEqual([
       ['e1', '青鬃狼', 1, 'claw', 60, 9, 2, 2800, 16, { min: 4, max: 10 }, [{ item: 'core1', chance: 0.25 }, { item: 'herb1', chance: 0.4 }]],
       ['e2', '赤尾妖蝎', 8, 'claw', 140, 17, 6, 2600, 40, { min: 12, max: 24 }, [{ item: 'core1', chance: 0.35 }, { item: 'herb2', chance: 0.3 }]],
-      ['e3', '鬼面修士', 18, 'magic', 280, 32, 14, 2400, 95, { min: 28, max: 55 }, [{ item: 'core1', chance: 0.5 }, { item: 'pill_heal', chance: 0.15 }, { item: 'herb2', chance: 0.25 }]],
+      ['e3', '鬼面修士', 18, 'magic', 280, 32, 14, 2400, 95, { min: 28, max: 55 }, [{ item: 'core1', chance: 0.5 }, { item: 'consumable_heal', chance: 0.15 }, { item: 'herb2', chance: 0.25 }]],
       ['e4', '尸傀', 30, 'claw', 560, 55, 26, 2600, 190, { min: 55, max: 95 }, [{ item: 'core2', chance: 0.3 }, { item: 'ore2', chance: 0.35 }]],
       ['e5', '血魔', 45, 'magic', 1050, 88, 46, 2400, 380, { min: 110, max: 190 }, [{ item: 'core2', chance: 0.45 }, { item: 'herb3', chance: 0.25 }]],
       ['e6', '阴罗妖将', 60, 'magic', 2000, 135, 82, 2200, 700, { min: 220, max: 380 }, [{ item: 'core3', chance: 0.3 }, { item: 'herb4', chance: 0.15 }]],
       ['e7', '魔君残魂', 78, 'magic', 3800, 205, 145, 2200, 1300, { min: 420, max: 720 }, [{ item: 'core3', chance: 0.45 }, { item: 'ore4', chance: 0.2 }]],
-      ['e8', '上古凶兽·饕餮', 92, 'claw', 6000, 240, 150, 2400, 2600, { min: 850, max: 1500 }, [{ item: 'core3', chance: 0.8 }, { item: 'pill_gold', chance: 0.2 }]],
+      ['e8', '上古凶兽·饕餮', 92, 'claw', 6000, 240, 150, 2400, 2600, { min: 850, max: 1500 }, [{ item: 'core3', chance: 0.8 }, { item: 'consumable_gold', chance: 0.2 }]],
     ]);
   });
 
@@ -298,10 +298,10 @@ describe('修仙题材包 · 数值基线', () => {
   it('坊市货架全表', () => {
     const rows = pack.shop.map((s) => [s.item, s.price]);
     expect(rows).toEqual([
-      ['pill_heal', 45],
-      ['pill_qi', 120],
-      ['pill_atk', 320],
-      ['pill_def', 450],
+      ['consumable_heal', 45],
+      ['consumable_qi', 120],
+      ['consumable_atk', 320],
+      ['consumable_def', 450],
       ['silk', 15],
       ['bingsilk', 90],
     ]);
@@ -309,15 +309,15 @@ describe('修仙题材包 · 数值基线', () => {
 
   it('战斗文案：动词池/招式注册/词库结构', () => {
     const ct = pack.combatText;
-    expect(Object.keys(ct.verbs)).toEqual(['sword', 'fist', 'claw', 'magic']);
+    expect(Object.keys(ct.verbs)).toEqual(['sword', 'basic', 'claw', 'magic']);
     expect(ct.verbs.sword).toHaveLength(6);
-    expect(ct.verbs.fist).toHaveLength(3);
+    expect(ct.verbs.basic).toHaveLength(3);
     expect(ct.verbs.claw).toHaveLength(5);
     expect(ct.verbs.magic).toHaveLength(5);
-    // 招式注册：fist + 9 件武器（4 剑 + 5 妖兵）+ 8 敌
+    // 招式注册：basic + 9 件武器（4 剑 + 5 妖兵）+ 8 敌
     expect(Object.keys(ct.moves).sort()).toEqual(
       [
-        'fist', 'sword1', 'sword2', 'sword3', 'sword4',
+        'basic', 'sword1', 'sword2', 'sword3', 'sword4',
         'scorp_tail', 'corpse_nail', 'blood_gourd', 'mojun_blade', 'taotie_fang',
         'e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8',
       ].sort(),

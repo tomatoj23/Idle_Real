@@ -32,7 +32,7 @@ const BASE_PACK: unknown = {
     { id: 'silk', name: '灵蚕丝', icon: '蚕', type: 'mat', sell: 6 },
     { id: 'sword1', name: '青锋剑', icon: '剑', type: 'equip', slot: 'weapon', sell: 30, bonuses: { atk: 6 } },
     { id: 'body1', name: '布道袍', icon: '衣', type: 'equip', slot: 'body', sell: 35, bonuses: { def: 6 } },
-    { id: 'pill_heal', name: '回气丹', icon: '回', type: 'pill', sell: 18, heal: { percent: 0.3 } },
+    { id: 'consumable_heal', name: '回气丹', icon: '回', type: 'consumable', sell: 18, heal: { percent: 0.3 } },
   ],
   recipes: [
     {
@@ -78,11 +78,11 @@ const BASE_PACK: unknown = {
   combatText: {
     verbs: {
       sword: [{ v: '刺', limbs: ['咽喉'] }],
-      fist: [{ v: '击', limbs: ['面门'] }],
+      basic: [{ v: '击', limbs: ['面门'] }],
       claw: [{ v: '抓', limbs: ['肩头'] }],
       magic: [{ v: '摄', limbs: ['眉心'] }],
     },
-    moves: { fist: ['搏兔一击'], sword1: ['青虹一闪'], e1: ['饿虎扑食'] },
+    moves: { basic: ['搏兔一击'], sword1: ['青虹一闪'], e1: ['饿虎扑食'] },
     openings: ['你足尖一点，身形快若惊鸿'],
     critIntro: ['你气机鼓荡，一式全力施为'],
     cons: {
@@ -117,7 +117,7 @@ const BASE_PACK: unknown = {
       retreatVictory: ['你见好就收，飘然离场'],
       reengage: ['你略定心神，再度向【{enemy}】出手'],
       start: ['剑拔弩张——你与【{enemy}】战至一处'],
-      autoPill: ['你服下一枚【{item}】，气息稍定'],
+      autoConsume: ['你服下一枚【{item}】，气息稍定'],
     },
     summary: {
       tiers: {
@@ -137,10 +137,10 @@ const BASE_PACK: unknown = {
     },
   },
   texts: {
-    fistName: '拳脚',
+    basicName: '拳脚',
     reject: { '*': { 'bad-payload': '指令无效', 'unknown-action': '未知指令' } },
   },
-  shop: [{ item: 'pill_heal', price: 45 }],
+  shop: [{ item: 'consumable_heal', price: 45 }],
 };
 
 function makePack(): Record<string, any> {
@@ -267,7 +267,7 @@ describe('validateContentPack · 去重与形态', () => {
     expectError(validateContentPack(noBonuses), '/items/2/bonuses', 'shape');
   });
 
-  it('pill 无 effect 也无 heal → shape', () => {
+  it('consumable 无 effect 也无 heal → shape', () => {
     const pack = makePack();
     delete pack.items[4].heal;
     expectError(validateContentPack(pack), '/items/4/effect', 'shape');
@@ -303,16 +303,16 @@ describe('validateContentPack · 去重与形态', () => {
 });
 
 describe('validateContentPack · 引擎兜底约定', () => {
-  it('缺 fist 兜底招式 → xref', () => {
+  it('缺 basic 兜底招式 → xref', () => {
     const pack = makePack();
-    delete pack.combatText.moves.fist;
+    delete pack.combatText.moves.basic;
     expectError(validateContentPack(pack), '/combatText/moves', 'xref');
   });
 
-  it('缺 fist 兜底动词池 → schema 层 required 先行拦截（#021 批 4：键域开放后仅 fist 恒需）', () => {
+  it('缺 basic 兜底动词池 → schema 层 required 先行拦截（#021 批 4：键域开放后仅 basic 恒需）', () => {
     const pack = makePack();
-    delete pack.combatText.verbs.fist;
-    expectError(validateContentPack(pack), '/combatText/verbs/fist', 'required');
+    delete pack.combatText.verbs.basic;
+    expectError(validateContentPack(pack), '/combatText/verbs/basic', 'required');
   });
 
   it('非兜底动词池缺失 → 合法（键域开放，存在性按引用强制）', () => {

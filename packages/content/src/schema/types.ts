@@ -54,7 +54,7 @@ export interface Skill {
 
 /* ---------- 物品 ---------- */
 
-export type ItemType = 'mat' | 'pill' | 'equip' | 'blank' | 'inscription';
+export type ItemType = 'mat' | 'consumable' | 'equip' | 'blank' | 'inscription';
 
 /**
  * 佩戴槽位 id：数据化（config.slots），起步三槽 法器 weapon / 护体 body /
@@ -119,13 +119,13 @@ export type InscriptionTiers = readonly [
  */
 export type Bonuses = Readonly<Record<string, number>>;
 
-/** 丹药持续增益的倍率区（#021 批 4 键域开放：键 = stat id，值须 > 1）。 */
-export type PillMultipliers = Readonly<Record<string, number>>;
+/** 消耗品持续增益的倍率区（#021 批 4 键域开放：键 = stat id，值须 > 1）。 */
+export type ConsumableMultipliers = Readonly<Record<string, number>>;
 
-/** 丹药持续增益（duration 毫秒）。 */
-export interface PillEffect {
+/** 消耗品持续增益（duration 毫秒）。 */
+export interface ConsumableEffect {
   readonly duration: number;
-  readonly multipliers?: PillMultipliers;
+  readonly multipliers?: ConsumableMultipliers;
   /** 额外暴击率加成（百分点）。 */
   readonly crit?: number;
 }
@@ -153,12 +153,12 @@ export interface Item {
   readonly bonuses?: Bonuses;
   /**
    * equip 类（引擎只消费 weapon 槽位物品）：动词池键（#021 批 4 开放键域，
-   * 须在 combatText.verbs 注册）；缺省 = 引擎兜底键 fist 池。
+   * 须在 combatText.verbs 注册）；缺省 = 引擎兜底键 basic 池（#24 fist→basic）。
    */
   readonly verbStyle?: VerbStyle;
-  /** pill 类：持续增益。 */
-  readonly effect?: PillEffect;
-  /** pill 类：即时恢复。 */
+  /** consumable 类：持续增益。 */
+  readonly effect?: ConsumableEffect;
+  /** consumable 类：即时恢复。 */
   readonly heal?: Heal;
   /** blank 类（器胚）：掉落层数段（秘境层数），分层掉不同器胚。 */
   readonly floorRange?: Range;
@@ -281,7 +281,7 @@ export interface VerbEntry {
 
 /**
  * 动词池键（#021 批 4 开放键域，ADR-016 裁决 ⑦）：新增动词风格 = 新 JSON 键，
- * schema 仅强制引擎兜底键 `fist` 恒需； sword/fist/claw/magic 为官方包约定。
+ * schema 仅强制引擎兜底键 `basic` 恒需； sword/basic/claw/magic 为官方包约定。
  */
 export type VerbStyle = string;
 
@@ -291,8 +291,8 @@ export type DamageTier = 'light' | 'mid' | 'heavy' | 'deadly';
 export interface CombatText {
   readonly verbs: Readonly<Record<VerbStyle, readonly VerbEntry[]>>;
   /**
-   * 招式名注册表：键为 `fist`、武器物品 id 或敌人 id。
-   * 未注册者由引擎回退 fist（安全兜底约定，见 engine/types.ts）。
+   * 招式名注册表：键为 `basic`、武器物品 id 或敌人 id。
+   * 未注册者由引擎回退 basic（安全兜底约定，见 engine/types.ts）。
    */
   readonly moves: Readonly<Record<string, readonly string[]>>;
   /** 起势（重击时加一段）。 */
@@ -336,8 +336,8 @@ export interface CombatText {
     readonly reengage: readonly string[];
     /** 开战（{enemy} 槽）。 */
     readonly start: readonly string[];
-    /** 自动嗑丹（{item} 槽）。 */
-    readonly autoPill: readonly string[];
+    /** 自动服用消耗品（{item} 槽）。 */
+    readonly autoConsume: readonly string[];
   };
   /** 战后一行签名画像（#019 出池）：主导伤害档出画句 + 整行模板。 */
   readonly summary: {
@@ -364,10 +364,10 @@ export interface CombatText {
  */
 export interface TextsSection {
   /** 无佩戴武器时的兵刃展示名（makeAttackText weaponName 槽兜底值）。 */
-  readonly fistName: string;
+  readonly basicName: string;
   /**
    * reject 展示文案：动作协议键 → 理由 code → 文案模板；
-   * `'*'` 为跨动作兜底键；槽位 {level}/{activity}/{item}/{owned}/{cost}/{gp}
+   * `'*'` 为跨动作兜底键；槽位 {level}/{activity}/{item}/{owned}/{cost}/{gold}
    * 由引擎按协议语境填入。
    */
   readonly reject: Readonly<Record<string, Readonly<Record<string, string>>>>;

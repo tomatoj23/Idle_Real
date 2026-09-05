@@ -68,11 +68,11 @@ function makeBasePack(): Record<string, any> {
     combatText: {
       verbs: {
         sword: [{ v: '刺', limbs: ['咽喉'] }],
-        fist: [{ v: '击', limbs: ['面门'] }],
+        basic: [{ v: '击', limbs: ['面门'] }],
         claw: [{ v: '抓', limbs: ['肩头'] }],
         magic: [{ v: '摄', limbs: ['眉心'] }],
       },
-      moves: { fist: ['搏兔一击'], e1: ['饿虎扑食'] },
+      moves: { basic: ['搏兔一击'], e1: ['饿虎扑食'] },
       openings: ['你足尖一点，身形快若惊鸿'],
       critIntro: ['你气机鼓荡，一式全力施为'],
       cons: {
@@ -107,7 +107,7 @@ function makeBasePack(): Record<string, any> {
         retreatVictory: ['你见好就收，飘然离场'],
         reengage: ['你略定心神，再度向【{enemy}】出手'],
         start: ['剑拔弩张——你与【{enemy}】战至一处'],
-        autoPill: ['你服下一枚【{item}】，气息稍定'],
+        autoConsume: ['你服下一枚【{item}】，气息稍定'],
       },
       summary: {
         tiers: {
@@ -127,7 +127,7 @@ function makeBasePack(): Record<string, any> {
       },
     },
     texts: {
-      fistName: '拳脚',
+      basicName: '拳脚',
       reject: { '*': { 'bad-payload': '指令无效', 'unknown-action': '未知指令' } },
     },
     shop: [],
