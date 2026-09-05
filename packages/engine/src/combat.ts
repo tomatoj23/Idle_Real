@@ -187,7 +187,7 @@ function pickVerbEntry(list: unknown, random: () => number): { verb: string; lim
 export function extractMoveName(pools: CombatTextPools, moveKey: string, random: () => number): string {
   const moves = pools.moves as Record<string, unknown> | undefined;
   const pool = moves && typeof moves === 'object' ? (moves[moveKey] ?? moves[FIST_KEY]) : undefined;
-  // 兜底：键名回显（ADR-016 裁决 ④），不再冻结默认包招式名。
+  // 兜底：键名回显（ADR-016 裁决 ④），不再冻结修仙包招式名。
   return pickText(pool, random) ?? moveKey;
 }
 

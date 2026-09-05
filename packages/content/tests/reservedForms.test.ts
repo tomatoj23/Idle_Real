@@ -7,7 +7,7 @@ import itemSchemaJson from '../src/schema/item.schema.json';
  * 票 #16 验收：content 预留字段（器胚×铭纹 schema + 槽位 config 节 +
  * enemies element/affinities + prototype 字段先行）。
  *
- * 预留内容一律走测试夹具，默认包不放器胚/铭纹/系别内容
+ * 预留内容一律走测试夹具，修仙包不放器胚/铭纹/系别内容
  * （无机制消费方，避免污染数值快照）。
  */
 

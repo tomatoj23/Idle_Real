@@ -106,7 +106,7 @@ describe('#018 · 稀有度展示 def 驱动', () => {
     expect(root2.textContent).toContain('攻+8');
   });
 
-  it('默认包端到端：绝世掉落 → 特判 toast → r-epic 卡 → 卖价 = max(1, round(卖价×10))', () => {
+  it('修仙包端到端：绝世掉落 → 特判 toast → r-epic 卡 → 卖价 = max(1, round(卖价×10))', () => {
     const clock = new ManualClock();
     const pack = {
       skills: [{ id: 'fight', name: '斗法', icon: '斗', kind: 'combat' }],

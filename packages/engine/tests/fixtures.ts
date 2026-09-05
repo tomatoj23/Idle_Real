@@ -47,7 +47,7 @@ export const CYCLES_60S = 20;
 
 /**
  * 战斗切片内容包（issue #4）：在 makePack 基础上补敌人/武器/丹药/
- * 异宝掉落/战斗词库。e1 数值对齐默认包青鬃狼（hp 60）。
+ * 异宝掉落/战斗词库。e1 数值对齐修仙包青鬃狼（hp 60）。
  */
 export function makeCombatPack(): GameContent {
   return {

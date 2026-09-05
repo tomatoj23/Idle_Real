@@ -61,12 +61,17 @@ describe('修仙题材包 · 验收（issue #2）', () => {
   });
 });
 
-describe('content 包分居（#23）', () => {
-  it('导出面分离：协议主入口零题材导出（框架不含缺省题材包）', () => {
-    const apiKeys = Object.keys(contentApi);
-    expect(apiKeys).not.toContain('loadDefaultContent');
-    expect(apiKeys).not.toContain('loadXiuxianPack');
-    expect(apiKeys).not.toContain('xiuxianPackJson');
+describe('content 包分居（#23，#29 守卫补强）', () => {
+  it('导出面键全集快照：主入口恒为纯协议，任何新增导出立即红灯', () => {
+    // 值导出键全集（类型导出编译擦除，运行时导出面即此三项）。
+    // 旧防回归键 loadDefaultContent / loadXiuxianPack / xiuxianPackJson 一旦出现
+    // 也会令快照多出键而红灯；失败 diff 会点名多出的键名。
+    // 题材侧导出只能走 @wendao/content/packs/* 子路径（ADR-017）。
+    expect(Object.keys(contentApi).sort()).toEqual([
+      'formatContentErrors',
+      'validateContent',
+      'validateContentPack',
+    ]);
   });
 });
 
