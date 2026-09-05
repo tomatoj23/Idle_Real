@@ -128,9 +128,9 @@ describe('UI 烟测（issue #4 战斗切片）', () => {
 
     root.querySelector<HTMLButtonElement>('.tab[data-tab="combat"]')!.click();
     ui.render();
-    const pillBtn = root.querySelector<HTMLButtonElement>('[data-act="eat"][data-item="consumable_heal"]');
-    expect(pillBtn).not.toBeNull();
-    pillBtn!.click();
+    const eatBtn = root.querySelector<HTMLButtonElement>('[data-act="eat"][data-item="consumable_heal"]');
+    expect(eatBtn).not.toBeNull();
+    eatBtn!.click();
     ui.render();
     // 回气丹恢复 30% 上限：50 + 34 = 84
     expect(root.querySelector('#res-hp-text')!.textContent).toContain('84/');
