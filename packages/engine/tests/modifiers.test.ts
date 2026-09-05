@@ -16,7 +16,7 @@ const equip = (uid: number, id = 'sword_iron'): ModifierSource => ({
   uid,
   name: '铁剑',
 });
-const pill: ModifierSource = { id: 'pill_fury', kind: 'pill', name: '狂暴丹' };
+const consumable: ModifierSource = { id: 'consumable_fury', kind: 'consumable', name: '狂暴丹' };
 
 const mod = (
   stat: string,
@@ -31,7 +31,7 @@ describe('修饰符聚合管线（ADR-011）', () => {
     const out = aggregateStat('atk', 100, [
       mod('atk', 'flat', 50, equip(1)),
       mod('atk', 'addPct', 20, equip(1)),
-      mod('atk', 'mult', 1.5, pill),
+      mod('atk', 'mult', 1.5, consumable),
     ]);
     // (100 + 50) × (1 + 20/100) × 1.5 = 270
     expect(out.value).toBeCloseTo(270, 10);
@@ -49,7 +49,7 @@ describe('修饰符聚合管线（ADR-011）', () => {
   it('乘法区是多乘区连乘，不与加法%合并', () => {
     const out = aggregateStat('atk', 100, [
       mod('atk', 'mult', 1.5, equip(1)),
-      mod('atk', 'mult', 1.2, pill),
+      mod('atk', 'mult', 1.2, consumable),
     ]);
     expect(out.value).toBeCloseTo(180, 10);
     expect(out.mult).toBeCloseTo(1.8, 10);
@@ -59,7 +59,7 @@ describe('修饰符聚合管线（ADR-011）', () => {
     const contributions = [
       mod('atk', 'flat', 30, equip(1)),
       mod('atk', 'addPct', 10, equip(2)),
-      mod('atk', 'mult', 2, pill),
+      mod('atk', 'mult', 2, consumable),
     ];
     const merged = aggregateStat('atk', 100, contributions).value;
     const byHand = (100 + 30) * (1 + 10 / 100) * 2;
@@ -67,7 +67,7 @@ describe('修饰符聚合管线（ADR-011）', () => {
   });
 
   it('addPct 负值生效；聚合总和跌破 −100 时结果钳到 0（引擎兜底，不产出负属性）', () => {
-    const weakened = aggregateStat('atk', 100, [mod('atk', 'addPct', -30, pill)]);
+    const weakened = aggregateStat('atk', 100, [mod('atk', 'addPct', -30, consumable)]);
     expect(weakened.value).toBeCloseTo(70, 10);
 
     const shattered = aggregateStat('atk', 100, [
@@ -104,7 +104,7 @@ describe('修饰符聚合管线（ADR-011）', () => {
     it('moveId 条件：语境招式命中才生效', () => {
       const contributions = [mod('atk', 'mult', 1.5, equip(1), { moveId: 'sword_qixue' })];
       expect(aggregateStat('atk', 100, contributions, { moveId: 'sword_qixue' }).value).toBe(150);
-      expect(aggregateStat('atk', 100, contributions, { moveId: 'fist' }).value).toBe(100);
+      expect(aggregateStat('atk', 100, contributions, { moveId: 'basic' }).value).toBe(100);
     });
 
     it('多维度条件为 AND', () => {
@@ -115,14 +115,14 @@ describe('修饰符聚合管线（ADR-011）', () => {
         aggregateStat('atk', 100, contributions, { element: 'thunder', moveId: 'sword_leiting' }).value,
       ).toBe(130);
       expect(
-        aggregateStat('atk', 100, contributions, { element: 'thunder', moveId: 'fist' }).value,
+        aggregateStat('atk', 100, contributions, { element: 'thunder', moveId: 'basic' }).value,
       ).toBe(100);
     });
 
     it('conditionMatches：只检查声明维度，context 缺维度即不命中', () => {
       expect(conditionMatches({ element: 'fire' }, { element: 'fire' })).toBe(true);
       expect(conditionMatches({ element: 'fire' }, {})).toBe(false);
-      expect(conditionMatches({ moveId: 'fist' }, {})).toBe(false);
+      expect(conditionMatches({ moveId: 'basic' }, {})).toBe(false);
       expect(conditionMatches({}, { element: 'fire' })).toBe(true);
     });
   });
@@ -133,17 +133,17 @@ describe('修饰符聚合管线（ADR-011）', () => {
       100,
       [
         mod('atk', 'flat', 20, equip(7, 'sword_qingyun')),
-        mod('atk', 'mult', 1.5, pill, { moveId: 'fist' }),
+        mod('atk', 'mult', 1.5, consumable, { moveId: 'basic' }),
       ],
-      { moveId: 'fist' },
+      { moveId: 'basic' },
     );
     expect(out.applied).toEqual([
       { zone: 'flat', value: 20, source: { id: 'sword_qingyun', kind: 'equip', uid: 7, name: '铁剑' } },
       {
         zone: 'mult',
         value: 1.5,
-        source: { id: 'pill_fury', kind: 'pill', name: '狂暴丹' },
-        condition: { moveId: 'fist' },
+        source: { id: 'consumable_fury', kind: 'consumable', name: '狂暴丹' },
+        condition: { moveId: 'basic' },
       },
     ]);
   });
@@ -165,7 +165,7 @@ describe('修饰符聚合管线（ADR-011）', () => {
         [
           mod('atk', 'flat', 10, equip(1)),
           mod('crit', 'flat', 25, equip(1)),
-          mod('gatherXp', 'mult', 1.5, pill),
+          mod('gatherXp', 'mult', 1.5, consumable),
         ],
       );
       expect(out.atk?.value).toBe(110);

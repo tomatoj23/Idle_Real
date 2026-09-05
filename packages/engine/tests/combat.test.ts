@@ -63,8 +63,8 @@ describe('通用词库抽取器', () => {
 
 describe('战斗文案', () => {
   const pools = {
-    verbs: { fist: [{ v: '击', limbs: ['面门'] }], claw: [{ v: '抓', limbs: ['肩头'] }] },
-    moves: { fist: ['搏兔一击'], e1: ['饿虎扑食'] },
+    verbs: { basic: [{ v: '击', limbs: ['面门'] }], claw: [{ v: '抓', limbs: ['肩头'] }] },
+    moves: { basic: ['搏兔一击'], e1: ['饿虎扑食'] },
     openings: ['你气沉丹田'],
     critIntro: ['你气机鼓荡'],
     cons: {
@@ -110,7 +110,7 @@ describe('战斗文案', () => {
     expect(text).not.toContain('你气沉丹田');
   });
 
-  it('未注册招式回退 fist（安全兜底约定）', () => {
+  it('未注册招式回退 basic（安全兜底约定）', () => {
     const text = makeAttackText(pools, { ...baseArgs, moveKey: 'nobody' }, rng);
     expect(text).toContain('「搏兔一击」');
   });
@@ -139,7 +139,7 @@ describe('战斗文案', () => {
   it('玩家挨打侧用 hurt 词库（你为主语）', () => {
     const text = makeAttackText(
       pools,
-      { ...baseArgs, side: 'enemy', dmg: 3, defenderHp: 95, defenderMaxHp: 112, verbStyle: 'fist' },
+      { ...baseArgs, side: 'enemy', dmg: 3, defenderHp: 95, defenderMaxHp: 112, verbStyle: 'basic' },
       rng,
     );
     expect(text).toContain('青鬃狼一式');
@@ -148,7 +148,7 @@ describe('战斗文案', () => {
 
   it('词库全缺：招式名回显注册键（非文案占位，#019）且不抛错', () => {
     expect(extractMoveName({}, 'e1', rng)).toBe('e1');
-    expect(extractMoveName({ moves: { fist: ['兜底'] } }, 'e1', rng)).toBe('兜底');
+    expect(extractMoveName({ moves: { basic: ['兜底'] } }, 'e1', rng)).toBe('兜底');
   });
 
   it('模板全缺：退化为伤害数字占位，不造中文句（#019）', () => {

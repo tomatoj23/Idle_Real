@@ -24,7 +24,7 @@ function saveWithWeapon(): SaveData {
     version: 1,
     time: 0,
     state: {
-      gp: 0,
+      gold: 0,
       hp: 112,
       items: {},
       skills: { fight: { xp: 0 } },
@@ -79,14 +79,14 @@ describe('#021 · 玩家动词风格随武器 verbStyle（P1-2 解绑）', () =>
     expect(firstAttackText(game, 'player')).toContain('摄向青鬃狼的眉心');
   });
 
-  it('无武器 → fist 兜底池（历史行为不变）', () => {
+  it('无武器 → basic 兜底池（历史行为不变）', () => {
     const game = createGame({ content: makeCombatPack(), clock: new ManualClock(), seed: 7 });
     game.dispatch({ type: 'combat:start', payload: { enemyId: 'e1' } });
     game.tick(2500);
     expect(firstAttackText(game, 'player')).toContain('击向青鬃狼的面门');
   });
 
-  it('武器缺 verbStyle 声明 → 回落 fist 兜底池（引擎零内嵌 sword 规则）', () => {
+  it('武器缺 verbStyle 声明 → 回落 basic 兜底池（引擎零内嵌 sword 规则）', () => {
     const pack = makeCombatPack() as GameContent;
     const sword = (pack as { items: Array<{ id: string; verbStyle?: string }> }).items.find(
       (item) => item.id === 'sword1',

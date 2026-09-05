@@ -80,20 +80,20 @@ describe('挂机采集（issue #3 验收）', () => {
     const [event] = game.events.drain();
     expect(event.type).toBe('reject');
     expect(event.data).toMatchObject({ reason: 'no-item' });
-    expect(stateOf(game.snapshot()).gp).toBe(0);
+    expect(stateOf(game.snapshot()).gold).toBe(0);
   });
 
   it('灵石不足 / 未上架：购买被拒', () => {
     const game = createGame({ content: makePack(), clock: new ManualClock() });
 
-    game.dispatch({ type: 'shop:buy', payload: { item: 'pill_heal' } });
+    game.dispatch({ type: 'shop:buy', payload: { item: 'consumable_heal' } });
     expect(game.events.drain()[0]?.data).toMatchObject({ reason: 'no-gold' });
 
     game.dispatch({ type: 'shop:buy', payload: { item: 'herb1' } });
     expect(game.events.drain()[0]?.data).toMatchObject({ reason: 'not-in-shop' });
   });
 
-  it('卖出入账：gp 与乾坤袋同步', () => {
+  it('卖出入账：gold 与乾坤袋同步', () => {
     const clock = new ManualClock();
     const game = createGame({ content: makePack(), clock, rng: () => 0.9 }); // 永无副产出
     game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
@@ -105,7 +105,7 @@ describe('挂机采集（issue #3 验收）', () => {
     expect(events.some((e) => e.type === 'sell')).toBe(true);
 
     const st = stateOf(game.snapshot());
-    expect(st.gp).toBe(16); // 4 件 × 4 灵石
+    expect(st.gold).toBe(16); // 4 件 × 4 灵石
     expect(st.items.herb1).toBeUndefined(); // 0 值不落盘
   });
 
@@ -201,7 +201,7 @@ describe('挂机采集（issue #3 验收）', () => {
     const save: SaveData = {
       version: 1,
       time: 0,
-      state: { gp: 0, hp: 50, items: {}, skills: { combat: { xp: 0 } }, activity: null },
+      state: { gold: 0, hp: 50, items: {}, skills: { combat: { xp: 0 } }, activity: null },
     };
     const game = createGame({ content: makePack(), clock, save });
 

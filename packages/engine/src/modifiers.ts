@@ -35,7 +35,7 @@ export interface Modifier {
 
 /**
  * 产出方语境：修饰符的来源身份。
- * id=来源条目 id；kind=产出方类型（equip/inscription/pill/sect/talent…开放枚举）；
+ * id=来源条目 id；kind=产出方类型（equip/inscription/consumable/sect/talent…开放枚举）；
  * uid=实例标识（装备实例等，模板来源省略）；name=展示名（事件语境用，可选）。
  */
 export interface ModifierSource {

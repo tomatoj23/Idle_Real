@@ -228,7 +228,7 @@ describe('#020 · createGame 读 config 参数（纯 JSON 改动）', () => {
     const restored = createGame({
       content: pack,
       clock: new ManualClock(),
-      save: { version: 1, time: 0, state: { gp: 1 } },
+      save: { version: 1, time: 0, state: { gold: 1 } },
     });
     expect((restored.snapshot().state as unknown as GameState).autoFight).toBe(false);
     expect((restored.snapshot().state as unknown as GameState).autoEat).toBe(false);

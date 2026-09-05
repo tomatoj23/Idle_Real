@@ -24,8 +24,8 @@ describe('验收 · 假时钟 300 游戏秒打狼', () => {
     expect(victory).toBeDefined();
     const data = victory!.data as Record<string, unknown>;
     // 灵石掉落在敌人 gold 区间内
-    expect(data.gp).toBeGreaterThanOrEqual(4);
-    expect(data.gp).toBeLessThanOrEqual(10);
+    expect(data.gold).toBeGreaterThanOrEqual(4);
+    expect(data.gold).toBeLessThanOrEqual(10);
     expect(data.summary).toBeTruthy();
     // combat 经验事件（skills fight exp 增加；#018 起夹具技能 id = 'fight'）
     const snap = game.snapshot().state as unknown as GameState;
@@ -39,9 +39,9 @@ describe('验收 · 假时钟 300 游戏秒打狼', () => {
       version: 1 as const,
       time: 0,
       state: {
-        gp: 0,
+        gold: 0,
         hp: 112,
-        items: { pill_atk: 1 },
+        items: { consumable_atk: 1 },
         skills: { fight: { xp: 0 } },
         activity: null,
         // 罕见剑：atk round(6×1.3)=8 + 词条锐锋 3 → flat 11；crit 词条 4
@@ -66,7 +66,7 @@ describe('验收 · 假时钟 300 游戏秒打狼', () => {
     expect(stats?.maxHp).toBe(112);
 
     // 丹药 buff（atk mult 1.2）与装备同管线叠加：round(22×1.2)=26
-    game.dispatch({ type: 'pill:eat', payload: { item: 'pill_atk' } });
+    game.dispatch({ type: 'consumable:eat', payload: { item: 'consumable_atk' } });
     expect(game.snapshot().stats?.atk).toBe(26);
   });
 

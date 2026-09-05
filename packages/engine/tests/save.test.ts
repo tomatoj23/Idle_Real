@@ -13,7 +13,7 @@ describe('SaveAdapter（issue #3）', () => {
     const adapter = memorySaveAdapter();
     expect(adapter.load()).toBeNull();
 
-    const data = { version: 1 as const, time: 5, state: { gp: 7 } };
+    const data = { version: 1 as const, time: 5, state: { gold: 7 } };
     adapter.save(data);
     expect(adapter.load()).toEqual(data);
   });
@@ -28,7 +28,7 @@ describe('SaveAdapter（issue #3）', () => {
       const adapter = localStorageSaveAdapter('wendao_v2');
       expect(adapter.load()).toBeNull();
 
-      const data = { version: 1 as const, time: 9, state: { gp: 3 } };
+      const data = { version: 1 as const, time: 9, state: { gold: 3 } };
       adapter.save(data);
       expect(adapter.load()).toEqual(data);
 

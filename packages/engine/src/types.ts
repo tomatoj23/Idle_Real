@@ -54,12 +54,12 @@ export interface SaveData {
  * 内容包类型：透明容器。content 包负责按 schema 校验并给出精确类型
  * （如 ContentPack），引擎不解读其内部结构，因此这里只要求非原始值。
  *
- * 引擎安全兜底约定（issue #2 确立，战斗票实现）：
+ * 引擎安全兜底约定（issue #2 确立，战斗票实现；#24 机制键中性化 fist→basic）：
  * - 出招文案与战斗解算查找招式名时，若内容包未注册当前武器或敌人 id
- *   （combatText.moves），一律回退拳脚动作（moves.fist + verbs.fist），
+ *   （combatText.moves），一律回退基础动作（moves.basic + verbs.basic），
  *   不得抛错或渲染空文案；
- * - 内容包校验保证 moves.fist 与 verbs.fist 兜底动词池恒存在
- *   （动词池键域开放后仅 fist 恒需，#021 批 4），
+ * - 内容包校验保证 moves.basic 与 verbs.basic 兜底动词池恒存在
+ *   （动词池键域开放后仅 basic 恒需，#021 批 4），
  *   兜底路径永远可用（见 @wendao/content 的 validateContentPack）。
  */
 export type GameContent = object;

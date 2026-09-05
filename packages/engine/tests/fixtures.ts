@@ -36,9 +36,9 @@ export function makePack(): GameContent {
     items: [
       { id: 'herb1', name: '青灵草', icon: '青', type: 'mat', sell: 4 },
       { id: 'silk', name: '灵蚕丝', icon: '蚕', type: 'mat', sell: 6 },
-      { id: 'pill_heal', name: '回气丹', icon: '回', type: 'pill', sell: 18, heal: { percent: 0.3 } },
+      { id: 'consumable_heal', name: '回气丹', icon: '回', type: 'consumable', sell: 18, heal: { percent: 0.3 } },
     ],
-    shop: [{ item: 'pill_heal', price: 45 }],
+    shop: [{ item: 'consumable_heal', price: 45 }],
   };
 }
 
@@ -58,10 +58,10 @@ export function makeCombatPack(): GameContent {
       { id: 'sword1', name: '青锋剑', icon: '剑', type: 'equip', slot: 'weapon', sell: 30, verbStyle: 'sword', bonuses: { atk: 6 } },
       { id: 'scorp_tail', name: '蝎尾刺', icon: '刺', type: 'equip', slot: 'weapon', sell: 25, verbStyle: 'sword', bonuses: { atk: 5 } },
       {
-        id: 'pill_atk',
+        id: 'consumable_atk',
         name: '破煞丹',
         icon: '破',
-        type: 'pill',
+        type: 'consumable',
         sell: 130,
         effect: { duration: 300000, multipliers: { atk: 1.2 } },
       },
@@ -130,11 +130,11 @@ export function makeCombatPack(): GameContent {
       // #019 起 verbs 四系按 schema 约定全配（不再依赖引擎兜底形状）。
       verbs: {
         sword: [{ v: '刺', limbs: ['咽喉'] }],
-        fist: [{ v: '击', limbs: ['面门'] }],
+        basic: [{ v: '击', limbs: ['面门'] }],
         claw: [{ v: '抓', limbs: ['肩头'] }],
         magic: [{ v: '摄', limbs: ['眉心'] }],
       },
-      moves: { fist: ['搏兔一击'], e1: ['饿虎扑食'], efatal: ['噬血狂扑'], e3: ['虎啸山林'] },
+      moves: { basic: ['搏兔一击'], e1: ['饿虎扑食'], efatal: ['噬血狂扑'], e3: ['虎啸山林'] },
       openings: ['你气沉丹田'],
       critIntro: ['你气机鼓荡'],
       cons: {
@@ -170,7 +170,7 @@ export function makeCombatPack(): GameContent {
         retreatVictory: ['你见好就收，飘然离场'],
         reengage: ['你略定心神，再度向【{enemy}】出手'],
         start: ['剑拔弩张——你与【{enemy}】战至一处'],
-        autoPill: ['你服下一枚【{item}】，气息稍定'],
+        autoConsume: ['你服下一枚【{item}】，气息稍定'],
       },
       summary: {
         tiers: {
@@ -192,7 +192,7 @@ export function makeCombatPack(): GameContent {
     // #019 批 2 texts 节（形状合规）：reject 展示文案走 '*' 兜底键；
     // #020 补 combat:start/level 模板验证 {level} 槽 = 敌层 − 门控偏移。
     texts: {
-      fistName: '拳脚',
+      basicName: '拳脚',
       reject: {
         '*': { 'bad-payload': '指令无效', 'unknown-action': '未知指令' },
         'combat:start': { level: '境界太低（需 {level} 层斗法），恐有性命之虞' },

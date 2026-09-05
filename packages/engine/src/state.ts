@@ -1,6 +1,6 @@
 /**
  * 状态树（issue #3 起步，issue #4 扩展战斗与装备）：
- * skills（修为）/ items（乾坤袋）/ gp（灵石）+ 活动进度、气血、RNG 种子
+ * skills（修为）/ items（乾坤袋）/ gold（灵石）+ 活动进度、气血、RNG 种子
  * + 装备实例（gear/equips/gearSeq）、丹药 buff（buffs）、战斗态（combat）、
  * 同对手对照（lastEncounter）。
  *
@@ -42,7 +42,7 @@ export interface CombatState extends RoundTally {
 
 export interface GameState {
   /** 灵石。 */
-  gp: number;
+  gold: number;
   /** 当前气血（上限由斗法修为推导，见 playerMaxHp，不落盘上限值）。 */
   hp: number;
   /** 乾坤袋：物品 id → 数量（不留 0 值键）。 */
@@ -59,7 +59,7 @@ export interface GameState {
   gearSeq: number;
   /** 佩戴表：槽位 id → uid（缺槽 = 未佩戴，不落盘）。 */
   equips: Record<string, number>;
-  /** 丹药 buff：pill id → 过期游戏内时间（毫秒）。 */
+  /** 消耗品 buff：consumable id → 过期游戏内时间（毫秒）。 */
   buffs: Record<string, number>;
   /** 进行中的战斗；null = 脱战。 */
   combat: CombatState | null;
@@ -72,7 +72,7 @@ export interface GameState {
 }
 
 const RESERVED_KEYS = new Set([
-  'gp', 'hp', 'items', 'skills', 'activity', 'rngSeed',
+  'gold', 'hp', 'items', 'skills', 'activity', 'rngSeed',
   'gear', 'gearSeq', 'equips', 'buffs', 'combat', 'autoFight', 'autoEat', 'lastEncounter',
 ]);
 
@@ -88,7 +88,7 @@ export function initialState(
   // 自动化开关缺省读 config.combat（#020：玩法缺省值归内容，引擎基线 true）。
   const cparams = combatParamsOf(content);
   return {
-    gp: 0,
+    gold: 0,
     hp: playerMaxHp(content, skills, contributions),
     items: {},
     skills,
@@ -137,7 +137,7 @@ export function restoreState(
   }
 
   if (isObj(raw)) {
-    state.gp = Math.max(0, Math.floor(safeNumber(raw.gp, 0)));
+    state.gold = Math.max(0, Math.floor(safeNumber(raw.gold, 0)));
     const cap = playerMaxHp(content, state.skills, contributions);
     state.hp = Math.min(cap, Math.max(0, safeNumber(raw.hp, cap)));
 
@@ -244,13 +244,13 @@ function restoreCombatState(
     }
   }
 
-  // —— 丹药 buff：pill 须存在且有持续增益；已过期的不收编。
+  // —— 消耗品 buff：consumable 须存在且有持续增益；已过期的不收编。
   if (isObj(raw.buffs)) {
-    for (const [pillId, until] of Object.entries(raw.buffs)) {
-      const item = findItem(content, pillId);
-      if (!item || item.type !== 'pill' || item.effect === undefined) continue;
+    for (const [consumableId, until] of Object.entries(raw.buffs)) {
+      const item = findItem(content, consumableId);
+      if (!item || item.type !== 'consumable' || item.effect === undefined) continue;
       if (typeof until === 'number' && Number.isFinite(until) && until > save.time) {
-        state.buffs[pillId] = until;
+        state.buffs[consumableId] = until;
       }
     }
   }

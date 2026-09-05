@@ -87,11 +87,12 @@ export function isCriticalHp(hp: number, max: number, m: DamageMechanics = BASE_
 /* ---------- 通用词库抽取器 ---------- */
 
 /**
- * 引擎战斗兜底键（ADR-010 安全兜底约定：未注册招式/动词池一律回退拳脚）。
- * 内容包校验保证 moves[FIST_KEY] 与 verbs[FIST_KEY] 恒在（#021 批 4：动词池
- * 键域开放后仅 fist 恒需）；引擎内所有 fist 兜底取值统一引用本常量。
+ * 引擎战斗兜底键（ADR-010 安全兜底约定：未注册招式/动词池一律回退基础动作）。
+ * 内容包校验保证 moves[BASIC_KEY] 与 verbs[BASIC_KEY] 恒在（#021 批 4：动词池
+ * 键域开放后仅 basic 恒需）；引擎内所有 basic 兜底取值统一引用本常量。
+ * #24：机制键中性化 fist→basic（未发布改名窗口，旧存档不迁移 ADR-008）。
  */
-export const FIST_KEY = 'fist';
+export const BASIC_KEY = 'basic';
 
 /**
  * 通用「过滤后随机抽取」：池非法（非数组/空/含非字符串）时过滤剔除，
@@ -142,9 +143,9 @@ export interface AttackTextArgs {
   readonly side: 'player' | 'enemy';
   /** 敌方名（玩家出招时的受击者 / 敌方出招时的主语）。 */
   readonly enemyName: string;
-  /** 招式注册键：武器物品 id / 敌人 id / 'fist'。未注册回退 fist。 */
+  /** 招式注册键：武器物品 id / 敌人 id / 'basic'。未注册回退 basic。 */
   readonly moveKey: string;
-  /** 动词池键（开放键域，#021 批 4）：内容声明，未注册回退 fist。 */
+  /** 动词池键（开放键域，#021 批 4）：内容声明，未注册回退 basic。 */
   readonly verbStyle: string;
   /** 兵器展示名（玩家无武器为「拳脚」）。 */
   readonly weaponName: string;
@@ -167,7 +168,7 @@ interface VerbLike {
 function pickVerb(pools: CombatTextPools, style: string, random: () => number): { verb: string; limb: string } {
   const verbs = pools.verbs as Record<string, readonly VerbLike[]> | undefined;
   const list = verbs && typeof verbs === 'object' ? verbs[style] : undefined;
-  const fallbackList = verbs && typeof verbs === 'object' ? verbs[FIST_KEY] : undefined;
+  const fallbackList = verbs && typeof verbs === 'object' ? verbs[BASIC_KEY] : undefined;
   const entry = pickVerbEntry(list, random) ?? pickVerbEntry(fallbackList, random);
   if (entry) return entry;
   // 词库全缺：非文案占位（键名回显，ADR-016 裁决 ④），不内置中文兜底句。
@@ -183,10 +184,10 @@ function pickVerbEntry(list: unknown, random: () => number): { verb: string; lim
   return { verb: entry.v, limb };
 }
 
-/** 招式名抽取：moves[moveKey] 未注册回退 moves.fist（安全兜底约定）；全缺回显注册键。 */
+/** 招式名抽取：moves[moveKey] 未注册回退 moves.basic（安全兜底约定）；全缺回显注册键。 */
 export function extractMoveName(pools: CombatTextPools, moveKey: string, random: () => number): string {
   const moves = pools.moves as Record<string, unknown> | undefined;
-  const pool = moves && typeof moves === 'object' ? (moves[moveKey] ?? moves[FIST_KEY]) : undefined;
+  const pool = moves && typeof moves === 'object' ? (moves[moveKey] ?? moves[BASIC_KEY]) : undefined;
   // 兜底：键名回显（ADR-016 裁决 ④），不再冻结修仙包招式名。
   return pickText(pool, random) ?? moveKey;
 }

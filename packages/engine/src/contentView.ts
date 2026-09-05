@@ -72,12 +72,12 @@ export interface ItemView {
   readonly bonuses?: ItemBonusesView;
   /**
    * equip 类（引擎只消费 weapon 槽位物品）：动词池键（开放键域，#021 批 4）。
-   * 缺省/非法 = 引擎兜底键 fist 池；存在性由内容包校验强制。
+   * 缺省/非法 = 引擎兜底键 basic 池；存在性由内容包校验强制。
    */
   readonly verbStyle?: string;
-  /** pill 类：持续增益。 */
+  /** consumable 类：持续增益。 */
   readonly effect?: ItemEffectView;
-  /** pill 类：即时恢复（percent = 气血上限比例）。 */
+  /** consumable 类：即时恢复（percent = 气血上限比例）。 */
   readonly heal?: { readonly percent: number };
 }
 
@@ -165,7 +165,7 @@ export interface EnemyView {
   /**
    * 动词池键（开放键域，#021 批 4，ADR-016 裁决 ⑦）：须在内容包
    * combatText.verbs 注册（校验关卡）；'claw'/'magic' 只是官方包的内容
-   * 约定，引擎不感知。缺省（防御路径）按引擎兜底 fist 池。
+   * 约定，引擎不感知。缺省（防御路径）按引擎兜底 basic 池。
    */
   readonly kind?: string;
   readonly hp: number;
@@ -300,12 +300,12 @@ export function combatTextOf(content: GameContent): {
  * 缺节返回空对象（game.ts 按键名回显降级，零崩溃）。
  */
 export function textsOf(content: GameContent): {
-  readonly fistName?: unknown;
+  readonly basicName?: unknown;
   readonly reject?: unknown;
 } {
   const texts = (content as { texts?: unknown }).texts;
   return texts && typeof texts === 'object' && !Array.isArray(texts)
-    ? (texts as { fistName?: unknown; reject?: unknown })
+    ? (texts as { basicName?: unknown; reject?: unknown })
     : {};
 }
 

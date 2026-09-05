@@ -76,7 +76,7 @@ export function buildUi(
       <div class="brand"><span class="sigil sigil-brand">道</span><span class="brand-name">问道长生</span></div>
       <div class="res">
         <div class="res-item" title="攻 / 防 / 会心"><span class="sigil sigil-res">斗</span><b id="res-stats"></b></div>
-        <div class="res-item" title="灵石"><span class="sigil sigil-res">石</span><b id="res-gp">0</b></div>
+        <div class="res-item" title="灵石"><span class="sigil sigil-res">石</span><b id="res-gold">0</b></div>
         <div class="res-item" title="气血"><span class="sigil sigil-res sigil-hp">血</span><div class="hpbar"><i id="res-hp"></i></div><span id="res-hp-text"></span></div>
       </div>
     </header>
@@ -102,7 +102,7 @@ export function buildUi(
     if (!el) throw new Error(`UI 缺少节点 ${selector}`);
     return el;
   };
-  const gpEl = $<HTMLElement>('#res-gp');
+  const goldEl = $<HTMLElement>('#res-gold');
   const statsEl = $<HTMLElement>('#res-stats');
   const hpFill = $<HTMLElement>('#res-hp');
   const hpText = $<HTMLElement>('#res-hp-text');
@@ -160,7 +160,7 @@ export function buildUi(
         handler({ type: 'combat:auto-eat' });
         break;
       case 'eat':
-        handler({ type: 'pill:eat', payload: { item: el.dataset.item } });
+        handler({ type: 'consumable:eat', payload: { item: el.dataset.item } });
         break;
       case 'wear':
         handler({ type: 'gear:equip', payload: { uid: Number(el.dataset.uid) } });
@@ -216,7 +216,7 @@ export function buildUi(
         flog(`你不敌【${data.enemyName}】，真元耗尽，被同门救回`, 't-red');
         toast('斗法落败，幸得同门相救', 'red');
         break;
-      case 'pill:eat':
+      case 'consumable:eat':
         if (data.kind === 'heal') {
           flog(`服下【${data.itemName}】，回气 ${data.healed} 点`, 't-sys');
         } else {
@@ -273,7 +273,7 @@ export function buildUi(
     JSON.stringify([
       activeTab,
       selectedSkillId,
-      Math.floor(st.gp),
+      Math.floor(st.gold),
       Object.entries(st.items).sort(),
       Object.entries(st.skills).map(([id, p]) => [id, p.xp]).sort(),
       st.activity ? [st.activity.skillId, st.activity.index] : null,
@@ -292,7 +292,7 @@ export function buildUi(
     const snap = getSnapshot();
     const st = snap.state as unknown as GameState;
 
-    gpEl.textContent = Math.floor(st.gp).toLocaleString('zh-CN');
+    goldEl.textContent = Math.floor(st.gold).toLocaleString('zh-CN');
     const cap = snap.stats?.maxHp ?? Math.max(1, Math.floor(st.hp));
     hpFill.style.width = `${Math.max(0, Math.min(100, (st.hp / cap) * 100))}%`;
     hpText.textContent = `${Math.floor(st.hp)}/${cap}`;
@@ -635,7 +635,7 @@ export function buildUi(
       .map((entry) => {
         const item = itemById.get(entry.item);
         const owned = st.items[entry.item] ?? 0;
-        const afford = st.gp >= entry.price;
+        const afford = st.gold >= entry.price;
         return `<div class="bag-row">
           <span class="sigil sigil-sm">${esc(item?.icon ?? '？')}</span>
           <span class="bag-name">${esc(item?.name ?? entry.item)}<small>${esc(item?.description ?? '')}</small></span>

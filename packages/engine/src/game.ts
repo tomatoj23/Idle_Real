@@ -26,7 +26,7 @@ import {
   calcDmg,
   compareEncounterText,
   fillTemplate,
-  FIST_KEY,
+  BASIC_KEY,
   hitTierOf,
   makeAttackText,
   pickText,
@@ -95,7 +95,7 @@ export interface Game {
 /**
  * 游戏实例工厂：引擎的唯一入口。
  *
- * issue #3 交付：状态树（skills/items/gp）+ 挂机采集循环（活动推进/
+ * issue #3 交付：状态树（skills/items/gold）+ 挂机采集循环（活动推进/
  * 材料入袋/修为/升级）+ 脱战回血 + 拒绝事件 + 离线 O(1) 补偿结算。
  * 本切片无战斗，气血恒为脱战状态（#4 接管战斗语义）。
  */
@@ -136,9 +136,9 @@ export function createGame(options: CreateGameOptions): Game {
   const combatText = combatTextOf(content);
   const texts = textsOf(content);
 
-  /** 无武器兵刃展示名（texts.fistName，#019）：形状非法时键名回显（裁决 ④）。 */
-  const fistName: string =
-    typeof texts.fistName === 'string' && texts.fistName.length > 0 ? texts.fistName : 'fistName';
+  /** 无武器兵刃展示名（texts.basicName，#019；#24 fist→basic 中性化）：形状非法时键名回显（裁决 ④）。 */
+  const basicName: string =
+    typeof texts.basicName === 'string' && texts.basicName.length > 0 ? texts.basicName : 'basicName';
 
   /**
    * reject 展示文案（texts.reject 映射，#019）：命中序 = 精确动作 →
@@ -194,17 +194,17 @@ export function createGame(options: CreateGameOptions): Game {
 
   /** 玩家招式注册键：佩戴武器 itemId，否则兜底键（未注册由文案层再兜底）。 */
   function weaponMoveKey(): string {
-    return wornWeapon()?.item.id ?? FIST_KEY;
+    return wornWeapon()?.item.id ?? BASIC_KEY;
   }
 
   /**
-   * 玩家动词池键（#021 批 4 解绑 'sword'/'fist' 内嵌映射）：佩戴武器读
+   * 玩家动词池键（#021 批 4 解绑内嵌映射；#24 fist→basic）：佩戴武器读
    * 内容声明的 verbStyle（开放键域，如法杖走 magic 池 = 纯 JSON 改动）；
    * 无武器 / 缺声明 / 声明非法回落引擎兜底键（未注册由文案层再兜底）。
    */
   function playerVerbStyle(): string {
     const declared = wornWeapon()?.item.verbStyle;
-    return typeof declared === 'string' && declared.length > 0 ? declared : FIST_KEY;
+    return typeof declared === 'string' && declared.length > 0 ? declared : BASIC_KEY;
   }
 
   /**
@@ -217,15 +217,15 @@ export function createGame(options: CreateGameOptions): Game {
     for (const { gear, item } of wornGear()) {
       out.push(...gearContributions(content, gear, item.bonuses ?? {}, item.name));
     }
-    for (const [pillId, until] of Object.entries(state.buffs)) {
+    for (const [consumableId, until] of Object.entries(state.buffs)) {
       if (until <= time) {
-        delete state.buffs[pillId]; // 过期 buff 读时清理，不落盘
+        delete state.buffs[consumableId]; // 过期 buff 读时清理，不落盘
         continue;
       }
-      const item = findItem(content, pillId);
+      const item = findItem(content, consumableId);
       const effect = item?.effect;
       if (!item || !effect) continue;
-      const source = { id: pillId, kind: 'pill', name: item.name };
+      const source = { id: consumableId, kind: 'consumable', name: item.name };
       for (const [stat, mult] of Object.entries(effect.multipliers ?? {})) {
         if (typeof mult === 'number' && mult > 0) {
           out.push({ modifier: { stat, zone: 'mult', value: mult }, source });
@@ -399,47 +399,47 @@ export function createGame(options: CreateGameOptions): Game {
     }
   }
 
-  /* ---------- 丹药（#4）：即时恢复 / 持续 buff ---------- */
+  /* ---------- 消耗品（#4）：即时恢复 / 持续 buff；#24 pill→consumable 中性化 ---------- */
 
-  /** 嗑丹。silent = 自动嗑丹（战斗日志由 attack/note 承载，不弹 reject）。 */
-  function eatPill(pillId: string, silent: boolean): void {
-    const item = findItem(content, pillId);
-    if (!item || item.type !== 'pill') {
-      if (!silent) reject('pill:eat', 'not-pill');
+  /** 服用消耗品。silent = 自动服用（战斗日志由 attack/note 承载，不弹 reject）。 */
+  function eatConsumable(consumableId: string, silent: boolean): void {
+    const item = findItem(content, consumableId);
+    if (!item || item.type !== 'consumable') {
+      if (!silent) reject('consumable:eat', 'not-consumable');
       return;
     }
-    if ((state.items[pillId] ?? 0) <= 0) {
-      if (!silent) reject('pill:eat', 'no-item');
+    if ((state.items[consumableId] ?? 0) <= 0) {
+      if (!silent) reject('consumable:eat', 'no-item');
       return;
     }
     if (item.heal) {
       const cap = playerStats(hpContext()).maxHp;
       if (state.hp >= cap) {
-        if (!silent) reject('pill:eat', 'full-hp');
+        if (!silent) reject('consumable:eat', 'full-hp');
         return;
       }
-      takeItem(pillId, 1);
+      takeItem(consumableId, 1);
       const healed = Math.min(cap, state.hp + Math.round(cap * item.heal.percent)) - state.hp;
       state.hp += healed;
       events.emit({
-        type: 'pill:eat',
+        type: 'consumable:eat',
         time,
-        data: { item: pillId, itemName: item.name, kind: 'heal', healed },
+        data: { item: consumableId, itemName: item.name, kind: 'heal', healed },
       });
       if (silent) {
         events.emit({
           type: 'combat-note',
           time,
-          data: { text: noteFrom('autoPill', { item: item.name }), kind: 'pill' },
+          data: { text: noteFrom('autoConsume', { item: item.name }), kind: 'consumable' },
         });
       }
     } else if (item.effect) {
-      takeItem(pillId, 1);
-      state.buffs[pillId] = time + item.effect.duration; // 同名丹药覆盖续时（旧版语义）
+      takeItem(consumableId, 1);
+      state.buffs[consumableId] = time + item.effect.duration; // 同名消耗品覆盖续时（旧版语义）
       events.emit({
-        type: 'pill:eat',
+        type: 'consumable:eat',
         time,
-        data: { item: pillId, itemName: item.name, kind: 'buff', minutes: Math.round(item.effect.duration / 60000) },
+        data: { item: consumableId, itemName: item.name, kind: 'buff', minutes: Math.round(item.effect.duration / 60000) },
       });
     }
   }
@@ -477,7 +477,7 @@ export function createGame(options: CreateGameOptions): Game {
         enemyName: enemy.name,
         moveKey,
         verbStyle: playerVerbStyle(),
-        weaponName: weapon ? weapon.item.name : fistName,
+        weaponName: weapon ? weapon.item.name : basicName,
         dmg,
         crit,
         atk,
@@ -510,7 +510,7 @@ export function createGame(options: CreateGameOptions): Game {
         moveKey: enemy.id,
         // 动词池键 = 敌人内容声明的 kind（开放键域，#021 批 4）；'claw' 不再是
         // 引擎缺省词汇，防御路径回落引擎兜底键（未注册由文案层再兜底）。
-        verbStyle: enemy.kind ?? FIST_KEY,
+        verbStyle: enemy.kind ?? BASIC_KEY,
         weaponName: '',
         dmg,
         crit: false,
@@ -532,11 +532,11 @@ export function createGame(options: CreateGameOptions): Game {
 
   /** 胜利结算：灵石/材料/异宝掉落 + 斗法修为 + 签名画像与同对手对照。 */
   function victory(enemy: EnemyView, c: CombatState): void {
-    const gold = enemy.gold;
-    const gpGain = gold
-      ? Math.floor(gold.min + random() * (gold.max - gold.min + 1))
+    const goldRange = enemy.gold;
+    const goldGain = goldRange
+      ? Math.floor(goldRange.min + random() * (goldRange.max - goldRange.min + 1))
       : 0;
-    state.gp += gpGain;
+    state.gold += goldGain;
 
     const drops: string[] = [];
     for (const drop of enemy.drops ?? []) {
@@ -589,7 +589,7 @@ export function createGame(options: CreateGameOptions): Game {
       data: {
         enemyId: enemy.id,
         enemyName: enemy.name,
-        gp: gpGain,
+        gold: goldGain,
         rounds: c.rounds,
         exp: skill ? enemy.exp : 0,
         summary,
@@ -654,14 +654,14 @@ export function createGame(options: CreateGameOptions): Game {
         }
         continue;
       }
-      // 自动嗑丹（血线触发；目标为背包中首个 heal 类丹药，引擎零内容感知）
+      // 自动服药（血线触发；目标为背包中首个 heal 类消耗品，引擎零内容感知）
       if (state.autoEat && state.hp < playerStats(hpContext()).maxHp * cparams.autoEatHpFraction) {
-        const healPill = Object.keys(state.items).find((itemId) => {
+        const healConsumable = Object.keys(state.items).find((itemId) => {
           if (!((state.items[itemId] ?? 0) > 0)) return false;
           const item = findItem(content, itemId);
-          return item?.type === 'pill' && item.heal !== undefined;
+          return item?.type === 'consumable' && item.heal !== undefined;
         });
-        if (healPill) eatPill(healPill, true);
+        if (healConsumable) eatConsumable(healConsumable, true);
       }
       if (!state.combat) return;
       // 推进到下一个事件点（玩家出招 / 敌人出招 / dt 消化完）
@@ -861,11 +861,11 @@ export function createGame(options: CreateGameOptions): Game {
           }
           takeItem(itemId, count);
           const gained = item.sell * count;
-          state.gp += gained;
+          state.gold += gained;
           events.emit({
             type: 'sell',
             time,
-            data: { item: itemId, itemName: item.name, count, gained, gp: state.gp },
+            data: { item: itemId, itemName: item.name, count, gained, gold: state.gold },
           });
           return;
         }
@@ -884,16 +884,16 @@ export function createGame(options: CreateGameOptions): Game {
           }
           const item = findItem(content, itemId);
           const cost = entry.price * count;
-          if (state.gp < cost) {
-            reject(action.type, 'no-gold', { cost: String(cost), gp: String(state.gp) });
+          if (state.gold < cost) {
+            reject(action.type, 'no-gold', { cost: String(cost), gold: String(state.gold) });
             return;
           }
-          state.gp -= cost;
+          state.gold -= cost;
           addItem(itemId, count);
           events.emit({
             type: 'buy',
             time,
-            data: { item: itemId, itemName: item?.name ?? itemId, count, cost, gp: state.gp },
+            data: { item: itemId, itemName: item?.name ?? itemId, count, cost, gold: state.gold },
           });
           return;
         }
@@ -961,13 +961,13 @@ export function createGame(options: CreateGameOptions): Game {
           return;
         }
 
-        case 'pill:eat': {
+        case 'consumable:eat': {
           const payload = action.payload as { item?: unknown } | undefined;
           if (typeof payload?.item !== 'string') {
             reject(action.type, 'bad-payload');
             return;
           }
-          eatPill(payload.item, false);
+          eatConsumable(payload.item, false);
           return;
         }
 
@@ -1043,7 +1043,7 @@ export function createGame(options: CreateGameOptions): Game {
           const item = findItem(content, gear.itemId);
           const gained = gearSell(content, item?.sell ?? 0, gear.rarity);
           state.gear = state.gear.filter((entry) => entry.uid !== uid);
-          state.gp += gained;
+          state.gold += gained;
           events.emit({
             type: 'sell',
             time,
@@ -1052,7 +1052,7 @@ export function createGame(options: CreateGameOptions): Game {
               itemName: gearName(content, item?.name ?? gear.itemId, gear.rarity),
               count: 1,
               gained,
-              gp: state.gp,
+              gold: state.gold,
             },
           });
           return;
