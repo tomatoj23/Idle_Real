@@ -245,7 +245,7 @@ describe('validateContentPack · 跨引用检查', () => {
 
   it('坊市货架物品不存在 → 字段级 xref', () => {
     const pack = makePack();
-    pack.shop[0].item = 'pill9';
+    pack.shop[0].item = 'herb9';
     expectError(validateContentPack(pack), '/shop/0/item', 'xref');
   });
 });

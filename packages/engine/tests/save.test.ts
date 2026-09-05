@@ -25,14 +25,14 @@ describe('SaveAdapter（issue #3）', () => {
       setItem: (key: string, value: string) => void store.set(key, value),
     });
     try {
-      const adapter = localStorageSaveAdapter('wendao_v2');
+      const adapter = localStorageSaveAdapter('wendao_test_key');
       expect(adapter.load()).toBeNull();
 
       const data = { version: 1 as const, time: 9, state: { gold: 3 } };
       adapter.save(data);
       expect(adapter.load()).toEqual(data);
 
-      store.set('wendao_v2', '{broken json');
+      store.set('wendao_test_key', '{broken json');
       expect(adapter.load()).toBeNull();
     } finally {
       vi.unstubAllGlobals();
