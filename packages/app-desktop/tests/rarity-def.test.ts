@@ -137,11 +137,11 @@ describe('#018 · 稀有度展示 def 驱动', () => {
       combatText: {
         verbs: {
           sword: [{ v: '刺', limbs: ['咽喉'] }],
-          fist: [{ v: '击', limbs: ['面门'] }],
+          basic: [{ v: '击', limbs: ['面门'] }],
           claw: [{ v: '抓', limbs: ['肩头'] }],
           magic: [{ v: '摄', limbs: ['眉心'] }],
         },
-        moves: { fist: ['搏兔一击'], e1: ['饿虎扑食'] },
+        moves: { basic: ['搏兔一击'], e1: ['饿虎扑食'] },
         openings: ['你气沉丹田'],
         critIntro: ['你气机鼓荡'],
         cons: {

@@ -154,7 +154,7 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 - 动词风格声明（P1-2 玩家映射解绑）：
   - **玩家** = 佩戴武器（weapon 槽 equip）的 `verbStyle` 字段（开放键域，validate
     强制 verbs 池存在）；缺声明/非法回落引擎兜底键 `basic` 池。引擎内嵌的
-    'sword'/'fist' 规则已清退——"法杖走 magic 池" = 纯 JSON 改动。
+    引擎内嵌的硬编码动词映射已清退——"法杖走 magic 池" = 纯 JSON 改动。
     官方包全部武器显式声明 `"verbStyle": "sword"`。
   - **敌人** = `kind` 字段（开放键域，validate 强制 verbs 池存在）；引擎不再内嵌
     缺省 'claw'（防御路径回落 basic 池）。'claw'/'magic' 是官方包约定而非引擎词汇。

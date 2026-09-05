@@ -472,11 +472,11 @@ export function buildUi(
     // N2 修复（#018）：斗法修为读数按 combatSkillId 解析，禁硬编码内容 id。
     const clv = levelFromXp(st.skills[combatSkillId]?.xp ?? 0, prog);
 
-    const pills = content.items
+    const consumables = content.items
       .filter((item) => item.type === 'consumable' && (st.items[item.id] ?? 0) > 0)
       .map(
         (item) =>
-          `<button class="btn btn-pill" data-act="eat" data-item="${item.id}">${esc(item.icon)} ${esc(item.name)} ×${st.items[item.id]}</button>`,
+          `<button class="btn btn-consumable" data-act="eat" data-item="${item.id}">${esc(item.icon)} ${esc(item.name)} ×${st.items[item.id]}</button>`,
       )
       .join('');
 
@@ -509,7 +509,7 @@ export function buildUi(
             </div>
           </article>
           ${toggles}
-          ${pills ? `<div class="pill-bar">${pills}</div>` : '<p class="page-sub">囊中无丹。</p>'}
+          ${consumables ? `<div class="consumable-bar">${consumables}</div>` : '<p class="page-sub">囊中无丹。</p>'}
           <div class="flog" id="flog"></div>
         </section>`;
     }
@@ -547,7 +547,7 @@ export function buildUi(
         <h2 class="page-title">斗法</h2>
         <p class="page-sub">斩妖除魔，问道长生。当前斗法 ${clv} 层。</p>
         <div class="enemy-grid">${cards}</div>
-        <div class="pill-bar">${pills || ''}</div>
+        <div class="consumable-bar">${consumables || ''}</div>
       </section>`;
   }
 

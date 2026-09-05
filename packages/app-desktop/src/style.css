@@ -434,8 +434,8 @@ body {
 .combat-toggles { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
 .btn.on { border-color: var(--border-gold); color: var(--gold); }
 
-.pill-bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
-.btn-pill { min-width: 0; }
+.consumable-bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.btn-consumable { min-width: 0; }
 
 .flog {
   height: 300px;
