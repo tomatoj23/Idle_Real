@@ -1,7 +1,7 @@
 # Content 字段约定
 
 content 包的字段级约定。**schema 变更三处同步纪律（ADR-015）**：任何字段变更须同步
-`packages/content/src/schemas/*.schema.json`、`packages/content/src/types.ts`、
+`packages/content/src/schema/*.schema.json`、`packages/content/src/schema/types.ts`、
 本文件，三者缺一即返工。**引擎消费点（contentView 的 View 类型、state.ts 规范化）
 不在三处清单内，随消费票同步**（P2-2 教训：enemy schema 已含 `affinities` 而
 engine `EnemyView` 未投影，靠 #15 票驱动补齐）。
@@ -37,7 +37,7 @@ engine `EnemyView` 未投影，靠 #15 票驱动补齐）。
   由 `validateContentPack` 语义检查补全（ADR-010 分工）。
 - **空集合合法**：`preferredTags: []`、`inherentModifiers: []`、`tags: []` 均合法；
   `items: []` 仍被拒（#2 定下的节下限不放宽，每包至少一个物品）。
-- 默认包**不放**器胚/铭纹内容（无机制消费方时不进默认包，避免污染数值快照）。
+- 修仙包**不放**器胚/铭纹内容（无机制消费方时不进题材包，避免污染数值快照）。
 
 ### 器胚字段（CONTEXT.md 词汇：器胚/胚纹/纹阶）
 
@@ -210,7 +210,7 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 数值**边界**（min/max/互斥）由 schema 与包校验关卡拒绝（ADR-010 分工：schema 管边界、
 引擎管形状防御），引擎使用点仅对除零类参数防崩（如 affix.hpDivider ≤ 0 回落基线）——
 改战斗/成长/词条参数 = 纯 JSON 改动，引擎零改动。
-默认包**显式写出全部基线值**（数值回归内容文件，作参数调档的起点）。
+修仙包**显式写出全部基线值**（数值回归内容文件，作参数调档的起点）。
 
 | 子节 | 字段域 | 引擎基线 |
 |---|---|---|

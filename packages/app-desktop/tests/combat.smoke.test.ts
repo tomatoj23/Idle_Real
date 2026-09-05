@@ -5,7 +5,7 @@
  * 这条接缝（事件→战斗日志接线与生产共用 buildUi 内的同一套路径）。
  */
 import { describe, expect, it } from 'vitest';
-import { loadDefaultContent } from '@wendao/content';
+import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
 import { createGame, ManualClock, type GameAction, type SaveData } from '@wendao/engine';
 import { buildUi } from '../src/ui';
 
@@ -14,7 +14,7 @@ const MAX_FLOG = 60;
 describe('UI 烟测（issue #4 战斗切片）', () => {
   it('斗法：挑战青鬃狼 → 战斗中视图 → 挂机胜利 → 战斗日志受控', () => {
     const clock = new ManualClock();
-    const content = loadDefaultContent();
+    const content = loadXiuxianPack();
     const game = createGame({ content, clock, seed: 11 });
     const root = document.createElement('div');
     document.body.appendChild(root);
@@ -56,7 +56,7 @@ describe('UI 烟测（issue #4 战斗切片）', () => {
 
   it('乾坤袋：装备卡佩戴/卸下 → 顶栏属性反映倍率+词条', () => {
     const clock = new ManualClock();
-    const content = loadDefaultContent();
+    const content = loadXiuxianPack();
     // 构造带装备实例的存档（罕见青锋剑：atk round(6×1.3)=8 + 锐锋 3 → 11）
     const base = createGame({ content, clock, seed: 3 }).snapshot();
     const save = {
@@ -109,7 +109,7 @@ describe('UI 烟测（issue #4 战斗切片）', () => {
 
   it('战斗页丹药快捷栏：嗑丹回血', () => {
     const clock = new ManualClock();
-    const content = loadDefaultContent();
+    const content = loadXiuxianPack();
     const base = createGame({ content, clock, seed: 3 }).snapshot();
     const save = {
       ...base,

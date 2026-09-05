@@ -1,19 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { formatContentErrors, loadDefaultContent, validateContentPack } from '../src/index.js';
+import * as contentApi from '../src/index.js';
+import { formatContentErrors, validateContentPack } from '../src/index.js';
 import type { ContentPack } from '../src/index.js';
-import defaultPackJson from '../src/content/default.json';
+import { loadXiuxianPack, xiuxianPackJson } from '../src/packs/xiuxian.js';
 
-describe('默认内容包 · 验收（issue #2）', () => {
+describe('修仙题材包 · 验收（issue #2）', () => {
   it('validateContentPack 通过', () => {
-    const result = validateContentPack(defaultPackJson);
+    const result = validateContentPack(xiuxianPackJson);
     if (!result.ok) {
       console.error(formatContentErrors(result.errors));
     }
     expect(result.ok).toBe(true);
   });
 
-  it('loadDefaultContent 强校验通过并返回完整包', () => {
-    const pack = loadDefaultContent();
+  it('loadXiuxianPack 强校验通过并返回完整包', () => {
+    const pack = loadXiuxianPack();
     expect(pack.skills).toHaveLength(6);
     expect(pack.items).toHaveLength(42);
     expect(pack.recipes).toHaveLength(16);
@@ -25,7 +26,7 @@ describe('默认内容包 · 验收（issue #2）', () => {
   });
 
   it('织物线：灵蚕丝/冰蚕丝为采药副产出，布道袍用丝、甲胄用矿石', () => {
-    const pack = loadDefaultContent();
+    const pack = loadXiuxianPack();
     const herb = pack.skills.find((s) => s.id === 'herb');
     expect(herb?.activities?.map((a) => a.byproduct?.item)).toEqual([
       'silk',
@@ -41,7 +42,7 @@ describe('默认内容包 · 验收（issue #2）', () => {
   });
 
   it('引擎兜底网：fist 招式与官方包动词池齐备（键域开放后 fist 为 schema 唯一恒需）', () => {
-    const pack = loadDefaultContent();
+    const pack = loadXiuxianPack();
     expect(pack.combatText.moves.fist).toEqual(['搏兔一击', '石破天惊']);
     expect(pack.combatText.verbs.fist?.length).toBeGreaterThan(0);
     // 官方包约定四池（非 schema 强制）。
@@ -51,7 +52,7 @@ describe('默认内容包 · 验收（issue #2）', () => {
   });
 
   it('config 槽位节：法器/护体/灵饰起步（#16，为法宝/外袍留门）', () => {
-    const pack = loadDefaultContent();
+    const pack = loadXiuxianPack();
     expect(pack.config?.slots).toEqual([
       { id: 'weapon', name: '法器', icon: '兵' },
       { id: 'body', name: '护体', icon: '甲' },
@@ -60,11 +61,20 @@ describe('默认内容包 · 验收（issue #2）', () => {
   });
 });
 
-/* ==================== 数值基线（防迁移走样，对照旧 js/data.js） ==================== */
-/* 本节断言全部手抄自旧版 data.js；改动默认包数值必须是有意重设并同步更新此处。 */
+describe('content 包分居（#23）', () => {
+  it('导出面分离：协议主入口零题材导出（框架不含缺省题材包）', () => {
+    const apiKeys = Object.keys(contentApi);
+    expect(apiKeys).not.toContain('loadDefaultContent');
+    expect(apiKeys).not.toContain('loadXiuxianPack');
+    expect(apiKeys).not.toContain('xiuxianPackJson');
+  });
+});
 
-describe('默认内容包 · 数值基线', () => {
-  const pack: ContentPack = loadDefaultContent();
+/* ==================== 数值基线（防迁移走样，对照旧 js/data.js） ==================== */
+/* 本节断言全部手抄自旧版 data.js；改动修仙包数值必须是有意重设并同步更新此处。 */
+
+describe('修仙题材包 · 数值基线', () => {
+  const pack: ContentPack = loadXiuxianPack();
   const itemById = Object.fromEntries(pack.items.map((it) => [it.id, it]));
 
   it('物品：类型与出售价全表', () => {

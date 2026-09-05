@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateContent } from '../src/index.js';
 import type { JsonSchema, ValidationResult } from '../src/index.js';
-import skillSchemaJson from '../src/schemas/skill.schema.json';
+import skillSchemaJson from '../src/schema/skill.schema.json';
 
 // skill.schema.json 约束 content 包 skills 节的值本身（技能数组）。
 const schema = skillSchemaJson as unknown as JsonSchema;

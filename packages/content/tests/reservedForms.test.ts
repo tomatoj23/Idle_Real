@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateContent, validateContentPack } from '../src/index.js';
 import type { ContentError, JsonSchema } from '../src/index.js';
-import itemSchemaJson from '../src/schemas/item.schema.json';
+import itemSchemaJson from '../src/schema/item.schema.json';
 
 /**
  * 票 #16 验收：content 预留字段（器胚×铭纹 schema + 槽位 config 节 +

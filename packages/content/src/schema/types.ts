@@ -2,9 +2,10 @@
  * 内容包类型（issue #2；#16 落地预留字段）。
  *
  * 这些接口描述 content 包各节的形状，供引擎消费方（app / editor）与
- * 默认内容包加载器使用；引擎本体依旧零内容感知（透明持有 GameContent）。
+ * 题材包装载器（src/packs/）使用；引擎本体依旧零内容感知（透明持有
+ * GameContent）。
  *
- * 三处同步纪律（ADR-015）：字段变更须同步 schemas/*.schema.json、
+ * 三处同步纪律（ADR-015）：字段变更须同步 src/schema/*.schema.json、
  * 本文件、docs/agents/content.md（字段约定文档）。
  */
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateContentPack } from '../src/index.js';
 import type { ContentError } from '../src/index.js';
-import defaultPackJson from '../src/content/default.json';
+import { xiuxianPackJson } from '../src/packs/xiuxian.js';
 
 /**
  * 跨引用语义检查的基准夹具：最小合法包。
@@ -438,9 +438,9 @@ describe('validateContentPack · 批 4 语义键域（#021）', () => {
   });
 });
 
-describe('validateContentPack · 默认包破坏演示（验收）', () => {
-  it('从默认包删除 silk → 相关跨引用逐字段报错', () => {
-    const pack = JSON.parse(JSON.stringify(defaultPackJson)) as Record<string, any>;
+describe('validateContentPack · 题材包破坏演示（验收）', () => {
+  it('从修仙包删除 silk → 相关跨引用逐字段报错', () => {
+    const pack = JSON.parse(JSON.stringify(xiuxianPackJson)) as Record<string, any>;
     pack.items = pack.items.filter((it: { id: string }) => it.id !== 'silk');
     const result = validateContentPack(pack);
     expect(result.ok).toBe(false);

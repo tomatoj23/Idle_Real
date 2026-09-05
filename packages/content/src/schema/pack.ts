@@ -2,7 +2,7 @@
  * 内容包整体校验（issue #2；#16 扩展）。
  *
  * 两道关卡：
- * 1. **schema 校验**：各内容节对照 src/schemas/ 下的 JSON Schema，
+ * 1. **schema 校验**：各内容节对照 src/schema/ 下的 JSON Schema，
  *    逐字段上报（JSON Pointer 路径 + 关键字）。item 节按 type 走
  *    oneOf 五形态分流（mat/pill/equip/blank 器胚/inscription 铭纹），
  *    跨形态字段由分支 additionalProperties:false 直接拒绝。
@@ -39,18 +39,17 @@
  *      条目、父链不得成环（展平留待后续票，此处为门禁侧保险）。
  */
 
-import defaultPackJson from './content/default.json';
-import affixPoolSchemaJson from './schemas/affix-pool.schema.json';
-import combatTextSchemaJson from './schemas/combat-text.schema.json';
-import configSchemaJson from './schemas/config.schema.json';
-import enemySchemaJson from './schemas/enemy.schema.json';
-import gearDropSchemaJson from './schemas/gear-drop.schema.json';
-import itemSchemaJson from './schemas/item.schema.json';
-import raritySchemaJson from './schemas/rarity.schema.json';
-import recipeSchemaJson from './schemas/recipe.schema.json';
-import shopSchemaJson from './schemas/shop.schema.json';
-import skillSchemaJson from './schemas/skill.schema.json';
-import textsSchemaJson from './schemas/texts.schema.json';
+import affixPoolSchemaJson from './affix-pool.schema.json';
+import combatTextSchemaJson from './combat-text.schema.json';
+import configSchemaJson from './config.schema.json';
+import enemySchemaJson from './enemy.schema.json';
+import gearDropSchemaJson from './gear-drop.schema.json';
+import itemSchemaJson from './item.schema.json';
+import raritySchemaJson from './rarity.schema.json';
+import recipeSchemaJson from './recipe.schema.json';
+import shopSchemaJson from './shop.schema.json';
+import skillSchemaJson from './skill.schema.json';
+import textsSchemaJson from './texts.schema.json';
 import type { Config, ContentPack, Item, Modifier, Range, Skill } from './types.js';
 import { validateContent } from './validate.js';
 import type { ContentError, JsonSchema } from './validate.js';
@@ -130,15 +129,6 @@ export function validateContentPack(json: unknown): PackValidationResult {
   return errors.length === 0
     ? { ok: true, pack: json as unknown as ContentPack }
     : { ok: false, errors };
-}
-
-/** 加载并强校验默认内容包；失败即抛错（启动期 fail-fast）。 */
-export function loadDefaultContent(): ContentPack {
-  const result = validateContentPack(defaultPackJson as unknown);
-  if (!result.ok) {
-    throw new Error(`默认内容包校验失败：\n${formatContentErrors(result.errors)}`);
-  }
-  return result.pack;
 }
 
 /** 把字段级错误列表格式化为多行文本（红屏/日志用）。 */

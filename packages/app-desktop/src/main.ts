@@ -5,7 +5,7 @@ import {
   localStorageSaveAdapter,
   type GameAction,
 } from '@wendao/engine';
-import { loadDefaultContent } from '@wendao/content';
+import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
 import { buildUi } from './ui';
 
 const SAVE_KEY = 'wendao_changsheng_v2';
@@ -19,7 +19,8 @@ try {
   if (!app) throw new Error('缺少 #app 挂载点');
 
   // 启动强校验接缝（issue #2）：坏内容绝不进入运行时。
-  const content = loadDefaultContent();
+  // #23 起壳层显式装配题材包（修仙包）——框架不再注入缺省包。
+  const content = loadXiuxianPack();
 
   const adapter = localStorageSaveAdapter(SAVE_KEY);
   const save = adapter.load() ?? undefined;

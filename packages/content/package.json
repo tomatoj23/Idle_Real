@@ -7,6 +7,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./packs/xiuxian": {
+      "types": "./src/packs/xiuxian.ts",
+      "default": "./src/packs/xiuxian.ts"
     }
   },
   "scripts": {

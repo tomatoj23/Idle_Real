@@ -5,7 +5,7 @@
  * （事件→日志/浮提示接线与生产共用 buildUi 内的同一套路径）。
  */
 import { describe, expect, it } from 'vitest';
-import { loadDefaultContent } from '@wendao/content';
+import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
 import {
   createGame,
   localStorageSaveAdapter,
@@ -17,7 +17,7 @@ import { buildUi } from '../src/ui';
 describe('UI 烟测（issue #3 验收）', () => {
   it('打开即玩：点开始 → 进度条走 → 背包增长 → 重开进度保留', () => {
     const clock = new ManualClock();
-    const content = loadDefaultContent();
+    const content = loadXiuxianPack();
     const adapter = localStorageSaveAdapter('wendao_ui_smoke_v2');
 
     // —— 首次进入 ——
@@ -89,7 +89,7 @@ describe('UI 烟测（issue #3 验收）', () => {
 
   it('灵石不足购买：reject 事件以红字浮提示呈现', () => {
     const clock = new ManualClock();
-    const content = loadDefaultContent();
+    const content = loadXiuxianPack();
     const game = createGame({ content, clock, seed: 7 });
     const root = document.createElement('div');
     document.body.appendChild(root);

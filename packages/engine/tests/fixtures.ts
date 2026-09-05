@@ -155,7 +155,7 @@ export function makeCombatPack(): GameContent {
         hit: '{defender}灵光溃散——致命一击受创{d}点！',
         hurt: '你眼前一黑，受创{d}点——再挨一下要道消身殒！',
       },
-      // #019 批 2 扩节：句式模板/系统 note/战后摘要/对照语（与 default.json 同构）。
+      // #019 批 2 扩节：句式模板/系统 note/战后摘要/对照语（与修仙题材包 xiuxian.json 同构）。
       templates: {
         playerLight: ['你一招「{move}」，{weapon}{verb}向{defender}的{limb}。'],
         playerHeavy: ['{opening}——一招「{move}」，{weapon}{verb}向{defender}的{limb}。'],
