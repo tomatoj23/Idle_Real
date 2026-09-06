@@ -383,8 +383,11 @@
       },
       "topbar": {
         "statsTitle": "攻 / 防 / 会心",
+        "statsSigil": "斗",
         "goldTitle": "灵石",
-        "hpTitle": "气血"
+        "goldSigil": "石",
+        "hpTitle": "气血",
+        "hpSigil": "血"
       },
       "tabs": {
         "skills": "修炼",
@@ -410,7 +413,8 @@
       "icons": { "buff": "丹", "gear": "器", "unknown": "？" },
       "common": {
         "needLevel": "需 {level} 层",
-        "compareWrap": "（{compare}）"
+        "compareWrap": "（{compare}）",
+        "itemListSep": "、"
       },
       "events": {
         "lootGear": "妖物遗落【{name}】",

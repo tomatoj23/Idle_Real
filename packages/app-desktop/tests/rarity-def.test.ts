@@ -25,6 +25,12 @@ const FIGHT_PACK = {
   rarities: [],
   affixPool: [],
   combatText: {},
+  // #26：壳文案内容驱动——夹具只配被断言的键，其余键名回显。
+  texts: {
+    shell: {
+      pages: { combat: { subtitle: '当前斗法 {level} 层' } },
+    },
+  },
   shop: [],
 } as unknown as ContentPack;
 
@@ -74,6 +80,13 @@ describe('#018 · 稀有度展示 def 驱动', () => {
       ],
       affixPool: [],
       combatText: {},
+      // #26：壳文案内容驱动——夹具只配被断言的键（showcase 浮提示/stat 标签）。
+      texts: {
+        shell: {
+          stats: { labels: { atk: { label: '攻' } } },
+          events: { lootShowcase: '天降异宝！【{name}】' },
+        },
+      },
       shop: [],
     } as unknown as ContentPack;
     const game = createGame({ content: pack, clock });
@@ -159,6 +172,16 @@ describe('#018 · 稀有度展示 def 驱动', () => {
           },
         },
         fatal: { hit: '{defender}灵光溃散，受创{d}点！', hurt: '你眼前一黑，受创{d}点。' },
+      },
+      // #26：壳文案内容驱动——夹具只配被断言的键（showcase 浮提示/stat 标签/卖出行）。
+      texts: {
+        shell: {
+          stats: { labels: { atk: { label: '攻' } } },
+          events: {
+            lootShowcase: '天降异宝！【{name}】',
+            sellLog: '卖出 {name}，得 {gained} 灵石',
+          },
+        },
       },
       shop: [],
     } as unknown as ContentPack;

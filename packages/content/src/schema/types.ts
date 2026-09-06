@@ -415,11 +415,14 @@ export interface ShellBrand {
   readonly bootError: string;
 }
 
-/** 顶栏资源区悬浮提示（title 属性）。 */
+/** 顶栏资源区悬浮提示（title 属性）与资源图章字。 */
 export interface ShellTopbar {
   readonly statsTitle: string;
+  readonly statsSigil: string;
   readonly goldTitle: string;
+  readonly goldSigil: string;
   readonly hpTitle: string;
+  readonly hpSigil: string;
 }
 
 /** 页签文案（键 = TabId 协议键，壳钉死四键）。 */
@@ -455,10 +458,11 @@ export interface ShellIcons {
   readonly unknown: string;
 }
 
-/** 跨页复用小模板：needLevel 槽位 {level}；compareWrap 槽位 {compare}。 */
+/** 跨页复用小模板：needLevel 槽位 {level}；compareWrap 槽位 {compare}；itemListSep 物品名分隔符。 */
 export interface ShellCommon {
   readonly needLevel: string;
   readonly compareWrap: string;
+  readonly itemListSep: string;
 }
 
 /** 事件流文案（键 = 引擎事件类型协议面，槽位见 schema 描述）。 */

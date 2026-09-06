@@ -2,11 +2,13 @@ import './style.css';
 import {
   attachAutoSave,
   createGame,
+  fillTemplate,
   localStorageSaveAdapter,
   type GameAction,
 } from '@wendao/engine';
+import type { ContentPack } from '@wendao/content';
 import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
-import { buildUi } from './ui';
+import { buildUi, esc } from './ui';
 
 // #24：状态键 gp/pill/fist → gold/consumable/basic 是存档形状 breaking change。
 // 旧存档不迁移（ADR-008）：v2 档留在旧键下永不读，新档从 v3 起。
@@ -17,12 +19,28 @@ const MAX_CATCHUP_MS = 5000;
 
 const app = document.querySelector<HTMLDivElement>('#app');
 
+/** texts.shell.brand 读取（#26）：内容包不可用（启动链早期失败）时键名回显（裁决 ④ 防御路径）。 */
+function brandText(shell: unknown, key: 'name' | 'bootError'): string {
+  const brand =
+    shell !== null && typeof shell === 'object'
+      ? (shell as { brand?: Record<string, unknown> }).brand
+      : undefined;
+  const value = brand?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : `shell.brand.${key}`;
+}
+
+let content: ContentPack | undefined;
+
 try {
-  if (!app) throw new Error('缺少 #app 挂载点');
+  if (!app) throw new Error('Missing #app mount point');
 
   // 启动强校验接缝（issue #2）：坏内容绝不进入运行时。
   // #23 起壳层显式装配题材包（修仙包）——框架不再注入缺省包。
-  const content = loadXiuxianPack();
+  content = loadXiuxianPack();
+
+  // 页面标题与文档语言随内容包（#26：壳零题材硬编码）。
+  document.title = content.texts.shell.brand.name;
+  document.documentElement.lang = content.texts.shell.brand.locale;
 
   const adapter = localStorageSaveAdapter(SAVE_KEY);
   const save = adapter.load() ?? undefined;
@@ -36,7 +54,7 @@ try {
   const autoSave = attachAutoSave(game, adapter, AUTOSAVE_MS);
   window.addEventListener('beforeunload', () => autoSave.flush());
 
-  // UI 只消费 events + snapshot（事件→日志/浮提示/重绘的接线在 buildUi 内）。
+  // UI 只消费 events + snapshot + texts.shell（事件→日志/浮提示/重绘的接线在 buildUi 内）。
   const ui = buildUi(app, content, () => game.snapshot(), game.events);
   ui.bindActions((action: GameAction) => game.dispatch(action));
 
@@ -68,9 +86,12 @@ try {
   if (app) {
     // 此兜底捕获整个启动链（内容校验/存档恢复/平台探测），
     // 不要把所有异常都说成内容包问题（曾把 Illegal invocation 误标）。
+    // 文案读 texts.shell.brand（#26）；内容包不可用时降级键名回显。
+    const shell = content?.texts?.shell;
+    const message = err instanceof Error ? err.message : String(err);
     app.innerHTML = `
-      <h1>问道长生</h1>
-      <pre class="content-error">启动中止：\n${err instanceof Error ? err.message : String(err)}</pre>
+      <h1>${esc(brandText(shell, 'name'))}</h1>
+      <pre class="content-error">${esc(fillTemplate(brandText(shell, 'bootError'), { message }))}</pre>
     `;
   }
 }

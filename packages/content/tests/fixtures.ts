@@ -9,7 +9,14 @@
 export function shellFixture(): Record<string, unknown> {
   return {
     brand: { sigil: '道', name: '问道长生', locale: 'zh-CN', bootError: '中止：{message}' },
-    topbar: { statsTitle: '属性', goldTitle: '灵石', hpTitle: '气血' },
+    topbar: {
+      statsTitle: '属性',
+      statsSigil: '斗',
+      goldTitle: '灵石',
+      goldSigil: '石',
+      hpTitle: '气血',
+      hpSigil: '血',
+    },
     tabs: { skills: '修炼', combat: '斗法', bag: '乾坤袋', shop: '坊市' },
     side: { title: '修行录' },
     stats: { labels: { atk: { label: '攻' }, crit: { label: '暴', percent: true } } },
@@ -20,7 +27,7 @@ export function shellFixture(): Record<string, unknown> {
       hourMinute: '{h} 时 {m} 分',
     },
     icons: { buff: '丹', gear: '器', unknown: '？' },
-    common: { needLevel: '需 {level} 层', compareWrap: '（{compare}）' },
+    common: { needLevel: '需 {level} 层', compareWrap: '（{compare}）', itemListSep: '、' },
     events: {
       lootGear: '妖物遗落【{name}】',
       lootGearLog: '夺得【{name}】',

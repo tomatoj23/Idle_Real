@@ -1,9 +1,17 @@
 /**
- * UI 层（issue #3）：只消费 engine 事件流 + snapshot，不触碰引擎内部。
+ * UI 层（issue #3）：只消费 engine 事件流 + snapshot + content 包视图，不触碰引擎内部。
  *
  * 结构一次搭建，点击走事件委托；动态区域按状态签名差量重绘，
  * 活动进度条/百分比每帧轻量更新。事件→日志/浮提示/重绘的接线
  * 在此统一完成（烟测走同一套路径）。
+ *
+ * #26（ADR-017 裁决 9：壳零题材字符串、零公式复算）：
+ * - 全部题材文案来自 content 包 texts.shell 节；缺键回显键名
+ *   （ADR-016 裁决 ④ 防御路径，与引擎 rejectText 同策略）；
+ * - 装备倍率投影走引擎 projectGearBase、坊市购买力走 shopAffordOf
+ *   （与引擎判定同式同源，禁壳内复制公式）；
+ * - stat 展示标签与量纲标记（percent）由 texts.shell.stats.labels
+ *   显式声明，壳零量纲特判（#26 票评）。
  */
 import type { ContentPack } from '@wendao/content';
 import {
@@ -11,9 +19,13 @@ import {
   enemyGateOf,
   expBase,
   expToNext,
+  fillTemplate,
   findRarity,
+  gearName,
   levelFromXp,
   progressionParamsOf,
+  projectGearBase,
+  shopAffordOf,
   type GameAction,
   type GameState,
   type ProgressionParams,
@@ -35,12 +47,7 @@ export interface Ui {
 const MAX_LOG = 40;
 const MAX_FLOG = 60;
 
-const fmtSeconds = (ms: number): string => {
-  const s = ms / 1000;
-  return Number.isInteger(s) ? `${s} 秒` : `${s.toFixed(1)} 秒`;
-};
-
-const esc = (text: string): string =>
+export const esc = (text: string): string =>
   text.replace(/[&<>"']/g, (ch) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch] ?? ch,
   );
@@ -65,6 +72,50 @@ export function buildUi(
   // 修为曲线参数与内容包同源（#020）：UI 只传参，不复制曲线系数。
   const prog: ProgressionParams = progressionParamsOf(content);
 
+  /* ---------- texts.shell 词表读取（#26） ---------- */
+
+  const shellRoot = (content as { texts?: { shell?: unknown } }).texts?.shell;
+  const shellGet = (path: string): unknown =>
+    path.split('.').reduce<unknown>(
+      (node, key) =>
+        node !== null && typeof node === 'object' ? (node as Record<string, unknown>)[key] : undefined,
+      shellRoot,
+    );
+  /** 取词 + {slot} 填槽（fillTemplate 同一约定）；缺键回显键名（防御可见）。 */
+  const T = (key: string, vars?: Readonly<Record<string, string | number>>): string => {
+    const raw = shellGet(key);
+    if (typeof raw !== 'string' || raw.length === 0) return key;
+    const slots: Record<string, string> = {};
+    for (const [k, v] of Object.entries(vars ?? {})) slots[k] = String(v);
+    return fillTemplate(raw, slots);
+  };
+
+  // 展示 locale（brand.locale）：千分位格式化与文档语言的单一来源；
+  // 非法值中性回落 'en'（防御路径，语言标签 schema 层已钉形态）。
+  const LOCALE_RE = /^[a-z]{2}(-[A-Z]{2})?$/;
+  const rawLocale = shellGet('brand.locale');
+  const locale = typeof rawLocale === 'string' && LOCALE_RE.test(rawLocale) ? rawLocale : 'en';
+
+  /**
+   * stat 展示标签与量纲（#26 票评，循 ADR-016 裁决 ④ 显式 bool 先例）：
+   * label/percent 由 texts.shell.stats.labels 声明，壳零特判；
+   * 未注册 stat 回退 stat 键名展示（开放键域防御路径）。
+   */
+  const statLabelOf = (stat: string): { label: string; percent: boolean } => {
+    const def = shellGet(`stats.labels.${stat}`);
+    const shape = def !== null && typeof def === 'object' ? (def as Record<string, unknown>) : undefined;
+    const label = typeof shape?.label === 'string' && shape.label.length > 0 ? shape.label : stat;
+    return { label, percent: shape?.percent === true };
+  };
+  /** 面板数值 + 量纲后缀（顶栏/斗法页属性行）。 */
+  const statValueText = (stat: string, value: number | string): string =>
+    `${value}${statLabelOf(stat).percent ? '%' : ''}`;
+  /** 加成行「标签+值+量纲」（装备卡基础/词条行）。 */
+  const statBonusText = (stat: string, value: number | string): string => {
+    const { label, percent } = statLabelOf(stat);
+    return `${label}+${value}${percent ? '%' : ''}`;
+  };
+
   let activeTab: TabId = 'skills';
   let selectedSkillId = gatherSkills[0]?.id ?? '';
   let handler: ((action: GameAction) => void) | null = null;
@@ -73,24 +124,24 @@ export function buildUi(
 
   root.innerHTML = `
     <header class="topbar">
-      <div class="brand"><span class="sigil sigil-brand">道</span><span class="brand-name">问道长生</span></div>
+      <div class="brand"><span class="sigil sigil-brand">${esc(T('brand.sigil'))}</span><span class="brand-name">${esc(T('brand.name'))}</span></div>
       <div class="res">
-        <div class="res-item" title="攻 / 防 / 会心"><span class="sigil sigil-res">斗</span><b id="res-stats"></b></div>
-        <div class="res-item" title="灵石"><span class="sigil sigil-res">石</span><b id="res-gold">0</b></div>
-        <div class="res-item" title="气血"><span class="sigil sigil-res sigil-hp">血</span><div class="hpbar"><i id="res-hp"></i></div><span id="res-hp-text"></span></div>
+        <div class="res-item" title="${esc(T('topbar.statsTitle'))}"><span class="sigil sigil-res">${esc(T('topbar.statsSigil'))}</span><b id="res-stats"></b></div>
+        <div class="res-item" title="${esc(T('topbar.goldTitle'))}"><span class="sigil sigil-res">${esc(T('topbar.goldSigil'))}</span><b id="res-gold">0</b></div>
+        <div class="res-item" title="${esc(T('topbar.hpTitle'))}"><span class="sigil sigil-res sigil-hp">${esc(T('topbar.hpSigil'))}</span><div class="hpbar"><i id="res-hp"></i></div><span id="res-hp-text"></span></div>
       </div>
     </header>
     <div class="buffbar" id="buffbar"></div>
     <nav class="tabs" id="tabs">
-      <button class="tab" data-act="tab" data-tab="skills">修炼</button>
-      <button class="tab" data-act="tab" data-tab="combat">斗法</button>
-      <button class="tab" data-act="tab" data-tab="bag">乾坤袋</button>
-      <button class="tab" data-act="tab" data-tab="shop">坊市</button>
+      <button class="tab" data-act="tab" data-tab="skills">${esc(T('tabs.skills'))}</button>
+      <button class="tab" data-act="tab" data-tab="combat">${esc(T('tabs.combat'))}</button>
+      <button class="tab" data-act="tab" data-tab="bag">${esc(T('tabs.bag'))}</button>
+      <button class="tab" data-act="tab" data-tab="shop">${esc(T('tabs.shop'))}</button>
     </nav>
     <div class="layout">
       <main class="page-root" id="page-root"></main>
       <aside class="side">
-        <h3 class="side-title">修行录</h3>
+        <h3 class="side-title">${esc(T('side.title'))}</h3>
         <ul class="log" id="log"></ul>
       </aside>
     </div>
@@ -99,7 +150,7 @@ export function buildUi(
 
   const $ = <T extends HTMLElement>(selector: string): T => {
     const el = root.querySelector<T>(selector);
-    if (!el) throw new Error(`UI 缺少节点 ${selector}`);
+    if (!el) throw new Error(`UI missing node ${selector}`);
     return el;
   };
   const goldEl = $<HTMLElement>('#res-gold');
@@ -176,6 +227,12 @@ export function buildUi(
 
   /* ---------- 事件流消费：日志 + 浮提示 + 合并重绘 ---------- */
 
+  /** 秒时长读数（units.seconds 模板，{v} 槽）。 */
+  const fmtSeconds = (ms: number): string => {
+    const s = ms / 1000;
+    return T('units.seconds', { v: Number.isInteger(s) ? String(s) : s.toFixed(1) });
+  };
+
   function scheduleRender(): void {
     if (rafId) return;
     rafId = requestAnimationFrame(() => {
@@ -189,14 +246,16 @@ export function buildUi(
     switch (event.type) {
       case 'loot':
         if (data.source === 'gear') {
-          flog(`妖物遗落【${data.itemName}】`, 't-gold');
-          log(`夺得【${data.itemName}】`, 't-gold');
+          flog(T('events.lootGear', { name: String(data.itemName ?? '') }), 't-gold');
+          log(T('events.lootGearLog', { name: String(data.itemName ?? '') }), 't-gold');
           // 天降异宝特判由内容 def 的 showcase bool 驱动（ADR-016 裁决 ④）。
-          if (rarityDefOf(String(data.rarity))?.showcase) toast(`天降异宝！【${data.itemName}】`);
+          if (rarityDefOf(String(data.rarity))?.showcase) {
+            toast(T('events.lootShowcase', { name: String(data.itemName ?? '') }));
+          }
         } else if (data.source === 'byproduct') {
-          log(`偶得 ${nameOf(data.item)}×${data.count}`, 't-jade');
+          log(T('events.lootByproduct', { name: nameOf(data.item), count: Number(data.count ?? 0) }));
         } else if (data.source === 'drop') {
-          log(`得 ${nameOf(data.item)}×${data.count}`);
+          log(T('events.lootDrop', { name: nameOf(data.item), count: Number(data.count ?? 0) }));
         }
         break;
       case 'attack':
@@ -207,58 +266,68 @@ export function buildUi(
         flog(String(data.text ?? ''), 't-sys');
         break;
       case 'victory': {
-        const compare = data.compare ? `（${data.compare}）` : '';
-        flog(`【${data.enemyName}】轰然倒地！${data.summary}${compare}`, 't-gold');
-        log(`击倒【${data.enemyName}】：${data.summary}${compare}`, 't-gold');
+        const compare = data.compare ? T('common.compareWrap', { compare: String(data.compare) }) : '';
+        const victoryVars = { name: String(data.enemyName ?? ''), summary: String(data.summary ?? ''), compare };
+        flog(T('events.victoryFlog', victoryVars), 't-gold');
+        log(T('events.victoryLog', victoryVars), 't-gold');
         break;
       }
       case 'defeat':
-        flog(`你不敌【${data.enemyName}】，真元耗尽，被同门救回`, 't-red');
-        toast('斗法落败，幸得同门相救', 'red');
+        flog(T('events.defeatFlog', { name: String(data.enemyName ?? '') }), 't-red');
+        toast(T('events.defeatToast'), 'red');
         break;
       case 'consumable:eat':
         if (data.kind === 'heal') {
-          flog(`服下【${data.itemName}】，回气 ${data.healed} 点`, 't-sys');
+          flog(T('events.eatHeal', { name: String(data.itemName ?? ''), healed: Number(data.healed ?? 0) }), 't-sys');
         } else {
-          toast(`服下【${data.itemName}】`);
-          log(`服下【${data.itemName}】，药力${data.minutes}分`, 't-jade');
+          toast(T('events.eatBuffToast', { name: String(data.itemName ?? '') }));
+          log(T('events.eatBuffLog', { name: String(data.itemName ?? ''), minutes: Number(data.minutes ?? 0) }), 't-jade');
         }
         break;
       case 'equip:wear':
-        toast(`已佩【${data.name}】`);
-        log(`佩上【${data.name}】`, 't-jade');
+        toast(T('events.equipWearToast', { name: String(data.name ?? '') }));
+        log(T('events.equipWearLog', { name: String(data.name ?? '') }), 't-jade');
         break;
       case 'equip:remove':
-        log(`卸下【${data.name ?? ''}】`);
+        log(T('events.equipRemoveLog', { name: String(data.name ?? '') }));
         break;
       case 'exp':
         // 引擎 exp 事件的数值字段是 amount（grantExp 载荷），非 exp。
-        if (data.skillId === combatSkillId) flog(`斗法修为 +${data.amount}`, 't-sys');
+        if (data.skillId === combatSkillId) flog(T('events.expCombat', { amount: Number(data.amount ?? 0) }), 't-sys');
         break;
       case 'levelup':
-        toast(`【${data.skillName}】修为精进，升至 ${data.level} 层`);
-        log(`【${data.skillName}】升至 ${data.level} 层`, 't-gold');
+        toast(T('events.levelupToast', { name: String(data.skillName ?? ''), level: Number(data.level ?? 0) }));
+        log(T('events.levelupLog', { name: String(data.skillName ?? ''), level: Number(data.level ?? 0) }), 't-gold');
         break;
       case 'sell':
-        log(`卖出 ${data.itemName}，得 ${data.gained} 灵石`);
+        log(T('events.sellLog', { name: String(data.itemName ?? ''), gained: Number(data.gained ?? 0) }));
         break;
       case 'buy':
-        log(`购入 ${data.itemName}×${data.count}，花去 ${data.cost} 灵石`);
+        log(T('events.buyLog', { name: String(data.itemName ?? ''), count: Number(data.count ?? 0), cost: Number(data.cost ?? 0) }));
         break;
       case 'reject':
-        toast(String(data.message ?? '此路不通'), 'red');
+        toast(String(data.message ?? T('events.rejectFallback')), 'red');
         break;
       case 'offline-settled': {
         const seconds = Math.max(0, Math.floor(Number(data.seconds) || 0));
         const h = Math.floor(seconds / 3600);
         const m = Math.floor((seconds % 3600) / 60);
-        const away = h > 0 ? `${h} 时 ${m} 分` : m > 0 ? `${m} 分` : `${seconds} 秒`;
+        const away =
+          h > 0
+            ? T('units.hourMinute', { h, m })
+            : m > 0
+              ? T('units.minute', { m })
+              : T('units.seconds', { v: seconds });
         const items = Object.entries((data.items ?? {}) as Record<string, number>)
           .map(([id, n]) => `${nameOf(id)}×${n}`)
-          .join('、');
-        toast(`离线 ${away}归来：${data.activityName} ×${data.cycles}`);
+          .join(T('common.itemListSep'));
+        toast(T('events.offlineToast', { away, activity: String(data.activityName ?? ''), cycles: Number(data.cycles ?? 0) }));
         log(
-          `离线修行 ${away}：${items || '无所获'}${data.exp ? `，修为 +${data.exp}` : ''}`,
+          T('events.offlineLog', {
+            away,
+            items: items || T('events.offlineNoYield'),
+            exp: data.exp ? T('events.offlineExpSuffix', { exp: Number(data.exp) }) : '',
+          }),
           't-gold',
         );
         break;
@@ -292,12 +361,17 @@ export function buildUi(
     const snap = getSnapshot();
     const st = snap.state as unknown as GameState;
 
-    goldEl.textContent = Math.floor(st.gold).toLocaleString('zh-CN');
+    goldEl.textContent = Math.floor(st.gold).toLocaleString(locale);
     const cap = snap.stats?.maxHp ?? Math.max(1, Math.floor(st.hp));
     hpFill.style.width = `${Math.max(0, Math.min(100, (st.hp / cap) * 100))}%`;
     hpText.textContent = `${Math.floor(st.hp)}/${cap}`;
     if (snap.stats) {
-      statsEl.textContent = `${snap.stats.atk}/${snap.stats.def}/${snap.stats.crit}%`;
+      // 属性行读引擎快照 + 内容量纲标记（#26 票评：壳零量纲特判）。
+      statsEl.textContent = [
+        statValueText('atk', snap.stats.atk),
+        statValueText('def', snap.stats.def),
+        statValueText('crit', snap.stats.crit),
+      ].join('/');
     }
     renderBuffbar(st, snap.time);
 
@@ -315,14 +389,14 @@ export function buildUi(
     syncFlogScroll();
   }
 
-  /** 顶栏丹药增益条：剩余时长轻量刷新（每帧），结构变化由 signature 驱动。 */
+  /** 顶栏增益条：剩余时长轻量刷新（每帧），结构变化由 signature 驱动。 */
   function renderBuffbar(st: GameState, now: number): void {
     const entries = Object.entries(st.buffs);
     if (buffbarEl.childElementCount !== entries.length) {
       buffbarEl.innerHTML = entries
         .map(([id]) => {
           const item = itemById.get(id);
-          return `<span class="buff-chip" data-buff="${id}">${esc(item?.icon ?? '丹')} ${esc(item?.name ?? id)} <b></b></span>`;
+          return `<span class="buff-chip" data-buff="${id}">${esc(item?.icon ?? T('icons.buff'))} ${esc(item?.name ?? id)} <b></b></span>`;
         })
         .join('');
     }
@@ -330,7 +404,9 @@ export function buildUi(
       const id = el.dataset.buff ?? '';
       const left = Math.max(0, Math.ceil(((st.buffs[id] ?? 0) - now) / 1000));
       const label = el.querySelector('b');
-      if (label) label.textContent = left >= 60 ? `${Math.floor(left / 60)} 分` : `${left} 秒`;
+      if (label) {
+        label.textContent = left >= 60 ? T('units.minute', { m: Math.floor(left / 60) }) : T('units.seconds', { v: left });
+      }
     }
   }
 
@@ -352,7 +428,7 @@ export function buildUi(
 
   function renderSkills(st: GameState): string {
     const skill = skillById.get(selectedSkillId) ?? gatherSkills[0];
-    if (!skill) return '<section class="page"><p class="empty">内容包中没有可修的技艺。</p></section>';
+    if (!skill) return `<section class="page"><p class="empty">${esc(T('pages.skills.empty'))}</p></section>`;
 
     const xp = st.skills[skill.id]?.xp ?? 0;
     const level = levelFromXp(xp, prog);
@@ -373,7 +449,7 @@ export function buildUi(
         return `<button class="chip${selected ? ' selected' : ''}${locked ? ' locked' : ''}"
           data-act="skill" data-skill="${s.id}"${locked ? ' data-disabled="y"' : ''}>
           <span class="sigil sigil-sm">${esc(s.icon)}</span><span>${esc(s.name)}</span>
-          ${locked ? '<em class="chip-lock">未开放</em>' : `<b class="chip-lv">${lv} 层</b>`}
+          ${locked ? `<em class="chip-lock">${esc(T('pages.skills.chipLocked'))}</em>` : `<b class="chip-lv">${esc(T('units.level', { v: lv }))}</b>`}
         </button>`;
       })
       .join('');
@@ -383,23 +459,23 @@ export function buildUi(
         <span class="sigil sigil-big">${esc(skill.icon)}</span>
         <div class="status-main">
           <div class="status-head">
-            <b>${esc(skill.name)}</b><span class="status-lv">${level} 层</span>
+            <b>${esc(skill.name)}</b><span class="status-lv">${esc(T('units.level', { v: level }))}</span>
             ${skill.description ? `<span class="status-desc">${esc(skill.description)}</span>` : ''}
           </div>
           <div class="bar"><i style="width:${expPct}%"></i></div>
           <div class="status-sub">${
             Number.isFinite(need)
-              ? `修为 ${into}/${need} · 距下一层还需 ${Math.max(0, Math.ceil(need - into))}`
-              : '修为已臻化境'
+              ? esc(T('pages.skills.expSub', { into, need, left: Math.max(0, Math.ceil(need - into)) }))
+              : esc(T('pages.skills.expMax'))
           }</div>
         </div>
         <div class="status-act">
           ${
             act && actDef
-              ? `<div class="act-now"><span>当前 · ${esc(actDef.name)}</span><b data-act-pct data-key="${act.skillId}:${act.index}">${Math.floor(actPct)}%</b></div>
+              ? `<div class="act-now"><span>${esc(T('pages.skills.actNow', { name: actDef.name }))}</span><b data-act-pct data-key="${act.skillId}:${act.index}">${Math.floor(actPct)}%</b></div>
                  <div class="bar bar-jade"><i data-bar="activity" data-key="${act.skillId}:${act.index}" style="width:${actPct}%"></i></div>
-                 <button class="btn btn-ghost" data-act="stop">收功</button>`
-              : '<div class="act-now idle"><span>闲坐蒲团，未修行</span></div>'
+                 <button class="btn btn-ghost" data-act="stop">${esc(T('pages.skills.stopBtn'))}</button>`
+              : `<div class="act-now idle"><span>${esc(T('pages.skills.idle'))}</span></div>`
           }
         </div>
       </section>`;
@@ -412,19 +488,19 @@ export function buildUi(
         const bonus = a.byproduct ? itemById.get(a.byproduct.item) : undefined;
         const pct = running && act ? Math.min(100, (act.progress / a.interval) * 100) : 0;
         return `<article class="act-card${running ? ' running' : ''}${unlocked ? '' : ' locked'}">
-          <header><b>${esc(a.name)}</b>${running ? '<em class="act-badge">进行中</em>' : ''}</header>
+          <header><b>${esc(a.name)}</b>${running ? `<em class="act-badge">${esc(T('pages.skills.running'))}</em>` : ''}</header>
           <div class="act-yield">
-            <span class="sigil sigil-sm">${esc(out?.icon ?? '？')}</span> ${esc(out?.name ?? a.output.item)} ×${a.output.count}
-            ${a.byproduct ? `<span class="act-bonus">偶得 ${esc(bonus?.icon ?? '？')} ${esc(bonus?.name ?? a.byproduct.item)} ${Math.round(a.byproduct.chance * 100)}%</span>` : ''}
+            <span class="sigil sigil-sm">${esc(out?.icon ?? T('icons.unknown'))}</span> ${esc(out?.name ?? a.output.item)} ×${a.output.count}
+            ${a.byproduct ? `<span class="act-bonus">${esc(T('pages.skills.byproduct', { icon: bonus?.icon ?? T('icons.unknown'), name: bonus?.name ?? a.byproduct.item, chance: Math.round(a.byproduct.chance * 100) }))}</span>` : ''}
           </div>
-          <div class="act-meta">${fmtSeconds(a.interval)} / 次 · 修为 +${a.exp} · 需 ${a.unlockLevel} 层</div>
+          <div class="act-meta">${esc(T('pages.skills.actMeta', { interval: fmtSeconds(a.interval), exp: a.exp, level: a.unlockLevel }))}</div>
           <div class="bar bar-thin"><i data-bar="activity" data-key="${skill.id}:${i}" style="width:${pct}%"></i></div>
           ${
             unlocked
               ? running
                 ? ''
-                : `<button class="btn" data-act="start" data-skill="${skill.id}" data-index="${i}">开始</button>`
-              : `<span class="act-lockmsg">需 ${a.unlockLevel} 层</span>`
+                : `<button class="btn" data-act="start" data-skill="${skill.id}" data-index="${i}">${esc(T('pages.skills.startBtn'))}</button>`
+              : `<span class="act-lockmsg">${esc(T('common.needLevel', { level: a.unlockLevel }))}</span>`
           }
         </article>`;
       })
@@ -471,6 +547,7 @@ export function buildUi(
     const combat = st.combat;
     // N2 修复（#018）：斗法修为读数按 combatSkillId 解析，禁硬编码内容 id。
     const clv = levelFromXp(st.skills[combatSkillId]?.xp ?? 0, prog);
+    const sep = T('common.itemListSep');
 
     const consumables = content.items
       .filter((item) => item.type === 'consumable' && (st.items[item.id] ?? 0) > 0)
@@ -482,34 +559,34 @@ export function buildUi(
 
     const toggles = `
       <div class="combat-toggles">
-        <button class="btn btn-ghost${st.autoFight ? ' on' : ''}" data-act="toggle-auto">自动再战${st.autoFight ? ' · 开' : ' · 关'}</button>
-        <button class="btn btn-ghost${st.autoEat ? ' on' : ''}" data-act="toggle-auto-eat">自动嗑丹${st.autoEat ? ' · 开' : ' · 关'}</button>
+        <button class="btn btn-ghost${st.autoFight ? ' on' : ''}" data-act="toggle-auto">${esc(T(st.autoFight ? 'pages.combat.autoFightOn' : 'pages.combat.autoFightOff'))}</button>
+        <button class="btn btn-ghost${st.autoEat ? ' on' : ''}" data-act="toggle-auto-eat">${esc(T(st.autoEat ? 'pages.combat.autoEatOn' : 'pages.combat.autoEatOff'))}</button>
       </div>`;
 
     if (combat) {
       const enemy = content.enemies.find((entry) => entry.id === combat.enemyId);
-      if (!enemy) return '<section class="page"><p class="empty">妖物不知所踪。</p></section>';
+      if (!enemy) return `<section class="page"><p class="empty">${esc(T('pages.combat.enemyMissing'))}</p></section>`;
       const ehpPct = Math.max(0, Math.min(100, (combat.ehp / enemy.hp) * 100));
       const resting = combat.respT > 0;
       const hpPct = Math.max(0, Math.min(100, (st.hp / (snap.stats?.maxHp ?? enemy.hp)) * 100));
       return `
         <section class="page">
-          <h2 class="page-title">斗法</h2>
+          <h2 class="page-title">${esc(T('pages.combat.title'))}</h2>
           <article class="enemy-card fighting">
             <div class="enemy-face"><span class="sigil sigil-big">${esc(enemy.icon)}</span></div>
             <div class="enemy-main">
-              <div class="enemy-head"><b>${esc(enemy.name)}</b><span class="enemy-lv">${enemy.level} 层</span>${resting ? '<em class="act-badge">休整中</em>' : ''}</div>
+              <div class="enemy-head"><b>${esc(enemy.name)}</b><span class="enemy-lv">${esc(T('units.level', { v: enemy.level }))}</span>${resting ? `<em class="act-badge">${esc(T('pages.combat.resting'))}</em>` : ''}</div>
               <div class="bar bar-red"><i data-bar="enemy" style="width:${ehpPct}%"></i></div>
-              <div class="enemy-sub">敌 ${Math.max(0, Math.ceil(combat.ehp))}/${enemy.hp}</div>
+              <div class="enemy-sub">${esc(T('pages.combat.enemyHp', { ehp: Math.max(0, Math.ceil(combat.ehp)), hp: enemy.hp }))}</div>
               <div class="bar bar-jade"><i style="width:${hpPct}%"></i></div>
-              <div class="enemy-sub">己方 ${Math.floor(st.hp)}/${snap.stats?.maxHp ?? '—'} · 攻 ${snap.stats?.atk ?? '—'} 防 ${snap.stats?.def ?? '—'} 会心 ${snap.stats?.crit ?? '—'}%</div>
+              <div class="enemy-sub">${esc(T('pages.combat.selfStats', { hp: Math.floor(st.hp), max: snap.stats?.maxHp ?? '—', atk: snap.stats?.atk ?? '—', def: snap.stats?.def ?? '—', crit: snap.stats?.crit ?? '—' }))}</div>
             </div>
             <div class="enemy-ops">
-              <button class="btn btn-ghost" data-act="flee">撤退</button>
+              <button class="btn btn-ghost" data-act="flee">${esc(T('pages.combat.fleeBtn'))}</button>
             </div>
           </article>
           ${toggles}
-          ${consumables ? `<div class="consumable-bar">${consumables}</div>` : '<p class="page-sub">囊中无丹。</p>'}
+          ${consumables ? `<div class="consumable-bar">${consumables}</div>` : `<p class="page-sub">${esc(T('pages.combat.noConsumables'))}</p>`}
           <div class="flog" id="flog"></div>
         </section>`;
     }
@@ -523,19 +600,19 @@ export function buildUi(
         const drops = (enemy.drops ?? [])
           .map((drop) => itemById.get(drop.item)?.name ?? drop.item)
           .slice(0, 3)
-          .join('、');
+          .join(sep);
         return `<article class="enemy-card${gate.locked ? ' locked' : ''}">
           <div class="enemy-face"><span class="sigil sigil-big">${esc(enemy.icon)}</span></div>
           <div class="enemy-main">
-            <div class="enemy-head"><b>${esc(enemy.name)}</b><span class="enemy-lv">${enemy.level} 层</span></div>
-            <div class="enemy-sub">气血 ${enemy.hp} · 攻 ${enemy.atk} · 防 ${enemy.def} · 修为 +${enemy.exp}</div>
-            <div class="enemy-sub">灵石 ${gold.min}~${gold.max}${drops ? ` · 掉落 ${esc(drops)}` : ''}</div>
+            <div class="enemy-head"><b>${esc(enemy.name)}</b><span class="enemy-lv">${esc(T('units.level', { v: enemy.level }))}</span></div>
+            <div class="enemy-sub">${esc(T('pages.combat.enemyStats', { hp: enemy.hp, atk: enemy.atk, def: enemy.def, exp: enemy.exp }))}</div>
+            <div class="enemy-sub">${esc(T('pages.combat.enemyGold', { min: gold.min, max: gold.max }))}${drops ? esc(T('pages.combat.dropsSuffix', { drops })) : ''}</div>
           </div>
           <div class="enemy-ops">
             ${
               gate.locked
-                ? `<span class="act-lockmsg">需 ${gate.requiredLevel} 层</span>`
-                : `<button class="btn" data-act="fight" data-enemy="${enemy.id}">挑战</button>`
+                ? `<span class="act-lockmsg">${esc(T('common.needLevel', { level: gate.requiredLevel }))}</span>`
+                : `<button class="btn" data-act="fight" data-enemy="${enemy.id}">${esc(T('pages.combat.fightBtn'))}</button>`
             }
           </div>
         </article>`;
@@ -544,8 +621,8 @@ export function buildUi(
 
     return `
       <section class="page">
-        <h2 class="page-title">斗法</h2>
-        <p class="page-sub">斩妖除魔，问道长生。当前斗法 ${clv} 层。</p>
+        <h2 class="page-title">${esc(T('pages.combat.title'))}</h2>
+        <p class="page-sub">${esc(T('pages.combat.subtitle', { level: clv }))}</p>
         <div class="enemy-grid">${cards}</div>
         <div class="consumable-bar">${consumables || ''}</div>
       </section>`;
@@ -560,28 +637,27 @@ export function buildUi(
   };
   const rarityName = (rarity: string): string => rarityDefOf(rarity)?.name ?? '';
 
-  const STAT_LABEL: Readonly<Record<string, string>> = { atk: '攻', def: '防', hp: '血', crit: '暴' };
-
   function gearCardHtml(st: GameState, gear: { uid: number; itemId: string; rarity: string; affixes: readonly { name: string; stat: string; val: number }[] }): string {
     const item = itemById.get(gear.itemId);
     const worn = Object.entries(st.equips).find(([, uid]) => uid === gear.uid);
-    const mult = rarityDefOf(gear.rarity)?.mult ?? 1;
-    const baseRows = Object.entries(item?.bonuses ?? {})
-      .filter(([, v]) => (v ?? 0) > 0)
-      .map(([stat, v]) => `${STAT_LABEL[stat] ?? stat}+${Math.round((v ?? 0) * mult)}`);
-    const affixRows = gear.affixes.map((a) => `<span class="txt-dim">${esc(a.name)}</span> ${STAT_LABEL[a.stat] ?? a.stat}+${a.val}${a.stat === 'crit' ? '%' : ''}`);
-    const rows = [...baseRows, ...affixRows].join('、') || '无属性';
-    const displayName = rarityName(gear.rarity)
-      ? `${rarityName(gear.rarity)}·${item?.name ?? gear.itemId}`
-      : item?.name ?? gear.itemId;
+    // 倍率投影走引擎 projectGearBase（#26 三处复算债收敛）：round(基础 × 档位倍率)
+    // 与实例化/属性聚合同式同源，UI 零 ×mult 公式；标签/量纲查 statLabels。
+    const baseRows = projectGearBase(content, item?.bonuses ?? {}, gear.rarity)
+      .map(({ stat, value }) => esc(statBonusText(stat, value)));
+    const affixRows = gear.affixes.map(
+      (a) => `<span class="txt-dim">${esc(a.name)}</span> ${esc(statBonusText(a.stat, a.val))}`,
+    );
+    const rows = [...baseRows, ...affixRows].join(esc(T('common.itemListSep'))) || esc(T('pages.bag.noAffix'));
+    // 展示名走引擎 gearName（#26：「档名·物品名」拼接单一来源；缺档名省略前缀）。
+    const displayName = gearName(content, item?.name ?? gear.itemId, gear.rarity);
     return `<div class="gear-card ${rarityClass(gear.rarity)}">
-      <span class="sigil sigil-sm">${esc(item?.icon ?? '器')}</span>
+      <span class="sigil sigil-sm">${esc(item?.icon ?? T('icons.gear'))}</span>
       <span class="gear-name">${esc(displayName)}<small>${rows}</small></span>
       <span class="bag-ops">
         ${worn
-          ? `<button class="btn btn-ghost" data-act="take-off" data-slot="${worn[0]}">卸下</button>`
-          : `<button class="btn" data-act="wear" data-uid="${gear.uid}">佩戴</button>`}
-        ${worn ? '' : `<button class="btn btn-ghost" data-act="sell-gear" data-uid="${gear.uid}">卖出</button>`}
+          ? `<button class="btn btn-ghost" data-act="take-off" data-slot="${worn[0]}">${esc(T('pages.bag.takeOffBtn'))}</button>`
+          : `<button class="btn" data-act="wear" data-uid="${gear.uid}">${esc(T('pages.bag.wearBtn'))}</button>`}
+        ${worn ? '' : `<button class="btn btn-ghost" data-act="sell-gear" data-uid="${gear.uid}">${esc(T('pages.bag.sellBtn'))}</button>`}
       </span>
     </div>`;
   }
@@ -589,8 +665,8 @@ export function buildUi(
   function renderBag(st: GameState): string {
     const owned = content.items.filter((item) => (st.items[item.id] ?? 0) > 0);
     const groups: Array<{ title: string; types: readonly string[] }> = [
-      { title: '材料', types: ['mat'] },
-      { title: '丹药', types: ['consumable'] },
+      { title: T('pages.bag.matGroup'), types: ['mat'] },
+      { title: T('pages.bag.consumableGroup'), types: ['consumable'] },
     ];
     const body = groups
       .map(({ title, types }) => {
@@ -602,15 +678,15 @@ export function buildUi(
               <span class="sigil sigil-sm">${esc(item.icon)}</span>
               <span class="bag-name">${esc(item.name)}<small>${esc(item.description ?? '')}</small></span>
               <b class="bag-count">×${count}</b>
-              <span class="bag-price">每件 ${item.sell} 灵石</span>
+              <span class="bag-price">${esc(T('pages.bag.priceEach', { price: item.sell }))}</span>
               <span class="bag-ops">
-                <button class="btn" data-act="sell" data-item="${item.id}" data-count="1">卖一</button>
-                <button class="btn btn-ghost" data-act="sell" data-item="${item.id}" data-count="${count}">全卖</button>
+                <button class="btn" data-act="sell" data-item="${item.id}" data-count="1">${esc(T('pages.bag.sellOneBtn'))}</button>
+                <button class="btn btn-ghost" data-act="sell" data-item="${item.id}" data-count="${count}">${esc(T('pages.bag.sellAllBtn'))}</button>
               </span>
             </div>`;
           })
           .join('');
-        return rows ? `<h3 class="group-title">${title}</h3>${rows}` : '';
+        return rows ? `<h3 class="group-title">${esc(title)}</h3>${rows}` : '';
       })
       .join('');
     const worn = Object.entries(st.equips)
@@ -624,10 +700,10 @@ export function buildUi(
       .join('');
     const gearSection =
       worn || loose
-        ? `<h3 class="group-title">法器 · 佩戴中</h3>${worn || '<p class="empty">未佩戴法器。</p>'}
-           <h3 class="group-title">法器 · 囊中</h3>${loose || '<p class="empty">囊中别无长物。</p>'}`
+        ? `<h3 class="group-title">${esc(T('pages.bag.gearWorn'))}</h3>${worn || `<p class="empty">${esc(T('pages.bag.emptyWorn'))}</p>`}
+           <h3 class="group-title">${esc(T('pages.bag.gearLoose'))}</h3>${loose || `<p class="empty">${esc(T('pages.bag.emptyLoose'))}</p>`}`
         : '';
-    return `<section class="page"><h2 class="page-title">乾坤袋</h2>${body}${gearSection || '<p class="empty">乾坤袋空空如也——先去「修炼」采些灵材。</p>'}</section>`;
+    return `<section class="page"><h2 class="page-title">${esc(T('pages.bag.title'))}</h2>${body}${gearSection || `<p class="empty">${esc(T('pages.bag.emptyAll'))}</p>`}</section>`;
   }
 
   function renderShop(st: GameState): string {
@@ -635,17 +711,18 @@ export function buildUi(
       .map((entry) => {
         const item = itemById.get(entry.item);
         const owned = st.items[entry.item] ?? 0;
-        const afford = st.gold >= entry.price;
+        // 购买力走引擎 shopAffordOf（#26 三处复算债收敛）：与 shop:buy 判定同式同源。
+        const afford = shopAffordOf(content, st.gold, entry.item);
         return `<div class="bag-row">
-          <span class="sigil sigil-sm">${esc(item?.icon ?? '？')}</span>
+          <span class="sigil sigil-sm">${esc(item?.icon ?? T('icons.unknown'))}</span>
           <span class="bag-name">${esc(item?.name ?? entry.item)}<small>${esc(item?.description ?? '')}</small></span>
-          <b class="bag-price">${entry.price} 灵石</b>
-          <span class="bag-count">持有 ${owned}</span>
-          <span class="bag-ops"><button class="btn${afford ? '' : ' btn-disabled'}" data-act="buy" data-item="${entry.item}">买一</button></span>
+          <b class="bag-price">${esc(T('pages.shop.price', { price: entry.price }))}</b>
+          <span class="bag-count">${esc(T('pages.shop.owned', { count: owned }))}</span>
+          <span class="bag-ops"><button class="btn${afford ? '' : ' btn-disabled'}" data-act="buy" data-item="${entry.item}">${esc(T('pages.shop.buyBtn'))}</button></span>
         </div>`;
       })
       .join('');
-    return `<section class="page"><h2 class="page-title">坊市</h2><p class="page-sub">以灵石易物，解燃眉之需。</p>${rows}</section>`;
+    return `<section class="page"><h2 class="page-title">${esc(T('pages.shop.title'))}</h2><p class="page-sub">${esc(T('pages.shop.subtitle'))}</p>${rows}</section>`;
   }
 
   /** 敌方血条轻量更新（战斗页存在时每帧刷新）。 */

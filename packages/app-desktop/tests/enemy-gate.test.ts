@@ -20,6 +20,13 @@ const PACK = {
   rarities: [],
   affixPool: [],
   combatText: {},
+  // #26：壳文案内容驱动——夹具只配被断言的键，其余键名回显（防御路径照跑）。
+  texts: {
+    shell: {
+      common: { needLevel: '需 {level} 层' },
+      pages: { combat: { subtitle: '当前斗法 {level} 层' } },
+    },
+  },
   shop: [],
 } as unknown as ContentPack;
 
