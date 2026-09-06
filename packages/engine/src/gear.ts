@@ -169,6 +169,27 @@ export function gearSell(content: GameContent, itemSell: number, rarity: Rarity)
 
 /* ---------- 修饰符贡献投影（ADR-011 唯一出口） ---------- */
 
+/**
+ * 装备模板基础加成的展示投影（#26 三处复算债之一，ADR-017 裁决 9）：
+ * flat = round(基础 × 档位倍率)，与实例化/属性聚合同式同源（唯一公式点，
+ * UI 展示一律调此函数，禁壳内复制 ×mult 公式）。只返回有效项（value > 0，
+ * 键序随 bonuses 原序）；缺档 mult 中性回退 1（ADR-016 兜底路径）。
+ */
+export function projectGearBase(
+  content: GameContent,
+  bonuses: GearBonuses,
+  rarity: Rarity,
+): ReadonlyArray<{ readonly stat: string; readonly value: number }> {
+  const mult = findRarity(content, rarity)?.mult ?? 1;
+  const out: Array<{ stat: string; value: number }> = [];
+  for (const [stat, base] of Object.entries(bonuses)) {
+    // 开放键域投影（#021 批 4，N3 消费封死清退）：模板 bonuses 逐键投影，
+    // 新增 stat 键 = 纯 JSON 改动（消费点清单见 content.md 注册表）。
+    if (typeof base === 'number' && base > 0) out.push({ stat, value: Math.round(base * mult) });
+  }
+  return out;
+}
+
 /** 装备实例的属性投影来源语境（事件流可回放）；倍率按内容档位表折算。 */
 export function gearContributions(
   content: GameContent,
@@ -176,7 +197,6 @@ export function gearContributions(
   bonuses: GearBonuses,
   itemName: string,
 ): import('./modifiers.js').Contribution[] {
-  const mult = findRarity(content, gear.rarity)?.mult ?? 1;
   const out: import('./modifiers.js').Contribution[] = [];
   const push = (stat: string, value: number): void => {
     if (!(value > 0)) return;
@@ -185,10 +205,8 @@ export function gearContributions(
       source: { id: gear.itemId, kind: 'equip', uid: gear.uid, name: gearName(content, itemName, gear.rarity) },
     });
   };
-  for (const [stat, base] of Object.entries(bonuses)) {
-    // 开放键域投影（#021 批 4，N3 消费封死清退）：模板 bonuses 逐键投影，
-    // 新增 stat 键 = 纯 JSON 改动（消费点清单见 content.md 注册表）。
-    if (typeof base === 'number' && base > 0) push(stat, Math.round(base * mult));
+  for (const { stat, value } of projectGearBase(content, bonuses, gear.rarity)) {
+    push(stat, value);
   }
   for (const affix of gear.affixes) {
     if (typeof affix.val === 'number' && affix.val > 0) push(affix.stat, affix.val);

@@ -5,6 +5,7 @@ import {
   gearName,
   gearSell,
   makeGear,
+  projectGearBase,
   restoreState,
   rollRarity,
   type GameContent,
@@ -130,6 +131,32 @@ describe('#018 · makeGear/gearName/gearSell/gearContributions 读内容表', ()
     const gearB = makeGear(packB, 'sword', base, 1, () => 0.5, 'rare');
     expect(gearContributions(packA, gearA, base, '剑')[0]?.modifier.value).toBe(13);
     expect(gearContributions(packB, gearB, base, '剑')[0]?.modifier.value).toBe(25);
+  });
+});
+
+describe('#26 · projectGearBase 展示投影（倍率公式唯一事实源）', () => {
+  it('round(基础 × mult) 与 gearContributions 同式同源；无效项过滤、键序保持', () => {
+    const pack = makePack();
+    expect(projectGearBase(pack, { atk: 5, hp: 21, crit: 0, junk: -3 }, 'refined')).toEqual([
+      { stat: 'atk', value: 10 },
+      { stat: 'hp', value: 42 },
+    ]);
+  });
+
+  it('缺档回退第一档、空表中性 mult 1（与 gearContributions 同律）', () => {
+    const pack = makePack();
+    expect(projectGearBase(pack, { atk: 10 }, 'bogus')).toEqual([{ stat: 'atk', value: 10 }]);
+    expect(projectGearBase(makePack({ rarities: [] }), { atk: 10 }, 'anything')).toEqual([
+      { stat: 'atk', value: 10 },
+    ]);
+  });
+
+  it('开放键域：新增 stat 键 = 纯 JSON（与 gearContributions 同一投影面）', () => {
+    const pack = makePack({ rarities: [{ id: 'rare', weight: 1, mult: 1.3, affix: 0, sell: 1 }] });
+    expect(projectGearBase(pack, { atk: 10, luck: 4 }, 'rare')).toEqual([
+      { stat: 'atk', value: 13 },
+      { stat: 'luck', value: 5 },
+    ]);
   });
 });
 

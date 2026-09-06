@@ -17,6 +17,7 @@ import {
   makeGear,
   maxHpForLevel,
   progressionParamsOf,
+  shopAffordOf,
   type DamageMechanics,
   type GameContent,
   type GameState,
@@ -250,5 +251,38 @@ describe('#020 · createGame 读 config 参数（纯 JSON 改动）', () => {
     const hitsOf = (g: ReturnType<typeof createGame>): number =>
       g.events.drain().filter((event) => event.type === 'attack' && event.data?.side === 'player').length;
     expect(hitsOf(b)).toBeGreaterThan(hitsOf(a));
+  });
+});
+
+describe('#26 · 坊市购买力视图（N4 判定侧单一来源）', () => {
+  it('shopAffordOf 与 shop:buy 判定同源：gold 边界两态 + 未上架物品兜底', () => {
+    const pack = makeCombatPack();
+    // 新档零灵石：45 的回气丹买不起
+    expect(shopAffordOf(pack, 0, 'consumable_heal')).toBe(false);
+    // gold 恰等于 price → 可买（dispatch 拒绝式 gold < cost 的补集）
+    expect(shopAffordOf(pack, 45, 'consumable_heal')).toBe(true);
+    expect(shopAffordOf(pack, 44, 'consumable_heal')).toBe(false);
+    // 货架未收录的物品 → 不可购买兜底
+    expect(shopAffordOf(pack, 999, 'ghost_item')).toBe(false);
+  });
+
+  it('dispatch 侧同式验证：gold=45 购买成功，gold=44 拒绝 no-gold', () => {
+    const pack = makeCombatPack();
+    const rich = createGame({
+      content: pack,
+      clock: new ManualClock(),
+      save: { version: 1, time: 0, state: { gold: 45 } },
+    });
+    rich.dispatch({ type: 'shop:buy', payload: { item: 'consumable_heal' } });
+    expect(rich.events.drain().some((event) => event.type === 'buy')).toBe(true);
+
+    const poor = createGame({
+      content: pack,
+      clock: new ManualClock(),
+      save: { version: 1, time: 0, state: { gold: 44 } },
+    });
+    poor.dispatch({ type: 'shop:buy', payload: { item: 'consumable_heal' } });
+    const rejected = poor.events.drain().find((event) => event.type === 'reject');
+    expect(rejected?.data?.reason).toBe('no-gold');
   });
 });

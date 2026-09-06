@@ -411,6 +411,18 @@ function resolveParams<T extends object>(raw: unknown, base: T): T {
   return out as T;
 }
 
+/* ---------- 坊市购买力（N4 判定侧单一来源，#26） ---------- */
+
+/**
+ * 坊市购买力视图：可否买一件。与引擎 shop:buy 拒绝判定同一比较式
+ * （gold ≥ price，单件 cost = price × 1）——UI 禁壳内复制 gold >= price
+ * 公式（先例 enemyGateOf 的 N1 收敛）。货架未收录的物品按不可购买兜底。
+ */
+export function shopAffordOf(content: GameContent, gold: number, itemId: string): boolean {
+  const entry = findShopEntry(content, itemId);
+  return entry !== undefined && gold >= entry.price;
+}
+
 /* ---------- 开战门控（N1 判定侧单一来源，#020） ---------- */
 
 /** 敌人开战门控视图：锁定判定与展示所需层数（与引擎 combat:start 判定同源）。 */

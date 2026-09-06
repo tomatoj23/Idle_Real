@@ -44,6 +44,7 @@ export {
   playerMaxHp,
   progressionParamsOf,
   raritiesOf,
+  shopAffordOf,
   shopOf,
   slotsOf,
   skillsOf,
@@ -108,6 +109,7 @@ export {
   gearName,
   gearSell,
   makeGear,
+  projectGearBase,
   rollRarity,
 } from './gear.js';
 export type { Affix, AffixParams, GearInstance, Rarity } from './gear.js';
