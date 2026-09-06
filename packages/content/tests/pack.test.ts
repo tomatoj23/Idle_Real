@@ -63,6 +63,7 @@ const BASE_PACK: unknown = {
     },
   ],
   gearDrops: [{ enemy: 'e1', chance: 0.1, pool: ['sword1'] }],
+  elements: [],
   rarities: [
     { id: 'common', name: '寻常', weight: 70, mult: 1, affix: 0, sell: 1 },
     { id: 'fine', name: '精良', weight: 20, mult: 1.15, affix: 1, sell: 2 },

@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ElementsSection",
+  "description": "content 包 elements 节：系别键域注册表（#25 键域开放，循 #21 VerbStyle 先例，ADR-017 裁决 8）。schema 不钉死七系枚举——包在此声明自己的系别键域，enemy.element / affinities 键 / 铭纹条件 element 的引用合法性由语义校验对照本节强制（xref，坏包加载期拒绝）。金木水火土风雷七系只是官方包内容约定（ADR-012：每系一个可观测机制签名，拒绝纯数值系）；空数组 = 无系别玩法（敌人缺省凡击）。",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id", "name"],
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string",
+        "pattern": "^[a-z][a-zA-Z0-9_]*$",
+        "description": "系别键（键形态与 stat/verbStyle 统一，#021 批 4）；一经发布不可变（敌人 element / affinities / 铭纹条件都引用它）；id 去重（语义校验）"
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 6,
+        "description": "系别展示名（1~6 字），词表归 content（ADR-016 延伸）；引擎零感知，壳层/编辑器消费"
+      }
+    }
+  }
+}

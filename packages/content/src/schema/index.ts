@@ -24,6 +24,7 @@ export type {
   ContentPack,
   DamageTier,
   Element,
+  ElementDef,
   Enemy,
   EnemyKind,
   Feature,

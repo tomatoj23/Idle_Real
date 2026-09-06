@@ -178,6 +178,15 @@
     { "enemy": "e7", "chance": 0.07, "pool": [ "mojun_blade", "mojun_guan" ] },
     { "enemy": "e8", "chance": 0.15, "pool": [ "taotie_fang", "taotie_pi" ] }
   ],
+  "elements": [
+    { "id": "metal", "name": "金" },
+    { "id": "wood", "name": "木" },
+    { "id": "water", "name": "水" },
+    { "id": "fire", "name": "火" },
+    { "id": "earth", "name": "土" },
+    { "id": "wind", "name": "风" },
+    { "id": "thunder", "name": "雷" }
+  ],
   "rarities": [
     { "id": "common", "name": "寻常", "weight": 70, "mult": 1, "affix": 0, "sell": 1 },
     { "id": "fine", "name": "精良", "weight": 20, "mult": 1.15, "affix": 1, "sell": 2 },

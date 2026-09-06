@@ -15,6 +15,7 @@ engine `EnemyView` 未投影，靠 #15 票驱动补齐）。
 | `recipes` | 是 | recipe.schema.json | 配方（无 id 的关系行，不参与原型继承） |
 | `enemies` | 是 | enemy.schema.json | 敌人 |
 | `gearDrops` | 是 | gear-drop.schema.json | 异宝掉落表（无 id 关系行） |
+| `elements` | 是 | element.schema.json | 系别键域注册表（#25 键域开放，ADR-017 裁决 8）：id+name，空数组=无系别玩法 |
 | `rarities` | 是 | rarity.schema.json | 稀有度档位词表（#018，ADR-016 词表零默认） |
 | `affixPool` | 是 | affix-pool.schema.json | 装备随机词条池（同上） |
 | `combatText` | 是 | combat-text.schema.json | CTEXT 战斗文案词库（#019 批 2 扩十键：+句式模板/系统 note/战后摘要/对照语） |
@@ -65,7 +66,8 @@ engine `EnemyView` 未投影，靠 #15 票驱动补齐）。
 
 - `zone`: `flat` → `addPct` → `mult` 三区按序结算（ADR-011），禁绕管直改。
 - `value`: 乘法区须 > 0；加法%区 ≥ −100（语义检查）。flat/addPct 可为负。
-- `condition`: `{element?, moveId?}` 至少一维（minProperties），命中才生效。
+- `condition`: `{element?, moveId?}` 至少一维（minProperties），命中才生效；
+  `element` 键域开放（#25）：须在包 elements 节注册（语义校验 xref）。
 
 **引擎聚合公式（#13 定版）**：`value = (base + Σflat) × (1 + ΣaddPct/100) × Πmult`，
 负值钳到 0；倍率类属性（gatherXp 等以 1 为基线）基线由消费方给定，百分点型
@@ -230,14 +232,35 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
   skills, enemyId)` 是锁定判定/需层数展示的**单一来源**（与 combat:start 判定同公式），
   UI 禁止复制 clv+offset 公式（AUD 审计 N1 四处副本收敛为引擎一处）。
 
+## elements 系别键域注册表（#25 键域开放，ADR-017 裁决 8）
+
+循 #21 VerbStyle 先例：schema 不钉死七系枚举，系别键域由包自声明——`elements`
+节是包内系别键域的唯一注册表；`enemy.element`、`affinities` 键、铭纹条件
+`condition.element` 的引用合法性由语义校验对照本节强制（xref，坏包加载期拒绝，
+报错逐字段可定位）。
+
+| 字段 | 形态 | 约定 |
+|---|---|---|
+| `id` | string（`^[a-z][a-zA-Z0-9_]*$`） | 系别键，键形态与 stat/verbStyle 统一（#021 批 4）；一经发布不可变；id 去重（语义检查） |
+| `name` | string（1~6 字） | 展示名，词表归 content（ADR-016 延伸）；引擎零感知，壳层/编辑器消费 |
+
+- 金木水火土风雷七系只是官方包内容约定（ADR-012：每系一个可观测机制签名，
+  拒绝纯数值系——自定义系别同样应满足结构签名判据）。
+- `elements: []` 合法 = 无系别玩法（敌人缺省凡击）。
+- **缺省/兜底行为**：敌人不填 `element` = 凡击；聚合语境无 element 维度时
+  `condition.element` 修饰符不生效（引擎 `conditionMatches` 语义不变）；
+  引用未注册系别键 = 加载期拒绝（不静默降级）。
+- 引擎零感知：系别只是条件匹配的不透明键（engine `modifiers.ts` 为 `string`）；
+  `affinities` 的引擎消费随 #15（schema/校验先行，View 投影未接）。
+
 ## enemies 系别字段（#16，可选零破坏）
 
 | 字段 | 形态 | 约定 |
 |---|---|---|
 | `kind` | string（`^[a-z][a-zA-Z0-9_]*$`） | 动词池键（#021 批 4 开放键域）：须在 `combatText.verbs` 注册（语义校验 xref）；'claw'/'magic' 为官方包约定 |
 | `level` | integer（≥ 1） | 层数；上限**单一来源** = `config.progression.maxLevel`（#021 批 4：语义校验对照，config 缺省时跳过；schema 魔法数 99 已清退）。另一有效上限来自开战门控 `clv + levelGateOffset ≥ level` |
-| `element` | enum：metal/wood/water/fire/earth/wind/thunder | 系别（金木水火土风雷，ADR-012）；**不填=凡击无系别**；只给 Boss/特色怪配 |
-| `affinities` | `{[系别]: −100~100}` | 系别亲和：受该系攻击的伤害调整百分点（负=抗性，正=易伤）；键由 patternProperties 钉死七系 |
+| `element` | string（`^[a-z][a-zA-Z0-9_]*$`） | 系别键（#25 键域开放）：须在 `elements` 节注册（语义校验 xref）；**不填=凡击无系别**；只给 Boss/特色怪配 |
+| `affinities` | `{[系别]: −100~100}` | 系别亲和：受该系攻击的伤害调整百分点（负=抗性，正=易伤）；键域开放（#25）：系别键须在 `elements` 节注册（语义校验 xref） |
 
 系别是结构签名不是数值皮肤（ADR-012）：配 `element` 的敌人应携带对应机制原语，
 否则宁可不配（宁 4 真系勿 7 假系）。

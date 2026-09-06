@@ -68,13 +68,28 @@ export interface Range {
   readonly max: number;
 }
 
-/* ---------- 系别（ADR-012） ---------- */
+/* ---------- 系别（ADR-012；#25 键域开放） ---------- */
 
-/** 系别 id：金木水火土风雷；凡击=无 element 字段，不是第七个值。 */
-export type Element = 'metal' | 'wood' | 'water' | 'fire' | 'earth' | 'wind' | 'thunder';
+/**
+ * 系别键（#25 键域开放，循 #21 VerbStyle/EnemyKind 先例）：取值 = 包内
+ * elements 节注册的系别 id，存在性由包校验强制；'metal'~'thunder' 七系只是
+ * 官方包的内容约定，自定义系别（如法术学派）= elements 节新条目。
+ */
+export type Element = string;
 
-/** 系别亲和：键=系别 id 的任意子集，值=受该系攻击的伤害调整百分点（−100 抗性 ~ 100 易伤）。 */
+/** 系别亲和：键=系别键的任意子集，值=受该系攻击的伤害调整百分点（−100 抗性 ~ 100 易伤）。 */
 export type Affinities = Readonly<Partial<Record<Element, number>>>;
+
+/**
+ * 系别定义（elements 节条目，#25）：包内系别键域的唯一注册表。
+ * id 一经发布不可变（enemy.element / affinities / 铭纹条件 element 引用它）；
+ * name 供壳层/编辑器展示（引擎零感知）。空 elements = 无系别玩法。
+ */
+export interface ElementDef {
+  readonly id: string;
+  /** 展示名（1~6 字）。 */
+  readonly name: string;
+}
 
 /* ---------- 修饰符（器胚胚纹 / 铭纹 tiers 的最小单元，#13 聚合管线消费） ---------- */
 
@@ -484,6 +499,8 @@ export interface ContentPack {
   readonly rarities: readonly RarityDef[];
   /** 随机词条池（同上，节恒在）。 */
   readonly affixPool: readonly AffixDef[];
+  /** 系别键域注册表（#25 键域开放）：enemy.element / affinities / 条件引用的系别键须在此注册。 */
+  readonly elements: readonly ElementDef[];
   readonly combatText: CombatText;
   /** 系统展示文案（#019 批 2）：reject 展示与兵刃兜底名，必需节。 */
   readonly texts: TextsSection;

@@ -290,8 +290,9 @@
       "description": "定向条件：至少声明一维，命中才生效（如受火系伤害、某招式命中）",
       "properties": {
         "element": {
-          "enum": ["metal", "wood", "water", "fire", "earth", "wind", "thunder"],
-          "description": "系别（金木水火土风雷）"
+          "type": "string",
+          "pattern": "^[a-z][a-zA-Z0-9_]*$",
+          "description": "系别键（#25 键域开放，循 #21 先例）：取值须在包 elements 节注册（语义校验 xref）；金木水火土风雷仅为官方包约定"
         },
         "moveId": {
           "type": "string",

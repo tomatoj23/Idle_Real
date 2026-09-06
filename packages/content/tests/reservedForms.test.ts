@@ -60,6 +60,7 @@ function makeBasePack(): Record<string, any> {
       },
     ],
     gearDrops: [],
+    elements: [],
     rarities: [
       { id: 'common', name: '寻常', weight: 70, mult: 1, affix: 0, sell: 1 },
       { id: 'epic', name: '绝世', weight: 2, mult: 1.5, affix: 3, sell: 10, showcase: true },
@@ -295,9 +296,14 @@ describe('#16 · 空集合合法性边界', () => {
 
 /* ==================== enemies 系别字段（可选零破坏） ==================== */
 
-describe('#16 · enemies element/affinities', () => {
-  it('带 element/affinities 的 Boss 样例条目过校验', () => {
+describe('#16 · enemies element/affinities（键域形态随 #25 开放后回归）', () => {
+  it('带 element/affinities 的 Boss 样例条目过校验（系别键已在 elements 注册）', () => {
     const pack = makeBasePack();
+    pack.elements = [
+      { id: 'fire', name: '火' },
+      { id: 'water', name: '水' },
+      { id: 'thunder', name: '雷' },
+    ];
     pack.enemies[0].element = 'fire';
     pack.enemies[0].affinities = { water: -50, thunder: 30 };
     const result = validateContentPack(pack);
@@ -308,22 +314,25 @@ describe('#16 · enemies element/affinities', () => {
     expect(validateContentPack(makeBasePack()).ok).toBe(true);
   });
 
-  it('未知系别被拒', () => {
+  it('未注册系别被拒（#25 键域开放后 schema 只钉键形态，存在性走语义 xref）', () => {
     const pack = makeBasePack();
+    pack.elements = [{ id: 'fire', name: '火' }];
     pack.enemies[0].element = 'light';
-    expectError(validateContentPack(pack), '/enemies/0/element', 'enum');
+    expectError(validateContentPack(pack), '/enemies/0/element', 'xref');
   });
 
   it('affinities 数值越界（−100~100 百分点）被拒', () => {
     const pack = makeBasePack();
+    pack.elements = [{ id: 'fire', name: '火' }];
     pack.enemies[0].affinities = { fire: -150 };
     expectError(validateContentPack(pack), '/enemies/0/affinities/fire', 'minimum');
   });
 
-  it('affinities 非法系别键被拒', () => {
+  it('affinities 未注册系别键被拒（#25 键域开放后存在性走语义 xref）', () => {
     const pack = makeBasePack();
+    pack.elements = [{ id: 'fire', name: '火' }];
     pack.enemies[0].affinities = { light: 10 };
-    expectError(validateContentPack(pack), '/enemies/0/affinities/light', 'additionalProperties');
+    expectError(validateContentPack(pack), '/enemies/0/affinities/light', 'xref');
   });
 });
 

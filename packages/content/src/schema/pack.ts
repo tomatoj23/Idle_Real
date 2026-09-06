@@ -31,6 +31,10 @@
  *      （rollRarity 按占比归一化的前提），rarities 的 id 去重（存档键
  *      GearInstance.rarity 引用它），affix.stat 键域开放后由 schema 只钉
  *      键形态（#021 批 4），生效须引擎消费点（content.md 注册表）；
+ *    - 系别存在性（#25 键域开放，循 #21 动词风格先例）：elements 节是包内
+ *      系别键域的唯一注册表（schema 不钉七系枚举），敌人 element、affinities
+ *      键、铭纹条件 element 引用的系别键都必须命中注册表（坏包加载期拒绝，
+ *      报错逐字段可定位）；敌人不填 element = 凡击，引擎条件匹配语义不变；
  *    - config 玩法参数子节（#020，ADR-016 裁决 ① 分策）：combat/
  *      progression/affix 子节全可选（缺省 = 引擎基线），伤害档阈值
  *      跨字段递增由语义检查补全；
@@ -42,6 +46,7 @@
 import affixPoolSchemaJson from './affix-pool.schema.json';
 import combatTextSchemaJson from './combat-text.schema.json';
 import configSchemaJson from './config.schema.json';
+import elementSchemaJson from './element.schema.json';
 import enemySchemaJson from './enemy.schema.json';
 import gearDropSchemaJson from './gear-drop.schema.json';
 import itemSchemaJson from './item.schema.json';
@@ -50,7 +55,7 @@ import recipeSchemaJson from './recipe.schema.json';
 import shopSchemaJson from './shop.schema.json';
 import skillSchemaJson from './skill.schema.json';
 import textsSchemaJson from './texts.schema.json';
-import type { Config, ContentPack, Item, Modifier, Range, Skill } from './types.js';
+import type { Config, ContentPack, Item, Modifier, ModifierCondition, Range, Skill } from './types.js';
 import { validateContent } from './validate.js';
 import type { ContentError, JsonSchema } from './validate.js';
 
@@ -59,6 +64,7 @@ const itemSchema = itemSchemaJson as unknown as JsonSchema;
 const recipeSchema = recipeSchemaJson as unknown as JsonSchema;
 const enemySchema = enemySchemaJson as unknown as JsonSchema;
 const gearDropSchema = gearDropSchemaJson as unknown as JsonSchema;
+const elementSchema = elementSchemaJson as unknown as JsonSchema;
 const raritySchema = raritySchemaJson as unknown as JsonSchema;
 const affixPoolSchema = affixPoolSchemaJson as unknown as JsonSchema;
 const combatTextSchema = combatTextSchemaJson as unknown as JsonSchema;
@@ -73,6 +79,7 @@ const SECTION_SCHEMAS = {
   recipes: recipeSchema,
   enemies: enemySchema,
   gearDrops: gearDropSchema,
+  elements: elementSchema,
   rarities: raritySchema,
   affixPool: affixPoolSchema,
   combatText: combatTextSchema,
@@ -149,6 +156,7 @@ function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
   pushDuplicates(pack.skills, '/skills', errors);
   pushDuplicates(pack.enemies, '/enemies', errors);
   pushDuplicates(pack.rarities, '/rarities', errors);
+  pushDuplicates(pack.elements, '/elements', errors);
   const slotIds = checkConfig(pack.config, errors);
 
   const weaponIds = checkItemShapes(pack.items, slotIds, errors);
@@ -169,6 +177,10 @@ function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
   checkMoveRegistry(moves, weaponIds, enemyIndex, errors);
   checkBasicFallback(moves, errors);
   checkVerbStyles(pack.items, pack.enemies, verbs, errors);
+
+  // 系别存在性（#25 键域开放）：注册表构建一次，三处引用面统一对照。
+  const elementIds = new Set(pack.elements.map((entry) => entry.id));
+  checkElementRefs(pack, elementIds, errors);
 
   checkPrototypes(pack.skills, '/skills', errors);
   checkPrototypes(pack.items, '/items', errors);
@@ -671,6 +683,58 @@ function checkVerbStyles(
         keyword: 'xref',
         message: `敌人 "${enemy.id}" 的动词风格 "${enemy.kind}" 未在 combatText.verbs 注册`,
       });
+    }
+  });
+}
+
+/**
+ * 系别存在性（#25 键域开放的存在性关卡，循 #21 动词风格先例）：
+ * schema 只钉键形态不钉取值，引用合法性在此收口——敌人 element、
+ * affinities 键、铭纹条件 element（胚纹/三阶表/feature 三落点）引用的
+ * 系别键都必须命中 elements 节注册表（坏包加载期拒绝，逐字段可定位）。
+ * 缺省/兜底约定：敌人不填 element = 凡击；聚合语境无 element 维度时
+ * 条件修饰符不生效（引擎 conditionMatches 语义不变）。
+ */
+function checkElementRefs(
+  pack: ContentPack,
+  registered: ReadonlySet<string>,
+  errors: ContentError[],
+): void {
+  const message = (id: string): string => `系别 "${id}" 未在包 elements 节注册`;
+  pack.enemies.forEach((enemy, i) => {
+    if (enemy.element !== undefined && !registered.has(enemy.element)) {
+      errors.push({
+        path: `/enemies/${i}/element`,
+        keyword: 'xref',
+        message: message(enemy.element),
+      });
+    }
+    for (const key of Object.keys(enemy.affinities ?? {})) {
+      if (!registered.has(key)) {
+        errors.push({
+          path: `/enemies/${i}/affinities/${key}`,
+          keyword: 'xref',
+          message: message(key),
+        });
+      }
+    }
+  });
+  pack.items.forEach((item, i) => {
+    const checkCondition = (condition: ModifierCondition | undefined, path: string): void => {
+      if (condition?.element !== undefined && !registered.has(condition.element)) {
+        errors.push({ path, keyword: 'xref', message: message(condition.element) });
+      }
+    };
+    (item.inherentModifiers ?? []).forEach((mod, j) => {
+      checkCondition(mod.condition, `/items/${i}/inherentModifiers/${j}/condition/element`);
+    });
+    (item.tiers ?? []).forEach((tier, t) => {
+      tier.forEach((mod, j) => {
+        checkCondition(mod.condition, `/items/${i}/tiers/${t}/${j}/condition/element`);
+      });
+    });
+    if (item.feature !== undefined) {
+      checkCondition(item.feature.condition, `/items/${i}/feature/condition/element`);
     }
   });
 }
