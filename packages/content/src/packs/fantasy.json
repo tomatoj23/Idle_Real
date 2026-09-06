@@ -1,0 +1,545 @@
+{
+  "skills": [
+    {
+      "id": "herbalism",
+      "name": "Herbalism",
+      "icon": "H",
+      "kind": "gather",
+      "description": "Gather herbs and roots from the moor.",
+      "activities": [
+        {
+          "name": "Pick Herbs",
+          "unlockLevel": 1,
+          "interval": 1500,
+          "exp": 5,
+          "output": { "item": "herb", "count": 1 },
+          "byproduct": { "item": "moonpetal", "chance": 0.25 }
+        },
+        {
+          "name": "Dig Roots",
+          "unlockLevel": 3,
+          "interval": 2400,
+          "exp": 9,
+          "output": { "item": "emberroot", "count": 1 }
+        }
+      ]
+    },
+    {
+      "id": "alchemy",
+      "name": "Alchemy",
+      "icon": "A",
+      "kind": "craft",
+      "description": "Brew potions from gathered reagents."
+    },
+    {
+      "id": "swordplay",
+      "name": "Swordplay",
+      "icon": "S",
+      "kind": "combat",
+      "description": "The discipline of blade and shield."
+    }
+  ],
+  "items": [
+    {
+      "id": "herb",
+      "name": "Wild Herb",
+      "icon": "h",
+      "type": "mat",
+      "sell": 2,
+      "description": "A sprig of bitter moorland herb."
+    },
+    {
+      "id": "moonpetal",
+      "name": "Moonpetal",
+      "icon": "m",
+      "type": "mat",
+      "sell": 6,
+      "description": "A pale blossom that opens only at dusk."
+    },
+    {
+      "id": "emberroot",
+      "name": "Ember Root",
+      "icon": "r",
+      "type": "mat",
+      "sell": 9,
+      "description": "A smoldering root dug from the ash fen."
+    },
+    {
+      "id": "crystal",
+      "name": "Arcane Dust",
+      "icon": "d",
+      "type": "mat",
+      "sell": 12,
+      "description": "Glittering residue of broken constructs."
+    },
+    {
+      "id": "potion",
+      "name": "Minor Potion",
+      "icon": "p",
+      "type": "consumable",
+      "sell": 8,
+      "heal": { "percent": 0.4 },
+      "description": "Restores 40% of your health."
+    },
+    {
+      "id": "elixir",
+      "name": "Wrath Elixir",
+      "icon": "e",
+      "type": "consumable",
+      "sell": 25,
+      "effect": { "duration": 60000, "multipliers": { "atk": 1.25 } },
+      "description": "Sharpen the arm for one minute."
+    },
+    {
+      "id": "shortsword",
+      "name": "Short Sword",
+      "icon": "s",
+      "type": "equip",
+      "sell": 10,
+      "slot": "weapon",
+      "bonuses": { "atk": 4 },
+      "verbStyle": "sword",
+      "description": "A soldier's plain blade."
+    },
+    {
+      "id": "leather_vest",
+      "name": "Leather Vest",
+      "icon": "v",
+      "type": "equip",
+      "sell": 12,
+      "slot": "body",
+      "bonuses": { "def": 3, "hp": 10 },
+      "description": "Boiled leather, patched twice."
+    },
+    {
+      "id": "focus_charm",
+      "name": "Focus Charm",
+      "icon": "c",
+      "type": "equip",
+      "sell": 15,
+      "slot": "accessory",
+      "bonuses": { "crit": 5 },
+      "description": "Aids a steady killing eye."
+    },
+    {
+      "id": "rune_blade",
+      "name": "Rune Blade",
+      "icon": "R",
+      "type": "equip",
+      "sell": 60,
+      "slot": "weapon",
+      "bonuses": { "atk": 8 },
+      "verbStyle": "sword",
+      "description": "Old runes wake along the edge."
+    },
+    {
+      "id": "arcane_robe",
+      "name": "Arcane Robe",
+      "icon": "b",
+      "type": "equip",
+      "sell": 55,
+      "slot": "body",
+      "bonuses": { "def": 4, "hp": 15 },
+      "description": "Woven with warding sigils."
+    },
+    {
+      "id": "seer_ring",
+      "name": "Seer Ring",
+      "icon": "g",
+      "type": "equip",
+      "sell": 50,
+      "slot": "accessory",
+      "bonuses": { "crit": 8 },
+      "description": "The pale stone never blinks."
+    }
+  ],
+  "recipes": [
+    {
+      "name": "Brew Potion",
+      "skill": "alchemy",
+      "unlockLevel": 1,
+      "output": { "item": "potion", "count": 1 },
+      "materials": { "herb": 2 },
+      "successRate": 1,
+      "interval": 3000,
+      "exp": 4
+    }
+  ],
+  "enemies": [
+    {
+      "id": "cave_bat",
+      "name": "Cave Bat",
+      "icon": "b",
+      "level": 1,
+      "kind": "beast",
+      "hp": 30,
+      "atk": 5,
+      "def": 2,
+      "attackInterval": 2000,
+      "exp": 8,
+      "gold": { "min": 4, "max": 10 },
+      "drops": [ { "item": "crystal", "chance": 0.2 } ]
+    },
+    {
+      "id": "arcane_golem",
+      "name": "Arcane Golem",
+      "icon": "G",
+      "level": 3,
+      "kind": "construct",
+      "element": "arcane",
+      "affinities": { "arcane": 50, "shadow": -50 },
+      "hp": 80,
+      "atk": 9,
+      "def": 6,
+      "attackInterval": 2600,
+      "exp": 25,
+      "gold": { "min": 8, "max": 20 },
+      "drops": [ { "item": "crystal", "chance": 0.5 } ]
+    }
+  ],
+  "gearDrops": [
+    {
+      "enemy": "arcane_golem",
+      "chance": 0.15,
+      "pool": ["rune_blade", "arcane_robe", "seer_ring"]
+    }
+  ],
+  "elements": [
+    { "id": "arcane", "name": "Arcane" },
+    { "id": "shadow", "name": "Shadow" }
+  ],
+  "rarities": [
+    { "id": "plain", "name": "Plain", "weight": 70, "mult": 1, "affix": 0, "sell": 1 },
+    { "id": "fine", "name": "Fine", "weight": 25, "mult": 1.4, "affix": 1, "sell": 2 },
+    { "id": "mythic", "name": "Mythic", "weight": 5, "mult": 2, "affix": 2, "sell": 4, "showcase": true }
+  ],
+  "affixPool": [
+    { "name": "Sharp", "stat": "atk", "scale": 0.3 },
+    { "name": "Sturdy", "stat": "def", "scale": 0.3 },
+    { "name": "Stout", "stat": "hp", "scale": 1.5 },
+    { "name": "Keen", "stat": "crit", "scale": 0.25 }
+  ],
+  "combatText": {
+    "verbs": {
+      "basic": [
+        { "v": "strikes", "limbs": ["guard", "flank"] }
+      ],
+      "sword": [
+        { "v": "slashes", "limbs": ["ribs", "shoulder", "guard"] },
+        { "v": "stabs", "limbs": ["flank", "throat"] }
+      ],
+      "beast": [
+        { "v": "swoops", "limbs": ["your head", "your eyes"] },
+        { "v": "bites", "limbs": ["your arm", "your shoulder"] }
+      ],
+      "construct": [
+        { "v": "hammers", "limbs": ["your shield arm", "your ribs"] },
+        { "v": "grinds", "limbs": ["your guard", "your boots"] }
+      ]
+    },
+    "moves": {
+      "basic": ["a measured strike", "a solid blow"],
+      "shortsword": ["Quicksnap", "Soldier's Cut"],
+      "rune_blade": ["Rune Arc", "Dawn Cleave"],
+      "cave_bat": ["Feral Swipe", "Night Rake"],
+      "arcane_golem": ["Arcane Pulse", "Core Surge"]
+    },
+    "openings": [
+      "Gathering strength, ",
+      "Drawing back the blade, ",
+      "With a battle cry, "
+    ],
+    "critIntro": [
+      "A perfect strike! ",
+      "Time seems to slow — "
+    ],
+    "cons": {
+      "hit": {
+        "light": [
+          "{defender} staggers, taking {d} damage.",
+          "Your blow lands on {defender} for {d} damage."
+        ],
+        "mid": [
+          "{defender} reels under the hit — {d} damage.",
+          "A clean hit bruises {defender} for {d} damage."
+        ],
+        "heavy": [
+          "{defender} is battered badly, losing {d} health!",
+          "A crushing blow splits {defender}'s guard — {d} damage!"
+        ],
+        "deadly": [
+          "{defender} is nearly slain by the blow — {d} damage!",
+          "The strike nearly fells {defender}: {d} damage!"
+        ]
+      },
+      "hurt": {
+        "light": [
+          "You take {d} damage.",
+          "A glancing blow scrapes you for {d} damage."
+        ],
+        "mid": [
+          "You are hit hard for {d} damage.",
+          "The blow drives the wind from you — {d} damage."
+        ],
+        "heavy": [
+          "You reel as the strike lands for {d} damage!",
+          "A heavy blow crashes into you — {d} damage!"
+        ],
+        "deadly": [
+          "A savage blow nearly ends you — {d} damage!",
+          "You barely survive the strike: {d} damage!"
+        ]
+      }
+    },
+    "fatal": {
+      "hit": "{defender} is mortally wounded — {d} damage!",
+      "hurt": "A killing blow hammers you for {d} damage!"
+    },
+    "templates": {
+      "playerLight": [
+        "Your {weapon} {verb} at {defender}'s {limb} — {move}!"
+      ],
+      "playerHeavy": [
+        "{opening}your {weapon} {verb} deep past {defender}'s {limb} — {move}!"
+      ],
+      "playerCrit": [
+        "{critIntro}Your {weapon} {verb} through {defender}'s {limb} — {move} strikes true!"
+      ],
+      "enemyLight": [
+        "{enemy} {verb} at {limb} — {move}!"
+      ],
+      "enemyHeavy": [
+        "{enemy} {verb} with full force at {limb} — {move}!"
+      ]
+    },
+    "notes": {
+      "retreat": [
+        "You withdraw from the fight."
+      ],
+      "retreatToGather": [
+        "You leave the battle to continue your training."
+      ],
+      "retreatWounded": [
+        "Badly hurt, you pull back to recover."
+      ],
+      "retreatVictory": [
+        "The foe is down; you rest, then move on."
+      ],
+      "reengage": [
+        "You return to the fray against {enemy}."
+      ],
+      "start": [
+        "You face {enemy} in battle!"
+      ],
+      "autoConsume": [
+        "You quickly drink {item}."
+      ]
+    },
+    "summary": {
+      "tiers": {
+        "light": [
+          "a skirmish of glancing blows",
+          "a cautious exchange of steel"
+        ],
+        "mid": [
+          "an even duel of arms",
+          "a steady, punishing exchange"
+        ],
+        "heavy": [
+          "a brutal clash of strength",
+          "a slogging match of heavy blows"
+        ],
+        "deadly": [
+          "a duel fought at death's door",
+          "a near-lethal exchange of strikes"
+        ]
+      },
+      "base": [
+        "The fight lasted {rounds} rounds — {flavor}."
+      ],
+      "crit": [
+        "The fight lasted {rounds} rounds with {crits} critical strikes — {flavor}."
+      ]
+    },
+    "compare": {
+      "revenge": [
+        "Vengeance! {rounds} rounds this time, after {prev} last meeting."
+      ],
+      "faster": [
+        "Faster than before: {rounds} rounds versus {prev}."
+      ],
+      "slower": [
+        "Slower than before: {rounds} rounds versus {prev}."
+      ],
+      "even": [
+        "An even rematch — {rounds} rounds once more."
+      ]
+    }
+  },
+  "texts": {
+    "basicName": "bare hands",
+    "reject": {
+      "combat:start": {
+        "locked": "Reach combat level {level} to challenge this foe."
+      },
+      "activity:start": {
+        "locked": "Requires level {level} for {activity}."
+      },
+      "shop:buy": {
+        "poor": "Not enough gold: need {cost}, you have {gold}."
+      },
+      "bag:sell": {
+        "bad-payload": "Cannot sell that."
+      },
+      "*": {
+        "bad-payload": "That action cannot be performed."
+      }
+    },
+    "shell": {
+      "brand": {
+        "sigil": "G",
+        "name": "Grim Vale",
+        "locale": "en-US",
+        "bootError": "The realm failed to load: {message}"
+      },
+      "topbar": {
+        "statsTitle": "Attributes",
+        "statsSigil": "A",
+        "goldTitle": "G",
+        "goldSigil": "G",
+        "hpTitle": "H",
+        "hpSigil": "H"
+      },
+      "tabs": {
+        "skills": "Skills",
+        "combat": "Combat",
+        "bag": "Bag",
+        "shop": "Shop"
+      },
+      "side": {
+        "title": "Chronicle"
+      },
+      "stats": {
+        "labels": {
+          "atk": { "label": "AT" },
+          "def": { "label": "DF" },
+          "hp": { "label": "HP" },
+          "crit": { "label": "CR", "percent": true },
+          "gatherXp": { "label": "XP" }
+        }
+      },
+      "units": {
+        "level": "Lv {v}",
+        "seconds": "{v}s",
+        "minute": "{m}m",
+        "hourMinute": "{h}h {m}m"
+      },
+      "icons": {
+        "buff": "B",
+        "gear": "G",
+        "unknown": "?"
+      },
+      "common": {
+        "needLevel": "Requires level {level}",
+        "compareWrap": "({compare})",
+        "itemListSep": ", "
+      },
+      "events": {
+        "lootGear": "You obtain {name}!",
+        "lootGearLog": "Obtained {name}.",
+        "lootShowcase": "A wondrous find: {name}!",
+        "lootByproduct": "Bonus find: {name} x{count}.",
+        "lootDrop": "+{count} {name}.",
+        "victoryFlog": "Victory over {name}! {summary}{compare}",
+        "victoryLog": "Victory over {name}. {summary}{compare}",
+        "defeatFlog": "You fall to {name}...",
+        "defeatToast": "You have fallen.",
+        "eatHeal": "{name} restores {healed} health.",
+        "eatBuffToast": "{name} takes effect!",
+        "eatBuffLog": "{name} active for {minutes}m.",
+        "equipWearToast": "Equipped {name}.",
+        "equipWearLog": "Equipped {name}.",
+        "equipRemoveLog": "Removed {name}.",
+        "expCombat": "+{amount} experience.",
+        "levelupToast": "{name} advanced to level {level}!",
+        "levelupLog": "{name} is now level {level}.",
+        "sellLog": "Sold {name} for {gained} gold.",
+        "buyLog": "Bought {name} x{count} for {cost} gold.",
+        "rejectFallback": "That action is not allowed.",
+        "offlineToast": "Away {away}: {activity} ran {cycles} times.",
+        "offlineLog": "Away {away}: gained {items}. {exp}",
+        "offlineNoYield": "nothing",
+        "offlineExpSuffix": "+{exp} exp"
+      },
+      "pages": {
+        "skills": {
+          "empty": "No disciplines known yet.",
+          "chipLocked": "Sealed",
+          "expSub": "{into}/{need} exp ({left} to go)",
+          "expMax": "Mastered",
+          "actNow": "Training: {name}",
+          "idle": "Not training",
+          "stopBtn": "Stop",
+          "running": "Active",
+          "byproduct": "Bonus: {icon} {name} ({chance}%)",
+          "actMeta": "{interval} a try · {exp} exp · Lv {level}",
+          "startBtn": "Train"
+        },
+        "combat": {
+          "title": "Combat",
+          "subtitle": "Blade level {level}",
+          "enemyMissing": "No foes known.",
+          "resting": "Resting...",
+          "enemyHp": "Foe {ehp}/{hp}",
+          "selfStats": "HP {hp}/{max} · AT {atk} · DF {def} · CR {crit}",
+          "fleeBtn": "Flee",
+          "autoFightOn": "Auto-rematch: on",
+          "autoFightOff": "Auto-rematch: off",
+          "autoEatOn": "Auto-potion: on",
+          "autoEatOff": "Auto-potion: off",
+          "noConsumables": "No potions left.",
+          "enemyStats": "HP {hp} · AT {atk} · DF {def} · EXP {exp}",
+          "enemyGold": "Gold {min}~{max}",
+          "dropsSuffix": " Also drops: {drops}",
+          "fightBtn": "Challenge"
+        },
+        "bag": {
+          "title": "Bag",
+          "matGroup": "Materials",
+          "consumableGroup": "Potions",
+          "priceEach": "{price} g each",
+          "sellOneBtn": "Sell 1",
+          "sellAllBtn": "Sell all",
+          "gearWorn": "Worn",
+          "gearLoose": "Carried",
+          "emptyWorn": "Nothing worn.",
+          "emptyLoose": "No gear carried.",
+          "emptyAll": "The bag is empty.",
+          "noAffix": "No enchantments.",
+          "wearBtn": "Wear",
+          "takeOffBtn": "Remove",
+          "sellBtn": "Sell"
+        },
+        "shop": {
+          "title": "Shop",
+          "subtitle": "The traveling merchant's cart",
+          "price": "{price} g",
+          "owned": "Owned: {count}",
+          "buyBtn": "Buy 1"
+        }
+      }
+    }
+  },
+  "shop": [
+    { "item": "potion", "price": 8 },
+    { "item": "elixir", "price": 25 }
+  ],
+  "config": {
+    "slots": [
+      { "id": "weapon", "name": "Weapon", "icon": "W" },
+      { "id": "body", "name": "Armor", "icon": "A" },
+      { "id": "accessory", "name": "Charm", "icon": "C" }
+    ],
+    "progression": { "maxLevel": 20 }
+  }
+}

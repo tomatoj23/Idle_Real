@@ -11,6 +11,10 @@
     "./packs/xiuxian": {
       "types": "./src/packs/xiuxian.ts",
       "default": "./src/packs/xiuxian.ts"
+    },
+    "./packs/fantasy": {
+      "types": "./src/packs/fantasy.ts",
+      "default": "./src/packs/fantasy.ts"
     }
   },
   "scripts": {
