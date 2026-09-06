@@ -27,6 +27,10 @@ import {
   levelFromXp,
   progressionParamsOf,
   projectGearBase,
+  rebirthGateOf,
+  rebirthOf,
+  rebirthPreviewOf,
+  realmOf,
   shopAffordOf,
   type GameAction,
   type GameState,
@@ -36,7 +40,7 @@ import {
   type SaveData,
 } from '@wendao/engine';
 
-export type TabId = 'skills' | 'craft' | 'combat' | 'bag' | 'shop';
+export type TabId = 'skills' | 'craft' | 'combat' | 'bag' | 'shop' | 'rebirth' | 'talents';
 
 export interface Ui {
   bindActions(handler: (action: GameAction) => void): void;
@@ -67,6 +71,9 @@ export function buildUi(
   const gatherSkills = content.skills.filter((skill) => skill.kind === 'gather');
   const craftSkills = content.skills.filter((skill) => skill.kind === 'craft');
   const combatSkillId = content.skills.find((skill) => skill.kind === 'combat')?.id ?? '';
+  // 转生玩法（#6）：包无 rebirth 节 = 无转生页签（引擎零降级路径的同款壳面）。
+  const rebirthSection = rebirthOf(content);
+  const hasRebirth = rebirthSection !== undefined;
 
   // 稀有度词表由内容包 rarities 节驱动（#018，ADR-016 裁决 ①/④）：
   // 档名/着色类/倍率来源/特判全部查内容 def，UI 零档位词、零引擎常量表；
@@ -124,6 +131,8 @@ export function buildUi(
   let activeTab: TabId = 'skills';
   let selectedSkillId = gatherSkills[0]?.id ?? '';
   let selectedCraftSkillId = craftSkills[0]?.id ?? '';
+  /** 兵解两段式确认：先 arm 展示后果预览，再 confirm 发动作（#6）。 */
+  let rebirthArmed = false;
   let handler: ((action: GameAction) => void) | null = null;
   let lastSig = '';
   let rafId = 0;
@@ -144,6 +153,8 @@ export function buildUi(
       <button class="tab" data-act="tab" data-tab="combat">${esc(T('tabs.combat'))}</button>
       <button class="tab" data-act="tab" data-tab="bag">${esc(T('tabs.bag'))}</button>
       <button class="tab" data-act="tab" data-tab="shop">${esc(T('tabs.shop'))}</button>
+      ${hasRebirth ? `<button class="tab" data-act="tab" data-tab="rebirth">${esc(T('tabs.rebirth'))}</button>
+      <button class="tab" data-act="tab" data-tab="talents">${esc(T('tabs.talents'))}</button>` : ''}
     </nav>
     <div class="layout">
       <main class="page-root" id="page-root"></main>
@@ -178,6 +189,7 @@ export function buildUi(
     switch (el.dataset.act) {
       case 'tab':
         activeTab = (el.dataset.tab ?? 'skills') as TabId;
+        rebirthArmed = false; // 换页即撤防（兵解确认不跨页存续）
         lastSig = '';
         render();
         break;
@@ -233,6 +245,23 @@ export function buildUi(
         break;
       case 'sell-gear':
         handler({ type: 'gear:sell', payload: { uid: Number(el.dataset.uid) } });
+        break;
+      case 'rebirth-go':
+        rebirthArmed = true;
+        lastSig = '';
+        render();
+        break;
+      case 'rebirth-cancel':
+        rebirthArmed = false;
+        lastSig = '';
+        render();
+        break;
+      case 'rebirth-confirm':
+        rebirthArmed = false;
+        handler({ type: 'rebirth:perform' });
+        break;
+      case 'talent-buy':
+        handler({ type: 'talent:buy', payload: { nodeId: el.dataset.node } });
         break;
     }
   });
@@ -333,6 +362,21 @@ export function buildUi(
         toast(T('events.craftHalt', { name: String(data.recipeName ?? '') }), 'red');
         log(T('events.craftHalt', { name: String(data.recipeName ?? '') }), 't-red');
         break;
+      case 'rebirth':
+        toast(T('events.rebirthToast', { daoYun: Number(data.daoYun ?? 0) }));
+        log(
+          T('events.rebirthLog', {
+            xp: Number(data.totalXp ?? 0),
+            daoYun: Number(data.daoYun ?? 0),
+            count: Number(data.rebirths ?? 0),
+          }),
+          't-gold',
+        );
+        break;
+      case 'talent:buy':
+        toast(T('events.talentBuyToast', { name: String(data.name ?? ''), cost: Number(data.cost ?? 0) }));
+        log(T('events.talentBuyLog', { name: String(data.name ?? ''), daoYun: Number(data.daoYun ?? 0) }), 't-jade');
+        break;
       case 'offline-settled': {
         const seconds = Math.max(0, Math.floor(Number(data.seconds) || 0));
         const h = Math.floor(seconds / 3600);
@@ -379,6 +423,10 @@ export function buildUi(
       st.autoFight,
       st.autoEat,
       Object.keys(st.lastEncounter).length,
+      st.rebirths,
+      st.daoYun,
+      st.daoYunEarned,
+      [...st.talents].sort(),
       snap.stats ?? null,
     ]);
 
@@ -409,7 +457,7 @@ export function buildUi(
       lastSig = sig;
       renderPage(st, snap);
     }
-    updateActivityBars(st);
+    updateActivityBars(st, snap);
     updateEnemyBar(st);
     syncFlogScroll();
   }
@@ -440,6 +488,8 @@ export function buildUi(
     else if (activeTab === 'craft') pageEl.innerHTML = renderCraft(st);
     else if (activeTab === 'combat') pageEl.innerHTML = renderCombat(st, snap);
     else if (activeTab === 'bag') pageEl.innerHTML = renderBag(st);
+    else if (activeTab === 'rebirth') pageEl.innerHTML = renderRebirth(st);
+    else if (activeTab === 'talents') pageEl.innerHTML = renderTalents(st);
     else pageEl.innerHTML = renderShop(st);
     if (activeTab === 'combat') {
       // 页面重建会丢滚动位置与日志内容：全量重放战斗日志并恢复到底部。
@@ -461,6 +511,15 @@ export function buildUi(
     const need = expToNext(level, prog);
     const into = xp - expBase(level, prog);
     const expPct = Number.isFinite(need) ? Math.min(100, (into / need) * 100) : 100;
+
+    // 主页境界区（#6 + B2 词表收编）：境界词表归 content.rebirth.realms，
+    // 引擎 realmOf 查表单一来源；包无词表时整行不渲染（零降级路径）。
+    const clv = levelFromXp(st.skills[combatSkillId]?.xp ?? 0, prog);
+    const realm = realmOf(content, clv);
+    const realmHtml =
+      realm !== undefined
+        ? `<div class="status-realm">${esc(T('pages.skills.realmLine', { realm, rebirths: st.rebirths }))}</div>`
+        : '';
 
     const act = st.activity;
     const actSkill = act ? skillById.get(act.skillId) : undefined;
@@ -489,6 +548,7 @@ export function buildUi(
             <b>${esc(skill.name)}</b><span class="status-lv">${esc(T('units.level', { v: level }))}</span>
             ${skill.description ? `<span class="status-desc">${esc(skill.description)}</span>` : ''}
           </div>
+          ${realmHtml}
           <div class="bar"><i style="width:${expPct}%"></i></div>
           <div class="status-sub">${
             Number.isFinite(need)
@@ -509,7 +569,12 @@ export function buildUi(
 
     const cards = (skill.activities ?? [])
       .map((a, i) => {
-        const unlocked = level >= a.unlockLevel;
+        // 解锁双重门控（#6）：层数门槛 + 道韵解锁表（rebirthGateOf 同源）。
+        const yunGate = rebirthGateOf(content, st.daoYunEarned, { skillId: skill.id });
+        const unlocked = level >= a.unlockLevel && !yunGate.locked;
+        const lockMsg = yunGate.locked
+          ? T('common.needDaoYun', { daoYun: yunGate.requiredDaoYun })
+          : T('common.needLevel', { level: a.unlockLevel });
         const running = act?.skillId === skill.id && act.index === i;
         const out = itemById.get(a.output.item);
         const bonus = a.byproduct ? itemById.get(a.byproduct.item) : undefined;
@@ -527,7 +592,7 @@ export function buildUi(
               ? running
                 ? ''
                 : `<button class="btn" data-act="start" data-skill="${skill.id}" data-index="${i}">${esc(T('pages.skills.startBtn'))}</button>`
-              : `<span class="act-lockmsg">${esc(T('common.needLevel', { level: a.unlockLevel }))}</span>`
+              : `<span class="act-lockmsg">${esc(lockMsg)}</span>`
           }
         </article>`;
       })
@@ -608,7 +673,12 @@ export function buildUi(
       .map((recipe: RecipeView, index: number) => ({ recipe, index }))
       .filter(({ recipe }) => recipe.skill === skill.id)
       .map(({ recipe, index }) => {
-        const unlocked = level >= recipe.unlockLevel;
+        // 解锁双重门控（#6）：层数门槛 + 道韵解锁表（rebirthGateOf 同源）。
+        const yunGate = rebirthGateOf(content, st.daoYunEarned, { skillId: skill.id });
+        const unlocked = level >= recipe.unlockLevel && !yunGate.locked;
+        const lockMsg = yunGate.locked
+          ? T('common.needDaoYun', { daoYun: yunGate.requiredDaoYun })
+          : T('common.needLevel', { level: recipe.unlockLevel });
         const running = runningHere && act?.index === index;
         const out = itemById.get(recipe.output.item);
         // 成功率/材料缺口走引擎单一来源（craftSuccessRateOf / craftMissingOf），
@@ -638,7 +708,7 @@ export function buildUi(
               ? running
                 ? `<button class="btn btn-ghost" data-act="stop">${esc(T('pages.craft.stopBtn'))}</button>`
                 : `<button class="btn" data-act="start" data-skill="${skill.id}" data-index="${index}">${esc(T('pages.craft.startBtn'))}</button>`
-              : `<span class="act-lockmsg">${esc(T('common.needLevel', { level: recipe.unlockLevel }))}</span>`
+              : `<span class="act-lockmsg">${esc(lockMsg)}</span>`
           }
         </article>`;
       })
@@ -651,6 +721,85 @@ export function buildUi(
         <div class="chips">${chips}</div>
         ${statusCard}
         <div class="act-grid">${cards || `<p class="empty">${esc(T('pages.craft.empty'))}</p>`}</div>
+      </section>`;
+  }
+
+  /* ---------- 转生页（#6）：兵解预览 + 两段式确认 ---------- */
+
+  function renderRebirth(st: GameState): string {
+    if (!rebirthSection) {
+      return `<section class="page"><p class="empty">${esc(T('pages.rebirth.empty'))}</p></section>`;
+    }
+    // 预览结算走引擎 rebirthPreviewOf（与 rebirth:perform 判定同源，壳零公式）。
+    const preview = rebirthPreviewOf(content, st.skills);
+    const resetChips = (rebirthSection.reset ?? [])
+      .map((key) => T(`pages.rebirth.resetLabels.${key}`))
+      .join(T('common.itemListSep'));
+    const keepChips = (rebirthSection.keep ?? [])
+      .map((key) => T(`pages.rebirth.keepLabels.${key}`))
+      .join(T('common.itemListSep'));
+    const gate = preview.eligible
+      ? ''
+      : `<p class="act-lockmsg">${esc(T('pages.rebirth.gateLine', { need: preview.minProgress }))}</p>`;
+    const ops = !preview.eligible
+      ? ''
+      : rebirthArmed
+        ? `<p class="page-sub rebirth-tip">${esc(T('pages.rebirth.confirmTip'))}</p>
+           <button class="btn btn-danger" data-act="rebirth-confirm">${esc(T('pages.rebirth.confirmBtn'))}</button>
+           <button class="btn btn-ghost" data-act="rebirth-cancel">${esc(T('pages.rebirth.cancelBtn'))}</button>`
+        : `<button class="btn btn-danger" data-act="rebirth-go">${esc(T('pages.rebirth.performBtn'))}</button>`;
+    return `
+      <section class="page">
+        <h2 class="page-title">${esc(T('pages.rebirth.title'))}</h2>
+        <p class="page-sub">${esc(T('pages.rebirth.subtitle', { rebirths: st.rebirths }))}</p>
+        <section class="status-card rebirth-card">
+          <div class="status-main">
+            <div class="status-head"><b>${esc(T('pages.rebirth.xpLine', { xp: preview.totalXp }))}</b></div>
+            <div class="status-head rebirth-gain"><b>${esc(T('pages.rebirth.gainLine', { daoYun: preview.gain }))}</b></div>
+          </div>
+          ${gate}
+        </section>
+        <div class="rebirth-lists">
+          <div class="rebirth-list"><h3 class="group-title">${esc(T('pages.rebirth.resetTitle'))}</h3><p>${esc(resetChips)}</p></div>
+          <div class="rebirth-list"><h3 class="group-title">${esc(T('pages.rebirth.keepTitle'))}</h3><p>${esc(keepChips)}</p></div>
+        </div>
+        <div class="rebirth-ops">${ops}</div>
+      </section>`;
+  }
+
+  /* ---------- 天赋树页（#6）：树数据 100% 来自 rebirth.talents ---------- */
+
+  function renderTalents(st: GameState): string {
+    const talents = rebirthSection?.talents ?? [];
+    if (talents.length === 0) {
+      return `<section class="page"><p class="empty">${esc(T('pages.talents.empty'))}</p></section>`;
+    }
+    const owned = new Set(st.talents);
+    const cards = talents
+      .map((node) => {
+        const isOwned = owned.has(node.id);
+        const missingPrereq = (node.requires ?? []).some((req) => !owned.has(req));
+        const affordable = st.daoYun >= node.cost;
+        let op: string;
+        if (isOwned) op = `<em class="act-badge">${esc(T('pages.talents.owned'))}</em>`;
+        else if (missingPrereq) op = `<span class="act-lockmsg">${esc(T('pages.talents.needPrereq'))}</span>`;
+        else if (!affordable)
+          op = `<span class="act-lockmsg">${esc(T('pages.talents.needDaoYun', { cost: node.cost }))}</span>`;
+        else
+          op = `<button class="btn" data-act="talent-buy" data-node="${node.id}">${esc(T('pages.talents.buyBtn'))}</button>`;
+        return `<article class="act-card talent-card${isOwned ? ' owned' : ''}${!isOwned && (missingPrereq || !affordable) ? ' locked' : ''}">
+          <header><b><span class="sigil sigil-sm">${esc(node.icon ?? T('icons.unknown'))}</span> ${esc(node.name)}</b></header>
+          ${node.description ? `<div class="talent-desc">${esc(node.description)}</div>` : ''}
+          <div class="act-meta">${esc(T('pages.talents.costRow', { cost: node.cost }))}</div>
+          ${op}
+        </article>`;
+      })
+      .join('');
+    return `
+      <section class="page">
+        <h2 class="page-title">${esc(T('pages.talents.title'))}</h2>
+        <p class="page-sub">${esc(T('pages.talents.subtitle', { daoYun: st.daoYun }))}</p>
+        <div class="act-grid">${cards}</div>
       </section>`;
   }
 
@@ -735,13 +884,19 @@ export function buildUi(
       .map((enemy) => {
         // 开战门控走引擎 enemyGateOf（N1 收敛，#020）：锁定判定与需层数展示
         // 与引擎 combat:start 判定同源，UI 零公式复算。
-        const gate = enemyGateOf(content, st.skills, enemy.id);
+        const levelGate = enemyGateOf(content, st.skills, enemy.id);
+        // 道韵解锁门槛（#6）：rebirthGateOf 与引擎判定同源。
+        const yunGate = rebirthGateOf(content, st.daoYunEarned, { enemyId: enemy.id });
+        const locked = levelGate.locked || yunGate.locked;
+        const lockMsg = yunGate.locked
+          ? T('common.needDaoYun', { daoYun: yunGate.requiredDaoYun })
+          : T('common.needLevel', { level: levelGate.requiredLevel });
         const gold = enemy.gold ?? { min: 0, max: 0 };
         const drops = (enemy.drops ?? [])
           .map((drop) => itemById.get(drop.item)?.name ?? drop.item)
           .slice(0, 3)
           .join(sep);
-        return `<article class="enemy-card${gate.locked ? ' locked' : ''}">
+        return `<article class="enemy-card${locked ? ' locked' : ''}">
           <div class="enemy-face"><span class="sigil sigil-big">${esc(enemy.icon)}</span></div>
           <div class="enemy-main">
             <div class="enemy-head"><b>${esc(enemy.name)}</b><span class="enemy-lv">${esc(T('units.level', { v: enemy.level }))}</span></div>
@@ -750,8 +905,8 @@ export function buildUi(
           </div>
           <div class="enemy-ops">
             ${
-              gate.locked
-                ? `<span class="act-lockmsg">${esc(T('common.needLevel', { level: gate.requiredLevel }))}</span>`
+              locked
+                ? `<span class="act-lockmsg">${esc(lockMsg)}</span>`
                 : `<button class="btn" data-act="fight" data-enemy="${enemy.id}">${esc(T('pages.combat.fightBtn'))}</button>`
             }
           </div>
@@ -874,14 +1029,16 @@ export function buildUi(
     bar.style.width = `${Math.max(0, Math.min(100, (st.combat.ehp / enemy.hp) * 100))}%`;
   }
 
-  function updateActivityBars(st: GameState): void {
+  function updateActivityBars(st: GameState, snap: SaveData): void {
     // 进度条按 活动 键控：只有正在进行的卡片充能，其余归零。
     let key = '';
     let pct = 0;
     if (st.activity) {
-      // interval 解析含 craft 配方（index = 包内 recipes 下标，#5）。
-      const interval = activityIntervalOf(st.activity.skillId, st.activity.index);
-      if (interval !== undefined) {
+      // 有效间隔单一来源 = 引擎快照投影（#6：gatherSpeed 缩放后与结算同调）；
+      // 快照未带（如 craft 页旧路径）回落内容原值。
+      const interval =
+        snap.activityInterval ?? activityIntervalOf(st.activity.skillId, st.activity.index);
+      if (interval !== undefined && interval > 0) {
         key = `${st.activity.skillId}:${st.activity.index}`;
         pct = Math.min(100, (st.activity.progress / interval) * 100);
       }

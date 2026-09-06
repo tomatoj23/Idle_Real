@@ -48,6 +48,12 @@ export interface SaveData {
   readonly state: Readonly<Record<string, unknown>>;
   /** 玩家属性面板（#4）：应用层展示用，非存档必需。 */
   readonly stats?: PlayerStatsView;
+  /**
+   * 进行中活动的有效轮间隔（毫秒，#6 展示投影）：采集按 gatherSpeed 缩放
+   * （与引擎结算同调 effectiveIntervalOf），炼制为配方原值；无活动时省略。
+   * 应用层展示用，非存档必需（恢复侧忽略）。
+   */
+  readonly activityInterval?: number;
 }
 
 /**

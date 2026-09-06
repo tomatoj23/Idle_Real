@@ -17,7 +17,7 @@ export function shellFixture(): Record<string, unknown> {
       hpTitle: '气血',
       hpSigil: '血',
     },
-    tabs: { skills: '修炼', craft: '炼制', combat: '斗法', bag: '乾坤袋', shop: '坊市' },
+    tabs: { skills: '修炼', craft: '炼制', combat: '斗法', bag: '乾坤袋', shop: '坊市', rebirth: '转生', talents: '道韵' },
     side: { title: '修行录' },
     stats: { labels: { atk: { label: '攻' }, crit: { label: '暴', percent: true } } },
     units: {
@@ -27,7 +27,7 @@ export function shellFixture(): Record<string, unknown> {
       hourMinute: '{h} 时 {m} 分',
     },
     icons: { buff: '丹', gear: '器', unknown: '？' },
-    common: { needLevel: '需 {level} 层', compareWrap: '（{compare}）', itemListSep: '、' },
+    common: { needLevel: '需 {level} 层', needDaoYun: '需 {daoYun} 道韵', compareWrap: '（{compare}）', itemListSep: '、' },
     events: {
       lootGear: '妖物遗落【{name}】',
       lootGearLog: '夺得【{name}】',
@@ -57,6 +57,10 @@ export function shellFixture(): Record<string, unknown> {
       offlineExpSuffix: '，修为 +{exp}',
       craftFail: '「{name}」炼制失败，材料尽失，仅悟得 {exp} 修为',
       craftHalt: '「{name}」材料告罄，熄炉中止',
+      rebirthToast: '兵解功成，得 {daoYun} 道韵',
+      rebirthLog: '兵解重修：{xp} 修为，{daoYun} 道韵（第 {count} 世）',
+      talentBuyToast: '点亮【{name}】（{cost} 道韵）',
+      talentBuyLog: '点亮【{name}】，余 {daoYun} 道韵',
     },
     pages: {
       skills: {
@@ -71,6 +75,7 @@ export function shellFixture(): Record<string, unknown> {
         byproduct: '偶得 {name}',
         actMeta: '{interval} / 次',
         startBtn: '开始',
+        realmLine: '境界 · {realm} · {rebirths} 世',
       },
       combat: {
         title: '斗法',
@@ -123,6 +128,32 @@ export function shellFixture(): Record<string, unknown> {
         recipeMeta: '{interval} / 炉 · 修为 +{exp}',
       },
       shop: { title: '坊市', subtitle: '以灵石易物', price: '{price} 灵石', owned: '持有 {count}', buyBtn: '买一' },
+      rebirth: {
+        title: '转生',
+        subtitle: '第 {rebirths} 世',
+        empty: '无兵解之法',
+        xpLine: '总修为 {xp}',
+        gainLine: '可得 {daoYun} 道韵',
+        gateLine: '需 {need} 修为',
+        resetTitle: '将散去',
+        keepTitle: '将长存',
+        performBtn: '兵解',
+        confirmTip: '不可逆',
+        confirmBtn: '确认',
+        cancelBtn: '取消',
+        resetLabels: { skills: '修为', items: '材料', gold: '灵石', buffs: '药力', lastEncounter: '旧账' },
+        keepLabels: { gear: '法宝' },
+      },
+      talents: {
+        title: '道韵天赋',
+        subtitle: '现有 {daoYun} 道韵',
+        empty: '无天赋',
+        costRow: '耗 {cost}',
+        needDaoYun: '道韵不足（需 {cost}）',
+        needPrereq: '前置未成',
+        owned: '已点亮',
+        buyBtn: '点亮',
+      },
     },
   };
 }

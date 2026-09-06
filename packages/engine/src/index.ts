@@ -135,3 +135,31 @@ export type {
   ModifierZone,
   StatBreakdown,
 } from './modifiers.js';
+
+// 转生结算框架（#6：兵解/道韵公式/天赋树投影/解锁门控/境界词表）
+export {
+  BASE_REBIRTH_FORMULA,
+  applyRebirthReset,
+  daoYunGainOf,
+  effectiveIntervalOf,
+  gatherSpeedOf,
+  offlineCapOf,
+  rebirthFormulaOf,
+  rebirthGateOf,
+  rebirthOf,
+  rebirthPreviewOf,
+  realmOf,
+  talentContributionsOf,
+  talentNodeOf,
+  totalXpOf,
+  xpMultOf,
+} from './rebirth.js';
+export type {
+  RebirthFormulaParams,
+  RebirthGateView,
+  RebirthPreviewView,
+  RebirthSectionView,
+  RebirthUnlockView,
+  RealmDefView,
+  TalentNodeView,
+} from './rebirth.js';

@@ -373,6 +373,17 @@
       "gear:sell": {
         "not-found": "查无此器",
         "worn": "佩戴中的法器不可卖出"
+      },
+      "rebirth:perform": {
+        "not-available": "此界并无兵解之法",
+        "in-combat": "斗法之中，如何散功？先脱战再说",
+        "no-progress": "道行尚浅（需总修为 {need}，现有 {xp}），兵解无益"
+      },
+      "talent:buy": {
+        "not-available": "此界并无天赋之说",
+        "not-found": "查无此天赋",
+        "prereq": "前置天赋未成，不可越阶点亮",
+        "no-daoyun": "道韵不足（需 {cost}，现有 {daoYun}）"
       }
     },
     "shell": {
@@ -395,7 +406,9 @@
         "craft": "炼制",
         "combat": "斗法",
         "bag": "乾坤袋",
-        "shop": "坊市"
+        "shop": "坊市",
+        "rebirth": "转生",
+        "talents": "道韵"
       },
       "side": { "title": "修行录" },
       "stats": {
@@ -415,6 +428,7 @@
       "icons": { "buff": "丹", "gear": "器", "unknown": "？" },
       "common": {
         "needLevel": "需 {level} 层",
+        "needDaoYun": "需 {daoYun} 道韵（兵解可得）",
         "compareWrap": "（{compare}）",
         "itemListSep": "、"
       },
@@ -446,7 +460,11 @@
         "offlineNoYield": "无所获",
         "offlineExpSuffix": "，修为 +{exp}",
         "craftFail": "「{name}」炼制失败，材料尽失，仅悟得 {exp} 修为",
-        "craftHalt": "「{name}」材料告罄，熄炉中止"
+        "craftHalt": "「{name}」材料告罄，熄炉中止",
+        "rebirthToast": "兵解功成！得道韵 {daoYun}，重入轮回",
+        "rebirthLog": "兵解重修：散尽 {xp} 修为，得道韵 {daoYun}（第 {count} 世）",
+        "talentBuyToast": "天赋【{name}】已点亮（{cost} 道韵）",
+        "talentBuyLog": "点亮【{name}】，尚余 {daoYun} 道韵"
       },
       "pages": {
         "skills": {
@@ -460,7 +478,8 @@
           "running": "进行中",
           "byproduct": "偶得 {icon} {name} {chance}%",
           "actMeta": "{interval} / 次 · 修为 +{exp} · 需 {level} 层",
-          "startBtn": "开始"
+          "startBtn": "开始",
+          "realmLine": "境界 · {realm} · 兵解 {rebirths} 世"
         },
         "craft": {
           "title": "炼制",
@@ -518,6 +537,40 @@
           "price": "{price} 灵石",
           "owned": "持有 {count}",
           "buyBtn": "买一"
+        },
+        "rebirth": {
+          "title": "转生",
+          "subtitle": "兵解重修，道韵长存。此世已是第 {rebirths} 世。",
+          "empty": "此界并无兵解之法。",
+          "xpLine": "本世总修为：{xp}",
+          "gainLine": "兵解可得道韵：{daoYun}",
+          "gateLine": "道行尚浅（需总修为 {need}），再修些时日吧。",
+          "resetTitle": "兵解将散去",
+          "keepTitle": "兵解将长存",
+          "performBtn": "兵解重修",
+          "confirmTip": "兵解不可逆——散尽修为与身外物，唯道韵与法宝长存。当真？",
+          "confirmBtn": "斩断前尘",
+          "cancelBtn": "再想想",
+          "resetLabels": {
+            "skills": "修为",
+            "items": "材料",
+            "gold": "灵石",
+            "buffs": "丹药药力",
+            "lastEncounter": "战绩旧账"
+          },
+          "keepLabels": {
+            "gear": "法宝"
+          }
+        },
+        "talents": {
+          "title": "道韵天赋",
+          "subtitle": "以道韵铭刻道基，生生世世不磨。现有道韵 {daoYun}。",
+          "empty": "此界并无天赋之说。",
+          "costRow": "耗 {cost} 道韵",
+          "needDaoYun": "道韵不足（需 {cost}）",
+          "needPrereq": "需先点亮前置天赋",
+          "owned": "已点亮",
+          "buyBtn": "点亮"
         }
       }
     }
@@ -583,5 +636,35 @@
       "failExpRefund": 0.25,
       "rarityBiasPerLevel": 0.0004
     }
+  },
+  "rebirth": {
+    "reset": ["skills", "items", "gold", "buffs", "lastEncounter"],
+    "keep": ["gear"],
+    "formula": { "base": 0, "coef": 0.0002, "exp": 1, "minProgress": 5000 },
+    "talents": [
+      { "id": "t_xueting", "name": "聆音", "icon": "聆", "description": "采药挖矿，悟性更佳——采集修为 +20%。", "cost": 2, "effects": [{ "stat": "gatherXp", "zone": "mult", "value": 1.2 }] },
+      { "id": "t_ruijin", "name": "锐金诀", "icon": "锐", "description": "以锐金之气淬体——攻击永久 +3。", "cost": 2, "effects": [{ "stat": "atk", "zone": "flat", "value": 3 }] },
+      { "id": "t_xuanyue", "name": "玄岳诀", "icon": "岳", "description": "身如玄岳不动——防御永久 +2。", "cost": 2, "effects": [{ "stat": "def", "zone": "flat", "value": 2 }] },
+      { "id": "t_hunyuan", "name": "浑元诀", "icon": "浑", "description": "浑元一气充盈——气血永久 +30。", "cost": 2, "effects": [{ "stat": "hp", "zone": "flat", "value": 30 }] },
+      { "id": "t_guangfeng", "name": "罡风步", "icon": "风", "description": "踏罡步斗，手脚麻利——采集轮次提速 15%。", "cost": 3, "effects": [{ "stat": "gatherSpeed", "zone": "mult", "value": 1.15 }] },
+      { "id": "t_tongming", "name": "通明诀", "icon": "明", "description": "心若通明，一击破绽立现——会心 +3%。", "cost": 4, "requires": ["t_ruijin"], "effects": [{ "stat": "crit", "zone": "flat", "value": 3 }] },
+      { "id": "t_guixi", "name": "龟息功", "icon": "龟", "description": "闭关龟息，离线修行上限 +1 时辰。", "cost": 6, "effects": [{ "stat": "offlineCap", "zone": "flat", "value": 3600000 }] },
+      { "id": "t_wudao", "name": "悟道通玄", "icon": "悟", "description": "万法殊途同归——全部修为获取 +15%。", "cost": 8, "requires": ["t_xueting"], "effects": [{ "stat": "xpMult", "zone": "mult", "value": 1.15 }] },
+      { "id": "t_yufeng", "name": "御风诀", "icon": "御", "description": "御风而行，采撷如飞——采集轮次再提速 20%。", "cost": 10, "requires": ["t_guangfeng"], "effects": [{ "stat": "gatherSpeed", "zone": "mult", "value": 1.2 }] },
+      { "id": "t_posha", "name": "破煞诀", "icon": "破", "description": "一往无前，破煞斩邪——攻击永久 +10%。", "cost": 12, "requires": ["t_ruijin", "t_tongming"], "effects": [{ "stat": "atk", "zone": "addPct", "value": 10 }] }
+    ],
+    "unlocks": [
+      { "requires": { "daoYun": 10 }, "enemies": ["e8"] }
+    ],
+    "realms": [
+      { "level": 1, "name": "练气期" },
+      { "level": 10, "name": "筑基期" },
+      { "level": 20, "name": "金丹期" },
+      { "level": 35, "name": "元婴期" },
+      { "level": 50, "name": "化神期" },
+      { "level": 65, "name": "炼虚期" },
+      { "level": 80, "name": "合体期" },
+      { "level": 93, "name": "大乘期" }
+    ]
   }
 }

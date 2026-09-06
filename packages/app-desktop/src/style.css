@@ -484,3 +484,39 @@ body {
 .r-epic .gear-name { color: var(--gold); }
 
 .txt-dim { color: var(--muted); }
+
+/* ---------- 转生页 / 天赋树页（#6） ---------- */
+
+.status-realm {
+  font-family: var(--serif);
+  font-size: 12.5px;
+  color: var(--gold-dim);
+  margin: 4px 0 2px;
+}
+
+.btn-danger { border-color: rgba(201, 106, 106, 0.55); color: var(--red); }
+.btn-danger:hover { border-color: var(--red); background: rgba(201, 106, 106, 0.12); }
+
+.rebirth-card { flex-direction: column; align-items: stretch; gap: 2px; }
+.rebirth-card .status-head b { font-size: 15px; }
+.rebirth-gain b { color: var(--gold); }
+
+.rebirth-lists { display: flex; gap: 12px; margin: 12px 0; flex-wrap: wrap; }
+.rebirth-list {
+  flex: 1;
+  min-width: 200px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: var(--panel);
+}
+.rebirth-list p { margin: 6px 0 0; font-size: 13px; }
+.rebirth-list:first-child p { color: var(--red); }
+.rebirth-list:last-child p { color: var(--jade); }
+
+.rebirth-ops { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.rebirth-tip { margin: 0; }
+
+.talent-desc { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+.talent-card.owned { border-color: var(--border-gold); box-shadow: 0 0 12px rgba(224, 200, 143, 0.08); }
+.talent-card.owned header b { color: var(--gold); }

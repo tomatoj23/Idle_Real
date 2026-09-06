@@ -79,11 +79,20 @@ export interface GameState {
   autoEat: boolean;
   /** 同对手上一战记录（对照语基准）。 */
   lastEncounter: Record<string, EncounterRecord>;
+  /** 兵解次数（#6）。 */
+  rebirths: number;
+  /** 道韵余额（天赋购买消耗）。 */
+  daoYun: number;
+  /** 累计道韵（解锁门槛基准，只增不减——花掉的道韵不回锁）。 */
+  daoYunEarned: number;
+  /** 已点亮天赋节点 id（内容包 rebirth.talents 稳定引用，ADR-015）。 */
+  talents: string[];
 }
 
 const RESERVED_KEYS = new Set([
   'gold', 'hp', 'items', 'skills', 'activity', 'rngSeed',
   'gear', 'gearSeq', 'equips', 'buffs', 'combat', 'autoFight', 'autoEat', 'lastEncounter',
+  'rebirths', 'daoYun', 'daoYunEarned', 'talents',
 ]);
 
 export function initialState(
@@ -112,6 +121,10 @@ export function initialState(
     autoFight: cparams.autoFight,
     autoEat: cparams.autoEat,
     lastEncounter: {},
+    rebirths: 0,
+    daoYun: 0,
+    daoYunEarned: 0,
+    talents: [],
   };
 }
 
@@ -210,6 +223,21 @@ export function restoreState(
     }
 
     restoreCombatState(content, raw, state, save);
+
+    // —— 转生（#6）：数值钳非负有限；daoYunEarned 未落盘时以余额兜底
+    //（旧档升级：解锁门槛不应低于当前余额）；talents 逐项字符串去重保序。
+    state.rebirths = Math.max(0, Math.floor(safeNumber(raw.rebirths, 0)));
+    state.daoYun = Math.max(0, safeNumber(raw.daoYun, 0));
+    state.daoYunEarned = Math.max(0, Math.max(state.daoYun, safeNumber(raw.daoYunEarned, 0)));
+    if (Array.isArray(raw.talents)) {
+      const seen = new Set<string>();
+      for (const id of raw.talents) {
+        if (typeof id === 'string' && id.length > 0 && !seen.has(id)) {
+          seen.add(id);
+          state.talents.push(id);
+        }
+      }
+    }
   }
 
   return state;
@@ -352,5 +380,6 @@ export function cloneState(state: GameState): GameState {
     lastEncounter: Object.fromEntries(
       Object.entries(state.lastEncounter).map(([id, rec]) => [id, { ...rec }]),
     ),
+    talents: [...state.talents],
   };
 }

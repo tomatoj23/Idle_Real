@@ -17,11 +17,11 @@
       "minProperties": 1,
       "additionalProperties": false,
       "patternProperties": {
-        "^(activity:start|bag:sell|shop:buy|combat:start|consumable:eat|gear:equip|gear:sell|\\*)$": {
+        "^(activity:start|bag:sell|shop:buy|combat:start|consumable:eat|gear:equip|gear:sell|rebirth:perform|talent:buy|\\*)$": {
           "$ref": "#/definitions/reasonMap"
         }
       },
-      "description": "reject 展示文案：动作协议键 → 理由 code → 文案模板；'*' 为跨动作兜底键（bad-payload/unknown-action 等通用文案），命中序 = 精确动作优先、'*' 次之、键名回显殿后。模板槽位 {level}/{activity}/{item}/{owned}/{cost}/{gold} 由引擎按协议语境填入"
+      "description": "reject 展示文案：动作协议键 → 理由 code → 文案模板；'*' 为跨动作兜底键（bad-payload/unknown-action 等通用文案），命中序 = 精确动作优先、'*' 次之、键名回显殿后。模板槽位 {level}/{activity}/{item}/{owned}/{cost}/{gold}/{daoYun}/{need}/{xp} 由引擎按协议语境填入（rebirth:perform 的 no-progress 带 {need}/{xp}，rebirth-locked 带 {daoYun}；talent:buy 的 no-daoyun 带 {cost}/{daoYun}）"
     },
     "shell": {
       "$ref": "#/definitions/shellTexts"
@@ -102,14 +102,16 @@
         },
         "tabs": {
           "type": "object",
-          "required": ["skills", "craft", "combat", "bag", "shop"],
+          "required": ["skills", "craft", "combat", "bag", "shop", "rebirth", "talents"],
           "additionalProperties": false,
           "properties": {
             "skills": { "$ref": "#/definitions/line" },
             "craft": { "$ref": "#/definitions/line" },
             "combat": { "$ref": "#/definitions/line" },
             "bag": { "$ref": "#/definitions/line" },
-            "shop": { "$ref": "#/definitions/line" }
+            "shop": { "$ref": "#/definitions/line" },
+            "rebirth": { "$ref": "#/definitions/line", "description": "转生页签（#6；包无 rebirth 节时壳不渲染该页签）" },
+            "talents": { "$ref": "#/definitions/line", "description": "天赋页签（#6；同上）" }
           }
         },
         "side": {
@@ -158,10 +160,11 @@
         },
         "common": {
           "type": "object",
-          "required": ["needLevel", "compareWrap", "itemListSep"],
+          "required": ["needLevel", "needDaoYun", "compareWrap", "itemListSep"],
           "additionalProperties": false,
           "properties": {
             "needLevel": { "$ref": "#/definitions/template", "description": "锁定门槛句；槽位 {level}" },
+            "needDaoYun": { "$ref": "#/definitions/template", "description": "道韵门槛锁定句（#6 解锁表）；槽位 {daoYun}" },
             "compareWrap": { "$ref": "#/definitions/template", "description": "胜利对照语包裹模板；槽位 {compare}" },
             "itemListSep": { "$ref": "#/definitions/glyph", "description": "物品名列表分隔符（掉落预览/离线产出）" }
           }
@@ -176,7 +179,8 @@
             "expCombat", "levelupToast", "levelupLog",
             "sellLog", "buyLog", "rejectFallback",
             "offlineToast", "offlineLog", "offlineNoYield", "offlineExpSuffix",
-            "craftFail", "craftHalt"
+            "craftFail", "craftHalt",
+            "rebirthToast", "rebirthLog", "talentBuyToast", "talentBuyLog"
           ],
           "additionalProperties": false,
           "properties": {
@@ -207,17 +211,21 @@
             "offlineNoYield": { "$ref": "#/definitions/template", "description": "离线无产出占位（无槽位）" },
             "offlineExpSuffix": { "$ref": "#/definitions/template", "description": "离线修为后缀模板；槽位 {exp}" },
             "craftFail": { "$ref": "#/definitions/template", "description": "炼制失败修行录行（#5）；槽位 {name}/{exp}" },
-            "craftHalt": { "$ref": "#/definitions/template", "description": "缺料停炉提示（#5）；槽位 {name}" }
+            "craftHalt": { "$ref": "#/definitions/template", "description": "缺料停炉提示（#5）；槽位 {name}" },
+            "rebirthToast": { "$ref": "#/definitions/template", "description": "兵解功成浮提示（#6）；槽位 {daoYun}" },
+            "rebirthLog": { "$ref": "#/definitions/template", "description": "兵解修行录行（#6）；槽位 {xp}/{daoYun}/{count}" },
+            "talentBuyToast": { "$ref": "#/definitions/template", "description": "天赋点亮浮提示（#6）；槽位 {name}/{cost}" },
+            "talentBuyLog": { "$ref": "#/definitions/template", "description": "天赋点亮修行录行（#6）；槽位 {name}/{daoYun}" }
           }
         },
         "pages": {
           "type": "object",
-          "required": ["skills", "craft", "combat", "bag", "shop"],
+          "required": ["skills", "craft", "combat", "bag", "shop", "rebirth", "talents"],
           "additionalProperties": false,
           "properties": {
             "skills": {
               "type": "object",
-              "required": ["empty", "chipLocked", "expSub", "expMax", "actNow", "idle", "stopBtn", "running", "byproduct", "actMeta", "startBtn"],
+              "required": ["empty", "chipLocked", "expSub", "expMax", "actNow", "idle", "stopBtn", "running", "byproduct", "actMeta", "startBtn", "realmLine"],
               "additionalProperties": false,
               "properties": {
                 "empty": { "$ref": "#/definitions/template", "description": "无可修技艺空态（无槽位）" },
@@ -230,7 +238,8 @@
                 "running": { "$ref": "#/definitions/template", "description": "进行中徽标（无槽位）" },
                 "byproduct": { "$ref": "#/definitions/template", "description": "副产出预览；槽位 {icon}/{name}/{chance}" },
                 "actMeta": { "$ref": "#/definitions/template", "description": "活动元信息行；槽位 {interval}/{exp}/{level}" },
-                "startBtn": { "$ref": "#/definitions/template", "description": "开始按钮（无槽位）" }
+                "startBtn": { "$ref": "#/definitions/template", "description": "开始按钮（无槽位）" },
+                "realmLine": { "$ref": "#/definitions/template", "description": "主页境界区行（#6 主页重做 + B2 词表收编）；槽位 {realm}/{rebirths}；包无 rebirth 节或境界词表时壳按缺省降级（realm 空、次数 0）" }
               }
             },
             "craft": {
@@ -308,6 +317,60 @@
                 "price": { "$ref": "#/definitions/template", "description": "售价行；槽位 {price}" },
                 "owned": { "$ref": "#/definitions/template", "description": "持有数行；槽位 {count}" },
                 "buyBtn": { "$ref": "#/definitions/template", "description": "买一按钮（无槽位）" }
+              }
+            },
+            "rebirth": {
+              "type": "object",
+              "required": ["title", "subtitle", "empty", "xpLine", "gainLine", "gateLine", "resetTitle", "keepTitle", "performBtn", "confirmTip", "confirmBtn", "cancelBtn", "resetLabels", "keepLabels"],
+              "additionalProperties": false,
+              "description": "兵解确认页（#6）：预览结算（总修为/可得道韵/门槛）+ 重置/保留清单展示（清单键的展示名归壳文案，键域 = 引擎注册表）+ 两段式确认",
+              "properties": {
+                "title": { "$ref": "#/definitions/line" },
+                "subtitle": { "$ref": "#/definitions/template", "description": "兵解页副标题；槽位 {rebirths}（当前兵解次数）" },
+                "empty": { "$ref": "#/definitions/template", "description": "包无 rebirth 节空态（无槽位）" },
+                "xpLine": { "$ref": "#/definitions/template", "description": "本世总修为行；槽位 {xp}（引擎 rebirthPreviewOf）" },
+                "gainLine": { "$ref": "#/definitions/template", "description": "可得道韵行；槽位 {daoYun}" },
+                "gateLine": { "$ref": "#/definitions/template", "description": "门槛未达提示；槽位 {need}" },
+                "resetTitle": { "$ref": "#/definitions/line", "description": "重置清单标题" },
+                "keepTitle": { "$ref": "#/definitions/line", "description": "保留清单标题" },
+                "performBtn": { "$ref": "#/definitions/template", "description": "兵解按钮（无槽位）" },
+                "confirmTip": { "$ref": "#/definitions/template", "description": "确认阶段提示（无槽位）" },
+                "confirmBtn": { "$ref": "#/definitions/template", "description": "确认按钮（无槽位）" },
+                "cancelBtn": { "$ref": "#/definitions/template", "description": "取消按钮（无槽位）" },
+                "resetLabels": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "additionalProperties": false,
+                  "patternProperties": {
+                    "^(skills|items|gold|buffs|lastEncounter)$": { "$ref": "#/definitions/line" }
+                  },
+                  "description": "重置清单键展示名（键域 = 引擎重置注册表，与 rebirth.schema enum 同源）"
+                },
+                "keepLabels": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "additionalProperties": false,
+                  "patternProperties": {
+                    "^(gear)$": { "$ref": "#/definitions/line" }
+                  },
+                  "description": "保留清单键展示名（键域 = 引擎保留注册表）"
+                }
+              }
+            },
+            "talents": {
+              "type": "object",
+              "required": ["title", "subtitle", "empty", "costRow", "needDaoYun", "needPrereq", "owned", "buyBtn"],
+              "additionalProperties": false,
+              "description": "道韵天赋树页（#6）：节点名/图标/描述/消耗全部来自 rebirth.talents（树数据 100% content），壳只承载结构性文案",
+              "properties": {
+                "title": { "$ref": "#/definitions/line" },
+                "subtitle": { "$ref": "#/definitions/template", "description": "天赋页副标题；槽位 {daoYun}（道韵余额）" },
+                "empty": { "$ref": "#/definitions/template", "description": "包无天赋树空态（无槽位）" },
+                "costRow": { "$ref": "#/definitions/template", "description": "消耗行；槽位 {cost}" },
+                "needDaoYun": { "$ref": "#/definitions/template", "description": "道韵不足锁定文案；槽位 {cost}" },
+                "needPrereq": { "$ref": "#/definitions/template", "description": "前置未点亮锁定文案（无槽位）" },
+                "owned": { "$ref": "#/definitions/template", "description": "已点亮徽标（无槽位）" },
+                "buyBtn": { "$ref": "#/definitions/template", "description": "点亮按钮（无槽位）" }
               }
             }
           }

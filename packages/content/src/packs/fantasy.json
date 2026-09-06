@@ -391,6 +391,17 @@
       "bag:sell": {
         "bad-payload": "Cannot sell that."
       },
+      "rebirth:perform": {
+        "not-available": "Rebirth is not part of this realm.",
+        "in-combat": "You cannot dissolve your cultivation mid-fight.",
+        "no-progress": "Too little progress (need {need} total exp, you have {xp})."
+      },
+      "talent:buy": {
+        "not-available": "Talents are not part of this realm.",
+        "not-found": "No such talent.",
+        "prereq": "Light its prerequisites first.",
+        "no-daoyun": "Not enough attunement: need {cost}, you have {daoYun}."
+      },
       "*": {
         "bad-payload": "That action cannot be performed."
       }
@@ -415,7 +426,9 @@
         "craft": "Crafting",
         "combat": "Combat",
         "bag": "Bag",
-        "shop": "Shop"
+        "shop": "Shop",
+        "rebirth": "Rebirth",
+        "talents": "Talents"
       },
       "side": {
         "title": "Chronicle"
@@ -442,6 +455,7 @@
       },
       "common": {
         "needLevel": "Requires level {level}",
+        "needDaoYun": "Requires {daoYun} attunement (lifetime)",
         "compareWrap": "({compare})",
         "itemListSep": ", "
       },
@@ -473,7 +487,11 @@
         "offlineNoYield": "nothing",
         "offlineExpSuffix": "+{exp} exp",
         "craftFail": "{name} failed — materials lost, {exp} exp gleaned.",
-        "craftHalt": "Out of materials — {name} halted."
+        "craftHalt": "Out of materials — {name} halted.",
+        "rebirthToast": "Reborn! {daoYun} attunement gained.",
+        "rebirthLog": "Rebirth: {xp} exp dissolved, {daoYun} attunement gained (life {count}).",
+        "talentBuyToast": "Talent {name} lit ({cost} attunement).",
+        "talentBuyLog": "Lit {name} — {daoYun} attunement left."
       },
       "pages": {
         "skills": {
@@ -487,7 +505,8 @@
           "running": "Active",
           "byproduct": "Bonus: {icon} {name} ({chance}%)",
           "actMeta": "{interval} a try · {exp} exp · Lv {level}",
-          "startBtn": "Train"
+          "startBtn": "Train",
+          "realmLine": "Rank · {realm} · Reborn {rebirths} times"
         },
         "craft": {
           "title": "Crafting",
@@ -545,6 +564,40 @@
           "price": "{price} g",
           "owned": "Owned: {count}",
           "buyBtn": "Buy 1"
+        },
+        "rebirth": {
+          "title": "Rebirth",
+          "subtitle": "Dissolve this life, keep the attunement. Life {rebirths} so far.",
+          "empty": "Rebirth is not part of this realm.",
+          "xpLine": "Total exp this life: {xp}",
+          "gainLine": "Attunement on rebirth: {daoYun}",
+          "gateLine": "Too little progress — need {need} total exp first.",
+          "resetTitle": "Dissolved",
+          "keepTitle": "Kept",
+          "performBtn": "Dissolve & Rebuild",
+          "confirmTip": "Cannot be undone — progress and purse are lost; attunement and gear remain.",
+          "confirmBtn": "Sever this life",
+          "cancelBtn": "Not yet",
+          "resetLabels": {
+            "skills": "Exp",
+            "items": "Materials",
+            "gold": "Gold",
+            "buffs": "Elixirs",
+            "lastEncounter": "Fight records"
+          },
+          "keepLabels": {
+            "gear": "Gear"
+          }
+        },
+        "talents": {
+          "title": "Attunement Talents",
+          "subtitle": "Etch your dao into the soul — it survives every rebirth. Attunement: {daoYun}.",
+          "empty": "Talents are not part of this realm.",
+          "costRow": "{cost} attunement",
+          "needDaoYun": "Not enough attunement (need {cost})",
+          "needPrereq": "Light its prerequisites first",
+          "owned": "Lit",
+          "buyBtn": "Light"
         }
       }
     }
@@ -560,5 +613,24 @@
       { "id": "accessory", "name": "Charm", "icon": "C" }
     ],
     "progression": { "maxLevel": 20 }
+  },
+  "rebirth": {
+    "reset": ["skills", "items", "gold", "buffs", "lastEncounter"],
+    "keep": ["gear"],
+    "formula": { "base": 1, "coef": 0.0001, "exp": 1.2, "minProgress": 2000 },
+    "talents": [
+      { "id": "t_mind", "name": "Sharp Mind", "icon": "M", "description": "All experience gain +15%.", "cost": 2, "effects": [{ "stat": "xpMult", "zone": "mult", "value": 1.15 }] },
+      { "id": "t_blade", "name": "Blade Mastery", "icon": "B", "description": "Attack permanently +4.", "cost": 2, "effects": [{ "stat": "atk", "zone": "flat", "value": 4 }] },
+      { "id": "t_hands", "name": "Swift Hands", "icon": "S", "description": "Gathering cycles run 20% faster.", "cost": 3, "effects": [{ "stat": "gatherSpeed", "zone": "mult", "value": 1.2 }] },
+      { "id": "t_skin", "name": "Iron Skin", "icon": "I", "description": "Defense permanently +3.", "cost": 2, "requires": ["t_blade"], "effects": [{ "stat": "def", "zone": "flat", "value": 3 }] },
+      { "id": "t_wisdom", "name": "Deep Insight", "icon": "W", "description": "Gathering yields 25% more experience.", "cost": 5, "requires": ["t_mind"], "effects": [{ "stat": "gatherXp", "zone": "mult", "value": 1.25 }] }
+    ],
+    "realms": [
+      { "level": 1, "name": "Apprentice" },
+      { "level": 5, "name": "Adept" },
+      { "level": 10, "name": "Mage" },
+      { "level": 15, "name": "Archmage" },
+      { "level": 20, "name": "Legend" }
+    ]
   }
 }

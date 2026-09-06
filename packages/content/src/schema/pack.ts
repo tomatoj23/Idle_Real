@@ -40,7 +40,10 @@
  *      跨字段递增由语义检查补全；
  *    - 原型继承三检（#16，ADR-015/SexyMUD ADR-0030）：prototypeKey 须等
  *      于自身 id、prototypeParent 须指向同集合内已声明 prototypeKey 的
- *      条目、父链不得成环（展平留待后续票，此处为门禁侧保险）。
+ *      条目、父链不得成环（展平留待后续票，此处为门禁侧保险）；
+ *    - 转生节（#6，可选节）：重置/保留清单键域 = 引擎注册表闭集且两集
+ *      不相交；天赋树 id 去重、requires xref + DFS 查环（菱形合法）、效果
+ *      修饰符区约束；解锁表目标 xref + 同目标重复拒绝；境界词表同层数重复拒绝。
  */
 
 import affixPoolSchemaJson from './affix-pool.schema.json';
@@ -51,11 +54,22 @@ import enemySchemaJson from './enemy.schema.json';
 import gearDropSchemaJson from './gear-drop.schema.json';
 import itemSchemaJson from './item.schema.json';
 import raritySchemaJson from './rarity.schema.json';
+import rebirthSchemaJson from './rebirth.schema.json';
 import recipeSchemaJson from './recipe.schema.json';
 import shopSchemaJson from './shop.schema.json';
 import skillSchemaJson from './skill.schema.json';
 import textsSchemaJson from './texts.schema.json';
-import type { Config, ContentPack, Item, Modifier, ModifierCondition, Range, Skill } from './types.js';
+import type {
+  Config,
+  ContentPack,
+  Item,
+  Modifier,
+  ModifierCondition,
+  Range,
+  RebirthSection,
+  Skill,
+  TalentNode,
+} from './types.js';
 import { validateContent } from './validate.js';
 import type { ContentError, JsonSchema } from './validate.js';
 
@@ -71,6 +85,7 @@ const combatTextSchema = combatTextSchemaJson as unknown as JsonSchema;
 const textsSchema = textsSchemaJson as unknown as JsonSchema;
 const shopSchema = shopSchemaJson as unknown as JsonSchema;
 const configSchema = configSchemaJson as unknown as JsonSchema;
+const rebirthSchema = rebirthSchemaJson as unknown as JsonSchema;
 
 /** 内容节 → 该节值的独立 schema。 */
 const SECTION_SCHEMAS = {
@@ -86,6 +101,7 @@ const SECTION_SCHEMAS = {
   texts: textsSchema,
   shop: shopSchema,
   config: configSchema,
+  rebirth: rebirthSchema,
 } as const;
 
 type SectionName = keyof typeof SECTION_SCHEMAS;
@@ -93,7 +109,7 @@ type SectionName = keyof typeof SECTION_SCHEMAS;
 const SECTION_NAMES = Object.keys(SECTION_SCHEMAS) as readonly SectionName[];
 
 /** 可选内容节：缺省合法（引擎安全兜底），存在则整节强校验。 */
-const OPTIONAL_SECTIONS: ReadonlySet<SectionName> = new Set(['config']);
+const OPTIONAL_SECTIONS: ReadonlySet<SectionName> = new Set(['config', 'rebirth']);
 
 export type PackValidationResult =
   | { readonly ok: true; readonly pack: ContentPack }
@@ -181,6 +197,9 @@ function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
   // 系别存在性（#25 键域开放）：注册表构建一次，三处引用面统一对照。
   const elementIds = new Set(pack.elements.map((entry) => entry.id));
   checkElementRefs(pack, elementIds, errors);
+
+  // 转生节（#6）：可选节，存在则查清单键域、天赋树 xref/查环、解锁表 xref、境界词表。
+  checkRebirth(pack, enemyIndex, skillIndex, errors);
 
   checkPrototypes(pack.skills, '/skills', errors);
   checkPrototypes(pack.items, '/items', errors);
@@ -735,6 +754,170 @@ function checkElementRefs(
     });
     if (item.feature !== undefined) {
       checkCondition(item.feature.condition, `/items/${i}/feature/condition/element`);
+    }
+  });
+}
+
+/* ==================== 转生节（#6） ==================== */
+
+/**
+ * 重置/保留清单键域 = 引擎注册表闭集（与 rebirth.schema.json 的 enum 钉死一致，
+ * 单一来源以 schema 为准，此处为语义侧同值镜像；引擎对未知键防御性忽略）。
+ * reset 键由引擎逐键解释重置语义；keep 键由引擎绑定保留语义（gear 保留时
+ * 佩戴表与 uid 序列器随动）；瞬态（活动/战斗/气血）由引擎一律清空回满，
+ * 不进清单。协议文档：docs/agents/content.md「rebirth 转生节」。
+ */
+const REBIRTH_RESET_KEYS: ReadonlySet<string> = new Set(['skills', 'items', 'gold', 'buffs', 'lastEncounter']);
+const REBIRTH_KEEP_KEYS: ReadonlySet<string> = new Set(['gear']);
+
+/**
+ * 转生节语义检查（#6，可选节，存在才查）：
+ * - 重置/保留清单键域闭集 + 两集不相交（兵解语义不能同时清零又保留）；
+ * - 天赋树：id 去重（state.talents 存档键）、requires xref 同树节点 + 查环、
+ *   效果修饰符区约束（乘法区 > 0、加法%区 ≥ −100，与铭纹同律）；
+ * - 解锁表：enemies/skills 引用 xref（enemies/skills 节）、同目标重复登记拒绝；
+ * - 境界词表：同层数重复拒绝（映射歧义）。
+ */
+function checkRebirth(
+  pack: ContentPack,
+  enemies: ReadonlyMap<string, number>,
+  skills: ReadonlyMap<string, number>,
+  errors: ContentError[],
+): void {
+  const section: RebirthSection | undefined = pack.rebirth;
+  if (section === undefined) return;
+
+  // —— 清单键域与互斥。
+  for (const [i, key] of section.reset.entries()) {
+    if (!REBIRTH_RESET_KEYS.has(key)) {
+      errors.push({
+        path: `/rebirth/reset/${i}`,
+        keyword: 'xref',
+        message: `重置键 "${key}" 不在引擎重置注册表（${[...REBIRTH_RESET_KEYS].join('/')}）`,
+      });
+    }
+  }
+  for (const [i, key] of section.keep.entries()) {
+    if (!REBIRTH_KEEP_KEYS.has(key)) {
+      errors.push({
+        path: `/rebirth/keep/${i}`,
+        keyword: 'xref',
+        message: `保留键 "${key}" 不在引擎保留注册表（${[...REBIRTH_KEEP_KEYS].join('/')}）`,
+      });
+    }
+  }
+  const resetSet = new Set(section.reset);
+  for (const [i, key] of section.keep.entries()) {
+    if (resetSet.has(key)) {
+      errors.push({
+        path: `/rebirth/keep/${i}`,
+        keyword: 'shape',
+        message: `保留键 "${key}" 与重置集冲突（同一资产不能既重置又保留）`,
+      });
+    }
+  }
+
+  // —— 天赋树：id 去重 + requires xref + 查环 + 效果修饰符区约束。
+  const talents: readonly TalentNode[] = section.talents;
+  pushDuplicates(talents, '/rebirth/talents', errors);
+  const talentIds = new Set(talents.map((node) => node.id));
+  talents.forEach((node, i) => {
+    const at = (field: string) => `/rebirth/talents/${i}/${field}`;
+    for (const [j, req] of (node.requires ?? []).entries()) {
+      if (!talentIds.has(req)) {
+        errors.push({
+          path: at(`requires/${j}`),
+          keyword: 'xref',
+          message: `前置节点 "${req}" 不在同树 talents`,
+        });
+      }
+    }
+    checkModifiers(node.effects ?? [], at('effects'), errors);
+  });
+  // 查环（门禁侧保险，与原型继承同律）：DFS 三色标记，回边即环——
+  // 菱形依赖（两节点共享前置）合法，不误报；环上每个成员各报一次。
+  const requiresOf = new Map<string, readonly string[]>(
+    talents.map((node) => [node.id, node.requires ?? []]),
+  );
+  const mark = new Map<string, 'visiting' | 'done'>();
+  const detectsCycle = (id: string): boolean => {
+    const m = mark.get(id);
+    if (m === 'visiting') return true;
+    if (m === 'done') return false;
+    mark.set(id, 'visiting');
+    let cycle = false;
+    for (const req of requiresOf.get(id) ?? []) {
+      if (talentIds.has(req) && detectsCycle(req)) cycle = true;
+    }
+    mark.set(id, 'done');
+    return cycle;
+  };
+  talents.forEach((node, i) => {
+    if (detectsCycle(node.id)) {
+      errors.push({
+        path: `/rebirth/talents/${i}/requires`,
+        keyword: 'shape',
+        message: `天赋 "${node.id}" 位于前置环上（requires 链成环）`,
+      });
+    }
+  });
+
+  // —— 解锁表：目标 xref + 同目标重复登记拒绝。
+  const claimedEnemies = new Map<string, number>();
+  const claimedSkills = new Map<string, number>();
+  section.unlocks?.forEach((unlock, i) => {
+    for (const [j, enemyId] of (unlock.enemies ?? []).entries()) {
+      if (!enemies.has(enemyId)) {
+        errors.push({
+          path: `/rebirth/unlocks/${i}/enemies/${j}`,
+          keyword: 'xref',
+          message: `解锁目标敌人 "${enemyId}" 不存在于 enemies`,
+        });
+      }
+      const first = claimedEnemies.get(enemyId);
+      if (first !== undefined) {
+        errors.push({
+          path: `/rebirth/unlocks/${i}/enemies/${j}`,
+          keyword: 'duplicate',
+          message: `敌人 "${enemyId}" 已在第 ${first} 条解锁表登记（同目标重复）`,
+        });
+      } else {
+        claimedEnemies.set(enemyId, i);
+      }
+    }
+    for (const [j, skillId] of (unlock.skills ?? []).entries()) {
+      if (!skills.has(skillId)) {
+        errors.push({
+          path: `/rebirth/unlocks/${i}/skills/${j}`,
+          keyword: 'xref',
+          message: `解锁目标技艺 "${skillId}" 不存在于 skills`,
+        });
+      }
+      const first = claimedSkills.get(skillId);
+      if (first !== undefined) {
+        errors.push({
+          path: `/rebirth/unlocks/${i}/skills/${j}`,
+          keyword: 'duplicate',
+          message: `技艺 "${skillId}" 已在第 ${first} 条解锁表登记（同目标重复）`,
+        });
+      } else {
+        claimedSkills.set(skillId, i);
+      }
+    }
+  });
+
+  // —— 境界词表：同层数重复拒绝（层数 → 称号映射歧义）。
+  const seenLevels = new Map<number, number>();
+  section.realms?.forEach((realm, i) => {
+    const first = seenLevels.get(realm.level);
+    if (first !== undefined) {
+      errors.push({
+        path: `/rebirth/realms/${i}`,
+        keyword: 'duplicate',
+        message: `境界层数 ${realm.level} 与第 ${first} 项重复`,
+      });
+    } else {
+      seenLevels.set(realm.level, i);
     }
   });
 }

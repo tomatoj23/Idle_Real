@@ -425,13 +425,17 @@ export interface ShellTopbar {
   readonly hpSigil: string;
 }
 
-/** 页签文案（键 = TabId 协议键，壳钉死五键；craft 随 #5 加入）。 */
+/** 页签文案（键 = TabId 协议键，壳钉死七键；craft 随 #5、rebirth/talents 随 #6 加入）。 */
 export interface ShellTabs {
   readonly skills: string;
   readonly craft: string;
   readonly combat: string;
   readonly bag: string;
   readonly shop: string;
+  /** 转生页签（#6）；包无 rebirth 节时壳不渲染该页签。 */
+  readonly rebirth: string;
+  /** 天赋页签（#6）；同上。 */
+  readonly talents: string;
 }
 
 /** 侧栏（修行录）文案。 */
@@ -459,9 +463,10 @@ export interface ShellIcons {
   readonly unknown: string;
 }
 
-/** 跨页复用小模板：needLevel 槽位 {level}；compareWrap 槽位 {compare}；itemListSep 物品名分隔符。 */
+/** 跨页复用小模板：needLevel 槽位 {level}；needDaoYun 槽位 {daoYun}（#6）；compareWrap 槽位 {compare}；itemListSep 物品名分隔符。 */
 export interface ShellCommon {
   readonly needLevel: string;
+  readonly needDaoYun: string;
   readonly compareWrap: string;
   readonly itemListSep: string;
 }
@@ -499,6 +504,14 @@ export interface ShellEvents {
   readonly craftFail: string;
   /** 缺料停炉提示（#5，craft-halt 事件）。 */
   readonly craftHalt: string;
+  /** 兵解功成浮提示（#6，rebirth 事件；槽位 {daoYun}）。 */
+  readonly rebirthToast: string;
+  /** 兵解修行录行（#6；槽位 {xp}/{daoYun}/{count}）。 */
+  readonly rebirthLog: string;
+  /** 天赋点亮浮提示（#6，talent:buy 事件；槽位 {name}/{cost}）。 */
+  readonly talentBuyToast: string;
+  /** 天赋点亮修行录行（#6；槽位 {name}/{daoYun}）。 */
+  readonly talentBuyLog: string;
 }
 
 /** 修炼页文案。 */
@@ -514,6 +527,8 @@ export interface ShellPageSkills {
   readonly byproduct: string;
   readonly actMeta: string;
   readonly startBtn: string;
+  /** 主页境界区行（#6 + B2 词表收编；槽位 {realm}/{rebirths}）。 */
+  readonly realmLine: string;
 }
 
 /** 斗法页文案。 */
@@ -588,13 +603,62 @@ export interface ShellPageCraft {
   readonly recipeMeta: string;
 }
 
-/** 页面文案分组（键 = TabId 协议键；craft 随 #5 加入）。 */
+/**
+ * 兵解确认页文案（#6）：预览结算（总修为/可得道韵/门槛，数值来自引擎
+ * rebirthPreviewOf）+ 重置/保留清单展示 + 两段式确认；清单键展示名归壳文案
+ * （键域 = 引擎注册表，与 rebirth.schema enum 同源），禁壳内键名直出题材词。
+ */
+export interface ShellPageRebirth {
+  readonly title: string;
+  /** 副标题；槽位 {rebirths} = 当前兵解次数。 */
+  readonly subtitle: string;
+  /** 包无 rebirth 节空态。 */
+  readonly empty: string;
+  /** 本世总修为行；槽位 {xp}。 */
+  readonly xpLine: string;
+  /** 可得道韵行；槽位 {daoYun}。 */
+  readonly gainLine: string;
+  /** 门槛未达提示；槽位 {need}。 */
+  readonly gateLine: string;
+  readonly resetTitle: string;
+  readonly keepTitle: string;
+  readonly performBtn: string;
+  readonly confirmTip: string;
+  readonly confirmBtn: string;
+  readonly cancelBtn: string;
+  /** 重置清单键展示名：键 = 引擎重置注册表键（skills/items/gold/buffs/lastEncounter）。 */
+  readonly resetLabels: Readonly<Record<string, string>>;
+  /** 保留清单键展示名：键 = 引擎保留注册表键（gear）。 */
+  readonly keepLabels: Readonly<Record<string, string>>;
+}
+
+/**
+ * 道韵天赋树页文案（#6）：节点名/图标/描述/消耗全部来自 rebirth.talents
+ * （树数据 100% content），壳只承载结构性文案。
+ */
+export interface ShellPageTalents {
+  readonly title: string;
+  /** 副标题；槽位 {daoYun} = 道韵余额。 */
+  readonly subtitle: string;
+  readonly empty: string;
+  /** 消耗行；槽位 {cost}。 */
+  readonly costRow: string;
+  /** 道韵不足锁定文案；槽位 {cost}。 */
+  readonly needDaoYun: string;
+  readonly needPrereq: string;
+  readonly owned: string;
+  readonly buyBtn: string;
+}
+
+/** 页面文案分组（键 = TabId 协议键；craft 随 #5、rebirth/talents 随 #6 加入）。 */
 export interface ShellPages {
   readonly skills: ShellPageSkills;
   readonly craft: ShellPageCraft;
   readonly combat: ShellPageCombat;
   readonly bag: ShellPageBag;
   readonly shop: ShellPageShop;
+  readonly rebirth: ShellPageRebirth;
+  readonly talents: ShellPageTalents;
 }
 
 /** 壳层文案节（#26）：模板槽 {slot} 由壳按语境填入，缺键回显键名（裁决 ④ 同策略）。 */
@@ -609,6 +673,80 @@ export interface ShellTexts {
   readonly common: ShellCommon;
   readonly events: ShellEvents;
   readonly pages: ShellPages;
+}
+
+/* ---------- 转生系统（#6：兵解重修 / 道韵 / 天赋树） ---------- */
+
+/**
+ * 天赋树节点（rebirth.talents 条目）：树数据 100% 来自 content（换包换整棵树）。
+ * id 一经发布不可变（state.talents 存档键，ADR-015）；效果 = 引擎标准修饰符
+ * 走 ADR-011 聚合管线（来源 kind=talent），生效须引擎消费点
+ * （docs/agents/content.md stat 消费点注册表）。
+ */
+export interface TalentNode {
+  readonly id: string;
+  readonly name: string;
+  readonly icon?: string;
+  readonly description?: string;
+  /** 点亮消耗（道韵余额）。 */
+  readonly cost: number;
+  /** 前置节点 id 列表：全部点亮才可购买（校验 xref + 查环）。 */
+  readonly requires?: readonly string[];
+  /** 点亮后常驻的效果修饰符组。 */
+  readonly effects?: readonly Modifier[];
+}
+
+/** 道韵公式参数（rebirth.formula）：缺省字段逐项回落引擎基线（#020 同款分策）。 */
+export interface RebirthFormula {
+  /** 固定入账（缺省 0）。 */
+  readonly base?: number;
+  /** 修为系数（缺省 0.0002）。 */
+  readonly coef?: number;
+  /** 修为指数（缺省 1）。 */
+  readonly exp?: number;
+  /** 兵解门槛：总修为须 ≥ 此值（缺省 5000）。 */
+  readonly minProgress?: number;
+}
+
+/**
+ * 解锁表条目（rebirth.unlocks）：道韵门槛（按累计道韵判定，只增不减——
+ * 花掉的道韵不回锁）解锁新内容；目标引用合法性由语义校验 xref。
+ */
+export interface RebirthUnlock {
+  readonly requires: { readonly daoYun: number };
+  /** 解锁的敌人 id 列表（开战门控 + 壳锁定态）。 */
+  readonly enemies?: readonly string[];
+  /** 解锁的技艺 id 列表（activity:start 门控 + 壳锁定态）。 */
+  readonly skills?: readonly string[];
+}
+
+/** 境界词表条目（rebirth.realms，B2 收编）：斗法层数 → 称号映射。 */
+export interface RealmDef {
+  readonly level: number;
+  readonly name: string;
+}
+
+/**
+ * 转生节（#6，包级可选：省略 = 无转生玩法，引擎零降级路径）。
+ * 重置/保留清单键域 = 引擎注册表闭集（schema 只钉字符串形态，键域合法性由
+ * 语义校验对照注册表收口，#021/#25 先例）：reset 键由引擎逐键解释重置语义，
+ * keep 键由引擎绑定保留语义（gear 保留时佩戴表与 uid 序列器随动）；
+ * 两清单均未登记的资产键默认保留（兵解不吞资产）。
+ * 道韵公式形状归引擎机制（floor(base + coef × 总修为^exp)），系数归本节。
+ */
+export interface RebirthSection {
+  /** 重置集：兵解时清零的资产键（skills/items/gold/buffs/lastEncounter）。 */
+  readonly reset: readonly string[];
+  /** 保留集：兵解时保留的资产键（gear）。 */
+  readonly keep: readonly string[];
+  /** 道韵公式参数（缺省 = 引擎基线）。 */
+  readonly formula?: RebirthFormula;
+  /** 天赋树（100% 来自 content）。 */
+  readonly talents: readonly TalentNode[];
+  /** 解锁表（道韵门槛 → 新内容）。 */
+  readonly unlocks?: readonly RebirthUnlock[];
+  /** 境界词表（B2 收编；缺省 = 壳不显示境界）。 */
+  readonly realms?: readonly RealmDef[];
 }
 
 /* ---------- 坊市 ---------- */
@@ -748,4 +886,8 @@ export interface ContentPack {
   readonly shop: readonly ShopEntry[];
   /** 全局配置（槽位数据化）；可选节，省略=无槽位数据（引擎安全兜底）。 */
   readonly config?: Config;
+  /**
+   * 转生节（#6）；可选节，省略 = 无转生玩法（引擎零降级路径，壳不渲染转生页签）。
+   */
+  readonly rebirth?: RebirthSection;
 }

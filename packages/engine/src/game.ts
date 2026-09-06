@@ -58,6 +58,18 @@ import {
 } from './state.js';
 import type { Clock, GameAction, GameContent, PlayerStatsView, SaveData } from './types.js';
 import {
+  applyRebirthReset,
+  effectiveIntervalOf,
+  gatherSpeedOf,
+  offlineCapOf,
+  rebirthGateOf,
+  rebirthOf,
+  rebirthPreviewOf,
+  talentContributionsOf,
+  talentNodeOf,
+  xpMultOf,
+} from './rebirth.js';
+import {
   aggregateStats,
   type AggregationContext,
   type Contribution,
@@ -217,11 +229,16 @@ export function createGame(options: CreateGameOptions): Game {
 
   /**
    * 全部属性贡献：静态注入（createGame.contributions）+ 装备实例投影
-   * （flat）+ 生效中的丹药 buff（倍率区 mult / 暴击百分点 flat）。
-   * 顺带清理过期 buff（读时清理，旧版同策略）。
+   * （flat）+ 生效中的丹药 buff（倍率区 mult / 暴击百分点 flat）+
+   * 已点亮天赋（rebirth.talents → 标准修饰符，#6；管线投影单一来源
+   * talentContributionsOf，与测试/第二题材共用）。顺带清理过期 buff
+   * （读时清理，旧版同策略）。
    */
   function playerContributions(): Contribution[] {
-    const out: Contribution[] = [...contributions];
+    const out: Contribution[] = [
+      ...contributions,
+      ...talentContributionsOf(content, state.talents),
+    ];
     for (const { gear, item } of wornGear()) {
       out.push(...gearContributions(content, gear, item.bonuses ?? {}, item.name));
     }
@@ -306,17 +323,22 @@ export function createGame(options: CreateGameOptions): Game {
     return true;
   }
 
-  function grantExp(skill: SkillView, amount: number, quiet: boolean): void {
-    if (!(amount > 0)) return;
+  /** 发放修为：返回实发值（倍率后取整）——离线事件载荷与实际入账同源。 */
+  function grantExp(skill: SkillView, amount: number, quiet: boolean): number {
+    if (!(amount > 0)) return 0;
+    // 全经验倍率（xpMult 消费点，#6）：gather/craft/combat/离线同路单点，
+    // 与采集特化倍率 gatherXp（调用方先行叠乘）自然组合。
+    const granted = Math.round(amount * xpMultOf(playerContributions()));
+    if (!(granted > 0)) return 0;
     const before = levelFromXp(xpOf(skill.id), pparams);
     const entry = state.skills[skill.id] ?? { xp: 0 };
-    entry.xp += amount;
+    entry.xp += granted;
     state.skills[skill.id] = entry;
     if (!quiet) {
       events.emit({
         type: 'exp',
         time,
-        data: { skillId: skill.id, skillName: skill.name, amount },
+        data: { skillId: skill.id, skillName: skill.name, amount: granted },
       });
     }
     const after = levelFromXp(entry.xp, pparams);
@@ -329,6 +351,7 @@ export function createGame(options: CreateGameOptions): Game {
         });
       }
     }
+    return granted;
   }
 
   /** 拒绝事件：展示文案由 texts 节按 action+reason 解析（#019），协议 code 保留。 */
@@ -410,9 +433,15 @@ export function createGame(options: CreateGameOptions): Game {
       return;
     }
     active.progress += dt;
+    // 采集速度（gatherSpeed 消费点，#6）：有效间隔 = 基础间隔 ÷ 速度倍率
+    //（在线/离线/快照投影同调 effectiveIntervalOf，禁第二份缩放式）。
+    const interval = effectiveIntervalOf(
+      found.activity.interval,
+      gatherSpeedOf(playerContributions()),
+    );
     let guard = 0;
-    while (active.progress >= found.activity.interval && guard++ < 1_000_000) {
-      active.progress -= found.activity.interval;
+    while (active.progress >= interval && guard++ < 1_000_000) {
+      active.progress -= interval;
       completeActivityOnce(found.skill, found.activity);
     }
   }
@@ -810,6 +839,10 @@ export function createGame(options: CreateGameOptions): Game {
   function settleOffline(elapsedMs: number): void {
     if (elapsedMs <= 0) return;
     if (state.combat) state.combat = null; // 离线不可战斗：视作离场休整，回满血由下方统一处理
+    // 离线上限（offlineCap 消费点，#6）：Σflat 毫秒，≤ 0 = 不设限（基线行为
+    // 完全一致）；超限部分不入账（上限的语义本体）。
+    const cap = offlineCapOf(playerContributions());
+    if (cap > 0 && elapsedMs > cap) elapsedMs = cap;
     const active = state.activity;
     if (!active) return;
     const skill = findSkill(content, active.skillId);
@@ -828,9 +861,11 @@ export function createGame(options: CreateGameOptions): Game {
     }
     const { activity } = found;
 
+    // 采集速度（gatherSpeed 消费点，#6）：有效间隔与在线 settleActivity 同调。
+    const interval = effectiveIntervalOf(activity.interval, gatherSpeedOf(playerContributions()));
     const total = active.progress + elapsedMs;
-    const cycles = Math.floor(total / activity.interval);
-    active.progress = total % activity.interval;
+    const cycles = Math.floor(total / interval);
+    active.progress = total - cycles * interval;
 
     state.hp = hpCap(); // 离线全程脱战
 
@@ -850,8 +885,13 @@ export function createGame(options: CreateGameOptions): Game {
       }
     }
 
+    // 采集修为乘数（gatherXp 消费点）先行叠乘，xpMult 由 grantExp 单点消费
+    // ——离线/在线语义对称（在线 completeActivityOnce 同式）。
+    const gatherMult =
+      aggregateStats({ gatherXp: 1 }, playerContributions(), {}).gatherXp?.value ?? 1;
+    const expBase = Math.round(activity.exp * cycles * gatherMult);
     const before = levelFromXp(xpOf(skill.id));
-    grantExp(skill, activity.exp * cycles, true);
+    const expTotal = grantExp(skill, expBase, true);
     const after = levelFromXp(xpOf(skill.id));
     const levels =
       after > before
@@ -867,7 +907,7 @@ export function createGame(options: CreateGameOptions): Game {
         skillName: skill.name,
         activityName: activity.name,
         cycles,
-        exp: cycles * activity.exp,
+        exp: expTotal,
         items,
         levels,
       },
@@ -941,11 +981,12 @@ export function createGame(options: CreateGameOptions): Game {
       }
     }
 
-    const expTotal = Math.round(
+    const expBase = Math.round(
       successes * recipe.exp + failures * recipe.exp * Math.max(0, crparams.failExpRefund),
     );
     const before = levelFromXp(xpOf(skill.id));
-    grantExp(skill, expTotal, true);
+    // xpMult 由 grantExp 单点消费；事件载荷 = 实发值（离线/在线对称）。
+    const expTotal = grantExp(skill, expBase, true);
     const after = levelFromXp(xpOf(skill.id));
     const levels =
       after > before
@@ -968,6 +1009,20 @@ export function createGame(options: CreateGameOptions): Game {
         levels,
       },
     });
+  }
+
+  /** 进行中活动的有效轮间隔（snapshot 展示投影，#6）；无活动 = undefined。 */
+  function runningIntervalOf(): number | undefined {
+    const act = state.activity;
+    if (!act) return undefined;
+    const skill = findSkill(content, act.skillId);
+    if (skill?.kind === 'craft') {
+      const recipe = findRecipe(content, act.index);
+      return recipe && recipe.skill === skill.id ? recipe.interval : undefined;
+    }
+    const found = findActivity(content, act.skillId, act.index);
+    if (!found) return undefined;
+    return effectiveIntervalOf(found.activity.interval, gatherSpeedOf(playerContributions()));
   }
 
   return {
@@ -1026,6 +1081,12 @@ export function createGame(options: CreateGameOptions): Game {
               });
               return;
             }
+            // 道韵解锁门槛（#6）：按累计道韵判定，判定与 UI 锁定态同源 rebirthGateOf。
+            const craftGate = rebirthGateOf(content, state.daoYunEarned, { skillId: craftSkill.id });
+            if (craftGate.locked) {
+              reject(action.type, 'rebirth-locked', { daoYun: String(craftGate.requiredDaoYun) });
+              return;
+            }
             if (craftMissingOf(recipe, state.items).length > 0) {
               reject(action.type, 'no-materials', { activity: recipe.name });
               return;
@@ -1066,6 +1127,12 @@ export function createGame(options: CreateGameOptions): Game {
               level: String(found.activity.unlockLevel),
               activity: found.activity.name,
             });
+            return;
+          }
+          // 道韵解锁门槛（#6）：同上，按技艺 id 判定。
+          const gate = rebirthGateOf(content, state.daoYunEarned, { skillId: found.skill.id });
+          if (gate.locked) {
+            reject(action.type, 'rebirth-locked', { daoYun: String(gate.requiredDaoYun) });
             return;
           }
           // 同一活动进行中：幂等派发（不清进度、不发事件）。
@@ -1186,6 +1253,12 @@ export function createGame(options: CreateGameOptions): Game {
           const gate = enemyGateOf(content, state.skills, enemyId);
           if (gate.locked) {
             reject(action.type, 'level', { level: String(gate.requiredLevel) });
+            return;
+          }
+          // 道韵解锁门槛（#6）：开战判定与 UI 锁定态同源 rebirthGateOf（N1 同款收敛）。
+          const rGate = rebirthGateOf(content, state.daoYunEarned, { enemyId });
+          if (rGate.locked) {
+            reject(action.type, 'rebirth-locked', { daoYun: String(rGate.requiredDaoYun) });
             return;
           }
           if (state.combat?.enemyId === enemyId) return; // 幂等
@@ -1328,6 +1401,80 @@ export function createGame(options: CreateGameOptions): Game {
           return;
         }
 
+        case 'rebirth:perform': {
+          // 兵解（#6）：转生结算框架——重置集/保留集/道韵公式全部来自
+          // content.rebirth；瞬态（活动/战斗/气血）由引擎一律清空回满。
+          const section = rebirthOf(content);
+          if (!section) {
+            reject(action.type, 'not-available');
+            return;
+          }
+          if (state.combat) {
+            reject(action.type, 'in-combat');
+            return;
+          }
+          const preview = rebirthPreviewOf(content, state.skills);
+          if (!preview.eligible) {
+            reject(action.type, 'no-progress', {
+              need: String(preview.minProgress),
+              xp: String(preview.totalXp),
+            });
+            return;
+          }
+          applyRebirthReset(section, state);
+          state.daoYun += preview.gain;
+          state.daoYunEarned += preview.gain;
+          state.rebirths += 1;
+          state.activity = null; // 散功：进度一并弃置（结算事件承载体，不另发 activity-stop）
+          state.combat = null;
+          state.hp = hpCap(); // 新一世气血回满（上限已随重置/天赋重算）
+          events.emit({
+            type: 'rebirth',
+            time,
+            data: { daoYun: preview.gain, totalXp: preview.totalXp, rebirths: state.rebirths },
+          });
+          return;
+        }
+
+        case 'talent:buy': {
+          // 点亮天赋（#6）：前置全点亮 + 道韵余额足额；效果经
+          // talentContributionsOf 常驻注入聚合管线（playerContributions）。
+          if (!rebirthOf(content)) {
+            reject(action.type, 'not-available');
+            return;
+          }
+          const payload = action.payload as { nodeId?: unknown } | undefined;
+          const nodeId = payload?.nodeId;
+          if (typeof nodeId !== 'string') {
+            reject(action.type, 'bad-payload');
+            return;
+          }
+          const node = talentNodeOf(content, nodeId);
+          if (!node) {
+            reject(action.type, 'not-found');
+            return;
+          }
+          if (state.talents.includes(nodeId)) return; // 已点亮幂等
+          if ((node.requires ?? []).some((req) => !state.talents.includes(req))) {
+            reject(action.type, 'prereq');
+            return;
+          }
+          if (state.daoYun < node.cost) {
+            reject(action.type, 'no-daoyun', { cost: String(node.cost), daoYun: String(state.daoYun) });
+            return;
+          }
+          state.daoYun -= node.cost;
+          state.talents.push(nodeId);
+          // 气血上限随天赋变化：负向修饰符时 clamp（正向不回血，旧版同策略）。
+          state.hp = Math.min(state.hp, hpCap());
+          events.emit({
+            type: 'talent:buy',
+            time,
+            data: { nodeId, name: node.name, cost: node.cost, daoYun: state.daoYun },
+          });
+          return;
+        }
+
         default:
           reject(action.type, 'unknown-action');
       }
@@ -1342,6 +1489,10 @@ export function createGame(options: CreateGameOptions): Game {
         state: cloneState(state) as unknown as Readonly<Record<string, unknown>>,
         // 属性面板（#4 验收：佩戴稀有度武器 → snapshot 反映倍率+词条）。
         stats: playerStats(),
+        // 进行中活动的有效轮间隔（#6 展示投影）：采集按 gatherSpeed 缩放
+        // （与 settleActivity/settleOffline 同调 effectiveIntervalOf），炼制为
+        // 配方原值；进度条零公式复算。非存档必需，恢复侧忽略。
+        ...(runningIntervalOf() !== undefined ? { activityInterval: runningIntervalOf() } : {}),
       };
     },
   };
