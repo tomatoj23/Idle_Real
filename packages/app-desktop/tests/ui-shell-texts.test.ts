@@ -30,6 +30,8 @@ interface Overrides {
   readonly price?: number;
   /** 卖出行文案模板。 */
   readonly sellLog?: string;
+  /** 离线结算修行录模板。 */
+  readonly offlineLog?: string;
 }
 
 /** 最小包：单战斗技能 + 试炼剑（atk 5）+ 回气丹 + 单档词表。 */
@@ -58,7 +60,13 @@ function makePack(overrides: Overrides = {}): ContentPack {
         units: { level: '{v} 层', seconds: '{v} 秒', minute: '{m} 分', hourMinute: '{h} 时 {m} 分' },
         icons: { buff: '丹', gear: '器', unknown: '？' },
         common: { needLevel: '需 {level} 层', compareWrap: '（{compare}）', itemListSep: '、' },
-        events: { sellLog: overrides.sellLog ?? '卖出 {name}，得 {gained} 灵石' },
+        events: {
+          sellLog: overrides.sellLog ?? '卖出 {name}，得 {gained} 灵石',
+          offlineToast: '离线 {away}归来：{activity} ×{cycles}',
+          offlineLog: overrides.offlineLog ?? '离线修行 {away}：{items}{exp}',
+          offlineNoYield: '无所获',
+          offlineExpSuffix: '，修为 +{exp}',
+        },
         pages: {
           shop: { title: '市', subtitle: '易物', price: '{price} 灵石', owned: '持有 {count}', buyBtn: '买一' },
           bag: {
@@ -175,5 +183,56 @@ describe('#26 · 事件文案随 texts.shell 模板走', () => {
     ui.bindActions((action: GameAction) => game.dispatch(action));
     game.dispatch({ type: 'bag:sell', payload: { item: 'heal', count: 1 } });
     expect(root.querySelector('#log')?.textContent).toContain('售出 回气丹 得 18 文');
+  });
+
+  it('offline-settled → toast/log 按模板填充（时长单位模板 + 物品列表分隔符 + 修为后缀）', () => {
+    const content = makePack({ offlineLog: '离线 {away}：{items}{exp}' });
+    const game = createGame({ content, clock: new ManualClock(), save: makeSave(0) });
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const ui = buildUi(root, content, () => game.snapshot(), game.events);
+    ui.bindActions((action: GameAction) => game.dispatch(action));
+    game.events.emit({
+      type: 'offline-settled',
+      time: 0,
+      data: {
+        seconds: 5400, // 1 时 30 分
+        skillId: 'fight',
+        skillName: '斗法',
+        activityName: '采青灵草',
+        cycles: 3,
+        exp: 18,
+        items: { heal: 2 },
+        levels: [],
+      },
+    });
+    // away 走 units.hourMinute；items 走 nameOf + itemListSep；exp 后缀按 exp 有无拼接
+    expect(root.querySelector('.toast')?.textContent).toBe('离线 1 时 30 分归来：采青灵草 ×3');
+    expect(root.querySelector('#log')?.textContent).toContain('离线 1 时 30 分：回气丹×2，修为 +18');
+  });
+
+  it('offline-settled 无产出 → items 槽填 offlineNoYield；无 exp → 后缀整段跳过', () => {
+    const content = makePack();
+    const game = createGame({ content, clock: new ManualClock(), save: makeSave(0) });
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const ui = buildUi(root, content, () => game.snapshot(), game.events);
+    ui.bindActions((action: GameAction) => game.dispatch(action));
+    game.events.emit({
+      type: 'offline-settled',
+      time: 0,
+      data: {
+        seconds: 90, // 1 分 30 秒 → away = minute 模板
+        skillId: 'fight',
+        skillName: '斗法',
+        activityName: '采青灵草',
+        cycles: 1,
+        exp: 0,
+        items: {},
+        levels: [],
+      },
+    });
+    expect(root.querySelector('#log')?.textContent).toContain('离线修行 1 分：无所获');
+    expect(root.querySelector('#log')?.textContent).not.toContain('修为');
   });
 });

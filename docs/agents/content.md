@@ -202,7 +202,10 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 - 键分组语义：`events.*` 键 = 引擎事件类型协议面（loot/victory/defeat/
   consumable:eat/equip:wear/levelup/sell/buy/reject/offline-settled）；
   `pages.*` 键 = 壳 TabId 协议面（skills/combat/bag/shop）；
-  `units.*` 承载层级/时长读数的单位模板（`{v}` 数值、`{m}` 分、`{h}` 时）。
+  `units.*` 承载层级/时长读数的单位模板（`{v}` 数值、`{m}` 分、`{h}` 时）；
+  `topbar.*Sigil` 承载顶栏资源图章字；`common.itemListSep` 为物品名列表
+  分隔符（掉落预览/离线产出共用）；`pages.combat.selfStats` 的属性行数值
+  槽（{atk}/{def}/{crit}）由壳按 statLabels 量纲填入，模板不写字面 `%`。
 
 ## config 槽位数据化（#16）与玩法参数数据化（#020）
 
