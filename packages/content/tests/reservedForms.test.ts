@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { validateContent, validateContentPack } from '../src/index.js';
 import type { ContentError, JsonSchema } from '../src/index.js';
 import itemSchemaJson from '../src/schema/item.schema.json';
+import { shellFixture } from './fixtures.js';
 
 /**
  * 票 #16 验收：content 预留字段（器胚×铭纹 schema + 槽位 config 节 +
@@ -130,6 +131,7 @@ function makeBasePack(): Record<string, any> {
     texts: {
       basicName: '拳脚',
       reject: { '*': { 'bad-payload': '指令无效', 'unknown-action': '未知指令' } },
+      shell: shellFixture(),
     },
     shop: [],
   };

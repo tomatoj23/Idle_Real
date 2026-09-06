@@ -373,6 +373,129 @@
         "not-found": "查无此器",
         "worn": "佩戴中的法器不可卖出"
       }
+    },
+    "shell": {
+      "brand": {
+        "sigil": "道",
+        "name": "问道长生",
+        "locale": "zh-CN",
+        "bootError": "启动中止：\n{message}"
+      },
+      "topbar": {
+        "statsTitle": "攻 / 防 / 会心",
+        "goldTitle": "灵石",
+        "hpTitle": "气血"
+      },
+      "tabs": {
+        "skills": "修炼",
+        "combat": "斗法",
+        "bag": "乾坤袋",
+        "shop": "坊市"
+      },
+      "side": { "title": "修行录" },
+      "stats": {
+        "labels": {
+          "atk": { "label": "攻" },
+          "def": { "label": "防" },
+          "hp": { "label": "血" },
+          "crit": { "label": "暴", "percent": true }
+        }
+      },
+      "units": {
+        "level": "{v} 层",
+        "seconds": "{v} 秒",
+        "minute": "{m} 分",
+        "hourMinute": "{h} 时 {m} 分"
+      },
+      "icons": { "buff": "丹", "gear": "器", "unknown": "？" },
+      "common": {
+        "needLevel": "需 {level} 层",
+        "compareWrap": "（{compare}）"
+      },
+      "events": {
+        "lootGear": "妖物遗落【{name}】",
+        "lootGearLog": "夺得【{name}】",
+        "lootShowcase": "天降异宝！【{name}】",
+        "lootByproduct": "偶得 {name}×{count}",
+        "lootDrop": "得 {name}×{count}",
+        "victoryFlog": "【{name}】轰然倒地！{summary}{compare}",
+        "victoryLog": "击倒【{name}】：{summary}{compare}",
+        "defeatFlog": "你不敌【{name}】，真元耗尽，被同门救回",
+        "defeatToast": "斗法落败，幸得同门相救",
+        "eatHeal": "服下【{name}】，回气 {healed} 点",
+        "eatBuffToast": "服下【{name}】",
+        "eatBuffLog": "服下【{name}】，药力{minutes}分",
+        "equipWearToast": "已佩【{name}】",
+        "equipWearLog": "佩上【{name}】",
+        "equipRemoveLog": "卸下【{name}】",
+        "expCombat": "斗法修为 +{amount}",
+        "levelupToast": "【{name}】修为精进，升至 {level} 层",
+        "levelupLog": "【{name}】升至 {level} 层",
+        "sellLog": "卖出 {name}，得 {gained} 灵石",
+        "buyLog": "购入 {name}×{count}，花去 {cost} 灵石",
+        "rejectFallback": "此路不通",
+        "offlineToast": "离线 {away}归来：{activity} ×{cycles}",
+        "offlineLog": "离线修行 {away}：{items}{exp}",
+        "offlineNoYield": "无所获",
+        "offlineExpSuffix": "，修为 +{exp}"
+      },
+      "pages": {
+        "skills": {
+          "empty": "内容包中没有可修的技艺。",
+          "chipLocked": "未开放",
+          "expSub": "修为 {into}/{need} · 距下一层还需 {left}",
+          "expMax": "修为已臻化境",
+          "actNow": "当前 · {name}",
+          "idle": "闲坐蒲团，未修行",
+          "stopBtn": "收功",
+          "running": "进行中",
+          "byproduct": "偶得 {icon} {name} {chance}%",
+          "actMeta": "{interval} / 次 · 修为 +{exp} · 需 {level} 层",
+          "startBtn": "开始"
+        },
+        "combat": {
+          "title": "斗法",
+          "subtitle": "斩妖除魔，问道长生。当前斗法 {level} 层。",
+          "enemyMissing": "妖物不知所踪。",
+          "resting": "休整中",
+          "enemyHp": "敌 {ehp}/{hp}",
+          "selfStats": "己方 {hp}/{max} · 攻 {atk} 防 {def} 会心 {crit}%",
+          "fleeBtn": "撤退",
+          "autoFightOn": "自动再战 · 开",
+          "autoFightOff": "自动再战 · 关",
+          "autoEatOn": "自动嗑丹 · 开",
+          "autoEatOff": "自动嗑丹 · 关",
+          "noConsumables": "囊中无丹。",
+          "enemyStats": "气血 {hp} · 攻 {atk} · 防 {def} · 修为 +{exp}",
+          "enemyGold": "灵石 {min}~{max}",
+          "dropsSuffix": " · 掉落 {drops}",
+          "fightBtn": "挑战"
+        },
+        "bag": {
+          "title": "乾坤袋",
+          "matGroup": "材料",
+          "consumableGroup": "丹药",
+          "priceEach": "每件 {price} 灵石",
+          "sellOneBtn": "卖一",
+          "sellAllBtn": "全卖",
+          "gearWorn": "法器 · 佩戴中",
+          "gearLoose": "法器 · 囊中",
+          "emptyWorn": "未佩戴法器。",
+          "emptyLoose": "囊中别无长物。",
+          "emptyAll": "乾坤袋空空如也——先去「修炼」采些灵材。",
+          "noAffix": "无属性",
+          "wearBtn": "佩戴",
+          "takeOffBtn": "卸下",
+          "sellBtn": "卖出"
+        },
+        "shop": {
+          "title": "坊市",
+          "subtitle": "以灵石易物，解燃眉之需。",
+          "price": "{price} 灵石",
+          "owned": "持有 {count}",
+          "buyBtn": "买一"
+        }
+      }
     }
   },
   "shop": [

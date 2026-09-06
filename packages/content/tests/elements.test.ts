@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateContentPack } from '../src/index.js';
 import type { ContentError } from '../src/index.js';
+import { shellFixture } from './fixtures.js';
 
 /**
  * 票 #25 验收：Element 七系键域开放 + 存在性校验（循 #21 VerbStyle 先例）。
@@ -141,6 +142,7 @@ function makeBasePack(): Record<string, any> {
     texts: {
       basicName: '拳脚',
       reject: { '*': { 'bad-payload': '指令无效', 'unknown-action': '未知指令' } },
+      shell: shellFixture(),
     },
     shop: [],
   };

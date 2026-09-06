@@ -19,7 +19,7 @@ engine `EnemyView` 未投影，靠 #15 票驱动补齐）。
 | `rarities` | 是 | rarity.schema.json | 稀有度档位词表（#018，ADR-016 词表零默认） |
 | `affixPool` | 是 | affix-pool.schema.json | 装备随机词条池（同上） |
 | `combatText` | 是 | combat-text.schema.json | CTEXT 战斗文案词库（#019 批 2 扩十键：+句式模板/系统 note/战后摘要/对照语） |
-| `texts` | 是 | texts.schema.json | 系统展示文案（#019 批 2）：兵刃兜底名 + reject 协议 code → 文案映射 |
+| `texts` | 是 | texts.schema.json | 系统展示文案（#019 批 2）：兵刃兜底名 + reject 协议 code → 文案映射；#26 起含 `shell` 子节（壳层全部题材文案） |
 | `shop` | 是 | shop.schema.json | 坊市货架（无 id 关系行） |
 | `config` | **否** | config.schema.json | 全局配置：槽位（#16）+ 玩法参数三子节 combat/progression/affix（#020，缺省=引擎基线） |
 
@@ -173,17 +173,36 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 | `summary` | tiers（四档画句池）+ base/crit 整行模板 | 战后一行签名画像：引擎按主导伤害档取画句填 `{flavor}`，`{rounds}`/`{crits}` 填数值 |
 | `compare` | 四池：revenge/faster/slower/even | 同对手再战对照语：`{rounds}` 今番、`{prev}` 前番回合数；无从对照返回空（事件不带 compare） |
 
-### texts（系统展示文案）
+### texts（系统展示文案 + 壳层文案）
 
 | 字段 | 形状 | 说明 |
 |---|---|---|
 | `basicName` | string（1~6 字） | 无佩戴武器时的兵刃展示名（weaponName 槽兜底值） |
 | `reject` | 动作协议键 → 理由 code → 文案模板 | 展示文案映射。动作键域 schema 钉死：activity:start / bag:sell / shop:buy / combat:start / consumable:eat / gear:equip / gear:sell / `'*'`（跨动作兜底，bad-payload 等通用文案）；理由 code 键域开放 |
 | `reject` 槽位 | `{level}` `{activity}` `{item}` `{owned}` `{cost}` `{gold}` | 由引擎按协议语境填入； combat:start 的 `{level}` = `enemy.level − 门控偏移`（偏移量只在引擎判定处单一来源，文案侧零副本——N1 文案侧裁决） |
+| `shell`（#26） | ShellTexts 结构化节 | **壳层全部题材文案**（ADR-017 裁决 9：壳零题材字符串）：brand（sigil/name/locale/bootError）、topbar、tabs、side、stats.labels、units、icons、common、events（25 键）、pages（skills/combat/bag/shop）。schema required + additionalProperties:false 全程钉死 |
 
 - 命中序：精确动作 → `'*'` → **键名回显**（`{action}/{reason}`，防御可见）。
 - 协议 code 本体归引擎，本节只承载展示文案；code 未命中/缺节绝不崩，toast
   退化为协议键名。
+
+### texts.shell（壳层文案，#26）
+
+- **模板约定**：与 texts.reject / combatText 模板同一 `{slot}` 语法，壳用引擎
+  `fillTemplate` 填槽；缺键回显键名（裁决 ④ 同策略，诊断可见）。
+- **stat 展示标签**（`shell.stats.labels`）：键 = stat id（开放键域，与
+  bonuses/affixPool.stat 同一注册表，键形态 `^[a-z][a-zA-Z0-9_]*$`）；
+  未注册 stat 由壳回退 stat 键名展示。
+- **量纲标记**（#26 票评，循 ADR-016 裁决 ④ 显式 bool 先例）：
+  `shell.stats.labels.<stat>.percent = true` 表示百分比量纲（展示值后缀 `%`）；
+  缺省 = 点数量纲。壳零量纲特判——`crit` 等是否带 `%` 由内容数据决定。
+- **brand.locale**：数字千分位格式化与文档 lang 的单一来源（`^[a-z]{2}(-[A-Z]{2})?$`）。
+- **brand.bootError**：启动失败兜底页模板，槽位 `{message}`；壳在内容包可用时
+  读取，内容包缺失时降级键名回显。
+- 键分组语义：`events.*` 键 = 引擎事件类型协议面（loot/victory/defeat/
+  consumable:eat/equip:wear/levelup/sell/buy/reject/offline-settled）；
+  `pages.*` 键 = 壳 TabId 协议面（skills/combat/bag/shop）；
+  `units.*` 承载层级/时长读数的单位模板（`{v}` 数值、`{m}` 分、`{h}` 时）。
 
 ## config 槽位数据化（#16）与玩法参数数据化（#020）
 

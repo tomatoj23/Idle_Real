@@ -72,6 +72,20 @@ describe('修仙题材包 · 验收（issue #2）', () => {
       { id: 'thunder', name: '雷' },
     ]);
   });
+
+  it('texts.shell 壳层文案：品牌/量纲标记/单位模板在案（#26，壳零题材字符串）', () => {
+    const pack = loadXiuxianPack();
+    expect(pack.texts.shell.brand.name).toBe('问道长生');
+    expect(pack.texts.shell.brand.locale).toBe('zh-CN');
+    expect(pack.texts.shell.brand.bootError).toContain('{message}');
+    // 量纲显式声明（#26 票评）：crit 百分比量纲，点数系无量纲标记。
+    expect(pack.texts.shell.stats.labels.crit).toEqual({ label: '暴', percent: true });
+    expect(pack.texts.shell.stats.labels.atk).toEqual({ label: '攻' });
+    // 事件与页面文案走 {slot} 模板（fillTemplate 同一约定）。
+    expect(pack.texts.shell.events.victoryFlog).toBe('【{name}】轰然倒地！{summary}{compare}');
+    expect(pack.texts.shell.pages.shop.price).toBe('{price} 灵石');
+    expect(pack.texts.shell.units.level).toBe('{v} 层');
+  });
 });
 
 describe('content 包分居（#23，#29 守卫补强）', () => {

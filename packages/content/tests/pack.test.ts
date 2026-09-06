@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { validateContentPack } from '../src/index.js';
 import type { ContentError } from '../src/index.js';
 import { xiuxianPackJson } from '../src/packs/xiuxian.js';
+import { shellFixture } from './fixtures.js';
 
 /**
  * 跨引用语义检查的基准夹具：最小合法包。
@@ -140,6 +141,7 @@ const BASE_PACK: unknown = {
   texts: {
     basicName: '拳脚',
     reject: { '*': { 'bad-payload': '指令无效', 'unknown-action': '未知指令' } },
+    shell: shellFixture(),
   },
   shop: [{ item: 'consumable_heal', price: 45 }],
 };
@@ -436,6 +438,52 @@ describe('validateContentPack · 批 4 语义键域（#021）', () => {
     const unbounded = makePack();
     unbounded.enemies[0].level = 120; // 无 config → 无法取得上限，不对照
     expect(validateContentPack(unbounded).ok).toBe(true);
+  });
+});
+
+describe('validateContentPack · texts.shell 壳层文案（#26，ADR-017 裁决 9）', () => {
+  it('缺 shell → required（壳零题材字符串的包侧义务）', () => {
+    const pack = makePack();
+    delete pack.texts.shell;
+    expectError(validateContentPack(pack), '/texts/shell', 'required');
+  });
+
+  it('shell 缺子节（events）→ required', () => {
+    const pack = makePack();
+    delete pack.texts.shell.events;
+    expectError(validateContentPack(pack), '/texts/shell/events', 'required');
+  });
+
+  it('未知额外键 → additionalProperties（typo 在校验关卡拒绝，不静默回显）', () => {
+    const pack = makePack();
+    pack.texts.shell.evnts = {};
+    expectError(validateContentPack(pack), '/texts/shell/evnts', 'additionalProperties');
+  });
+
+  it('statLabels 键形态违规 → additionalProperties 拦截（开放键域只钉形态，与 #25 elements 同律）', () => {
+    const pack = makePack();
+    pack.texts.shell.stats.labels.Luck = { label: '幸' };
+    // 校验器优先级：不匹配 patternProperties 的键落入 additionalProperties:false
+    // 同一关卡拒绝（patternProperties + additionalProperties:false 组合语义）。
+    expectError(validateContentPack(pack), '/texts/shell/stats/labels/Luck', 'additionalProperties');
+  });
+
+  it('percent 非布尔 → type（量纲标记显式 bool，循 ADR-016 裁决 ④）', () => {
+    const pack = makePack();
+    pack.texts.shell.stats.labels.atk.percent = 'yes';
+    expectError(validateContentPack(pack), '/texts/shell/stats/labels/atk/percent', 'type');
+  });
+
+  it('locale 违反语言标签形态 → pattern', () => {
+    const pack = makePack();
+    pack.texts.shell.brand.locale = 'zh_CN';
+    expectError(validateContentPack(pack), '/texts/shell/brand/locale', 'pattern');
+  });
+
+  it('新增 stat 标签键 = 纯 JSON 放行（键域开放演示）', () => {
+    const pack = makePack();
+    pack.texts.shell.stats.labels.luck = { label: '幸' };
+    expect(validateContentPack(pack).ok).toBe(true);
   });
 });
 

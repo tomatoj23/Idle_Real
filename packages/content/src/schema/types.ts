@@ -371,11 +371,12 @@ export interface CombatText {
   };
 }
 
-/* ---------- 系统展示文案（#019 批 2） ---------- */
+/* ---------- 系统展示文案（#019 批 2）+ 壳层文案（#26） ---------- */
 
 /**
  * texts 节：协议 code → 展示文案映射。
  * 协议 code 本体归引擎；code 未命中时引擎按键名回显降级（ADR-016 裁决 ④）。
+ * shell 子节（#26）承载游戏壳的全部题材文案——壳零题材字符串（ADR-017 裁决 9）。
  */
 export interface TextsSection {
   /** 无佩戴武器时的兵刃展示名（makeAttackText weaponName 槽兜底值）。 */
@@ -386,6 +387,192 @@ export interface TextsSection {
    * 由引擎按协议语境填入。
    */
   readonly reject: Readonly<Record<string, Readonly<Record<string, string>>>>;
+  /** 壳层文案（#26）：品牌/页签/事件/页面文案与 stat 展示标签，模板槽 {slot} 由壳填入。 */
+  readonly shell: ShellTexts;
+}
+
+/* ---------- 壳层文案（#26，ADR-017 裁决 9：外壳文案归 content） ---------- */
+
+/**
+ * stat 展示标签 + 量纲标记（#26 票评，循 ADR-016 裁决 ④ 显式 bool 先例）：
+ * 键 = stat id（开放键域，与 bonuses/affixPool.stat 同一注册表）；
+ * 未注册 stat 由壳回退 stat 键名展示。percent 驱动 % 后缀，壳零量纲特判。
+ */
+export interface StatLabelDef {
+  /** 展示标签（1~2 字）。 */
+  readonly label: string;
+  /** true = 百分比量纲（展示值后缀 %）；缺省 = 点数量纲。 */
+  readonly percent?: boolean;
+}
+
+/** 品牌与启动兜底页文案（bootError 槽位 {message}）。 */
+export interface ShellBrand {
+  readonly sigil: string;
+  /** 游戏名：顶栏品牌与 document.title。 */
+  readonly name: string;
+  /** 展示 locale：数字千分位格式化与文档 lang。 */
+  readonly locale: string;
+  readonly bootError: string;
+}
+
+/** 顶栏资源区悬浮提示（title 属性）。 */
+export interface ShellTopbar {
+  readonly statsTitle: string;
+  readonly goldTitle: string;
+  readonly hpTitle: string;
+}
+
+/** 页签文案（键 = TabId 协议键，壳钉死四键）。 */
+export interface ShellTabs {
+  readonly skills: string;
+  readonly combat: string;
+  readonly bag: string;
+  readonly shop: string;
+}
+
+/** 侧栏（修行录）文案。 */
+export interface ShellSide {
+  readonly title: string;
+}
+
+/** stat 展示标签表：键 = stat id（开放键域）。 */
+export interface ShellStats {
+  readonly labels: Readonly<Record<string, StatLabelDef>>;
+}
+
+/** 量纲单位模板：{v}=数值 {m}=分 {h}=时。 */
+export interface ShellUnits {
+  readonly level: string;
+  readonly seconds: string;
+  readonly minute: string;
+  readonly hourMinute: string;
+}
+
+/** 缺省图标字（内容缺 icon 时的壳内占位）。 */
+export interface ShellIcons {
+  readonly buff: string;
+  readonly gear: string;
+  readonly unknown: string;
+}
+
+/** 跨页复用小模板：needLevel 槽位 {level}；compareWrap 槽位 {compare}。 */
+export interface ShellCommon {
+  readonly needLevel: string;
+  readonly compareWrap: string;
+}
+
+/** 事件流文案（键 = 引擎事件类型协议面，槽位见 schema 描述）。 */
+export interface ShellEvents {
+  readonly lootGear: string;
+  readonly lootGearLog: string;
+  readonly lootShowcase: string;
+  readonly lootByproduct: string;
+  readonly lootDrop: string;
+  readonly victoryFlog: string;
+  readonly victoryLog: string;
+  readonly defeatFlog: string;
+  readonly defeatToast: string;
+  readonly eatHeal: string;
+  readonly eatBuffToast: string;
+  readonly eatBuffLog: string;
+  readonly equipWearToast: string;
+  readonly equipWearLog: string;
+  readonly equipRemoveLog: string;
+  readonly expCombat: string;
+  readonly levelupToast: string;
+  readonly levelupLog: string;
+  readonly sellLog: string;
+  readonly buyLog: string;
+  readonly rejectFallback: string;
+  readonly offlineToast: string;
+  readonly offlineLog: string;
+  readonly offlineNoYield: string;
+  readonly offlineExpSuffix: string;
+}
+
+/** 修炼页文案。 */
+export interface ShellPageSkills {
+  readonly empty: string;
+  readonly chipLocked: string;
+  readonly expSub: string;
+  readonly expMax: string;
+  readonly actNow: string;
+  readonly idle: string;
+  readonly stopBtn: string;
+  readonly running: string;
+  readonly byproduct: string;
+  readonly actMeta: string;
+  readonly startBtn: string;
+}
+
+/** 斗法页文案。 */
+export interface ShellPageCombat {
+  readonly title: string;
+  readonly subtitle: string;
+  readonly enemyMissing: string;
+  readonly resting: string;
+  readonly enemyHp: string;
+  readonly selfStats: string;
+  readonly fleeBtn: string;
+  readonly autoFightOn: string;
+  readonly autoFightOff: string;
+  readonly autoEatOn: string;
+  readonly autoEatOff: string;
+  readonly noConsumables: string;
+  readonly enemyStats: string;
+  readonly enemyGold: string;
+  readonly dropsSuffix: string;
+  readonly fightBtn: string;
+}
+
+/** 乾坤袋页文案。 */
+export interface ShellPageBag {
+  readonly title: string;
+  readonly matGroup: string;
+  readonly consumableGroup: string;
+  readonly priceEach: string;
+  readonly sellOneBtn: string;
+  readonly sellAllBtn: string;
+  readonly gearWorn: string;
+  readonly gearLoose: string;
+  readonly emptyWorn: string;
+  readonly emptyLoose: string;
+  readonly emptyAll: string;
+  readonly noAffix: string;
+  readonly wearBtn: string;
+  readonly takeOffBtn: string;
+  readonly sellBtn: string;
+}
+
+/** 坊市页文案。 */
+export interface ShellPageShop {
+  readonly title: string;
+  readonly subtitle: string;
+  readonly price: string;
+  readonly owned: string;
+  readonly buyBtn: string;
+}
+
+/** 页面文案分组（键 = TabId 协议键）。 */
+export interface ShellPages {
+  readonly skills: ShellPageSkills;
+  readonly combat: ShellPageCombat;
+  readonly bag: ShellPageBag;
+  readonly shop: ShellPageShop;
+}
+
+/** 壳层文案节（#26）：模板槽 {slot} 由壳按语境填入，缺键回显键名（裁决 ④ 同策略）。 */
+export interface ShellTexts {
+  readonly brand: ShellBrand;
+  readonly topbar: ShellTopbar;
+  readonly tabs: ShellTabs;
+  readonly side: ShellSide;
+  readonly stats: ShellStats;
+  readonly units: ShellUnits;
+  readonly icons: ShellIcons;
+  readonly common: ShellCommon;
+  readonly events: ShellEvents;
+  readonly pages: ShellPages;
 }
 
 /* ---------- 坊市 ---------- */

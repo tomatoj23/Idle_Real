@@ -1,9 +1,9 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "TextsSection",
-  "description": "content 包 texts 节（#019 批 2）：系统展示文案，协议 code → 文案映射。协议 code 本体归引擎（不在内容里定义新 code），本节只承载展示文案；code 未命中时引擎按键名回显降级（ADR-016 裁决 ④ 防御路径）。",
+  "description": "content 包 texts 节（#019 批 2；#26 扩壳层文案）：系统展示文案 + 壳层文案。协议 code 本体归引擎（不在内容里定义新 code），texts 基础键只承载引擎侧展示文案；code 未命中时引擎按键名回显降级（ADR-016 裁决 ④ 防御路径）。shell 子节承载游戏壳的全部题材文案（#26，ADR-017 裁决 9：外壳文案归 content，壳零题材字符串），模板槽 {slot} 由壳按语境填入，缺键回显键名。",
   "type": "object",
-  "required": ["basicName", "reject"],
+  "required": ["basicName", "reject", "shell"],
   "additionalProperties": false,
   "properties": {
     "basicName": {
@@ -22,6 +22,9 @@
         }
       },
       "description": "reject 展示文案：动作协议键 → 理由 code → 文案模板；'*' 为跨动作兜底键（bad-payload/unknown-action 等通用文案），命中序 = 精确动作优先、'*' 次之、键名回显殿后。模板槽位 {level}/{activity}/{item}/{owned}/{cost}/{gold} 由引擎按协议语境填入"
+    },
+    "shell": {
+      "$ref": "#/definitions/shellTexts"
     }
   },
   "definitions": {
@@ -34,6 +37,253 @@
         "maxLength": 60
       },
       "description": "理由 code → 展示文案（code 键域开放：引擎协议 code 演进不破本节；typo 键静默回退键名回显，诊断可见）"
+    },
+    "glyph": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2,
+      "description": "单字展示串：印章字/图标字/单位字"
+    },
+    "line": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 30,
+      "description": "短展示串：页签名/栏目标题/悬浮提示"
+    },
+    "template": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "description": "文案模板：可含 {slot} 槽，由壳按语境填入（fillTemplate 同一约定）；缺键时壳按键名回显降级"
+    },
+    "statLabel": {
+      "type": "object",
+      "required": ["label"],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "$ref": "#/definitions/glyph"
+        },
+        "percent": {
+          "type": "boolean",
+          "description": "量纲标记（#26 票评，循 ADR-016 裁决 ④ 显式 bool 先例）：true = 百分比量纲，展示值后缀 %；缺省 = 点数量纲。壳零量纲特判"
+        }
+      },
+      "description": "stat 展示标签 + 量纲标记。键 = stat id（开放键域，与 bonuses/affixPool.stat 同一注册表，键形态与 #25 elements 一致）；未注册 stat 由壳回退 stat 键名展示"
+    },
+    "shellTexts": {
+      "type": "object",
+      "required": ["brand", "topbar", "tabs", "side", "stats", "units", "icons", "common", "events", "pages"],
+      "additionalProperties": false,
+      "properties": {
+        "brand": {
+          "type": "object",
+          "required": ["sigil", "name", "locale", "bootError"],
+          "additionalProperties": false,
+          "properties": {
+            "sigil": { "$ref": "#/definitions/glyph" },
+            "name": { "type": "string", "minLength": 1, "maxLength": 20, "description": "游戏名：顶栏品牌与页标题（document.title）" },
+            "locale": { "type": "string", "pattern": "^[a-z]{2}(-[A-Z]{2})?$", "description": "展示 locale：数字千分位格式化与文档 lang" },
+            "bootError": { "$ref": "#/definitions/template", "description": "启动失败兜底页模板；槽位 {message}" }
+          }
+        },
+        "topbar": {
+          "type": "object",
+          "required": ["statsTitle", "goldTitle", "hpTitle"],
+          "additionalProperties": false,
+          "properties": {
+            "statsTitle": { "$ref": "#/definitions/line" },
+            "goldTitle": { "$ref": "#/definitions/glyph" },
+            "hpTitle": { "$ref": "#/definitions/glyph" }
+          }
+        },
+        "tabs": {
+          "type": "object",
+          "required": ["skills", "combat", "bag", "shop"],
+          "additionalProperties": false,
+          "properties": {
+            "skills": { "$ref": "#/definitions/line" },
+            "combat": { "$ref": "#/definitions/line" },
+            "bag": { "$ref": "#/definitions/line" },
+            "shop": { "$ref": "#/definitions/line" }
+          }
+        },
+        "side": {
+          "type": "object",
+          "required": ["title"],
+          "additionalProperties": false,
+          "properties": {
+            "title": { "$ref": "#/definitions/line" }
+          }
+        },
+        "stats": {
+          "type": "object",
+          "required": ["labels"],
+          "additionalProperties": false,
+          "properties": {
+            "labels": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": false,
+              "patternProperties": {
+                "^[a-z][a-zA-Z0-9_]*$": { "$ref": "#/definitions/statLabel" }
+              }
+            }
+          }
+        },
+        "units": {
+          "type": "object",
+          "required": ["level", "seconds", "minute", "hourMinute"],
+          "additionalProperties": false,
+          "properties": {
+            "level": { "$ref": "#/definitions/template", "description": "层级读数模板；槽位 {v}" },
+            "seconds": { "$ref": "#/definitions/template", "description": "秒时长模板；槽位 {v}" },
+            "minute": { "$ref": "#/definitions/template", "description": "分钟时长模板；槽位 {m}" },
+            "hourMinute": { "$ref": "#/definitions/template", "description": "时分时长模板；槽位 {h}/{m}" }
+          }
+        },
+        "icons": {
+          "type": "object",
+          "required": ["buff", "gear", "unknown"],
+          "additionalProperties": false,
+          "properties": {
+            "buff": { "$ref": "#/definitions/glyph", "description": "增益条物品缺省图标字" },
+            "gear": { "$ref": "#/definitions/glyph", "description": "装备卡物品缺省图标字" },
+            "unknown": { "$ref": "#/definitions/glyph", "description": "未知物品缺省图标字" }
+          }
+        },
+        "common": {
+          "type": "object",
+          "required": ["needLevel", "compareWrap"],
+          "additionalProperties": false,
+          "properties": {
+            "needLevel": { "$ref": "#/definitions/template", "description": "锁定门槛句；槽位 {level}" },
+            "compareWrap": { "$ref": "#/definitions/template", "description": "胜利对照语包裹模板；槽位 {compare}" }
+          }
+        },
+        "events": {
+          "type": "object",
+          "required": [
+            "lootGear", "lootGearLog", "lootShowcase", "lootByproduct", "lootDrop",
+            "victoryFlog", "victoryLog", "defeatFlog", "defeatToast",
+            "eatHeal", "eatBuffToast", "eatBuffLog",
+            "equipWearToast", "equipWearLog", "equipRemoveLog",
+            "expCombat", "levelupToast", "levelupLog",
+            "sellLog", "buyLog", "rejectFallback",
+            "offlineToast", "offlineLog", "offlineNoYield", "offlineExpSuffix"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "lootGear": { "$ref": "#/definitions/template", "description": "异宝掉落浮战报；槽位 {name}" },
+            "lootGearLog": { "$ref": "#/definitions/template", "description": "异宝掉落修行录行；槽位 {name}" },
+            "lootShowcase": { "$ref": "#/definitions/template", "description": "showcase 档掉落浮提示；槽位 {name}" },
+            "lootByproduct": { "$ref": "#/definitions/template", "description": "副产出修行录行；槽位 {name}/{count}" },
+            "lootDrop": { "$ref": "#/definitions/template", "description": "常规掉落修行录行；槽位 {name}/{count}" },
+            "victoryFlog": { "$ref": "#/definitions/template", "description": "胜利浮战报；槽位 {name}/{summary}/{compare}" },
+            "victoryLog": { "$ref": "#/definitions/template", "description": "胜利修行录行；槽位 {name}/{summary}/{compare}" },
+            "defeatFlog": { "$ref": "#/definitions/template", "description": "落败浮战报；槽位 {name}" },
+            "defeatToast": { "$ref": "#/definitions/template", "description": "落败浮提示（无槽位）" },
+            "eatHeal": { "$ref": "#/definitions/template", "description": "即时恢复浮战报；槽位 {name}/{healed}" },
+            "eatBuffToast": { "$ref": "#/definitions/template", "description": "增益丹浮提示；槽位 {name}" },
+            "eatBuffLog": { "$ref": "#/definitions/template", "description": "增益丹修行录行；槽位 {name}/{minutes}" },
+            "equipWearToast": { "$ref": "#/definitions/template", "description": "佩戴浮提示；槽位 {name}" },
+            "equipWearLog": { "$ref": "#/definitions/template", "description": "佩戴修行录行；槽位 {name}" },
+            "equipRemoveLog": { "$ref": "#/definitions/template", "description": "卸下修行录行；槽位 {name}" },
+            "expCombat": { "$ref": "#/definitions/template", "description": "斗法修为浮战报；槽位 {amount}" },
+            "levelupToast": { "$ref": "#/definitions/template", "description": "升级浮提示；槽位 {name}/{level}" },
+            "levelupLog": { "$ref": "#/definitions/template", "description": "升级修行录行；槽位 {name}/{level}" },
+            "sellLog": { "$ref": "#/definitions/template", "description": "卖出修行录行；槽位 {name}/{gained}" },
+            "buyLog": { "$ref": "#/definitions/template", "description": "购入修行录行；槽位 {name}/{count}/{cost}" },
+            "rejectFallback": { "$ref": "#/definitions/template", "description": "reject 事件无 message 时的浮提示兜底（无槽位）" },
+            "offlineToast": { "$ref": "#/definitions/template", "description": "离线归来浮提示；槽位 {away}/{activity}/{cycles}" },
+            "offlineLog": { "$ref": "#/definitions/template", "description": "离线结算修行录行；槽位 {away}/{items}/{exp}" },
+            "offlineNoYield": { "$ref": "#/definitions/template", "description": "离线无产出占位（无槽位）" },
+            "offlineExpSuffix": { "$ref": "#/definitions/template", "description": "离线修为后缀模板；槽位 {exp}" }
+          }
+        },
+        "pages": {
+          "type": "object",
+          "required": ["skills", "combat", "bag", "shop"],
+          "additionalProperties": false,
+          "properties": {
+            "skills": {
+              "type": "object",
+              "required": ["empty", "chipLocked", "expSub", "expMax", "actNow", "idle", "stopBtn", "running", "byproduct", "actMeta", "startBtn"],
+              "additionalProperties": false,
+              "properties": {
+                "empty": { "$ref": "#/definitions/template", "description": "无可修技艺空态（无槽位）" },
+                "chipLocked": { "$ref": "#/definitions/template", "description": "技能片锁定标记（无槽位）" },
+                "expSub": { "$ref": "#/definitions/template", "description": "修为进度副行；槽位 {into}/{need}/{left}" },
+                "expMax": { "$ref": "#/definitions/template", "description": "修为满层副行（无槽位）" },
+                "actNow": { "$ref": "#/definitions/template", "description": "进行中活动行；槽位 {name}" },
+                "idle": { "$ref": "#/definitions/template", "description": "未修行空态（无槽位）" },
+                "stopBtn": { "$ref": "#/definitions/template", "description": "收功按钮（无槽位）" },
+                "running": { "$ref": "#/definitions/template", "description": "进行中徽标（无槽位）" },
+                "byproduct": { "$ref": "#/definitions/template", "description": "副产出预览；槽位 {icon}/{name}/{chance}" },
+                "actMeta": { "$ref": "#/definitions/template", "description": "活动元信息行；槽位 {interval}/{exp}/{level}" },
+                "startBtn": { "$ref": "#/definitions/template", "description": "开始按钮（无槽位）" }
+              }
+            },
+            "combat": {
+              "type": "object",
+              "required": ["title", "subtitle", "enemyMissing", "resting", "enemyHp", "selfStats", "fleeBtn", "autoFightOn", "autoFightOff", "autoEatOn", "autoEatOff", "noConsumables", "enemyStats", "enemyGold", "dropsSuffix", "fightBtn"],
+              "additionalProperties": false,
+              "properties": {
+                "title": { "$ref": "#/definitions/line" },
+                "subtitle": { "$ref": "#/definitions/template", "description": "斗法页副标题；槽位 {level}" },
+                "enemyMissing": { "$ref": "#/definitions/template", "description": "敌人缺失空态（无槽位）" },
+                "resting": { "$ref": "#/definitions/template", "description": "休整中徽标（无槽位）" },
+                "enemyHp": { "$ref": "#/definitions/template", "description": "敌方血量行；槽位 {ehp}/{hp}" },
+                "selfStats": { "$ref": "#/definitions/template", "description": "己方属性行；槽位 {hp}/{max}/{atk}/{def}/{crit}" },
+                "fleeBtn": { "$ref": "#/definitions/template", "description": "撤退按钮（无槽位）" },
+                "autoFightOn": { "$ref": "#/definitions/template", "description": "自动再战·开（无槽位）" },
+                "autoFightOff": { "$ref": "#/definitions/template", "description": "自动再战·关（无槽位）" },
+                "autoEatOn": { "$ref": "#/definitions/template", "description": "自动嗑丹·开（无槽位）" },
+                "autoEatOff": { "$ref": "#/definitions/template", "description": "自动嗑丹·关（无槽位）" },
+                "noConsumables": { "$ref": "#/definitions/template", "description": "无消耗品空态（无槽位）" },
+                "enemyStats": { "$ref": "#/definitions/template", "description": "敌人卡属性行；槽位 {hp}/{atk}/{def}/{exp}" },
+                "enemyGold": { "$ref": "#/definitions/template", "description": "敌人卡灵石行；槽位 {min}/{max}" },
+                "dropsSuffix": { "$ref": "#/definitions/template", "description": "敌人卡掉落后缀；槽位 {drops}" },
+                "fightBtn": { "$ref": "#/definitions/template", "description": "挑战按钮（无槽位）" }
+              }
+            },
+            "bag": {
+              "type": "object",
+              "required": ["title", "matGroup", "consumableGroup", "priceEach", "sellOneBtn", "sellAllBtn", "gearWorn", "gearLoose", "emptyWorn", "emptyLoose", "emptyAll", "noAffix", "wearBtn", "takeOffBtn", "sellBtn"],
+              "additionalProperties": false,
+              "properties": {
+                "title": { "$ref": "#/definitions/line" },
+                "matGroup": { "$ref": "#/definitions/line", "description": "材料分组标题" },
+                "consumableGroup": { "$ref": "#/definitions/line", "description": "消耗品分组标题" },
+                "priceEach": { "$ref": "#/definitions/template", "description": "单价行；槽位 {price}" },
+                "sellOneBtn": { "$ref": "#/definitions/template", "description": "卖一按钮（无槽位）" },
+                "sellAllBtn": { "$ref": "#/definitions/template", "description": "全卖按钮（无槽位）" },
+                "gearWorn": { "$ref": "#/definitions/line", "description": "佩戴中装备分组标题" },
+                "gearLoose": { "$ref": "#/definitions/line", "description": "囊中装备分组标题" },
+                "emptyWorn": { "$ref": "#/definitions/template", "description": "未佩戴空态（无槽位）" },
+                "emptyLoose": { "$ref": "#/definitions/template", "description": "囊中无装备空态（无槽位）" },
+                "emptyAll": { "$ref": "#/definitions/template", "description": "背包全空空态（无槽位）" },
+                "noAffix": { "$ref": "#/definitions/template", "description": "无属性装备卡占位（无槽位）" },
+                "wearBtn": { "$ref": "#/definitions/template", "description": "佩戴按钮（无槽位）" },
+                "takeOffBtn": { "$ref": "#/definitions/template", "description": "卸下按钮（无槽位）" },
+                "sellBtn": { "$ref": "#/definitions/template", "description": "卖出按钮（无槽位）" }
+              }
+            },
+            "shop": {
+              "type": "object",
+              "required": ["title", "subtitle", "price", "owned", "buyBtn"],
+              "additionalProperties": false,
+              "properties": {
+                "title": { "$ref": "#/definitions/line" },
+                "subtitle": { "$ref": "#/definitions/template", "description": "坊市副标题（无槽位）" },
+                "price": { "$ref": "#/definitions/template", "description": "售价行；槽位 {price}" },
+                "owned": { "$ref": "#/definitions/template", "description": "持有数行；槽位 {count}" },
+                "buyBtn": { "$ref": "#/definitions/template", "description": "买一按钮（无槽位）" }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }
