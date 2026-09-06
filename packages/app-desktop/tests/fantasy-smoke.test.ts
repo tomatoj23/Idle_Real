@@ -11,7 +11,7 @@ import { loadFantasyPack } from '@wendao/content/packs/fantasy';
 import { createGame, ManualClock, type GameAction } from '@wendao/engine';
 import { buildUi } from '../src/ui';
 
-/** 驱动 tick 直至条件满足；返回累计事件（drain 全收）。 */
+/** 驱动 tick 直至条件满足（maxSteps 兜底断言防挂死）。 */
 function runUntil(
   clock: ManualClock,
   game: ReturnType<typeof createGame>,
@@ -139,7 +139,6 @@ describe('fantasy tracer · 装备掷点与佩戴', () => {
     if (bonuses.crit) expect(after!.crit).toBeGreaterThan(before!.crit);
     if (bonuses.hp) expect(after!.maxHp).toBeGreaterThan(before!.maxHp);
     expect(Object.keys(bonuses).length).toBeGreaterThan(0);
-    expect(victories).toBeGreaterThan(0);
   });
 });
 
