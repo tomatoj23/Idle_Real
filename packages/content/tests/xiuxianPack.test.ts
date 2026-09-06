@@ -59,6 +59,19 @@ describe('修仙题材包 · 验收（issue #2）', () => {
       { id: 'accessory', name: '灵饰', icon: '饰' },
     ]);
   });
+
+  it('elements 系别注册表：七系在案（#25 键域开放，官方包约定）', () => {
+    const pack = loadXiuxianPack();
+    expect(pack.elements).toEqual([
+      { id: 'metal', name: '金' },
+      { id: 'wood', name: '木' },
+      { id: 'water', name: '水' },
+      { id: 'fire', name: '火' },
+      { id: 'earth', name: '土' },
+      { id: 'wind', name: '风' },
+      { id: 'thunder', name: '雷' },
+    ]);
+  });
 });
 
 describe('content 包分居（#23，#29 守卫补强）', () => {

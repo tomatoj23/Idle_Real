@@ -495,12 +495,12 @@ export interface ContentPack {
   readonly recipes: readonly Recipe[];
   readonly enemies: readonly Enemy[];
   readonly gearDrops: readonly GearDrop[];
+  /** 系别键域注册表（#25 键域开放）：enemy.element / affinities / 条件引用的系别键须在此注册。 */
+  readonly elements: readonly ElementDef[];
   /** 稀有度档位词表（ADR-016 裁决 ①：validate 强制恒在，引擎零默认）。 */
   readonly rarities: readonly RarityDef[];
   /** 随机词条池（同上，节恒在）。 */
   readonly affixPool: readonly AffixDef[];
-  /** 系别键域注册表（#25 键域开放）：enemy.element / affinities / 条件引用的系别键须在此注册。 */
-  readonly elements: readonly ElementDef[];
   readonly combatText: CombatText;
   /** 系统展示文案（#019 批 2）：reject 展示与兵刃兜底名，必需节。 */
   readonly texts: TextsSection;
