@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "CombatTextSection",
-  "description": "content 包 combatText 节：战斗文案词库（CTEXT 体系数据化）。招式注册键的存在性（武器/敌人 id、basic 兜底）由语义校验补全。#019 批 2 扩：句式模板/系统 note/战后摘要/对照语出池，十键恒需。",
+  "description": "content 包 combatText 节：战斗文案词库（CTEXT 体系数据化）。招式注册键的存在性（武器/敌人 id、basic 兜底）由语义校验补全。#019 批 2 扩：句式模板/系统 note/战后摘要/对照语出池，十键恒需。长度上限按非 CJK 等义文本（约 3× 字符密度）放宽（#027 槽位审查裁决），语义见 docs/combat-text-slots.md。",
   "type": "object",
   "required": ["verbs", "moves", "openings", "critIntro", "cons", "fatal", "templates", "notes", "summary", "compare"],
   "additionalProperties": false,
@@ -177,13 +177,13 @@
           "v": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 4,
-            "description": "动作动词（单字为主）"
+            "maxLength": 12,
+            "description": "动作动词（官方包单字为主；上限按非 CJK 等义文本放宽，#027）"
           },
           "limbs": {
             "type": "array",
             "minItems": 1,
-            "items": { "type": "string", "minLength": 1, "maxLength": 6 }
+            "items": { "type": "string", "minLength": 1, "maxLength": 18 }
           }
         }
       }
@@ -191,22 +191,22 @@
     "moveNames": {
       "type": "array",
       "minItems": 1,
-      "items": { "type": "string", "minLength": 1, "maxLength": 12 }
+      "items": { "type": "string", "minLength": 1, "maxLength": 36 }
     },
     "lines": {
       "type": "array",
       "minItems": 1,
-      "items": { "type": "string", "minLength": 1, "maxLength": 60 }
+      "items": { "type": "string", "minLength": 1, "maxLength": 180 }
     },
     "templateLines": {
       "type": "array",
       "minItems": 1,
-      "items": { "type": "string", "minLength": 1, "maxLength": 80 }
+      "items": { "type": "string", "minLength": 1, "maxLength": 240 }
     },
     "noteLines": {
       "type": "array",
       "minItems": 1,
-      "items": { "type": "string", "minLength": 1, "maxLength": 60 }
+      "items": { "type": "string", "minLength": 1, "maxLength": 180 }
     },
     "flavorTiers": {
       "type": "object",
@@ -248,7 +248,7 @@
       "items": {
         "type": "string",
         "minLength": 1,
-        "maxLength": 80,
+        "maxLength": 240,
         "pattern": "(?=.*\\{defender\\})(?=.*\\{d\\})"
       }
     },
@@ -258,7 +258,7 @@
       "items": {
         "type": "string",
         "minLength": 1,
-        "maxLength": 80,
+        "maxLength": 240,
         "pattern": "\\{d\\}"
       }
     }

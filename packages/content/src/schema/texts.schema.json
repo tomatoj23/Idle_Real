@@ -9,8 +9,8 @@
     "basicName": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 6,
-      "description": "无佩戴武器时的兵刃展示名（makeAttackText weaponName 槽兜底值）"
+      "maxLength": 18,
+      "description": "无佩戴武器时的兵刃展示名（makeAttackText weaponName 槽兜底值）；上限按非 CJK 等义文本放宽（#027）"
     },
     "reject": {
       "type": "object",
