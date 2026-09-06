@@ -884,6 +884,8 @@ export function createGame(options: CreateGameOptions): Game {
           }
           const item = findItem(content, itemId);
           const cost = entry.price * count;
+          // 判定式与 UI 视图 shopAffordOf 同一来源（N4 收敛，#26）：afford = 单件
+          // 特化（cost = price × 1），本处为 count 泛化式，禁止壳内另写比较。
           if (state.gold < cost) {
             reject(action.type, 'no-gold', { cost: String(cost), gold: String(state.gold) });
             return;

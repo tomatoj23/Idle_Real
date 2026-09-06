@@ -28,6 +28,7 @@ import {
   shopAffordOf,
   type GameAction,
   type GameState,
+  type GearInstance,
   type ProgressionParams,
   type SaveData,
 } from '@wendao/engine';
@@ -579,7 +580,7 @@ export function buildUi(
               <div class="bar bar-red"><i data-bar="enemy" style="width:${ehpPct}%"></i></div>
               <div class="enemy-sub">${esc(T('pages.combat.enemyHp', { ehp: Math.max(0, Math.ceil(combat.ehp)), hp: enemy.hp }))}</div>
               <div class="bar bar-jade"><i style="width:${hpPct}%"></i></div>
-              <div class="enemy-sub">${esc(T('pages.combat.selfStats', { hp: Math.floor(st.hp), max: snap.stats?.maxHp ?? '—', atk: snap.stats?.atk ?? '—', def: snap.stats?.def ?? '—', crit: snap.stats?.crit ?? '—' }))}</div>
+              <div class="enemy-sub">${esc(T('pages.combat.selfStats', { hp: Math.floor(st.hp), max: snap.stats?.maxHp ?? '—', atk: statValueText('atk', snap.stats?.atk ?? '—'), def: statValueText('def', snap.stats?.def ?? '—'), crit: statValueText('crit', snap.stats?.crit ?? '—') }))}</div>
             </div>
             <div class="enemy-ops">
               <button class="btn btn-ghost" data-act="flee">${esc(T('pages.combat.fleeBtn'))}</button>
@@ -637,7 +638,7 @@ export function buildUi(
   };
   const rarityName = (rarity: string): string => rarityDefOf(rarity)?.name ?? '';
 
-  function gearCardHtml(st: GameState, gear: { uid: number; itemId: string; rarity: string; affixes: readonly { name: string; stat: string; val: number }[] }): string {
+  function gearCardHtml(st: GameState, gear: GearInstance): string {
     const item = itemById.get(gear.itemId);
     const worn = Object.entries(st.equips).find(([, uid]) => uid === gear.uid);
     // 倍率投影走引擎 projectGearBase（#26 三处复算债收敛）：round(基础 × 档位倍率)

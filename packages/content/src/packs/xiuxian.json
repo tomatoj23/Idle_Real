@@ -463,7 +463,7 @@
           "enemyMissing": "妖物不知所踪。",
           "resting": "休整中",
           "enemyHp": "敌 {ehp}/{hp}",
-          "selfStats": "己方 {hp}/{max} · 攻 {atk} 防 {def} 会心 {crit}%",
+          "selfStats": "己方 {hp}/{max} · 攻 {atk} 防 {def} 会心 {crit}",
           "fleeBtn": "撤退",
           "autoFightOn": "自动再战 · 开",
           "autoFightOff": "自动再战 · 关",
