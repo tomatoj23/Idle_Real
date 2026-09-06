@@ -248,6 +248,18 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 | `affix` | hpDivider / critScale / baseScaleFloor / variance | 5 / 0.8 / 3（基础标尺 = max(攻防原值, hp÷5, crit×0.8, 3)）/ ±20% |
 | `crafting`（#5） | successPerLevel / successCap / failExpRefund / rarityBiasPerLevel | +0.004/层 / 0.99 / 25% / 0.0004/层 |
 
+- 计量：毫秒与百分点；`damageVariance`/`variance` 为对称波动幅度 v（乘数 1−v ~ 1+v）。
+- 跨字段语义检查：伤害档阈值须严格递增（tierLightMax < tierMidMax < tierHeavyMax，
+  pack 校验 shape）；其余边界由 schema 关卡保证。
+- statBase 语境：`statAtk*`/`statDef*`/`statCritBase` 按斗法层数线性成长，与
+  progression 的气血曲线在引擎 statBase 处汇合（攻击/防御/暴击归 combat、气血归
+  progression，按消费侧归属分节）。
+- autoFight/autoEat 裁决（#020）：自动化开关的**缺省值**归 `config.combat`
+  （新档初建与存档未写该字段两落点），玩家在局内的手动开关仍随档保存。
+- N1 判定侧收敛：开战门控偏移 `levelGateOffset` 参数化；引擎 `enemyGateOf(content,
+  skills, enemyId)` 是锁定判定/需层数展示的**单一来源**（与 combat:start 判定同公式），
+  UI 禁止复制 clv+offset 公式（AUD 审计 N1 四处副本收敛为引擎一处）。
+
 ### 炼制参数 crafting 子节（#5）
 
 旧版 craft 参数位（#5 票评 round3 A4 清单）全部 config 化（ADR-016 裁决 ① 分策），
@@ -270,18 +282,6 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 - 离线补偿 O(1) 统计式：成功数 = floor(轮数 × 成功率) + 余数无偏掷定
   （副产出同式先例）；材料按完整轮数扣减、只够部分轮数即停炉；装备产出
   逐件掷定（离散唯一实体，有界）。
-
-- 计量：毫秒与百分点；`damageVariance`/`variance` 为对称波动幅度 v（乘数 1−v ~ 1+v）。
-- 跨字段语义检查：伤害档阈值须严格递增（tierLightMax < tierMidMax < tierHeavyMax，
-  pack 校验 shape）；其余边界由 schema 关卡保证。
-- statBase 语境：`statAtk*`/`statDef*`/`statCritBase` 按斗法层数线性成长，与
-  progression 的气血曲线在引擎 statBase 处汇合（攻击/防御/暴击归 combat、气血归
-  progression，按消费侧归属分节）。
-- autoFight/autoEat 裁决（#020）：自动化开关的**缺省值**归 `config.combat`
-  （新档初建与存档未写该字段两落点），玩家在局内的手动开关仍随档保存。
-- N1 判定侧收敛：开战门控偏移 `levelGateOffset` 参数化；引擎 `enemyGateOf(content,
-  skills, enemyId)` 是锁定判定/需层数展示的**单一来源**（与 combat:start 判定同公式），
-  UI 禁止复制 clv+offset 公式（AUD 审计 N1 四处副本收敛为引擎一处）。
 
 ## elements 系别键域注册表（#25 键域开放，ADR-017 裁决 8）
 

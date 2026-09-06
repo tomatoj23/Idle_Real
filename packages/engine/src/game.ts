@@ -922,7 +922,9 @@ export function createGame(options: CreateGameOptions): Game {
         items[item.id] = recipe.output.count * successes;
       } else {
         const bias = levelOf(skill.id) * crparams.rarityBiasPerLevel;
-        for (let i = 0; i < successes; i++) {
+        // 装备产出按 output.count 逐件掷定（与在线 grantCraftOutput 同语义）。
+        const instances = successes * recipe.output.count;
+        for (let i = 0; i < instances; i++) {
           state.gearSeq += 1;
           const gear = makeGear(
             content,
@@ -935,7 +937,7 @@ export function createGame(options: CreateGameOptions): Game {
           );
           state.gear.push(gear);
         }
-        items[item.id] = successes;
+        items[item.id] = instances;
       }
     }
 

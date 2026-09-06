@@ -484,6 +484,37 @@ describe('#5 · 炼制离线补偿（O(1) 统计式，欠账不丢）', () => {
       expect(['common', 'fine', 'rare', 'epic']).toContain(gear.rarity);
     }
   });
+
+  it('装备产出 count>1：离线实例数 = 成功数 × 产出数（与在线逐件语义一致）', () => {
+    const pack = makeCraftPack();
+    (pack as { recipes: Array<{ output: { count: number } }> }).recipes[1].output.count = 2;
+    const clock = new ManualClock();
+    const game = createGame({
+      content: pack,
+      clock,
+      rng: () => 0.5,
+      save: {
+        version: 1,
+        time: 0,
+        state: {
+          gold: 0,
+          hp: 112,
+          items: { ore1: 8, qi1: 10 }, // 恰好 2 轮
+          skills: { smith: { xp: 0 } },
+          activity: { skillId: 'smith', index: 1, name: '锻青锋剑', progress: 0 },
+        },
+      },
+    });
+    game.settleOffline(100000); // 50 轮 >> 2
+
+    const events = game.events.drain();
+    expect(events).toHaveLength(1);
+    expect(events[0]?.data).toMatchObject({ cycles: 2, items: { sword1: 4 } });
+
+    const st = stateOf(game.snapshot());
+    expect(st.gear).toHaveLength(4); // 2 成功 × count 2
+    expect(st.activity).toBeNull();
+  });
 });
 
 describe('#5 · 存档恢复：craft 活动稳定引用（ADR-015）', () => {
@@ -568,5 +599,36 @@ describe('#5 · 内容包变更安全弃置（防崩回归）', () => {
     game.events.drain(); // 清掉 tick 事件
     expect(() => game.dispatch({ type: 'activity:start', payload: { skillId: 'fight', index: 0 } })).not.toThrow();
     expect(game.events.drain()[0]?.data).toMatchObject({ reason: 'not-found' });
+  });
+});
+
+describe('#5 · 增益丹 buff 窗口回归（票面验收；#4 无显式断言用例，本票补齐）', () => {
+  it('服破煞丹 → snapshot atk 窗口内提升、过期后恢复且 buff 键清理', () => {
+    const clock = new ManualClock();
+    const game = createGame({
+      content: makeCombatPack(),
+      clock,
+      seed: 7,
+      save: {
+        version: 1,
+        time: 0,
+        state: { gold: 0, hp: 112, items: { consumable_atk: 1 }, skills: { fight: { xp: 0 } }, activity: null },
+      },
+    });
+
+    const before = game.snapshot().stats!.atk;
+    game.dispatch({ type: 'consumable:eat', payload: { item: 'consumable_atk' } });
+    game.events.drain();
+
+    // 窗口内：atk ×1.2 经 ADR-011 管线生效，buff 随档记录
+    const during = game.snapshot().stats!.atk;
+    expect(during).toBeGreaterThan(before);
+    expect(stateOf(game.snapshot()).buffs.consumable_atk).toBeDefined();
+
+    // 推进过 300000ms 窗口：读时过期清理（playerContributions），属性恢复基线
+    clock.advance(300000);
+    game.tick(300000);
+    expect(game.snapshot().stats!.atk).toBe(before);
+    expect(stateOf(game.snapshot()).buffs.consumable_atk).toBeUndefined();
   });
 });
