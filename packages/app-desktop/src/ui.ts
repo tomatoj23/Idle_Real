@@ -32,6 +32,7 @@ import {
   rebirthPreviewOf,
   realmOf,
   shopAffordOf,
+  talentGateOf,
   type GameAction,
   type GameState,
   type GearInstance,
@@ -774,20 +775,18 @@ export function buildUi(
     if (talents.length === 0) {
       return `<section class="page"><p class="empty">${esc(T('pages.talents.empty'))}</p></section>`;
     }
-    const owned = new Set(st.talents);
     const cards = talents
       .map((node) => {
-        const isOwned = owned.has(node.id);
-        const missingPrereq = (node.requires ?? []).some((req) => !owned.has(req));
-        const affordable = st.daoYun >= node.cost;
+        // 购买门控走引擎 talentGateOf（与 talent:buy 判定同式同源，N4 收敛）。
+        const gate = talentGateOf(content, st.daoYun, st.talents, node.id);
         let op: string;
-        if (isOwned) op = `<em class="act-badge">${esc(T('pages.talents.owned'))}</em>`;
-        else if (missingPrereq) op = `<span class="act-lockmsg">${esc(T('pages.talents.needPrereq'))}</span>`;
-        else if (!affordable)
+        if (gate.owned) op = `<em class="act-badge">${esc(T('pages.talents.owned'))}</em>`;
+        else if (gate.prereqMissing) op = `<span class="act-lockmsg">${esc(T('pages.talents.needPrereq'))}</span>`;
+        else if (!gate.affordable)
           op = `<span class="act-lockmsg">${esc(T('pages.talents.needDaoYun', { cost: node.cost }))}</span>`;
         else
           op = `<button class="btn" data-act="talent-buy" data-node="${node.id}">${esc(T('pages.talents.buyBtn'))}</button>`;
-        return `<article class="act-card talent-card${isOwned ? ' owned' : ''}${!isOwned && (missingPrereq || !affordable) ? ' locked' : ''}">
+        return `<article class="act-card talent-card${gate.owned ? ' owned' : ''}${!gate.owned && (gate.prereqMissing || !gate.affordable) ? ' locked' : ''}">
           <header><b><span class="sigil sigil-sm">${esc(node.icon ?? T('icons.unknown'))}</span> ${esc(node.name)}</b></header>
           ${node.description ? `<div class="talent-desc">${esc(node.description)}</div>` : ''}
           <div class="act-meta">${esc(T('pages.talents.costRow', { cost: node.cost }))}</div>

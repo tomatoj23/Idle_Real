@@ -178,6 +178,40 @@ export function talentContributionsOf(
   return out;
 }
 
+/**
+ * 天赋节点购买门控（引擎单一来源，N4 收敛）：exists/owned/prereqMissing/
+ * affordable 四态与引擎 talent:buy 判定同式同源，UI 锁定态展示禁另写比较式
+ * （shopAffordOf 先例）。
+ */
+export interface TalentGateView {
+  /** 节点不存在于当前包（孤儿 id）。 */
+  readonly exists: boolean;
+  readonly owned: boolean;
+  /** 前置未点亮（requires 逐一对照已点亮集）。 */
+  readonly prereqMissing: boolean;
+  /** 道韵余额足额（与 talent:buy 的 no-daoyun 判定同式）。 */
+  readonly affordable: boolean;
+}
+
+export function talentGateOf(
+  content: GameContent,
+  daoYun: number,
+  purchasedIds: readonly string[],
+  nodeId: string,
+): TalentGateView {
+  const node = talentNodeOf(content, nodeId);
+  if (!node) {
+    return { exists: false, owned: false, prereqMissing: false, affordable: false };
+  }
+  const owned = purchasedIds.includes(nodeId);
+  return {
+    exists: true,
+    owned,
+    prereqMissing: !owned && (node.requires ?? []).some((req) => !purchasedIds.includes(req)),
+    affordable: daoYun >= node.cost,
+  };
+}
+
 /* ---------- 解锁表（道韵门槛 → 新内容，门控判定单一来源） ---------- */
 
 /** 解锁门控视图：锁定判定与展示所需道韵（与引擎判定同源，UI 禁复制门槛式）。 */
@@ -296,17 +330,13 @@ export function effectiveIntervalOf(baseInterval: number, speed: number): number
 }
 
 /**
- * 离线结算时长上限（offlineCap 消费点，flat 毫秒累计）：Σ ≤ 0 = 不设限
+ * 离线结算时长上限（offlineCap 消费点，flat 毫秒累计）：走 aggregateStats
+ * 统一管线（条件感知：带 condition 的贡献在无语境时不命中——与
+ * gatherSpeedOf/xpMultOf 同律），取 flat 区合计（base 0）；Σ ≤ 0 = 不设限
  * （基线行为不变）；内容声明上限后超出部分不入账（离线上限的语义本体）。
  */
 export function offlineCapOf(contributions: readonly Contribution[]): number {
-  let cap = 0;
-  for (const contribution of contributions) {
-    if (contribution.modifier.stat !== 'offlineCap' || contribution.modifier.zone !== 'flat') continue;
-    const value = contribution.modifier.value;
-    if (typeof value === 'number' && Number.isFinite(value) && value > 0) cap += value;
-  }
-  return cap;
+  return aggregateStats({ offlineCap: 0 }, contributions, {}).offlineCap?.flat ?? 0;
 }
 
 /**

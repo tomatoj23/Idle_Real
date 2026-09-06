@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { ManualClock } from '../src/clock.js';
-import { createGame, realmOf, type GameContent, type GameEvent, type SaveData } from '../src/index.js';
+import {
+  createGame,
+  realmOf,
+  talentGateOf,
+  type GameContent,
+  type GameEvent,
+  type SaveData,
+} from '../src/index.js';
 import { makeCombatPack } from './fixtures.js';
 
 /**
@@ -217,6 +224,18 @@ describe('#6 · AC3 换包换树：投影随 content.rebirth.talents 走', () =>
 });
 
 describe('#6 · 天赋购买拒绝面', () => {
+  it('talentGateOf 四态视图与 dispatch 判定同式（N4 收敛单一来源）', () => {
+    const pack = makeRebirthPack();
+    // 未点亮、无前置、余额足 → 可购；余额不足 → !affordable；前置缺 → prereqMissing；孤儿 → !exists。
+    expect(talentGateOf(pack, 1, [], 't_atk')).toEqual({
+      exists: true, owned: false, prereqMissing: false, affordable: true,
+    });
+    expect(talentGateOf(pack, 0, [], 't_atk')).toMatchObject({ affordable: false });
+    expect(talentGateOf(pack, 5, [], 't_spd')).toMatchObject({ prereqMissing: true });
+    expect(talentGateOf(pack, 5, ['t_atk'], 't_spd')).toMatchObject({ prereqMissing: false, affordable: true });
+    expect(talentGateOf(pack, 5, ['t_atk'], 't_ghost')).toMatchObject({ exists: false });
+  });
+
   function gameWithDaoYun(daoYun: number): ReturnType<typeof createGame> {
     const save = {
       version: 1,
@@ -301,6 +320,32 @@ describe('#6 · 新 stat 消费点（round3 E3 注册表收口）', () => {
     const game2 = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save: plain, seed: 7 });
     game2.settleOffline(120000);
     expect(game2.events.drain().find((e) => e.type === 'offline-settled')?.data?.cycles).toBe(40);
+  });
+
+  it('offlineCap 条件感知：带 condition 的贡献在无语境时不命中（与 gatherSpeedOf/xpMultOf 同律）', () => {
+    const pack = {
+      ...makeRebirthPack(),
+      rebirth: {
+        ...(makeRebirthPack() as { rebirth: Record<string, unknown> }).rebirth,
+        talents: [
+          {
+            id: 't_off_cond',
+            name: 'Conditional',
+            cost: 1,
+            effects: [{ stat: 'offlineCap', zone: 'flat', value: 60000, condition: { element: 'fire' } }],
+          },
+        ],
+      },
+    } as unknown as GameContent;
+    const activity = { skillId: 'herb', index: 0, name: '采青灵草', progress: 0 };
+    const game = createGame({
+      content: pack,
+      clock: new ManualClock(),
+      save: { version: 1, time: 0, state: { activity, items: {}, talents: ['t_off_cond'] } } as unknown as SaveData,
+      seed: 7,
+    });
+    game.settleOffline(120000); // 条件不命中 → 上限不生效 → 40 轮
+    expect(game.events.drain().find((e) => e.type === 'offline-settled')?.data?.cycles).toBe(40);
   });
 
   it('xpMult：全经验倍率在 grantExp 单点消费（采集/斗法同路）', () => {

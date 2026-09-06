@@ -66,6 +66,7 @@ import {
   rebirthOf,
   rebirthPreviewOf,
   talentContributionsOf,
+  talentGateOf,
   talentNodeOf,
   xpMultOf,
 } from './rebirth.js';
@@ -1450,16 +1451,18 @@ export function createGame(options: CreateGameOptions): Game {
             return;
           }
           const node = talentNodeOf(content, nodeId);
-          if (!node) {
+          // 判定走 talentGateOf（单一来源，UI 锁定态同调，N4 收敛）。
+          const gate = talentGateOf(content, state.daoYun, state.talents, nodeId);
+          if (!gate.exists || !node) {
             reject(action.type, 'not-found');
             return;
           }
-          if (state.talents.includes(nodeId)) return; // 已点亮幂等
-          if ((node.requires ?? []).some((req) => !state.talents.includes(req))) {
+          if (gate.owned) return; // 已点亮幂等
+          if (gate.prereqMissing) {
             reject(action.type, 'prereq');
             return;
           }
-          if (state.daoYun < node.cost) {
+          if (!gate.affordable) {
             reject(action.type, 'no-daoyun', { cost: String(node.cost), daoYun: String(state.daoYun) });
             return;
           }
@@ -1482,6 +1485,7 @@ export function createGame(options: CreateGameOptions): Game {
 
     snapshot(): SaveData {
       // GameState 无索引签名，与 GameContent 同理放宽为透明 Record（#2 先例）。
+      const runningInterval = runningIntervalOf();
       return {
         version: 1,
         time,
@@ -1492,7 +1496,7 @@ export function createGame(options: CreateGameOptions): Game {
         // 进行中活动的有效轮间隔（#6 展示投影）：采集按 gatherSpeed 缩放
         // （与 settleActivity/settleOffline 同调 effectiveIntervalOf），炼制为
         // 配方原值；进度条零公式复算。非存档必需，恢复侧忽略。
-        ...(runningIntervalOf() !== undefined ? { activityInterval: runningIntervalOf() } : {}),
+        ...(runningInterval !== undefined ? { activityInterval: runningInterval } : {}),
       };
     },
   };

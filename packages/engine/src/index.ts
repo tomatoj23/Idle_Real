@@ -150,6 +150,7 @@ export {
   rebirthPreviewOf,
   realmOf,
   talentContributionsOf,
+  talentGateOf,
   talentNodeOf,
   totalXpOf,
   xpMultOf,
@@ -161,5 +162,6 @@ export type {
   RebirthSectionView,
   RebirthUnlockView,
   RealmDefView,
+  TalentGateView,
   TalentNodeView,
 } from './rebirth.js';
