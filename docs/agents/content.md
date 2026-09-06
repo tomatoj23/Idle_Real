@@ -21,7 +21,7 @@ engine `EnemyView` 未投影，靠 #15 票驱动补齐）。
 | `combatText` | 是 | combat-text.schema.json | CTEXT 战斗文案词库（#019 批 2 扩十键：+句式模板/系统 note/战后摘要/对照语） |
 | `texts` | 是 | texts.schema.json | 系统展示文案（#019 批 2）：兵刃兜底名 + reject 协议 code → 文案映射；#26 起含 `shell` 子节（壳层全部题材文案） |
 | `shop` | 是 | shop.schema.json | 坊市货架（无 id 关系行） |
-| `config` | **否** | config.schema.json | 全局配置：槽位（#16）+ 玩法参数三子节 combat/progression/affix（#020，缺省=引擎基线） |
+| `config` | **否** | config.schema.json | 全局配置：槽位（#16）+ 玩法参数四子节 combat/progression/affix（#020，缺省=引擎基线）+ crafting（#5） |
 
 ## items 五形态（#16 起 oneOf 分流，判别式 = `type`）
 
@@ -135,12 +135,14 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
   无谓的内容格式迁移）。
 - UI `STAT_LABEL` 缺键回退 stat id（键域开放的可接受降级）。
 
-### 引擎判例（round3 A1，#14 动工时引用）
+### 引擎判例（round3 A1；加权位已随 #5 落地）
 
 `rollRarity`（权重掷点机制）与 `makeGear`（词条实例化管线）归引擎，接收内容表
 为参数位；权重表/概率/档名/卖价系数/量级系数归 content。"炼器等级抬稀有度"的
-外部加权输入位（旧版 js/game.js:84-95）留待 #5/#14 接入 rollRarity 签名，届时
-系数本身随批 3 config 化，勿写死函数体。
+外部加权输入位已随 #5 接入 `rollRarity(content, random, bias?)`：bias 正值上移
+掷点 → 档位表数组序后段（高档位）实际占比单调上升；系数归
+`config.crafting.rarityBiasPerLevel`（引擎基线 0.0004），craft 循环传
+`技艺层 × 系数`，#14 掉落管线复用同签名、不传（=0）时与旧签名逐点同分布。
 
 ## combatText 扩节与 texts 系统文案（#019 批 2，ADR-016 裁决 ④）
 
@@ -180,7 +182,7 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 | `basicName` | string（1~18 字，#027 按 CJK 密度假设放宽） | 无佩戴武器时的兵刃展示名（weaponName 槽兜底值） |
 | `reject` | 动作协议键 → 理由 code → 文案模板 | 展示文案映射。动作键域 schema 钉死：activity:start / bag:sell / shop:buy / combat:start / consumable:eat / gear:equip / gear:sell / `'*'`（跨动作兜底，bad-payload 等通用文案）；理由 code 键域开放 |
 | `reject` 槽位 | `{level}` `{activity}` `{item}` `{owned}` `{cost}` `{gold}` | 由引擎按协议语境填入； combat:start 的 `{level}` = `enemy.level − 门控偏移`（偏移量只在引擎判定处单一来源，文案侧零副本——N1 文案侧裁决） |
-| `shell`（#26） | ShellTexts 结构化节 | **壳层全部题材文案**（ADR-017 裁决 9：壳零题材字符串）：brand（sigil/name/locale/bootError）、topbar、tabs、side、stats.labels、units、icons、common、events（25 键）、pages（skills/combat/bag/shop）。schema required + additionalProperties:false 全程钉死 |
+| `shell`（#26） | ShellTexts 结构化节 | **壳层全部题材文案**（ADR-017 裁决 9：壳零题材字符串）：brand（sigil/name/locale/bootError）、topbar、tabs、side、stats.labels、units、icons、common、events（28 键）、pages（skills/craft/combat/bag/shop）。schema required + additionalProperties:false 全程钉死 |
 
 - 命中序：精确动作 → `'*'` → **键名回显**（`{action}/{reason}`，防御可见）。
 - 协议 code 本体归引擎，本节只承载展示文案；code 未命中/缺节绝不崩，toast
@@ -200,8 +202,10 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 - **brand.bootError**：启动失败兜底页模板，槽位 `{message}`；壳在内容包可用时
   读取，内容包缺失时降级键名回显。
 - 键分组语义：`events.*` 键 = 引擎事件类型协议面（loot/victory/defeat/
-  consumable:eat/equip:wear/levelup/sell/buy/reject/offline-settled）；
-  `pages.*` 键 = 壳 TabId 协议面（skills/combat/bag/shop）；
+  consumable:eat/equip:wear/levelup/sell/buy/reject/offline-settled；
+  #5 起含 craft-fail/craft-halt 的 craftFail/craftHalt 与 loot source=craft
+  的 lootCraft）；
+  `pages.*` 键 = 壳 TabId 协议面（skills/craft/combat/bag/shop，#5 起五页）；
   `units.*` 承载层级/时长读数的单位模板（`{v}` 数值、`{m}` 分、`{h}` 时）；
   `topbar.*Sigil` 承载顶栏资源图章字；`common.itemListSep` 为物品名列表
   分隔符（掉落预览/离线产出共用）；`pages.combat.selfStats` 的属性行数值
@@ -214,7 +218,8 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
   "slots": [ { "id": "weapon", "name": "法器", "icon": "兵" } ],
   "combat": { "playerAttackInterval": 2200, "levelGateOffset": 2, "...": "…" },
   "progression": { "maxLevel": 99, "xpPowCoef": 10, "...": "…" },
-  "affix": { "hpDivider": 5, "variance": 0.2 }
+  "affix": { "hpDivider": 5, "variance": 0.2 },
+  "crafting": { "successPerLevel": 0.004, "failExpRefund": 0.25 }
 }
 ```
 
@@ -241,6 +246,30 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 | `combat` | playerAttackInterval / defenseK / damageVariance / critMultiplier / critCap / criticalHpFraction / lowHpFraction / autoEatHpFraction / victoryRestMs / levelGateOffset / tierLightMax / tierMidMax / tierHeavyMax / statAtkBase / statAtkPerLevel / statDefBase / statDefPerLevel / statCritBase / autoFight / autoEat | 2200ms / 120 / ±10% / ×1.6 / 75 / 15% / 30% / 50% / 1500ms / +2 / 0.95·1.05·1.5 / 攻 8+3·层 / 防 2+1.2·层 / 暴 5 / true / true |
 | `progression` | maxLevel / xpPowCoef / xpExponent / xpLinearCoef / hpBase / hpPerLevel / hpRegenPerSec | 99 / 10 / 1.8 / 15（升层需 floor(10·L^1.8+15·L)）/ 100 / 12（气血 100+12·层）/ 4%/s |
 | `affix` | hpDivider / critScale / baseScaleFloor / variance | 5 / 0.8 / 3（基础标尺 = max(攻防原值, hp÷5, crit×0.8, 3)）/ ±20% |
+| `crafting`（#5） | successPerLevel / successCap / failExpRefund / rarityBiasPerLevel | +0.004/层 / 0.99 / 25% / 0.0004/层 |
+
+### 炼制参数 crafting 子节（#5）
+
+旧版 craft 参数位（#5 票评 round3 A4 清单）全部 config 化（ADR-016 裁决 ① 分策），
+非法值逐字段回落引擎基线；per-recipe 差异（基础成功率/耗时/产出/修为）归
+`recipes[]` 本体。
+
+| 字段 | 约定 |
+|---|---|
+| `successPerLevel` | 成功率层加成：每层技艺 +该值，炼丹/炼器通用 |
+| `successCap` | 成功率上限：层级加成抬升的天花板。公式 = min(cap, base + perLevel×层) 但**不低于 base**——否则 `successRate: 1` 的「炼器必得」被 0.99 击穿（票评裁决点：必得由内容表达，引擎只保证上限只作用于抬升段） |
+| `failExpRefund` | 失败修为返还比例：失败仍得 round(配方修为 × 该值)，**材料全损**（旧版 js/game.js:412 语义：返还的是修为非材料） |
+| `rarityBiasPerLevel` | 装备产出稀有度偏置：掷档点数上移 `技艺层 × 该值`（高档位占比单调上升；见上「引擎判例」） |
+
+- 配方执行单一来源：引擎 `craftSuccessRateOf`（掷点与 UI 展示同调）、
+  `craftMissingOf`（停炉判定与 UI 材料着色同调）；壳禁另写公式。
+- 开炉门控（旧版 startCraft 语义）：`activity:start` 对 craft 类技能按
+  `unlockLevel` 层数门控 + 开炉前验料（不足 reject `no-materials`，文案挂
+  `texts.reject['activity:start']`）；炉内材料耗尽 → 自动停炉（活动清空 +
+  `craft-halt` 事件，旧版踩坑回归）。
+- 离线补偿 O(1) 统计式：成功数 = floor(轮数 × 成功率) + 余数无偏掷定
+  （副产出同式先例）；材料按完整轮数扣减、只够部分轮数即停炉；装备产出
+  逐件掷定（离散唯一实体，有界）。
 
 - 计量：毫秒与百分点；`damageVariance`/`variance` 为对称波动幅度 v（乘数 1−v ~ 1+v）。
 - 跨字段语义检查：伤害档阈值须严格递增（tierLightMax < tierMidMax < tierHeavyMax，

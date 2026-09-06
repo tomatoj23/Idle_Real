@@ -49,15 +49,17 @@ export type GearBonuses = Readonly<Record<string, number>>;
 
 /**
  * 稀有度掷点（参数化机制，ADR-016 判例）：权重表由内容包 rarities 节提供，
- * 按权重占比归一化掷档（权重无需配成 1）；"炼器等级抬稀有度"的外部加权
- * 输入位（旧版 js/game.js:84-95）留待 #5/#14 扩展本函数签名接入。
+ * 按权重占比归一化掷档（权重无需配成 1）。`bias` 是外部加权输入位（#5 落地，
+ * #14 掉落管线复用同签名）：正值上移掷点 → 数组序后段（高档位）实际占比
+ * 单调上升（旧版 js/game.js:84-95 的 `r - lvBonus` 同义，方向适配本表
+ * 「数组顺序即档位顺序、末位最高」的约定）；不传（= 0）时与旧签名逐点同分布。
  * 空表/无正权重返回空串：缺内容降级，一切档位解析方按中性值兜底。
  */
-export function rollRarity(content: GameContent, random: () => number): Rarity {
+export function rollRarity(content: GameContent, random: () => number, bias = 0): Rarity {
   const table = raritiesOf(content).filter((def) => def.weight > 0);
   const total = table.reduce((sum, def) => sum + def.weight, 0);
   if (!(total > 0)) return '';
-  let roll = random() * total;
+  let roll = (random() + Math.max(0, bias)) * total;
   for (const def of table) {
     roll -= def.weight;
     if (roll < 0) return def.id;

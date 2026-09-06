@@ -16,6 +16,8 @@
 import type { ContentPack } from '@wendao/content';
 import {
   EventBus,
+  craftMissingOf,
+  craftSuccessRateOf,
   enemyGateOf,
   expBase,
   expToNext,
@@ -30,10 +32,11 @@ import {
   type GameState,
   type GearInstance,
   type ProgressionParams,
+  type RecipeView,
   type SaveData,
 } from '@wendao/engine';
 
-export type TabId = 'skills' | 'combat' | 'bag' | 'shop';
+export type TabId = 'skills' | 'craft' | 'combat' | 'bag' | 'shop';
 
 export interface Ui {
   bindActions(handler: (action: GameAction) => void): void;
@@ -62,6 +65,7 @@ export function buildUi(
   const itemById = new Map(content.items.map((item) => [item.id, item]));
   const skillById = new Map(content.skills.map((skill) => [skill.id, skill]));
   const gatherSkills = content.skills.filter((skill) => skill.kind === 'gather');
+  const craftSkills = content.skills.filter((skill) => skill.kind === 'craft');
   const combatSkillId = content.skills.find((skill) => skill.kind === 'combat')?.id ?? '';
 
   // 稀有度词表由内容包 rarities 节驱动（#018，ADR-016 裁决 ①/④）：
@@ -119,6 +123,7 @@ export function buildUi(
 
   let activeTab: TabId = 'skills';
   let selectedSkillId = gatherSkills[0]?.id ?? '';
+  let selectedCraftSkillId = craftSkills[0]?.id ?? '';
   let handler: ((action: GameAction) => void) | null = null;
   let lastSig = '';
   let rafId = 0;
@@ -135,6 +140,7 @@ export function buildUi(
     <div class="buffbar" id="buffbar"></div>
     <nav class="tabs" id="tabs">
       <button class="tab" data-act="tab" data-tab="skills">${esc(T('tabs.skills'))}</button>
+      <button class="tab" data-act="tab" data-tab="craft">${esc(T('tabs.craft'))}</button>
       <button class="tab" data-act="tab" data-tab="combat">${esc(T('tabs.combat'))}</button>
       <button class="tab" data-act="tab" data-tab="bag">${esc(T('tabs.bag'))}</button>
       <button class="tab" data-act="tab" data-tab="shop">${esc(T('tabs.shop'))}</button>
@@ -178,6 +184,11 @@ export function buildUi(
       case 'skill':
         if (el.dataset.disabled === 'y') break;
         selectedSkillId = el.dataset.skill ?? selectedSkillId;
+        lastSig = '';
+        render();
+        break;
+      case 'craftskill':
+        selectedCraftSkillId = el.dataset.skill ?? selectedCraftSkillId;
         lastSig = '';
         render();
         break;
@@ -257,6 +268,12 @@ export function buildUi(
           log(T('events.lootByproduct', { name: nameOf(data.item), count: Number(data.count ?? 0) }));
         } else if (data.source === 'drop') {
           log(T('events.lootDrop', { name: nameOf(data.item), count: Number(data.count ?? 0) }));
+        } else if (data.source === 'craft') {
+          // 炼制产出（#5）：装备产出带档位名/稀有度，showcase 特判与掉落同律。
+          log(T('events.lootCraft', { name: String(data.itemName ?? ''), count: Number(data.count ?? 0) }), 't-jade');
+          if (rarityDefOf(String(data.rarity))?.showcase) {
+            toast(T('events.lootShowcase', { name: String(data.itemName ?? '') }));
+          }
         }
         break;
       case 'attack':
@@ -308,6 +325,13 @@ export function buildUi(
         break;
       case 'reject':
         toast(String(data.message ?? T('events.rejectFallback')), 'red');
+        break;
+      case 'craft-fail':
+        log(T('events.craftFail', { name: String(data.recipeName ?? ''), exp: Number(data.exp ?? 0) }), 't-red');
+        break;
+      case 'craft-halt':
+        toast(T('events.craftHalt', { name: String(data.recipeName ?? '') }), 'red');
+        log(T('events.craftHalt', { name: String(data.recipeName ?? '') }), 't-red');
         break;
       case 'offline-settled': {
         const seconds = Math.max(0, Math.floor(Number(data.seconds) || 0));
@@ -413,6 +437,7 @@ export function buildUi(
 
   function renderPage(st: GameState, snap: SaveData): void {
     if (activeTab === 'skills') pageEl.innerHTML = renderSkills(st);
+    else if (activeTab === 'craft') pageEl.innerHTML = renderCraft(st);
     else if (activeTab === 'combat') pageEl.innerHTML = renderCombat(st, snap);
     else if (activeTab === 'bag') pageEl.innerHTML = renderBag(st);
     else pageEl.innerHTML = renderShop(st);
@@ -444,7 +469,8 @@ export function buildUi(
 
     const chips = content.skills
       .map((s) => {
-        const locked = s.kind !== 'gather';
+        // #5 起 craft 技能 chip 可选（修为/层数在炼制页消费），仅 combat 锁定。
+        const locked = s.kind === 'combat';
         const selected = s.id === skill.id;
         const lv = levelFromXp(st.skills[s.id]?.xp ?? 0, prog);
         return `<button class="chip${selected ? ' selected' : ''}${locked ? ' locked' : ''}"
@@ -511,7 +537,120 @@ export function buildUi(
       <section class="page">
         <div class="chips">${chips}</div>
         ${statusCard}
-        <div class="act-grid">${cards}</div>
+        ${cards ? `<div class="act-grid">${cards}</div>` : ''}
+      </section>`;
+  }
+
+  /* ---------- 炼制页（#5）：配方卡 = 材料着色 + 成功率 + 进度条 ---------- */
+
+  /** 活动槽 interval 解析（craft 动作归 recipes，index = 包内 recipes 下标）。 */
+  const activityIntervalOf = (skillId: string, index: number): number | undefined => {
+    const skill = skillById.get(skillId);
+    if (!skill) return undefined;
+    if (skill.kind === 'craft') return content.recipes[index]?.interval;
+    return skill.activities?.[index]?.interval;
+  };
+
+  function renderCraft(st: GameState): string {
+    if (craftSkills.length === 0 || content.recipes.length === 0) {
+      return `<section class="page"><p class="empty">${esc(T('pages.craft.empty'))}</p></section>`;
+    }
+    const skill = craftSkills.find((s) => s.id === selectedCraftSkillId) ?? craftSkills[0]!;
+    const xp = st.skills[skill.id]?.xp ?? 0;
+    const level = levelFromXp(xp, prog);
+    const need = expToNext(level, prog);
+    const into = xp - expBase(level, prog);
+    const expPct = Number.isFinite(need) ? Math.min(100, (into / need) * 100) : 100;
+
+    const act = st.activity;
+    const runningHere = act?.skillId === skill.id;
+    const actInterval = act ? activityIntervalOf(act.skillId, act.index) : undefined;
+    const actPct = act && actInterval ? Math.min(100, (act.progress / actInterval) * 100) : 0;
+
+    const chips = craftSkills
+      .map((s) => {
+        const selected = s.id === skill.id;
+        const lv = levelFromXp(st.skills[s.id]?.xp ?? 0, prog);
+        return `<button class="chip${selected ? ' selected' : ''}" data-act="craftskill" data-skill="${s.id}">
+          <span class="sigil sigil-sm">${esc(s.icon)}</span><span>${esc(s.name)}</span>
+          <b class="chip-lv">${esc(T('units.level', { v: lv }))}</b>
+        </button>`;
+      })
+      .join('');
+
+    const statusCard = `
+      <section class="status-card">
+        <span class="sigil sigil-big">${esc(skill.icon)}</span>
+        <div class="status-main">
+          <div class="status-head">
+            <b>${esc(skill.name)}</b><span class="status-lv">${esc(T('units.level', { v: level }))}</span>
+            ${skill.description ? `<span class="status-desc">${esc(skill.description)}</span>` : ''}
+          </div>
+          <div class="bar"><i style="width:${expPct}%"></i></div>
+          <div class="status-sub">${
+            Number.isFinite(need)
+              ? esc(T('pages.craft.expSub', { into, need, left: Math.max(0, Math.ceil(need - into)) }))
+              : esc(T('pages.craft.expMax'))
+          }</div>
+        </div>
+        <div class="status-act">
+          ${
+            act && runningHere
+              ? `<div class="act-now"><span>${esc(T('pages.craft.actNow', { name: act.name }))}</span><b data-act-pct data-key="${act.skillId}:${act.index}">${Math.floor(actPct)}%</b></div>
+                 <div class="bar bar-jade"><i data-bar="activity" data-key="${act.skillId}:${act.index}" style="width:${actPct}%"></i></div>
+                 <button class="btn btn-ghost" data-act="stop">${esc(T('pages.craft.stopBtn'))}</button>`
+              : `<div class="act-now idle"><span>${esc(T('pages.craft.idle'))}</span></div>`
+          }
+        </div>
+      </section>`;
+
+    const cards = content.recipes
+      .map((recipe: RecipeView, index: number) => ({ recipe, index }))
+      .filter(({ recipe }) => recipe.skill === skill.id)
+      .map(({ recipe, index }) => {
+        const unlocked = level >= recipe.unlockLevel;
+        const running = runningHere && act?.index === index;
+        const out = itemById.get(recipe.output.item);
+        // 成功率/材料缺口走引擎单一来源（craftSuccessRateOf / craftMissingOf），
+        // 壳零公式复算（#5 票评：成功率展示禁二次硬编码，round3 A4）。
+        const rate = craftSuccessRateOf(content, st.skills, recipe);
+        const ratePct = String(Math.round(rate * 1000) / 10);
+        const missing = new Set(craftMissingOf(recipe, st.items));
+        const mats = Object.entries(recipe.materials)
+          .map(([id, matNeed]) => {
+            const mat = itemById.get(id);
+            const have = st.items[id] ?? 0;
+            return `<span class="mat${missing.has(id) ? ' no' : ' ok'}">${esc(mat?.icon ?? T('icons.unknown'))} ${esc(T('pages.craft.matRow', { name: mat?.name ?? id, have, need: matNeed }))}</span>`;
+          })
+          .join('');
+        const pct = running && act ? Math.min(100, (act.progress / recipe.interval) * 100) : 0;
+        return `<article class="act-card${running ? ' running' : ''}${unlocked ? '' : ' locked'}">
+          <header><b>${esc(recipe.name)}</b>${running ? `<em class="act-badge">${esc(T('pages.craft.running'))}</em>` : ''}</header>
+          <div class="act-yield">
+            <span class="sigil sigil-sm">${esc(out?.icon ?? T('icons.unknown'))}</span> ${esc(out?.name ?? recipe.output.item)} ×${recipe.output.count}
+            <span class="act-bonus">${esc(T('pages.craft.successRate', { rate: ratePct }))}</span>
+          </div>
+          <div class="craft-mats">${mats}</div>
+          <div class="act-meta">${esc(T('pages.craft.recipeMeta', { interval: fmtSeconds(recipe.interval), exp: recipe.exp, level: recipe.unlockLevel }))}</div>
+          <div class="bar bar-thin"><i data-bar="activity" data-key="${skill.id}:${index}" style="width:${pct}%"></i></div>
+          ${
+            unlocked
+              ? running
+                ? `<button class="btn btn-ghost" data-act="stop">${esc(T('pages.craft.stopBtn'))}</button>`
+                : `<button class="btn" data-act="start" data-skill="${skill.id}" data-index="${index}">${esc(T('pages.craft.startBtn'))}</button>`
+              : `<span class="act-lockmsg">${esc(T('common.needLevel', { level: recipe.unlockLevel }))}</span>`
+          }
+        </article>`;
+      })
+      .join('');
+
+    return `
+      <section class="page">
+        <h2 class="page-title">${esc(T('pages.craft.title'))}</h2>
+        <p class="page-sub">${esc(T('pages.craft.subtitle', { level }))}</p>
+        <div class="chips">${chips}</div>
+        ${statusCard}
+        <div class="act-grid">${cards || `<p class="empty">${esc(T('pages.craft.empty'))}</p>`}</div>
       </section>`;
   }
 
@@ -740,10 +879,11 @@ export function buildUi(
     let key = '';
     let pct = 0;
     if (st.activity) {
-      const def = skillById.get(st.activity.skillId)?.activities?.[st.activity.index];
-      if (def) {
+      // interval 解析含 craft 配方（index = 包内 recipes 下标，#5）。
+      const interval = activityIntervalOf(st.activity.skillId, st.activity.index);
+      if (interval !== undefined) {
         key = `${st.activity.skillId}:${st.activity.index}`;
-        pct = Math.min(100, (st.activity.progress / def.interval) * 100);
+        pct = Math.min(100, (st.activity.progress / interval) * 100);
       }
     }
     for (const el of root.querySelectorAll<HTMLElement>('[data-bar="activity"]')) {

@@ -480,6 +480,26 @@ describe('validateContentPack · texts.shell 壳层文案（#26，ADR-017 裁决
     expectError(validateContentPack(pack), '/texts/shell/brand/locale', 'pattern');
   });
 
+  it('tabs / pages 缺 craft 子节 → required（#5 新页签的包侧义务）', () => {
+    const noTab = makePack();
+    delete noTab.texts.shell.tabs.craft;
+    expectError(validateContentPack(noTab), '/texts/shell/tabs/craft', 'required');
+
+    const noPage = makePack();
+    delete noPage.texts.shell.pages.craft;
+    expectError(validateContentPack(noPage), '/texts/shell/pages/craft', 'required');
+  });
+
+  it('events 缺 craft 相关键 → required（#5 事件协议面扩展）', () => {
+    const pack = makePack();
+    delete pack.texts.shell.events.craftFail;
+    expectError(validateContentPack(pack), '/texts/shell/events/craftFail', 'required');
+
+    const halt = makePack();
+    delete halt.texts.shell.events.craftHalt;
+    expectError(validateContentPack(halt), '/texts/shell/events/craftHalt', 'required');
+  });
+
   it('新增 stat 标签键 = 纯 JSON 放行（键域开放演示）', () => {
     const pack = makePack();
     pack.texts.shell.stats.labels.luck = { label: '幸' };

@@ -124,6 +124,38 @@ export function findShopEntry(content: GameContent, itemId: string): ShopEntryVi
   return shopOf(content).find((entry) => entry.item === itemId);
 }
 
+/* ---------- 配方与炼制（#5 垂直切片③） ---------- */
+
+/**
+ * 配方视图（recipes 节条目）：无 id 关系行，`index` = 包内 recipes 数组
+ * 下标（活动槽持久化该下标，恢复时按配方名做稳定引用校验，ADR-015）。
+ */
+export interface RecipeView {
+  readonly name: string;
+  /** 所属技艺 id（craft 类技能，包校验强制）。 */
+  readonly skill: string;
+  readonly unlockLevel: number;
+  readonly output: StackView;
+  /** 材料表：物品 id → 数量（失败时全损，只返还修为）。 */
+  readonly materials: Readonly<Record<string, number>>;
+  /** 基础成功率（0~1）；必定成功（炼器）填 1。 */
+  readonly successRate: number;
+  /** 单次炼制耗时（毫秒）。 */
+  readonly interval: number;
+  readonly exp: number;
+}
+
+/** 配方列表：缺节/形状非法 → 空表（安全兜底，绝不因内容缺失崩溃）。 */
+export function recipesOf(content: GameContent): readonly RecipeView[] {
+  const recipes = (content as { recipes?: unknown }).recipes;
+  return Array.isArray(recipes) ? (recipes as RecipeView[]) : [];
+}
+
+/** 按包内下标取配方；越界返回 undefined。 */
+export function findRecipe(content: GameContent, index: number): RecipeView | undefined {
+  return recipesOf(content)[index];
+}
+
 /** 佩戴槽位视图（config.slots 数据化，issue #13）。 */
 export interface SlotView {
   readonly id: string;
@@ -388,6 +420,72 @@ export function progressionParamsOf(content: GameContent): ProgressionParams {
 export function affixParamsOf(content: GameContent): AffixParams {
   const affix = (content as { config?: { affix?: unknown } }).config?.affix;
   return resolveParams(affix, BASE_AFFIX_PARAMS);
+}
+
+/* ---------- 炼制参数（#5，ADR-016 裁决 ① 分策：引擎基线 + config.crafting 覆盖） ---------- */
+
+/**
+ * 炼制参数视图（已解析基线）。旧版 craft 参数位（#5 票评 round3 A4 清单）
+ * 全部数据化：成功率层加成/上限、失败修为返还、稀有度偏置系数——
+ * per-recipe 差异归 Recipe.successRate；「炼器必得」由 successRate: 1 表达，
+ * 引擎零规则硬编码。
+ */
+export interface CraftParamsView {
+  /** 成功率层加成：每层技艺 +该值（旧版 js/game.js:410 沿革 +0.004/层）。 */
+  readonly successPerLevel: number;
+  /** 成功率上限：层级加成抬升的天花板（旧版 0.99）。 */
+  readonly successCap: number;
+  /** 失败修为返还比例：失败仍得 round(配方修为 × 该值)，材料全损（旧版 js/game.js:412）。 */
+  readonly failExpRefund: number;
+  /** 装备产出稀有度偏置系数：掷档点数上移 技艺层 × 该值（旧版 js/game.js:95 沿革 0.0004）。 */
+  readonly rarityBiasPerLevel: number;
+}
+
+/** 引擎基线（旧版 game.js 沿革）；config.crafting 缺省字段逐项回落到此。 */
+export const BASE_CRAFT_PARAMS: CraftParamsView = {
+  successPerLevel: 0.004,
+  successCap: 0.99,
+  failExpRefund: 0.25,
+  rarityBiasPerLevel: 0.0004,
+};
+
+/** 炼制参数：config.crafting 覆盖基线（可选子节，缺省 = 引擎基线）。 */
+export function craftParamsOf(content: GameContent): CraftParamsView {
+  const crafting = (content as { config?: { crafting?: unknown } }).config?.crafting;
+  return resolveParams(crafting, BASE_CRAFT_PARAMS);
+}
+
+/**
+ * 炼制成功率（单一来源，#5）：min(cap, 基础 + perLevel × 技艺层)，但**不低于
+ * 基础值**——否则 successRate: 1 的「炼器必得」会被上限击穿（票评裁决点：
+ * 必得由内容表达，引擎只保证上限只作用于层级加成的抬升段）。
+ * 引擎掷点与 UI 成功率展示同调此函数，禁另写第二份公式。
+ */
+export function craftSuccessRateOf(
+  content: GameContent,
+  skills: Readonly<Record<string, { xp?: number }>>,
+  recipe: RecipeView,
+): number {
+  const params = craftParamsOf(content);
+  const level = levelFromXp(skills[recipe.skill]?.xp ?? 0, progressionParamsOf(content));
+  const bonus = Math.max(0, params.successPerLevel) * level;
+  return Math.min(
+    1,
+    Math.max(recipe.successRate, Math.min(params.successCap, recipe.successRate + bonus)),
+  );
+}
+
+/**
+ * 配方材料缺口（单一来源，#5）：返回数量不足的材料 id 列表。
+ * 引擎缺料停炉判定与 UI 材料着色同调此函数，禁另写第二份比较式。
+ */
+export function craftMissingOf(
+  recipe: RecipeView,
+  items: Readonly<Record<string, number>>,
+): string[] {
+  return Object.entries(recipe.materials)
+    .filter(([matId, need]) => (items[matId] ?? 0) < need)
+    .map(([matId]) => matId);
 }
 
 /**

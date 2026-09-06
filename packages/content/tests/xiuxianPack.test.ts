@@ -22,7 +22,7 @@ describe('修仙题材包 · 验收（issue #2）', () => {
     expect(pack.gearDrops).toHaveLength(8);
     expect(pack.rarities).toHaveLength(4);
     expect(pack.affixPool).toHaveLength(4);
-    expect(pack.shop).toHaveLength(6);
+    expect(pack.shop).toHaveLength(10);
   });
 
   it('织物线：灵蚕丝/冰蚕丝为采药副产出，布道袍用丝、甲胄用矿石', () => {
@@ -322,7 +322,7 @@ describe('修仙题材包 · 数值基线', () => {
     ]);
   });
 
-  it('坊市货架全表', () => {
+  it('坊市货架全表（#5 补材料条目：修仙包炼制循环的购料通路）', () => {
     const rows = pack.shop.map((s) => [s.item, s.price]);
     expect(rows).toEqual([
       ['consumable_heal', 45],
@@ -331,7 +331,26 @@ describe('修仙题材包 · 数值基线', () => {
       ['consumable_def', 450],
       ['silk', 15],
       ['bingsilk', 90],
+      ['herb1', 10],
+      ['qi1', 6],
+      ['ore1', 12],
+      ['core1', 60],
     ]);
+  });
+
+  it('炼制协议面：config.crafting 显式基线 + craft 页/事件文案在案（#5）', () => {
+    expect(pack.config?.crafting).toEqual({
+      successPerLevel: 0.004,
+      successCap: 0.99,
+      failExpRefund: 0.25,
+      rarityBiasPerLevel: 0.0004,
+    });
+    expect(pack.texts.shell.tabs.craft).toBe('炼制');
+    expect(pack.texts.shell.pages.craft.successRate).toContain('{rate}');
+    expect(pack.texts.shell.pages.craft.matRow).toContain('{have}');
+    expect(pack.texts.shell.events.lootCraft).toContain('{name}');
+    expect(pack.texts.shell.events.craftFail).toContain('{exp}');
+    expect(pack.texts.shell.events.craftHalt).toContain('{name}');
   });
 
   it('战斗文案：动词池/招式注册/词库结构', () => {

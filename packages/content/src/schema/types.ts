@@ -425,9 +425,10 @@ export interface ShellTopbar {
   readonly hpSigil: string;
 }
 
-/** 页签文案（键 = TabId 协议键，壳钉死四键）。 */
+/** 页签文案（键 = TabId 协议键，壳钉死五键；craft 随 #5 加入）。 */
 export interface ShellTabs {
   readonly skills: string;
+  readonly craft: string;
   readonly combat: string;
   readonly bag: string;
   readonly shop: string;
@@ -465,13 +466,15 @@ export interface ShellCommon {
   readonly itemListSep: string;
 }
 
-/** 事件流文案（键 = 引擎事件类型协议面，槽位见 schema 描述）。 */
+/** 事件流文案（键 = 引擎事件类型协议面，槽位见 schema 描述；craft 相关键随 #5 加入）。 */
 export interface ShellEvents {
   readonly lootGear: string;
   readonly lootGearLog: string;
   readonly lootShowcase: string;
   readonly lootByproduct: string;
   readonly lootDrop: string;
+  /** 炼制产出修行录行（#5，loot source=craft）。 */
+  readonly lootCraft: string;
   readonly victoryFlog: string;
   readonly victoryLog: string;
   readonly defeatFlog: string;
@@ -492,6 +495,10 @@ export interface ShellEvents {
   readonly offlineLog: string;
   readonly offlineNoYield: string;
   readonly offlineExpSuffix: string;
+  /** 炼制失败修行录行（#5，craft-fail 事件）。 */
+  readonly craftFail: string;
+  /** 缺料停炉提示（#5，craft-halt 事件）。 */
+  readonly craftHalt: string;
 }
 
 /** 修炼页文案。 */
@@ -557,9 +564,34 @@ export interface ShellPageShop {
   readonly buyBtn: string;
 }
 
-/** 页面文案分组（键 = TabId 协议键）。 */
+/**
+ * 炼制页文案（#5）：配方卡材料着色 + 成功率展示（数值来自引擎
+ * craftSuccessRateOf）+ 进度条；成功率/材料缺口禁壳内另写公式。
+ */
+export interface ShellPageCraft {
+  readonly title: string;
+  /** 副标题；槽位 {level} = 当前选中的炼制技艺层数。 */
+  readonly subtitle: string;
+  readonly empty: string;
+  readonly expSub: string;
+  readonly expMax: string;
+  readonly actNow: string;
+  readonly idle: string;
+  readonly stopBtn: string;
+  readonly running: string;
+  readonly startBtn: string;
+  /** 成功率行；槽位 {rate}（引擎数值 × 100）。 */
+  readonly successRate: string;
+  /** 材料行；槽位 {name}/{have}/{need}。 */
+  readonly matRow: string;
+  /** 配方元信息行；槽位 {interval}/{exp}/{level}。 */
+  readonly recipeMeta: string;
+}
+
+/** 页面文案分组（键 = TabId 协议键；craft 随 #5 加入）。 */
 export interface ShellPages {
   readonly skills: ShellPageSkills;
+  readonly craft: ShellPageCraft;
   readonly combat: ShellPageCombat;
   readonly bag: ShellPageBag;
   readonly shop: ShellPageShop;
@@ -668,6 +700,22 @@ export interface AffixConfig {
   readonly variance?: number;
 }
 
+/**
+ * 炼制机制参数（config.crafting 子节，#5）。缺省 = 引擎基线：
+ * 成功率层加成 +0.004/层、上限 0.99、失败修为返还 25%、稀有度偏置 0.0004/层。
+ * per-recipe 差异归 recipes[].successRate；「炼器必得」由 successRate: 1 表达。
+ */
+export interface CraftingConfig {
+  /** 成功率层加成：每层技艺 +该值（炼丹/炼器通用）。 */
+  readonly successPerLevel?: number;
+  /** 成功率上限：层级加成抬升的天花板（不低于配方基础成功率）。 */
+  readonly successCap?: number;
+  /** 失败修为返还比例：失败仍得 round(配方修为 × 该值)，材料全损。 */
+  readonly failExpRefund?: number;
+  /** 装备产出稀有度偏置：掷档点数上移 技艺层 × 该值（#14 掉落管线复用同签名）。 */
+  readonly rarityBiasPerLevel?: number;
+}
+
 export interface Config {
   readonly slots: readonly SlotDef[];
   /** 战斗机制与属性基线参数；缺省 = 引擎基线。 */
@@ -676,6 +724,8 @@ export interface Config {
   readonly progression?: ProgressionConfig;
   /** 装备词条机制参数；缺省 = 引擎基线。 */
   readonly affix?: AffixConfig;
+  /** 炼制机制参数（#5）；缺省 = 引擎基线。 */
+  readonly crafting?: CraftingConfig;
 }
 
 /* ---------- 内容包整体 ---------- */

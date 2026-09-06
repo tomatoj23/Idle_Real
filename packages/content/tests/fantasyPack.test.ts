@@ -90,6 +90,17 @@ describe('西方魔幻迷你包 · 验收 tracer（#28）', () => {
     expect(pack.texts.shell.stats.labels.atk).toEqual({ label: 'AT' });
   });
 
+  it('craft 协议面第二题材样张：craft 页签/页面/事件文案英语齐备（#5）', () => {
+    const pack = loadFantasyPack();
+    expect(pack.texts.shell.tabs.craft).toBe('Crafting');
+    expect(pack.texts.shell.pages.craft.title).toBe('Crafting');
+    expect(pack.texts.shell.pages.craft.successRate).toContain('{rate}');
+    expect(pack.texts.shell.pages.craft.matRow).toContain('{need}');
+    expect(pack.texts.shell.events.lootCraft).toContain('{count}');
+    expect(pack.texts.shell.events.craftFail).toContain('{name}');
+    expect(pack.texts.shell.events.craftHalt).toContain('{name}');
+  });
+
   it('config 槽位节：weapon/body/accessory 三槽英语命名（#16 槽位数据化）', () => {
     const pack = loadFantasyPack();
     expect(pack.config?.slots).toEqual([

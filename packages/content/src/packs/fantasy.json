@@ -412,6 +412,7 @@
       },
       "tabs": {
         "skills": "Skills",
+        "craft": "Crafting",
         "combat": "Combat",
         "bag": "Bag",
         "shop": "Shop"
@@ -450,6 +451,7 @@
         "lootShowcase": "A wondrous find: {name}!",
         "lootByproduct": "Bonus find: {name} x{count}.",
         "lootDrop": "+{count} {name}.",
+        "lootCraft": "Crafted {name} x{count}.",
         "victoryFlog": "Victory over {name}! {summary}{compare}",
         "victoryLog": "Victory over {name}. {summary}{compare}",
         "defeatFlog": "You fall to {name}...",
@@ -469,7 +471,9 @@
         "offlineToast": "Away {away}: {activity} ran {cycles} times.",
         "offlineLog": "Away {away}: gained {items}. {exp}",
         "offlineNoYield": "nothing",
-        "offlineExpSuffix": "+{exp} exp"
+        "offlineExpSuffix": "+{exp} exp",
+        "craftFail": "{name} failed — materials lost, {exp} exp gleaned.",
+        "craftHalt": "Out of materials — {name} halted."
       },
       "pages": {
         "skills": {
@@ -484,6 +488,21 @@
           "byproduct": "Bonus: {icon} {name} ({chance}%)",
           "actMeta": "{interval} a try · {exp} exp · Lv {level}",
           "startBtn": "Train"
+        },
+        "craft": {
+          "title": "Crafting",
+          "subtitle": "The workbench — level {level}.",
+          "empty": "No recipes known.",
+          "expSub": "{into}/{need} exp ({left} to go)",
+          "expMax": "Mastered",
+          "actNow": "Working: {name}",
+          "idle": "The workbench is cold",
+          "stopBtn": "Stop",
+          "running": "Working",
+          "startBtn": "Craft",
+          "successRate": "Success {rate}%",
+          "matRow": "{name} {have}/{need}",
+          "recipeMeta": "{interval} a try · {exp} exp · Lv {level}"
         },
         "combat": {
           "title": "Combat",

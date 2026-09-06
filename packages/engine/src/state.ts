@@ -8,7 +8,17 @@
  * 未知顶层键透明透传（向后兼容未来节的存档）。
  */
 import type { GameContent, SaveData } from './types.js';
-import { combatParamsOf, findActivity, findEnemy, findItem, playerMaxHp, raritiesOf, skillsOf } from './contentView.js';
+import {
+  combatParamsOf,
+  findActivity,
+  findEnemy,
+  findItem,
+  findRecipe,
+  findSkill,
+  playerMaxHp,
+  raritiesOf,
+  skillsOf,
+} from './contentView.js';
 import { type Affix, type GearInstance, type Rarity } from './gear.js';
 import type { DamageTier, EncounterRecord, RoundTally } from './combat.js';
 import type { Contribution } from './modifiers.js';
@@ -172,16 +182,30 @@ export function restoreState(
       Number.isFinite(act.progress) &&
       act.progress >= 0
     ) {
-      // 稳定引用校验：下标指向的活动必须与存档记录同名，
+      // 稳定引用校验：下标指向的目标必须与存档记录同名，
       // 内容重排/改名时宁可弃置也不静默换目标（ADR-015）。
-      const def = findActivity(content, act.skillId, act.index);
-      if (def && def.activity.name === act.name) {
-        state.activity = {
-          skillId: act.skillId,
-          index: act.index,
-          name: act.name,
-          progress: act.progress,
-        };
+      // craft 类技能的动作是 recipes（index = 包内 recipes 下标，#5）。
+      const skill = findSkill(content, act.skillId);
+      if (skill && skill.kind === 'craft') {
+        const recipe = findRecipe(content, act.index);
+        if (recipe && recipe.skill === skill.id && recipe.name === act.name) {
+          state.activity = {
+            skillId: act.skillId,
+            index: act.index,
+            name: act.name,
+            progress: act.progress,
+          };
+        }
+      } else {
+        const def = findActivity(content, act.skillId, act.index);
+        if (def && def.activity.name === act.name) {
+          state.activity = {
+            skillId: act.skillId,
+            index: act.index,
+            name: act.name,
+            progress: act.progress,
+          };
+        }
       }
     }
 

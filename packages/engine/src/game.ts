@@ -7,12 +7,17 @@ import {
   combatLevelOf,
   combatParamsOf,
   combatTextOf,
+  craftMissingOf,
+  craftParamsOf,
+  craftSuccessRateOf,
   enemyGateOf,
   findActivity,
   findEnemy,
   findGearDrop,
   findItem,
+  findRecipe,
   findShopEntry,
+  findSkill,
   playerMaxHp,
   progressionParamsOf,
   skillsOf,
@@ -20,6 +25,7 @@ import {
   type ActivityView,
   type EnemyView,
   type ItemView,
+  type RecipeView,
   type SkillView,
 } from './contentView.js';
 import {
@@ -46,6 +52,7 @@ import {
   cloneState,
   initialState,
   restoreState,
+  type ActivityState,
   type CombatState,
   type GameState,
 } from './state.js';
@@ -109,6 +116,7 @@ export function createGame(options: CreateGameOptions): Game {
   const cparams = combatParamsOf(content);
   const pparams = progressionParamsOf(content);
   const aparams = affixParamsOf(content);
+  const crparams = craftParamsOf(content);
 
   const contributions: readonly Contribution[] = options.contributions ?? [];
   const state: GameState = options.save
@@ -386,6 +394,16 @@ export function createGame(options: CreateGameOptions): Game {
   function settleActivity(dt: number): void {
     const active = state.activity;
     if (!active) return;
+    const skill = findSkill(content, active.skillId);
+    if (!skill) {
+      state.activity = null; // 内容包已变更：安全弃置
+      return;
+    }
+    // craft 类技能的动作是 recipes（index = 包内 recipes 下标，#5）。
+    if (skill.kind === 'craft') {
+      settleCraft(active, skill, dt);
+      return;
+    }
     const found = findActivity(content, active.skillId, active.index);
     if (!found) {
       state.activity = null; // 内容包已变更：安全弃置
@@ -396,6 +414,105 @@ export function createGame(options: CreateGameOptions): Game {
     while (active.progress >= found.activity.interval && guard++ < 1_000_000) {
       active.progress -= found.activity.interval;
       completeActivityOnce(found.skill, found.activity);
+    }
+  }
+
+  /* ---------- 炼制（#5 垂直切片③）：配方循环 / 失败损料 / 缺料停炉 / 装备实例化 ---------- */
+
+  /**
+   * 单轮炼制完成（旧版 game.js 406-418 语义）：先扣料 → 成功率掷点 →
+   * 成功发产出 + 配方修为；失败材料全损、只返还修为（round(exp × failRefund)）。
+   * 事件面：exp（复用 grantExp）+ loot（source=craft）/ craft-fail + activity-complete。
+   */
+  function completeCraftOnce(skill: SkillView, recipe: RecipeView): void {
+    for (const [matId, count] of Object.entries(recipe.materials)) {
+      takeItem(matId, count);
+    }
+    if (random() < craftSuccessRateOf(content, state.skills, recipe)) {
+      grantCraftOutput(skill, recipe);
+      grantExp(skill, recipe.exp, false);
+    } else {
+      const exp = Math.round(recipe.exp * Math.max(0, crparams.failExpRefund));
+      grantExp(skill, exp, false);
+      events.emit({
+        type: 'craft-fail',
+        time,
+        data: { skillId: skill.id, skillName: skill.name, recipeName: recipe.name, exp },
+      });
+    }
+    events.emit({
+      type: 'activity-complete',
+      time,
+      data: { skillId: skill.id, skillName: skill.name, activityName: recipe.name },
+    });
+  }
+
+  /**
+   * 炼制产出：equip 类 → 装备实例化（rollRarity 受炼器等级偏置 + 词条掷定，
+   * #5/#14 接缝：偏置 = 技艺层 × config.crafting.rarityBiasPerLevel）；其余入袋。
+   */
+  function grantCraftOutput(skill: SkillView, recipe: RecipeView): void {
+    const item = findItem(content, recipe.output.item);
+    if (!item) return; // 包校验已保证存在；防御路径静默跳过
+    if (item.type !== 'equip') {
+      addItem(item.id, recipe.output.count);
+      emitLoot(item.id, recipe.output.count, 'craft');
+      return;
+    }
+    const bias = levelOf(skill.id) * crparams.rarityBiasPerLevel;
+    for (let i = 0; i < recipe.output.count; i++) {
+      state.gearSeq += 1;
+      // 词条标尺/波动走 config.affix；rarity 显式 roll（带偏置）与缺省参数位求值同序。
+      const gear = makeGear(
+        content,
+        item.id,
+        item.bonuses ?? {},
+        state.gearSeq,
+        random,
+        rollRarity(content, random, bias),
+        aparams,
+      );
+      state.gear.push(gear);
+      events.emit({
+        type: 'loot',
+        time,
+        data: {
+          item: item.id,
+          itemName: gearName(content, item.name, gear.rarity),
+          count: 1,
+          source: 'craft',
+          rarity: gear.rarity,
+          uid: gear.uid,
+        },
+      });
+    }
+  }
+
+  /**
+   * 炼制大步长结算（旧版 game.js 401-420 语义）：轮内材料耗尽即中止；
+   * 结算后材料不足 → 自动停炉（活动清空 + craft-halt 事件，旧版踩坑回归：
+   * 绝不静默卡死、绝不抛未捕获异常）。
+   */
+  function settleCraft(active: ActivityState, skill: SkillView, dt: number): void {
+    const recipe = findRecipe(content, active.index);
+    if (!recipe || recipe.skill !== skill.id) {
+      state.activity = null; // 内容包已变更：安全弃置
+      return;
+    }
+    active.progress += dt;
+    let guard = 0;
+    while (active.progress >= recipe.interval && guard++ < 1_000_000) {
+      if (craftMissingOf(recipe, state.items).length > 0) break;
+      active.progress -= recipe.interval;
+      completeCraftOnce(skill, recipe);
+    }
+    if (craftMissingOf(recipe, state.items).length > 0) {
+      state.activity = null; // 缺料停炉：与手动收功同效（剩余进度一并弃置）
+      events.emit({
+        type: 'craft-halt',
+        time,
+        data: { skillId: skill.id, skillName: skill.name, recipeName: recipe.name },
+      });
     }
   }
 
@@ -695,12 +812,21 @@ export function createGame(options: CreateGameOptions): Game {
     if (state.combat) state.combat = null; // 离线不可战斗：视作离场休整，回满血由下方统一处理
     const active = state.activity;
     if (!active) return;
+    const skill = findSkill(content, active.skillId);
+    if (!skill) {
+      state.activity = null;
+      return;
+    }
+    if (skill.kind === 'craft') {
+      settleCraftOffline(active, skill, elapsedMs);
+      return;
+    }
     const found = findActivity(content, active.skillId, active.index);
     if (!found) {
       state.activity = null;
       return;
     }
-    const { skill, activity } = found;
+    const { activity } = found;
 
     const total = active.progress + elapsedMs;
     const cycles = Math.floor(total / activity.interval);
@@ -748,6 +874,100 @@ export function createGame(options: CreateGameOptions): Game {
     });
   }
 
+  /**
+   * 炼制离线补偿（ADR-013 观察时补偿，O(1) 统计式）：成功数 = floor(期望) +
+   * 余数无偏掷定（副产出同式先例）。材料按完整轮数扣减（失败不返料、只返还
+   * 修为，与在线语义一致）；材料只够部分轮数 → 炼完即停炉（活动清空）。
+   * 装备产出为离散唯一实体，逐件掷定稀有度与词条（有界：attempts ≤ 时长/interval）。
+   */
+  function settleCraftOffline(active: ActivityState, skill: SkillView, elapsedMs: number): void {
+    const recipe = findRecipe(content, active.index);
+    if (!recipe || recipe.skill !== skill.id) {
+      state.activity = null;
+      return;
+    }
+    const total = active.progress + elapsedMs;
+    const cycles = Math.floor(total / recipe.interval);
+    active.progress = total % recipe.interval;
+
+    state.hp = hpCap(); // 离线全程脱战
+
+    if (cycles <= 0) return;
+    let attempts = cycles;
+    for (const [matId, need] of Object.entries(recipe.materials)) {
+      const afford = Math.floor((state.items[matId] ?? 0) / need);
+      if (afford < attempts) attempts = afford;
+    }
+    if (attempts <= 0) {
+      state.activity = null; // 无料可炼：停炉
+      return;
+    }
+
+    const rate = craftSuccessRateOf(content, state.skills, recipe);
+    const expected = attempts * rate;
+    const whole = Math.floor(expected);
+    let successes = whole;
+    if (whole < attempts && random() < expected - whole) successes += 1; // 余数无偏掷定
+    const failures = attempts - successes;
+
+    for (const [matId, need] of Object.entries(recipe.materials)) {
+      takeItem(matId, need * attempts);
+    }
+
+    const items: Record<string, number> = {};
+    const item = findItem(content, recipe.output.item);
+    if (item && successes > 0) {
+      if (item.type !== 'equip') {
+        addItem(item.id, recipe.output.count * successes);
+        items[item.id] = recipe.output.count * successes;
+      } else {
+        const bias = levelOf(skill.id) * crparams.rarityBiasPerLevel;
+        for (let i = 0; i < successes; i++) {
+          state.gearSeq += 1;
+          const gear = makeGear(
+            content,
+            item.id,
+            item.bonuses ?? {},
+            state.gearSeq,
+            random,
+            rollRarity(content, random, bias),
+            aparams,
+          );
+          state.gear.push(gear);
+        }
+        items[item.id] = successes;
+      }
+    }
+
+    const expTotal = Math.round(
+      successes * recipe.exp + failures * recipe.exp * Math.max(0, crparams.failExpRefund),
+    );
+    const before = levelFromXp(xpOf(skill.id));
+    grantExp(skill, expTotal, true);
+    const after = levelFromXp(xpOf(skill.id));
+    const levels =
+      after > before
+        ? [{ skillId: skill.id, skillName: skill.name, level: Math.min(after, pparams.maxLevel) }]
+        : [];
+
+    if (attempts < cycles) state.activity = null; // 材料告罄：停炉（与在线语义一致）
+
+    events.emit({
+      type: 'offline-settled',
+      time,
+      data: {
+        seconds: Math.round(elapsedMs / 1000),
+        skillId: skill.id,
+        skillName: skill.name,
+        activityName: recipe.name,
+        cycles: attempts,
+        exp: expTotal,
+        items,
+        levels,
+      },
+    });
+  }
+
   return {
     events,
 
@@ -786,6 +1006,52 @@ export function createGame(options: CreateGameOptions): Game {
             payload.index < 0
           ) {
             reject(action.type, 'bad-payload');
+            return;
+          }
+          // craft 类技能：动作归 recipes（index = 包内 recipes 下标，#5）。
+          // 旧版 startCraft 语义（js/game.js:238-245）：层数门控 + 开炉前验料。
+          const craftSkill = findSkill(content, payload.skillId);
+          if (craftSkill && craftSkill.kind === 'craft') {
+            const recipe = findRecipe(content, payload.index);
+            if (!recipe || recipe.skill !== craftSkill.id) {
+              reject(action.type, 'not-found');
+              return;
+            }
+            if (levelOf(craftSkill.id) < recipe.unlockLevel) {
+              reject(action.type, 'level', {
+                level: String(recipe.unlockLevel),
+                activity: recipe.name,
+              });
+              return;
+            }
+            if (craftMissingOf(recipe, state.items).length > 0) {
+              reject(action.type, 'no-materials', { activity: recipe.name });
+              return;
+            }
+            // 同一配方进行中：幂等派发（不清进度、不发事件）。
+            if (
+              state.activity &&
+              state.activity.skillId === craftSkill.id &&
+              state.activity.index === payload.index
+            ) {
+              return;
+            }
+            state.activity = {
+              skillId: craftSkill.id,
+              index: payload.index,
+              name: recipe.name,
+              progress: 0,
+            };
+            events.emit({
+              type: 'activity-start',
+              time,
+              data: {
+                skillId: craftSkill.id,
+                skillName: craftSkill.name,
+                index: payload.index,
+                activityName: recipe.name,
+              },
+            });
             return;
           }
           const found = findActivity(content, payload.skillId, payload.index);

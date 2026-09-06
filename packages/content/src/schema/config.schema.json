@@ -210,6 +210,35 @@
           "description": "词条值随机波动幅度（±v：乘数 1−v ~ 1+v）"
         }
       }
+    },
+    "crafting": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "炼制机制参数（#5）。缺省 = 引擎基线：成功率层加成 +0.004/层、成功率上限 0.99、失败修为返还 25%、稀有度偏置 0.0004/层。per-recipe 差异归 recipes[].successRate；「炼器必得」由 successRate: 1 表达（上限不击穿必得配方）",
+      "properties": {
+        "successPerLevel": {
+          "type": "number",
+          "minimum": 0,
+          "description": "成功率层加成：每层技艺 +该值（炼丹/炼器通用）"
+        },
+        "successCap": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "成功率上限：层级加成抬升的天花板（不低于配方基础成功率，successRate 1 的必得配方不受击穿）"
+        },
+        "failExpRefund": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "失败修为返还比例：失败仍得 round(配方修为 × 该值)，材料全损"
+        },
+        "rarityBiasPerLevel": {
+          "type": "number",
+          "minimum": 0,
+          "description": "装备产出稀有度偏置：掷档点数上移 技艺层 × 该值（高档位占比单调上升；#14 掉落管线复用同签名、不传 = 现行为）"
+        }
+      }
     }
   }
 }

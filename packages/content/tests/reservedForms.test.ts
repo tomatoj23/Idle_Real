@@ -458,6 +458,30 @@ describe('#020 · config combat/progression/affix 子节', () => {
     packC.config = { slots, combat: { levelGateOffset: -1 } };
     expectError(validateContentPack(packC), '/config/combat/levelGateOffset', 'minimum');
   });
+
+  it('crafting 子节（#5）：全字段合法通过；越界/未知字段被拒；缺省零破坏', () => {
+    const slots = [{ id: 'weapon', name: '法器' }];
+    const ok = makeBasePack();
+    ok.config = {
+      slots,
+      crafting: { successPerLevel: 0.004, successCap: 0.99, failExpRefund: 0.25, rarityBiasPerLevel: 0.0004 },
+    };
+    expect(validateContentPack(ok).ok).toBe(true);
+
+    const cap = makeBasePack();
+    cap.config = { slots, crafting: { successCap: 1.5 } };
+    expectError(validateContentPack(cap), '/config/crafting/successCap', 'maximum');
+
+    const negative = makeBasePack();
+    negative.config = { slots, crafting: { rarityBiasPerLevel: -0.1 } };
+    expectError(validateContentPack(negative), '/config/crafting/rarityBiasPerLevel', 'minimum');
+
+    const unknown = makeBasePack();
+    unknown.config = { slots, crafting: { failRate: 0.1 } };
+    expectError(validateContentPack(unknown), '/config/crafting/failRate', 'additionalProperties');
+
+    expect(validateContentPack(makeBasePack()).ok).toBe(true); // 缺省 = 引擎基线
+  });
 });
 
 /* ==================== prototype 字段（门禁侧三检） ==================== */

@@ -22,14 +22,19 @@ export type { SeededRng } from './rng.js';
 export { attachAutoSave, localStorageSaveAdapter, memorySaveAdapter } from './save.js';
 export type { AutoSaveHandle, SaveAdapter } from './save.js';
 
-// 内容包结构视图与状态树（issue #3；稀有度/词条池视图 #018 批 1；参数视图 #020 批 3）
+// 内容包结构视图与状态树（issue #3；稀有度/词条池视图 #018 批 1；参数视图 #020 批 3；
+// 配方视图与炼制参数 #5）
 export {
   BASE_COMBAT_PARAMS,
+  BASE_CRAFT_PARAMS,
   affixParamsOf,
   affixPoolOf,
   combatLevelOf,
   combatParamsOf,
   combatTextOf,
+  craftMissingOf,
+  craftParamsOf,
+  craftSuccessRateOf,
   enemyGateOf,
   enemiesOf,
   findActivity,
@@ -37,6 +42,7 @@ export {
   findGearDrop,
   findItem,
   findRarity,
+  findRecipe,
   findShopEntry,
   findSkill,
   gearDropsOf,
@@ -44,6 +50,7 @@ export {
   playerMaxHp,
   progressionParamsOf,
   raritiesOf,
+  recipesOf,
   shopAffordOf,
   shopOf,
   slotsOf,
@@ -55,6 +62,7 @@ export type {
   AffixPoolView,
   ByproductView,
   CombatParamsView,
+  CraftParamsView,
   EnemyDropView,
   EnemyGateView,
   EnemyView,
@@ -63,6 +71,7 @@ export type {
   ItemEffectView,
   ItemView,
   RarityView,
+  RecipeView,
   ShopEntryView,
   SkillView,
   SlotView,

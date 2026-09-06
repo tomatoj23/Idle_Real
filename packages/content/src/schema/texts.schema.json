@@ -102,10 +102,11 @@
         },
         "tabs": {
           "type": "object",
-          "required": ["skills", "combat", "bag", "shop"],
+          "required": ["skills", "craft", "combat", "bag", "shop"],
           "additionalProperties": false,
           "properties": {
             "skills": { "$ref": "#/definitions/line" },
+            "craft": { "$ref": "#/definitions/line" },
             "combat": { "$ref": "#/definitions/line" },
             "bag": { "$ref": "#/definitions/line" },
             "shop": { "$ref": "#/definitions/line" }
@@ -168,13 +169,14 @@
         "events": {
           "type": "object",
           "required": [
-            "lootGear", "lootGearLog", "lootShowcase", "lootByproduct", "lootDrop",
+            "lootGear", "lootGearLog", "lootShowcase", "lootByproduct", "lootDrop", "lootCraft",
             "victoryFlog", "victoryLog", "defeatFlog", "defeatToast",
             "eatHeal", "eatBuffToast", "eatBuffLog",
             "equipWearToast", "equipWearLog", "equipRemoveLog",
             "expCombat", "levelupToast", "levelupLog",
             "sellLog", "buyLog", "rejectFallback",
-            "offlineToast", "offlineLog", "offlineNoYield", "offlineExpSuffix"
+            "offlineToast", "offlineLog", "offlineNoYield", "offlineExpSuffix",
+            "craftFail", "craftHalt"
           ],
           "additionalProperties": false,
           "properties": {
@@ -183,6 +185,7 @@
             "lootShowcase": { "$ref": "#/definitions/template", "description": "showcase 档掉落浮提示；槽位 {name}" },
             "lootByproduct": { "$ref": "#/definitions/template", "description": "副产出修行录行；槽位 {name}/{count}" },
             "lootDrop": { "$ref": "#/definitions/template", "description": "常规掉落修行录行；槽位 {name}/{count}" },
+            "lootCraft": { "$ref": "#/definitions/template", "description": "炼制产出修行录行（#5）；槽位 {name}/{count}" },
             "victoryFlog": { "$ref": "#/definitions/template", "description": "胜利浮战报；槽位 {name}/{summary}/{compare}" },
             "victoryLog": { "$ref": "#/definitions/template", "description": "胜利修行录行；槽位 {name}/{summary}/{compare}" },
             "defeatFlog": { "$ref": "#/definitions/template", "description": "落败浮战报；槽位 {name}" },
@@ -202,12 +205,14 @@
             "offlineToast": { "$ref": "#/definitions/template", "description": "离线归来浮提示；槽位 {away}/{activity}/{cycles}" },
             "offlineLog": { "$ref": "#/definitions/template", "description": "离线结算修行录行；槽位 {away}/{items}/{exp}" },
             "offlineNoYield": { "$ref": "#/definitions/template", "description": "离线无产出占位（无槽位）" },
-            "offlineExpSuffix": { "$ref": "#/definitions/template", "description": "离线修为后缀模板；槽位 {exp}" }
+            "offlineExpSuffix": { "$ref": "#/definitions/template", "description": "离线修为后缀模板；槽位 {exp}" },
+            "craftFail": { "$ref": "#/definitions/template", "description": "炼制失败修行录行（#5）；槽位 {name}/{exp}" },
+            "craftHalt": { "$ref": "#/definitions/template", "description": "缺料停炉提示（#5）；槽位 {name}" }
           }
         },
         "pages": {
           "type": "object",
-          "required": ["skills", "combat", "bag", "shop"],
+          "required": ["skills", "craft", "combat", "bag", "shop"],
           "additionalProperties": false,
           "properties": {
             "skills": {
@@ -226,6 +231,26 @@
                 "byproduct": { "$ref": "#/definitions/template", "description": "副产出预览；槽位 {icon}/{name}/{chance}" },
                 "actMeta": { "$ref": "#/definitions/template", "description": "活动元信息行；槽位 {interval}/{exp}/{level}" },
                 "startBtn": { "$ref": "#/definitions/template", "description": "开始按钮（无槽位）" }
+              }
+            },
+            "craft": {
+              "type": "object",
+              "required": ["title", "subtitle", "empty", "expSub", "expMax", "actNow", "idle", "stopBtn", "running", "startBtn", "successRate", "matRow", "recipeMeta"],
+              "additionalProperties": false,
+              "properties": {
+                "title": { "$ref": "#/definitions/line" },
+                "subtitle": { "$ref": "#/definitions/template", "description": "炼制页副标题；槽位 {level}（当前选中的炼制技艺层数）" },
+                "empty": { "$ref": "#/definitions/template", "description": "无可炼配方空态（无槽位）" },
+                "expSub": { "$ref": "#/definitions/template", "description": "修为进度副行；槽位 {into}/{need}/{left}" },
+                "expMax": { "$ref": "#/definitions/template", "description": "修为满层副行（无槽位）" },
+                "actNow": { "$ref": "#/definitions/template", "description": "进行中配方行；槽位 {name}" },
+                "idle": { "$ref": "#/definitions/template", "description": "未开炉空态（无槽位）" },
+                "stopBtn": { "$ref": "#/definitions/template", "description": "熄炉按钮（无槽位）" },
+                "running": { "$ref": "#/definitions/template", "description": "进行中徽标（无槽位）" },
+                "startBtn": { "$ref": "#/definitions/template", "description": "开炉按钮（无槽位）" },
+                "successRate": { "$ref": "#/definitions/template", "description": "成功率行（#5）；槽位 {rate}（数值来自引擎 craftSuccessRateOf × 100，量纲 %）" },
+                "matRow": { "$ref": "#/definitions/template", "description": "材料行（#5）；槽位 {name}/{have}/{need}（着色由壳按 craftMissingOf 结果驱动）" },
+                "recipeMeta": { "$ref": "#/definitions/template", "description": "配方元信息行（#5）；槽位 {interval}/{exp}/{level}" }
               }
             },
             "combat": {
