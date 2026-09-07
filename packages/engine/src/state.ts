@@ -11,7 +11,9 @@ import type { GameContent, SaveData } from './types.js';
 import {
   combatParamsOf,
   findActivity,
+  findBlank,
   findEnemy,
+  findInscription,
   findItem,
   findRecipe,
   findSkill,
@@ -21,7 +23,7 @@ import {
 } from './contentView.js';
 import { findBossOf } from './bosses.js';
 import { findDungeon } from './dungeon.js';
-import { type Affix, type GearInstance, type Rarity } from './gear.js';
+import { tierBoundsOf, type Affix, type GearInscription, type GearInstance, type Rarity } from './gear.js';
 import type { DamageTier, EncounterRecord, RoundTally } from './combat.js';
 import type { Contribution } from './modifiers.js';
 import { restoreStats, type StatSnapshot } from './stats.js';
@@ -327,8 +329,9 @@ function restoreCombatState(
   state: GameState,
   save: SaveData,
 ): void {
-  // —— 装备实例：物品须存在且为 equip；稀有度须命中内容档位表，非法回退
-  // 第一档（#018，ADR-016：词表零默认，引擎不持默认表）；词条逐条校验。
+  // —— 装备实例：物品须存在且为 equip/器胚（#14）；稀有度须命中内容档位表，
+  // 非法回退第一档（#018，ADR-016：词表零默认，引擎不持默认表）；词条逐条校验；
+  // 铭纹（#14）逐条校验——id 须命中内容铭纹池（内容已移除的不收编），纹阶钳 1~3。
   const rarityTable = raritiesOf(content);
   const fallbackRarity: Rarity = rarityTable[0]?.id ?? '';
   if (Array.isArray(raw.gear)) {
@@ -338,7 +341,7 @@ function restoreCombatState(
       if (typeof uid !== 'number' || !Number.isInteger(uid) || uid <= 0) continue;
       if (typeof itemId !== 'string') continue;
       const item = findItem(content, itemId);
-      if (!item || item.type !== 'equip') continue;
+      if (!item || (item.type !== 'equip' && item.type !== 'blank')) continue;
       const rarity: Rarity =
         typeof entry.rarity === 'string' && rarityTable.some((def) => def.id === entry.rarity)
           ? entry.rarity
@@ -352,7 +355,36 @@ function restoreCombatState(
           affixes.push({ name: affix.name, stat: affix.stat, val: affix.val });
         }
       }
-      state.gear.push({ uid, itemId, rarity, affixes });
+      const inscriptions: GearInscription[] = [];
+      if (Array.isArray(entry.inscriptions)) {
+        for (const inscription of entry.inscriptions) {
+          if (!isObj(inscription)) continue;
+          if (typeof inscription.id !== 'string') continue;
+          if (
+            typeof inscription.tier !== 'number' ||
+            !Number.isInteger(inscription.tier) ||
+            inscription.tier < 1 ||
+            inscription.tier > 3
+          ) {
+            continue;
+          }
+          if (findInscription(content, inscription.id) === undefined) continue; // 稳定引用（ADR-015）
+          // 纹阶按器胚 tierRange 钳制（天花板数据锁死：内容调窄后旧档超阶回落天花板）。
+          const blankDef = findBlank(content, itemId);
+          const [tMin, tMax] = blankDef ? tierBoundsOf(blankDef) : [1, 3];
+          inscriptions.push({
+            id: inscription.id,
+            tier: Math.min(Math.max(inscription.tier, tMin), tMax),
+          });
+        }
+      }
+      state.gear.push({
+        uid,
+        itemId,
+        rarity,
+        affixes,
+        ...(inscriptions.length > 0 ? { inscriptions } : {}),
+      });
     }
   }
   if (typeof raw.gearSeq === 'number' && Number.isFinite(raw.gearSeq) && raw.gearSeq >= 0) {
@@ -457,7 +489,13 @@ export function cloneState(state: GameState): GameState {
     items: { ...state.items },
     skills,
     activity: state.activity ? { ...state.activity } : null,
-    gear: state.gear.map((gear) => ({ ...gear, affixes: gear.affixes.map((affix) => ({ ...affix })) })),
+    gear: state.gear.map((gear) => ({
+      ...gear,
+      affixes: gear.affixes.map((affix) => ({ ...affix })),
+      ...(gear.inscriptions
+        ? { inscriptions: gear.inscriptions.map((inscription) => ({ ...inscription })) }
+        : {}),
+    })),
     equips: { ...state.equips },
     buffs: { ...state.buffs },
     combat: state.combat ? { ...state.combat, tiers: { ...state.combat.tiers } } : null,

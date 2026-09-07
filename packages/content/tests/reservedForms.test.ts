@@ -385,6 +385,8 @@ describe('#16 · config 槽位节', () => {
   it('缺 config 但物品带 slot → 仍通过（既有包零破坏）', () => {
     const pack = makeBasePack();
     pack.items.push({ ...BLANK });
+    // 器胚武器同律（#14）：weapon 槽物品须在 moves 注册招式名。
+    (pack.combatText.moves as Record<string, string[]>).blank_sword1 = ['青锋出鞘'];
     expect(validateContentPack(pack).ok).toBe(true);
   });
 });

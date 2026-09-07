@@ -55,7 +55,7 @@ describe('#021 · 新增 stat 键 = 纯 JSON（N3 键域贯通）', () => {
       affixPool: [{ name: '天幸', stat: 'luck', scale: 0.5 }],
     } as unknown as GameContent;
     // 标尺 = max(攻 10, 幸运 4（原值参与）, 兜底 3) = 10；词条 val = round(10×0.5×1.0) = 5
-    const gear = makeGear(pack, 'sword1', { atk: 10, luck: 4 }, 1, () => 0.5, 'rare');
+    const gear = makeGear(pack, 'sword1', { atk: 10, luck: 4 }, 1, () => 0.5, { rarity: 'rare' });
     expect(gear.affixes).toEqual([{ name: '天幸', stat: 'luck', val: 5 }]);
     // 投影开放键域：模板键逐个投影（rare mult 1.3 → atk 13 / luck 5）+ 词条 luck 5
     const contributions = gearContributions(pack, gear, { atk: 10, luck: 4 }, '青锋剑');

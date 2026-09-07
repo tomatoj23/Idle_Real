@@ -499,6 +499,28 @@ body {
 
 .txt-dim { color: var(--muted); }
 
+/* ---------- 铭纹展示与重铸（#14：纹阶着色，T1 灰 / T2 青 / T3 金） ---------- */
+
+.insc { white-space: nowrap; }
+.insc-tier {
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 0 3px;
+  margin-right: 3px;
+}
+.insc-t1 { color: var(--muted); }
+.insc-t2 { color: var(--jade); }
+.insc-t3 { color: var(--gold); text-shadow: 0 0 8px rgba(224, 200, 143, 0.25); }
+.btn-mini {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 5px;
+  vertical-align: middle;
+}
+
 /* ---------- 转生页 / 天赋树页（#6） ---------- */
 
 .status-realm {

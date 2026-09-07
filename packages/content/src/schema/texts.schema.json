@@ -17,11 +17,11 @@
       "minProperties": 1,
       "additionalProperties": false,
       "patternProperties": {
-        "^(activity:start|bag:sell|shop:buy|combat:start|consumable:eat|dungeon:enter|gear:equip|gear:sell|rebirth:perform|talent:buy|\\*)$": {
+        "^(activity:start|bag:sell|shop:buy|combat:start|consumable:eat|dungeon:enter|gear:equip|gear:sell|gear:smelt|gear:reforge|rebirth:perform|talent:buy|\\*)$": {
           "$ref": "#/definitions/reasonMap"
         }
       },
-      "description": "reject 展示文案：动作协议键 → 理由 code → 文案模板；'*' 为跨动作兜底键（bad-payload/unknown-action 等通用文案），命中序 = 精确动作优先、'*' 次之、键名回显殿后。模板槽位 {level}/{activity}/{item}/{owned}/{cost}/{gold}/{daoYun}/{need}/{xp} 由引擎按协议语境填入（rebirth:perform 的 no-progress 带 {need}/{xp}，rebirth-locked 带 {daoYun}；talent:buy 的 no-daoyun 带 {cost}/{daoYun}；dungeon:enter 的 locked 带 {daoYun}、no-key 带 {item}，#7）"
+      "description": "reject 展示文案：动作协议键 → 理由 code → 文案模板；'*' 为跨动作兜底键（bad-payload/unknown-action 等通用文案），命中序 = 精确动作优先、'*' 次之、键名回显殿后。模板槽位 {level}/{activity}/{item}/{owned}/{cost}/{gold}/{daoYun}/{need}/{xp} 由引擎按协议语境填入（rebirth:perform 的 no-progress 带 {need}/{xp}，rebirth-locked 带 {daoYun}；talent:buy 的 no-daoyun 带 {cost}/{daoYun}；dungeon:enter 的 locked 带 {daoYun}、no-key 带 {item}，#7；gear:reforge 的 no-shard 带 {cost}/{owned}，#14）"
     },
     "shell": {
       "$ref": "#/definitions/shellTexts"
@@ -185,7 +185,8 @@
             "rebirthToast", "rebirthLog", "talentBuyToast", "talentBuyLog",
             "dungeonEnter", "dungeonFloor", "dungeonDaoYun", "dungeonClear", "dungeonLeave",
             "bossPhase",
-            "achievementToast", "achievementLog"
+            "achievementToast", "achievementLog",
+            "gearSmelt", "gearReforge"
           ],
           "additionalProperties": false,
           "properties": {
@@ -228,7 +229,9 @@
             "dungeonLeave": { "$ref": "#/definitions/template", "description": "离境修行录行（#7，dungeon:leave 事件）；槽位 {name}/{floor}/{best}" },
             "bossPhase": { "$ref": "#/definitions/template", "description": "Boss 阶段转场修行录行（#8，boss:phase 事件）；槽位 {name}/{phase}" },
             "achievementToast": { "$ref": "#/definitions/template", "description": "成就达成浮提示（#9，achievement:unlock 事件）；槽位 {name}" },
-            "achievementLog": { "$ref": "#/definitions/template", "description": "成就达成修行录行（#9）；槽位 {name}" }
+            "achievementLog": { "$ref": "#/definitions/template", "description": "成就达成修行录行（#9）；槽位 {name}" },
+            "gearSmelt": { "$ref": "#/definitions/template", "description": "熔炼修行录行（#14，gear:smelt 事件）；槽位 {name}/{shard}/{count}（shard = 器屑物品展示名）" },
+            "gearReforge": { "$ref": "#/definitions/template", "description": "重铸修行录行（#14，gear:reforge 事件）；槽位 {name}/{tier}" }
           }
         },
         "pages": {
@@ -300,7 +303,7 @@
             },
             "bag": {
               "type": "object",
-              "required": ["title", "matGroup", "consumableGroup", "priceEach", "sellOneBtn", "sellAllBtn", "gearWorn", "gearLoose", "emptyWorn", "emptyLoose", "emptyAll", "noAffix", "wearBtn", "takeOffBtn", "sellBtn"],
+              "required": ["title", "matGroup", "consumableGroup", "priceEach", "sellOneBtn", "sellAllBtn", "gearWorn", "gearLoose", "emptyWorn", "emptyLoose", "emptyAll", "noAffix", "wearBtn", "takeOffBtn", "sellBtn", "smeltBtn", "reforgeBtn", "inscTier", "inscCondition"],
               "additionalProperties": false,
               "properties": {
                 "title": { "$ref": "#/definitions/line" },
@@ -317,7 +320,11 @@
                 "noAffix": { "$ref": "#/definitions/template", "description": "无属性装备卡占位（无槽位）" },
                 "wearBtn": { "$ref": "#/definitions/template", "description": "佩戴按钮（无槽位）" },
                 "takeOffBtn": { "$ref": "#/definitions/template", "description": "卸下按钮（无槽位）" },
-                "sellBtn": { "$ref": "#/definitions/template", "description": "卖出按钮（无槽位）" }
+                "sellBtn": { "$ref": "#/definitions/template", "description": "卖出按钮（无槽位）" },
+                "smeltBtn": { "$ref": "#/definitions/template", "description": "熔炼按钮（#14，囊中装备卡；无槽位）" },
+                "reforgeBtn": { "$ref": "#/definitions/template", "description": "重铸按钮（#14，铭纹行内；无槽位）" },
+                "inscTier": { "$ref": "#/definitions/template", "description": "纹阶徽标（#14 铭纹展示）；槽位 {tier}" },
+                "inscCondition": { "$ref": "#/definitions/template", "description": "铭纹条件后缀（#14，条件修饰符语境）；槽位 {element}（elements 节展示名）" }
               }
             },
             "shop": {

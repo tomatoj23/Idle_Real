@@ -30,8 +30,10 @@ import {
   fillTemplate,
   findBossOf,
   findDungeon,
+  findInscription,
   findRarity,
   gearName,
+  gearParamsOf,
   levelFromXp,
   powerOf,
   progressionParamsOf,
@@ -46,6 +48,7 @@ import {
   type GameAction,
   type GameState,
   type GearInstance,
+  type Modifier,
   type ProgressionParams,
   type RecipeView,
   type SaveData,
@@ -151,6 +154,22 @@ export function buildUi(
   const statBonusText = (stat: string, value: number | string): string => {
     const { label, percent } = statLabelOf(stat);
     return `${label}+${value}${percent ? '%' : ''}`;
+  };
+
+  /* ---------- 装备构筑循环（#14）：熔炼/重铸入口与铭纹展示 ---------- */
+
+  // 器屑经济可用性：config.gear.shardItem 未配置 = 该包无熔炼/重铸玩法
+  //（引擎 not-available 零降级路径的壳面同款——按钮不渲染）。
+  const gearParams = gearParamsOf(content);
+  const canSmelt = gearParams.shardItem !== undefined;
+  // 条件铭纹语境的系别展示名：elements 注册表数据直出，壳零系别词。
+  const elementNameOf = (id: string): string =>
+    content.elements.find((entry) => entry.id === id)?.name ?? id;
+  /** 铭纹修饰符行：flat → +N，addPct → +N%，mult → ×N（标签/量纲查 statLabels）。 */
+  const inscModText = (mod: Modifier): string => {
+    if (mod.zone === 'mult') return `${statLabelOf(mod.stat).label}×${mod.value}`;
+    if (mod.zone === 'addPct') return `${statLabelOf(mod.stat).label}+${mod.value}%`;
+    return statBonusText(mod.stat, mod.value);
   };
 
   let activeTab: TabId = 'skills';
@@ -283,6 +302,15 @@ export function buildUi(
       case 'sell-gear':
         handler({ type: 'gear:sell', payload: { uid: Number(el.dataset.uid) } });
         break;
+      case 'smelt-gear':
+        handler({ type: 'gear:smelt', payload: { uid: Number(el.dataset.uid) } });
+        break;
+      case 'reforge':
+        handler({
+          type: 'gear:reforge',
+          payload: { uid: Number(el.dataset.uid), index: Number(el.dataset.index) },
+        });
+        break;
       case 'rebirth-go':
         rebirthArmed = true;
         lastSig = '';
@@ -374,6 +402,20 @@ export function buildUi(
         break;
       case 'equip:remove':
         log(T('events.equipRemoveLog', { name: String(data.name ?? '') }));
+        break;
+      case 'gear:smelt':
+        // 熔炼（#14）：{shard} 槽 = 器屑物品展示名（content 数据直出）。
+        log(
+          T('events.gearSmelt', {
+            name: String(data.name ?? ''),
+            shard: nameOf(data.item),
+            count: Number(data.shards ?? 0),
+          }),
+          't-jade',
+        );
+        break;
+      case 'gear:reforge':
+        log(T('events.gearReforge', { name: String(data.name ?? ''), tier: Number(data.tier ?? 0) }), 't-jade');
         break;
       case 'exp':
         // 引擎 exp 事件的数值字段是 amount（grantExp 载荷），非 exp。
@@ -1283,7 +1325,30 @@ export function buildUi(
     const affixRows = gear.affixes.map(
       (a) => `<span class="txt-dim">${esc(a.name)}</span> ${esc(statBonusText(a.stat, a.val))}`,
     );
-    const rows = [...baseRows, ...affixRows].join(esc(T('common.itemListSep'))) || esc(T('pages.bag.noAffix'));
+    // 铭纹行（#14）：纹阶徽标着色（t1/t2/t3）+ 三阶表数值直读（内容数据，
+    // 壳零公式）+ 行内重铸入口（器屑经济可用才渲染；佩戴中引擎拒绝，按钮同禁）。
+    const inscRows = (gear.inscriptions ?? [])
+      .map((insc, index) => {
+        const def = findInscription(content, insc.id);
+        if (!def) return ''; // 内容已移除：防御跳过（引擎贡献侧同律静默）
+        const tier = Math.max(1, Math.min(3, Math.floor(insc.tier)));
+        const parts = (def.tiers[tier - 1] ?? []).map((mod) => {
+          const cond =
+            mod.condition?.element !== undefined
+              ? esc(T('pages.bag.inscCondition', { element: elementNameOf(mod.condition.element) }))
+              : '';
+          return `${esc(inscModText(mod))}${cond}`;
+        });
+        const reforgeBtn =
+          canSmelt && !worn
+            ? ` <button class="btn btn-mini" data-act="reforge" data-uid="${gear.uid}" data-index="${index}">${esc(T('pages.bag.reforgeBtn'))}</button>`
+            : '';
+        return `<span class="insc insc-t${tier}"><b class="insc-tier">${esc(T('pages.bag.inscTier', { tier }))}</b>${esc(def.name)}</span> ${parts.join(esc(T('common.itemListSep')))}${reforgeBtn}`;
+      })
+      .filter((row) => row !== '');
+    const rows =
+      [...baseRows, ...affixRows, ...inscRows].join(esc(T('common.itemListSep'))) ||
+      esc(T('pages.bag.noAffix'));
     // 展示名走引擎 gearName（#26：「档名·物品名」拼接单一来源；缺档名省略前缀）。
     const displayName = gearName(content, item?.name ?? gear.itemId, gear.rarity);
     return `<div class="gear-card ${rarityClass(gear.rarity)}">
@@ -1294,6 +1359,7 @@ export function buildUi(
           ? `<button class="btn btn-ghost" data-act="take-off" data-slot="${worn[0]}">${esc(T('pages.bag.takeOffBtn'))}</button>`
           : `<button class="btn" data-act="wear" data-uid="${gear.uid}">${esc(T('pages.bag.wearBtn'))}</button>`}
         ${worn ? '' : `<button class="btn btn-ghost" data-act="sell-gear" data-uid="${gear.uid}">${esc(T('pages.bag.sellBtn'))}</button>`}
+        ${worn ? '' : (canSmelt ? `<button class="btn btn-ghost" data-act="smelt-gear" data-uid="${gear.uid}">${esc(T('pages.bag.smeltBtn'))}</button>` : '')}
       </span>
     </div>`;
   }

@@ -69,6 +69,8 @@ export function shellFixture(): Record<string, unknown> {
       bossPhase: '【{enemy}】显露「{name}」之相！（阶段 {phase}）',
       achievementToast: '成就达成【{name}】',
       achievementLog: '成就达成【{name}】',
+      gearSmelt: '熔炼【{name}】，得 {shard}×{count}',
+      gearReforge: '重铸【{name}】，铭纹升至 T{tier}',
     },
     pages: {
       skills: {
@@ -119,6 +121,10 @@ export function shellFixture(): Record<string, unknown> {
         wearBtn: '佩戴',
         takeOffBtn: '卸下',
         sellBtn: '卖出',
+        smeltBtn: '熔炼',
+        reforgeBtn: '重铸',
+        inscTier: 'T{tier}',
+        inscCondition: '（受{element}）',
       },
       craft: {
         title: '炼制',

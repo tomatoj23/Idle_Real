@@ -271,6 +271,11 @@ export interface RarityDef {
   readonly affix: number;
   /** 卖价倍率：卖价 = max(1, round(物品卖价 × sell))。 */
   readonly sell: number;
+  /**
+   * 熔炼产出（#14）：熔炼该档装备所得器屑数量；缺省 = 引擎基线 1
+   * （ADR-016 裁决 ① 分策：数值参数引擎基线 + 内容覆盖）。
+   */
+  readonly smelt?: number;
   /** UI 特判开关（ADR-016 裁决 ④）：true 时 UI 作「天降异宝」级特判；缺省 = 普通档。 */
   readonly showcase?: boolean;
 }
@@ -522,6 +527,10 @@ export interface ShellEvents {
   readonly achievementToast: string;
   /** 成就达成修行录行（#9；槽位 {name}）。 */
   readonly achievementLog: string;
+  /** 熔炼修行录行（#14，gear:smelt 事件；槽位 {name}/{shard}/{count}）。 */
+  readonly gearSmelt: string;
+  /** 重铸修行录行（#14，gear:reforge 事件；槽位 {name}/{tier}）。 */
+  readonly gearReforge: string;
 }
 
 /** 修炼页文案。 */
@@ -578,6 +587,14 @@ export interface ShellPageBag {
   readonly wearBtn: string;
   readonly takeOffBtn: string;
   readonly sellBtn: string;
+  /** 熔炼按钮（#14，囊中装备卡）。 */
+  readonly smeltBtn: string;
+  /** 重铸按钮（#14，铭纹行内）。 */
+  readonly reforgeBtn: string;
+  /** 纹阶徽标（#14 铭纹展示）；槽位 {tier}。 */
+  readonly inscTier: string;
+  /** 铭纹条件后缀（#14）；槽位 {element}（elements 节展示名）。 */
+  readonly inscCondition: string;
 }
 
 /** 坊市页文案。 */
@@ -957,6 +974,12 @@ export interface SlotDef {
   readonly id: string;
   readonly name: string;
   readonly icon?: string;
+  /**
+   * 槽位角色（#14 放宽，开放键域）：引擎只消费 'weapon' 角色（武器招式/
+   * 动词池语义）；未声明时按 id === 'weapon' 兜底识别——自定义武器槽
+   * 改名零引擎改动。
+   */
+  readonly role?: string;
 }
 
 /**
@@ -1048,6 +1071,20 @@ export interface CraftingConfig {
   readonly rarityBiasPerLevel?: number;
 }
 
+/**
+ * 装备构筑循环参数（config.gear 子节，#14）。缺省 = 引擎基线：
+ * 重铸耗器屑 1、标签加权系数 1（权重 = 基础 × (1+匹配数×加成)）。
+ * shardItem 缺省 = 无器屑经济（熔炼/重铸拒绝 not-available，零降级路径）。
+ */
+export interface GearConfig {
+  /** 器屑物品 id（熔炼产物/重铸消耗，语义校验 xref items 且须为 mat 类）。 */
+  readonly shardItem?: string;
+  /** 单条铭纹重铸消耗（器屑数量）。 */
+  readonly reforgeCost?: number;
+  /** 标签加权系数：铭纹抽取权重 = 基础 × (1+匹配数×该值)。 */
+  readonly tagWeightPerMatch?: number;
+}
+
 export interface Config {
   readonly slots: readonly SlotDef[];
   /** 战斗机制与属性基线参数；缺省 = 引擎基线。 */
@@ -1058,6 +1095,8 @@ export interface Config {
   readonly affix?: AffixConfig;
   /** 炼制机制参数（#5）；缺省 = 引擎基线。 */
   readonly crafting?: CraftingConfig;
+  /** 装备构筑循环参数（#14：熔炼/重铸/标签加权）；缺省 = 引擎基线。 */
+  readonly gear?: GearConfig;
 }
 
 /* ---------- 内容包整体 ---------- */

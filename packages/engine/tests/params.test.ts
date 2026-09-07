@@ -153,7 +153,7 @@ describe('#020 · 装备词条机制参数（config.affix）', () => {
   it('hpDivider/critScale/variance 全部生效：改 JSON → 词条值变', () => {
     const affix = { hpDivider: 1, critScale: 0, baseScaleFloor: 0, variance: 0 };
     // 标尺 = max(0, 0, hp 10/1, crit 10×0, 0) = 10 → val = round(10×1×1) = 10
-    const gear = makeGear(gearPack, 'sword', { hp: 10, crit: 10 }, 1, () => 0.5, 'only', affix);
+    const gear = makeGear(gearPack, 'sword', { hp: 10, crit: 10 }, 1, () => 0.5, { rarity: 'only', affix });
     expect(gear.affixes).toEqual([{ name: '浑厚', stat: 'hp', val: 10 }]);
   });
 
@@ -165,7 +165,7 @@ describe('#020 · 装备词条机制参数（config.affix）', () => {
 
   it('使用点防崩：divider ≤ 0（未过包校验的包）回落基线 divider，不产生 Infinity', () => {
     const broken = { hpDivider: 0, critScale: 0, baseScaleFloor: 3, variance: 0 };
-    const gear = makeGear(gearPack, 'sword', { hp: 10, crit: 10 }, 1, () => 0.5, 'only', broken);
+    const gear = makeGear(gearPack, 'sword', { hp: 10, crit: 10 }, 1, () => 0.5, { rarity: 'only', affix: broken });
     // 标尺 = max(0, 0, 10/5（防崩回落）, 0, 3) = 3 → val = 3；无防崩则为 Infinity
     expect(gear.affixes[0]?.val).toBe(3);
   });

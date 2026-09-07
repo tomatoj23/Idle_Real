@@ -17,6 +17,7 @@ import {
   aggregateStat,
   type AggregationContext,
   type Contribution,
+  type Modifier,
 } from './modifiers.js';
 
 export interface StackView {
@@ -156,11 +157,13 @@ export function findRecipe(content: GameContent, index: number): RecipeView | un
   return recipesOf(content)[index];
 }
 
-/** 佩戴槽位视图（config.slots 数据化，issue #13）。 */
+/** 佩戴槽位视图（config.slots 数据化，issue #13；role #14 放宽）。 */
 export interface SlotView {
   readonly id: string;
   readonly name: string;
   readonly icon?: string;
+  /** 槽位角色（开放键域）：引擎只消费 'weapon'；缺省按 id === 'weapon' 兜底。 */
+  readonly role?: string;
 }
 
 /**
@@ -170,6 +173,18 @@ export interface SlotView {
 export function slotsOf(content: GameContent): readonly SlotView[] {
   const slots = (content as { config?: { slots?: unknown } }).config?.slots;
   return Array.isArray(slots) ? (slots as SlotView[]) : [];
+}
+
+/**
+ * 武器槽位解析（#14 放宽，'weapon' 键不再是引擎硬编码）：先查 role === 'weapon'
+ * 的槽位（role 开放键域中引擎唯一消费者），未声明 role 的包按 id === 'weapon'
+ * 兜底识别——自定义武器槽改名 = 纯 JSON 改动。无槽位表（#16 前旧包形态）回落
+ * 起步约定键 'weapon'（既有包零破坏）。
+ */
+export function weaponSlotOf(content: GameContent): string | undefined {
+  const slots = slotsOf(content);
+  if (slots.length === 0) return 'weapon';
+  return slots.find((slot) => slot.role === 'weapon')?.id ?? slots.find((slot) => slot.id === 'weapon')?.id;
 }
 
 /** 斗法层数（内容包里 kind=combat 的技能；无则按 0 层）。修为曲线读 config.progression。 */
@@ -253,6 +268,8 @@ export interface RarityView {
   readonly affix: number;
   /** 卖价倍率。 */
   readonly sell: number;
+  /** 熔炼产出（#14）：熔炼该档装备所得器屑数量；缺省 = 引擎基线 1。 */
+  readonly smelt?: number;
   /** UI 特判开关（ADR-016 裁决 ④）。 */
   readonly showcase?: boolean;
 }
@@ -289,6 +306,60 @@ export function affixPoolOf(content: GameContent): readonly AffixPoolView[] {
 export function findRarity(content: GameContent, rarity: string): RarityView | undefined {
   const table = raritiesOf(content);
   return table.find((def) => def.id === rarity) ?? table[0];
+}
+
+/* ---------- 器胚与铭纹（#14：装备构筑循环的内容面） ---------- */
+
+/**
+ * 器胚视图（items 节 type=blank 条目）：装备底材模板——槽位 + 掉落层数段 +
+ * 纹阶天花板 + 偏好标签 + 胚纹（固有词条）。从 itemsOf 过滤派生，缺节 → 空表。
+ */
+export interface BlankView {
+  readonly id: string;
+  readonly name: string;
+  readonly icon: string;
+  readonly slot: string;
+  /** 掉落层数段（秘境层数，1 起）；缺省 = 不限层。 */
+  readonly floorRange?: { readonly min: number; readonly max: number };
+  /** 纹阶天花板区间 T1~T3；重铸与实例化掷阶都不得突破。 */
+  readonly tierRange?: { readonly min: number; readonly max: number };
+  /** 偏好标签：铭纹抽取权重 = 基础 × (1+匹配数×加成)。 */
+  readonly preferredTags?: readonly string[];
+  /** 胚纹：固有词条，固定非随机，实例化时直接附加。 */
+  readonly inherentModifiers?: readonly Modifier[];
+}
+
+/** 铭纹视图（items 节 type=inscription 条目）：三阶数值表 + feature + tags。 */
+export interface InscriptionView {
+  readonly id: string;
+  readonly name: string;
+  readonly icon: string;
+  /** 三阶数值表：下标 0/1/2 = 纹阶 T1/T2/T3。 */
+  readonly tiers: readonly (readonly Modifier[])[];
+  /** 机制型特色表达（原语未注册时引擎忽略，零新增）。 */
+  readonly feature?: { readonly primitive: string; readonly condition?: Modifier['condition']; readonly value?: number };
+  /** 标签加权抽取归类（ADR-015）。 */
+  readonly tags?: readonly string[];
+}
+
+/** 器胚列表：items 节 type=blank 条目（换包增减器胚 = 纯 JSON 改动）。 */
+export function blanksOf(content: GameContent): readonly BlankView[] {
+  const blanks = itemsOf(content).filter((item) => item.type === 'blank');
+  return blanks as unknown as readonly BlankView[];
+}
+
+export function findBlank(content: GameContent, blankId: string): BlankView | undefined {
+  return blanksOf(content).find((blank) => blank.id === blankId);
+}
+
+/** 铭纹池：items 节 type=inscription 条目（扩池 = 纯 JSON 改动，引擎零改动）。 */
+export function inscriptionsOf(content: GameContent): readonly InscriptionView[] {
+  const inscriptions = itemsOf(content).filter((item) => item.type === 'inscription');
+  return inscriptions as unknown as readonly InscriptionView[];
+}
+
+export function findInscription(content: GameContent, inscriptionId: string): InscriptionView | undefined {
+  return inscriptionsOf(content).find((inscription) => inscription.id === inscriptionId);
 }
 
 /* ---------- 战斗词库（CTEXT 数据化，issue #2/#4） ---------- */
@@ -453,6 +524,42 @@ export const BASE_CRAFT_PARAMS: CraftParamsView = {
 export function craftParamsOf(content: GameContent): CraftParamsView {
   const crafting = (content as { config?: { crafting?: unknown } }).config?.crafting;
   return resolveParams(crafting, BASE_CRAFT_PARAMS);
+}
+
+/* ---------- 装备构筑循环参数（#14，ADR-016 裁决 ① 分策：引擎基线 + config.gear 覆盖） ---------- */
+
+/**
+ * 装备构筑循环参数视图（已解析基线）。重铸消耗与标签加权系数是机制参数位；
+ * shardItem 是内容引用（器屑物品 id），缺省 = 无器屑经济（熔炼/重铸零降级路径）。
+ */
+export interface GearParamsView {
+  /** 器屑物品 id（熔炼产物/重铸消耗）；undefined = 该包无熔炼/重铸玩法。 */
+  readonly shardItem?: string;
+  /** 单条铭纹重铸消耗（器屑数量）。 */
+  readonly reforgeCost: number;
+  /** 标签加权系数：铭纹抽取权重 = 基础 × (1+匹配数×该值)。 */
+  readonly tagWeightPerMatch: number;
+}
+
+/** 引擎基线；config.gear 缺省字段逐项回落到此。 */
+export const BASE_GEAR_PARAMS: Omit<GearParamsView, 'shardItem'> = {
+  reforgeCost: 1,
+  tagWeightPerMatch: 1,
+};
+
+/** 装备构筑循环参数：config.gear 覆盖基线（可选子节；shardItem 缺省 = 无器屑经济）。 */
+export function gearParamsOf(content: GameContent): GearParamsView {
+  const gear = (content as { config?: { gear?: unknown } }).config?.gear;
+  const source =
+    gear !== null && typeof gear === 'object' && !Array.isArray(gear)
+      ? (gear as Record<string, unknown>)
+      : undefined;
+  const rawShard = source?.shardItem;
+  return {
+    ...resolveParams(source, BASE_GEAR_PARAMS),
+    shardItem:
+      typeof rawShard === 'string' && rawShard.length > 0 ? rawShard : undefined,
+  };
 }
 
 /**

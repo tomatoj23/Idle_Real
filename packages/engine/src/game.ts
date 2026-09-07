@@ -12,16 +12,20 @@ import {
   craftSuccessRateOf,
   enemyGateOf,
   findActivity,
+  findBlank,
   findEnemy,
   findGearDrop,
   findItem,
   findRecipe,
+  findRarity,
   findShopEntry,
   findSkill,
+  gearParamsOf,
   playerMaxHp,
   progressionParamsOf,
   skillsOf,
   textsOf,
+  weaponSlotOf,
   type ActivityView,
   type EnemyView,
   type ItemView,
@@ -45,7 +49,9 @@ import {
   gearName,
   gearSell,
   makeGear,
+  rollGear,
   rollRarity,
+  tierBoundsOf,
   type GearInstance,
 } from './gear.js';
 import {
@@ -141,6 +147,7 @@ export function createGame(options: CreateGameOptions): Game {
   const pparams = progressionParamsOf(content);
   const aparams = affixParamsOf(content);
   const crparams = craftParamsOf(content);
+  const gparams = gearParamsOf(content); // 装备构筑循环参数（#14：熔炼/重铸/标签加权）
 
   const contributions: readonly Contribution[] = options.contributions ?? [];
   const state: GameState = options.save
@@ -220,9 +227,13 @@ export function createGame(options: CreateGameOptions): Game {
     return out;
   }
 
-  /** 佩戴中的武器；无则拳脚（招式注册键与动词池随之兜底）。 */
+  /** 佩戴中的武器；无则拳脚（招式注册键与动词池随之兜底）。武器槽按
+   * role === 'weapon' 解析（#14 放宽，'weapon' 键不再是引擎硬编码），
+   * 未声明 role 的包按槽位 id 兜底识别（weaponSlotOf 单一来源）。 */
   function wornWeapon(): { readonly gear: GearInstance; readonly item: ItemView } | undefined {
-    const uid = state.equips['weapon'];
+    const weaponSlot = weaponSlotOf(content);
+    if (weaponSlot === undefined) return undefined;
+    const uid = state.equips[weaponSlot];
     if (uid === undefined) return undefined;
     return wornGear().find((entry) => entry.gear.uid === uid);
   }
@@ -387,6 +398,11 @@ export function createGame(options: CreateGameOptions): Game {
     });
   }
 
+  /** 装备实例展示名（「档名·物品名」单一拼装点，掉落/熔炼/重铸三处共用）。 */
+  function gearDisplayName(gear: GearInstance): string {
+    return gearName(content, findItem(content, gear.itemId)?.name ?? gear.itemId, gear.rarity);
+  }
+
   /** bag:sell / shop:buy 共用的载荷解析；非法返回 null。 */
   function readItemPayload(payload: unknown): { itemId: string; count: number } | null {
     const p = payload as { item?: unknown; count?: unknown } | undefined;
@@ -507,15 +523,10 @@ export function createGame(options: CreateGameOptions): Game {
     for (let i = 0; i < recipe.output.count; i++) {
       state.gearSeq += 1;
       // 词条标尺/波动走 config.affix；rarity 显式 roll（带偏置）与缺省参数位求值同序。
-      const gear = makeGear(
-        content,
-        item.id,
-        item.bonuses ?? {},
-        state.gearSeq,
-        random,
-        rollRarity(content, random, bias),
-        aparams,
-      );
+      const gear = makeGear(content, item.id, item.bonuses ?? {}, state.gearSeq, random, {
+        rarity: rollRarity(content, random, bias),
+        affix: aparams,
+      });
       state.gear.push(gear);
       events.emit({
         type: 'loot',
@@ -845,20 +856,22 @@ export function createGame(options: CreateGameOptions): Game {
 
     let gearDropName: string | undefined;
     const gearDrop = findGearDrop(content, enemy.id);
-    if (gearDrop && random() < gearDrop.chance) {
-      const itemId = pickText(gearDrop.pool, random);
-      const item = itemId ? findItem(content, itemId) : undefined;
-      if (item) {
-        state.gearSeq += 1;
-        // 词条标尺/波动走 config.affix（#020）；rarity 显式 roll 与缺省参数位求值同序。
-        const gear = makeGear(content, item.id, item.bonuses ?? {}, state.gearSeq, random, rollRarity(content, random), aparams);
+    if (gearDrop) {
+      // 掉落管线（#14 补全 ①②③⑦）：①掉不掉 → ②按秘境层数筛器胚池 → ③选底材
+      // → ④~⑦实例化（equip 走词条池旧管线；器胚走铭纹管线）。稀有度掷点不传
+      // 偏置（#5 接缝：掉落侧与旧签名逐点同分布）；uid 只在实得时入账（不空烧序号）。
+      const gear = rollGear(content, gearDrop, state.gearSeq + 1, random, {
+        floor: state.dungeon?.floor,
+      });
+      if (gear) {
+        state.gearSeq = gear.uid;
         state.gear.push(gear);
-        gearDropName = gearName(content, item.name, gear.rarity);
+        gearDropName = gearDisplayName(gear);
         events.emit({
           type: 'loot',
           time,
           data: {
-            item: item.id,
+            item: gear.itemId,
             itemName: gearDropName,
             count: 1,
             source: 'gear',
@@ -1213,15 +1226,10 @@ export function createGame(options: CreateGameOptions): Game {
         const instances = successes * recipe.output.count;
         for (let i = 0; i < instances; i++) {
           state.gearSeq += 1;
-          const gear = makeGear(
-            content,
-            item.id,
-            item.bonuses ?? {},
-            state.gearSeq,
-            random,
-            rollRarity(content, random, bias),
-            aparams,
-          );
+          const gear = makeGear(content, item.id, item.bonuses ?? {}, state.gearSeq, random, {
+            rarity: rollRarity(content, random, bias),
+            affix: aparams,
+          });
           state.gear.push(gear);
         }
         items[item.id] = instances;
@@ -1731,6 +1739,105 @@ export function createGame(options: CreateGameOptions): Game {
               count: 1,
               gained,
               gold: state.gold,
+            },
+          });
+          return;
+        }
+
+        case 'gear:smelt': {
+          // 熔炼（#14）：分解囊中装备得器屑。产出按稀有度档位 smelt 字段
+          // （缺省 = 引擎基线 1）；器屑物品 id 归 config.gear.shardItem——
+          // 未配置 = 该包无器屑经济，not-available 零降级路径。
+          const uid = readUidPayload(action.payload);
+          if (uid === undefined) {
+            reject(action.type, 'bad-payload');
+            return;
+          }
+          const gear = state.gear.find((entry) => entry.uid === uid);
+          if (!gear) {
+            reject(action.type, 'not-found');
+            return;
+          }
+          if (Object.values(state.equips).includes(uid)) {
+            reject(action.type, 'worn');
+            return;
+          }
+          const shardItem = gparams.shardItem;
+          if (!shardItem || !findItem(content, shardItem)) {
+            reject(action.type, 'not-available');
+            return;
+          }
+          const shards = Math.max(0, Math.floor(findRarity(content, gear.rarity)?.smelt ?? 1));
+          state.gear = state.gear.filter((entry) => entry.uid !== uid);
+          addItem(shardItem, shards);
+          events.emit({
+            type: 'gear:smelt',
+            time,
+            data: {
+              uid,
+              item: shardItem,
+              shards,
+              name: gearDisplayName(gear),
+            },
+          });
+          return;
+        }
+
+        case 'gear:reforge': {
+          // 重铸铭纹（#14）：消耗器屑重随单条铭纹的纹阶（数值随内容三阶表
+          // tiers[tier] 变化），天花板由器胚 tierRange 数据锁死；仅器胚实例
+          // 可重铸，佩戴中不可（与卖出同律）。
+          const payload = action.payload as { uid?: unknown; index?: unknown } | undefined;
+          const uid = readUidPayload(payload);
+          const index = payload?.index;
+          if (uid === undefined || typeof index !== 'number' || !Number.isInteger(index) || index < 0) {
+            reject(action.type, 'bad-payload');
+            return;
+          }
+          const gear = state.gear.find((entry) => entry.uid === uid);
+          if (!gear) {
+            reject(action.type, 'not-found');
+            return;
+          }
+          if (Object.values(state.equips).includes(uid)) {
+            reject(action.type, 'worn');
+            return;
+          }
+          const inscription = gear.inscriptions?.[index];
+          const blank = inscription ? findBlank(content, gear.itemId) : undefined;
+          if (!inscription || !blank) {
+            reject(action.type, 'no-inscription');
+            return;
+          }
+          if (!gparams.shardItem || !findItem(content, gparams.shardItem)) {
+            reject(action.type, 'not-available');
+            return;
+          }
+          const cost = Math.max(0, Math.floor(gparams.reforgeCost));
+          const owned = state.items[gparams.shardItem] ?? 0;
+          if (owned < cost) {
+            reject(action.type, 'no-shard', { cost: String(cost), owned: String(owned) });
+            return;
+          }
+          // 纹阶重随：tierBoundsOf 数据锁死（与实例化掷阶/存档钳制同一来源）。
+          const [tierMin, tierMax] = tierBoundsOf(blank);
+          const tier = tierMin + Math.floor(random() * (tierMax - tierMin + 1));
+          takeItem(gparams.shardItem, cost);
+          const inscriptions = gear.inscriptions!.map((insc, i) =>
+            i === index ? { ...insc, tier } : insc,
+          );
+          state.gear = state.gear.map((entry) =>
+            entry.uid === uid ? { ...entry, inscriptions } : entry,
+          );
+          events.emit({
+            type: 'gear:reforge',
+            time,
+            data: {
+              uid,
+              index,
+              tier,
+              inscriptionId: inscription.id,
+              name: gearDisplayName(gear),
             },
           });
           return;

@@ -42,25 +42,28 @@ engine `EnemyView` 未投影，靠 #15 票驱动补齐）。
   由 `validateContentPack` 语义检查补全（ADR-010 分工）。
 - **空集合合法**：`preferredTags: []`、`inherentModifiers: []`、`tags: []` 均合法；
   `items: []` 仍被拒（#2 定下的节下限不放宽，每包至少一个物品）。
-- 修仙包**不放**器胚/铭纹内容（无机制消费方时不进题材包，避免污染数值快照）。
+- 器胚/铭纹机制消费方已随 **#14 落地**（rollGear 掉落管线 + 熔炼/重铸）：
+  题材包可以（修仙包已）配器胚/铭纹内容；模板类（blank/inscription）**禁入袋流**
+  （activity 产出/副产出、配方产出与材料、敌人掉落、货架、成就奖励引用即 xref 拒绝
+  ——两类是实例化模板，进袋只会成不可见死物并可按 sell 套利）。
 
-### 器胚字段（CONTEXT.md 词汇：器胚/胚纹/纹阶）
-
-| 字段 | 形态 | 约定 |
-|---|---|---|
-| `slot` | string | 槽位 id，须在 config.slots 有定义（xref） |
-| `floorRange` | `{min,max}` | 掉落层数段（秘境层数，1 起）；分层掉不同器胚，否决 itemLevel 缩放 |
-| `tierRange` | `{min,max}` | 纹阶天花板区间 T1~T3；重铸铭纹不得突破 |
-| `preferredTags` | string[] | 偏好标签：铭纹抽取权重 = 基础 × (1+匹配数×加成) |
-| `inherentModifiers` | Modifier[] | **胚纹**：固有词条，固定非随机，实例化时直接附加 |
-
-### 铭文字段（CONTEXT.md 词汇：铭纹/纹阶）
+### 器胚字段（CONTEXT.md 词汇：器胚/胚纹/纹阶；#14 机制落地）
 
 | 字段 | 形态 | 约定 |
 |---|---|---|
-| `tiers` | `[Modifier[], Modifier[], Modifier[]]` | 三阶数值表，下标 0/1/2 = 纹阶 T1/T2/T3，定长 3 |
-| `feature` | `{primitive, condition?, value?}` | 机制型特色铭纹：condition+primitive 表达，引擎原语池零新增（未注册原语忽略） |
-| `tags` | string[] | 标签加权抽取归类（tags/flags 分工：归类批量捞，裸布尔走 flags） |
+| `slot` | string | 槽位 id，须在 config.slots 有定义（xref）；weapon 槽器胚与 equip 武器同律（佩戴后承担武器语义，须在 combatText.moves 注册招式名） |
+| `floorRange` | `{min,max}` | 掉落层数段（秘境层数，1 起）：掉落管线 ②按当前层筛选器胚池，同池跨层段即分层掉胚（E5/E6 混池样例）；否决 itemLevel 缩放 |
+| `tierRange` | `{min,max}` | 纹阶天花板区间 T1~T3：实例化掷阶与重铸铭纹都不得突破 |
+| `preferredTags` | string[] | 偏好标签：铭纹抽取权重 = 基础 × (1+匹配数×`config.gear.tagWeightPerMatch`) |
+| `inherentModifiers` | Modifier[] | **胚纹**：固有词条，固定非随机，投影时直接入聚合管线（不进实例存档——可由 itemId 随时从内容读出） |
+
+### 铭文字段（CONTEXT.md 词汇：铭纹/纹阶；#14 机制落地）
+
+| 字段 | 形态 | 约定 |
+|---|---|---|
+| `tiers` | `[Modifier[], Modifier[], Modifier[]]` | 三阶数值表，下标 0/1/2 = 纹阶 T1/T2/T3，定长 3；实例只存 `{id, tier}`，数值投影时按 tiers[tier] 从内容读 |
+| `feature` | `{primitive, condition?, value?}` | 机制型特色铭纹：condition+primitive 表达，引擎原语池零新增（未注册原语忽略，tiers 数值表照常生效） |
+| `tags` | string[] | 标签加权抽取归类（tags/flags 分工：归类批量捞，裸布尔走 flags）；引擎 `buildTagIndex` 倒排索引消费 |
 
 ### Modifier（修饰符，#13 聚合管线已消费）
 
@@ -102,6 +105,7 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 | `mult` | number（> 0） | 基础加成倍率：实例化投影 flat = round(基础 × mult)（ADR-011 单管线） |
 | `affix` | integer（≥ 0） | 随机词条数；实例化时从 affixPool 掷不重复 stat 词条 |
 | `sell` | number（> 0） | 卖价倍率：卖价 = max(1, round(物品卖价 × sell)) |
+| `smelt` | integer（≥ 0，可选，#14） | 熔炼产出：熔炼该档装备所得器屑数量；缺省 = 引擎基线 1（config.gear.shardItem 未配置时无意义） |
 | `showcase` | bool（可选） | **UI 特判开关（裁决 ④）**：true 时 UI 作「天降异宝」级特判；UI 不再用 id 字面量（如 `'epic'`）特判 |
 
 数组顺序即档位顺序：缺档回退取**第一项**；旧档位从词表移除后，存量存档的该档
@@ -171,8 +175,8 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
     官方包全部武器显式声明 `"verbStyle": "sword"`。
   - **敌人** = `kind` 字段（开放键域，validate 强制 verbs 池存在）；引擎不再内嵌
     缺省 'claw'（防御路径回落 basic 池）。'claw'/'magic' 是官方包约定而非引擎词汇。
-  - 槽位 role 推断（有武器→读槽位 role）随 #14 的 SlotDef.role 一并落地，
-    批 4 只做"读 def + basic 兜底"。
+  - 槽位 role 推断（有武器→读槽位 role）已随 #14 落地：`weaponSlotOf`
+    先查 role === 'weapon'，未声明按槽位 id 兜底。
 - 键形态：`^[a-z][a-zA-Z0-9_]*$`（与 stat 键形态统一）。
 
 ### combatText 扩节（六键 → 十键，schema required）
@@ -241,9 +245,41 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
   `progression.maxLevel` 存在时同时作为敌人层数上限的**单一来源**（#021 批 4：
   enemy.schema 魔法数 99 已清退，语义校验对照该值；config 缺省时无从取得，跳过对照）。
 - 起步三槽：`weapon` 法器 / `body` 护体 / `accessory` 灵饰。
-- 注意：武器招式注册（`combatText.moves` 键）目前锚定槽位 id `weapon`；
-  若未来槽位改名/多武器槽，须同步放宽该锚定（**#14 装备票消费时处理，#021 批 4
-  维持登记不撤销**——SlotDef.role 未随批 4 落地，'weapon' 双写仍在）。
+- **SlotDef.role 已随 #14 落地**（可选，开放键域）：引擎武器槽解析走
+  `weaponSlotOf`（先查 role === 'weapon' 的槽位，未声明 role 的包按槽位 id
+  `weapon` 兜底识别）——自定义武器槽改名 = 纯 JSON 改动，'weapon' 键不再是
+  引擎硬编码；招式注册键域随之放行 weapon 槽的 equip/器胚武器 id。
+
+### config.gear 装备构筑循环参数（#14）
+
+```json
+"gear": { "shardItem": "gear_shard", "reforgeCost": 3, "tagWeightPerMatch": 1 }
+```
+
+- `shardItem`：器屑物品 id（**语义校验 xref items 且须为 mat 类**）；缺省 =
+  无器屑经济——引擎 `gear:smelt`/`gear:reforge` 拒绝 not-available（零降级路径）。
+- `reforgeCost`：单条铭纹重铸消耗（器屑数量），引擎基线 1。
+- `tagWeightPerMatch`：标签加权系数（权重 = 基础 × (1+匹配数×该值)），引擎基线 1。
+- 熔炼产出按稀有度：`rarities[].smelt`（整数 ≥ 0，缺省基线 1）——器屑经济
+  的档位梯度归词表。
+
+### 掉落管线与实例形状（#14 机制定版）
+
+- **rollGear 八步管线**（engine gear.ts 单一来源）：①掉不掉（chance）→
+  ②按秘境层数筛器胚池（equip 条目不受层筛，兼容旧池）→ ③均匀选底材 →
+  ④掷稀有度（掉落侧不传 bias，与旧签名逐点同分布，#5 接缝）→ ⑤按稀有度
+  affix 数定铭纹条数 → ⑥标签加权抽铭纹（倒排索引查 preferredTags ∩ tags
+  交集；同实例不重复铭纹 id）→ ⑦按器胚 tierRange 掷纹阶 → ⑧胚纹随投影附加。
+  口诀：**稀有度是因（词条数），纹阶是果（质量）**。
+- **实例形状**：`GearInstance` 增可选 `inscriptions: [{id, tier}]`（器胚实例
+  专用；空/缺省不落盘，ADR-013）。数值/胚纹不进实例——展示与投影按内容表
+  读（改 tiers 表 = 改全部同纹阶实例）。旧存档不迁移（ADR-008）。
+- **熔炼** `gear:smelt {uid}`：囊中装备 → 器屑 ×`rarities[].smelt`；
+  **重铸** `gear:reforge {uid, index}`：耗 `reforgeCost` 器屑，重随该铭纹纹阶
+  （tierRange 天花板数据锁死）。佩戴中一律拒绝（reason `worn`，与卖出同律）。
+  reject 动作键 `gear:smelt`/`gear:reforge` 已入 texts.schema pattern；壳文案
+  `events.gearSmelt`（`{name}/{shard}/{count}`）与 `events.gearReforge`
+  （`{name}/{tier}`）+ `pages.bag.smeltBtn/reforgeBtn/inscTier/inscCondition`。
 
 ### 玩法参数三子节（#020 批 3，ADR-016 裁决 ① 分策）
 

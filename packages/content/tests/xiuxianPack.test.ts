@@ -16,7 +16,7 @@ describe('修仙题材包 · 验收（issue #2）', () => {
   it('loadXiuxianPack 强校验通过并返回完整包', () => {
     const pack = loadXiuxianPack();
     expect(pack.skills).toHaveLength(6);
-    expect(pack.items).toHaveLength(43);
+    expect(pack.items).toHaveLength(53);
     expect(pack.recipes).toHaveLength(16);
     expect(pack.enemies).toHaveLength(8);
     expect(pack.gearDrops).toHaveLength(8);
@@ -169,16 +169,26 @@ describe('修仙题材包 · 数值基线', () => {
       acc1: ['equip', 100],
       acc2: ['equip', 320],
       acc3: ['equip', 1200],
-      scorp_tail: ['equip', 25],
-      wolf_fang: ['equip', 60],
-      corpse_nail: ['equip', 130],
-      ghost_mask: ['equip', 160],
-      blood_gourd: ['equip', 420],
-      luo_shayi: ['equip', 460],
-      mojun_blade: ['equip', 780],
-      mojun_guan: ['equip', 1250],
-      taotie_fang: ['equip', 1550],
-      taotie_pi: ['equip', 1650],
+      gear_shard: ['mat', 8],
+      blank_sword_1: ['blank', 0],
+      blank_sword_2: ['blank', 0],
+      blank_sword_3: ['blank', 0],
+      blank_body_1: ['blank', 0],
+      blank_body_2: ['blank', 0],
+      blank_body_3: ['blank', 0],
+      blank_acc_1: ['blank', 0],
+      blank_acc_2: ['blank', 0],
+      blank_acc_3: ['blank', 0],
+      insc_lieshi: ['inscription', 0],
+      insc_suiyu: ['inscription', 0],
+      insc_guyuan: ['inscription', 0],
+      insc_dongxuan: ['inscription', 0],
+      insc_ranxue: ['inscription', 0],
+      insc_tiebi: ['inscription', 0],
+      insc_qifu: ['inscription', 0],
+      insc_nilin: ['inscription', 0],
+      insc_shigu: ['inscription', 0],
+      insc_yinlei: ['inscription', 0],
     });
   });
 
@@ -199,17 +209,47 @@ describe('修仙题材包 · 数值基线', () => {
       ['acc1', 'accessory', { crit: 5 }],
       ['acc2', 'accessory', { crit: 10 }],
       ['acc3', 'accessory', { crit: 18, atk: 15, def: 15 }],
-      ['scorp_tail', 'weapon', { atk: 5 }],
-      ['wolf_fang', 'accessory', { crit: 4, atk: 2 }],
-      ['corpse_nail', 'weapon', { atk: 15 }],
-      ['ghost_mask', 'accessory', { def: 8, crit: 6 }],
-      ['blood_gourd', 'weapon', { atk: 40 }],
-      ['luo_shayi', 'body', { def: 30, hp: 220 }],
-      ['mojun_blade', 'weapon', { atk: 70 }],
-      ['mojun_guan', 'accessory', { atk: 10, def: 10, crit: 8 }],
-      ['taotie_fang', 'weapon', { atk: 95, crit: 5 }],
-      ['taotie_pi', 'body', { def: 75, hp: 500 }],
     ]);
+  });
+
+  it('器胚：层数段/纹阶天花板/偏好标签/胚纹全表（#14，分层掉胚否决 itemLevel 缩放）', () => {
+    const rows = pack.items
+      .filter((it) => it.type === 'blank')
+      .map((it) => [it.id, it.slot, it.floorRange, it.tierRange, it.preferredTags, it.inherentModifiers]);
+    expect(rows).toEqual([
+      ['blank_sword_1', 'weapon', { min: 1, max: 5 }, { min: 1, max: 2 }, ['offense'], [{ stat: 'atk', zone: 'flat', value: 4 }]],
+      ['blank_sword_2', 'weapon', { min: 6, max: 10 }, { min: 2, max: 3 }, ['offense', 'fortune'], [{ stat: 'atk', zone: 'flat', value: 10 }]],
+      ['blank_sword_3', 'weapon', { min: 11, max: 15 }, { min: 3, max: 3 }, ['offense', 'fortune'], [{ stat: 'atk', zone: 'flat', value: 24 }]],
+      ['blank_body_1', 'body', { min: 1, max: 5 }, { min: 1, max: 2 }, ['defense'], [{ stat: 'def', zone: 'flat', value: 3 }]],
+      ['blank_body_2', 'body', { min: 6, max: 10 }, { min: 2, max: 3 }, ['defense', 'sustain'], [{ stat: 'def', zone: 'flat', value: 8 }]],
+      ['blank_body_3', 'body', { min: 11, max: 15 }, { min: 3, max: 3 }, ['defense', 'sustain'], [{ stat: 'def', zone: 'flat', value: 20 }]],
+      ['blank_acc_1', 'accessory', { min: 1, max: 5 }, { min: 1, max: 2 }, ['fortune'], [{ stat: 'crit', zone: 'flat', value: 2 }]],
+      ['blank_acc_2', 'accessory', { min: 6, max: 10 }, { min: 2, max: 3 }, ['fortune', 'sustain'], [{ stat: 'crit', zone: 'flat', value: 4 }]],
+      ['blank_acc_3', 'accessory', { min: 11, max: 15 }, { min: 3, max: 3 }, ['fortune', 'offense'], [{ stat: 'crit', zone: 'flat', value: 7 }]],
+    ]);
+  });
+
+  it('铭纹池：8~12 条 + 三阶表 + 条件/feature 特色铭纹 + tags（#14）', () => {
+    const inscriptions = pack.items.filter((it) => it.type === 'inscription');
+    // 票面范围：铭纹池 8~12 条。
+    expect(inscriptions.length).toBeGreaterThanOrEqual(8);
+    expect(inscriptions.length).toBeLessThanOrEqual(12);
+    // 三阶表定长 3 且逐阶非空。
+    for (const insc of inscriptions) {
+      expect(insc.tiers).toHaveLength(3);
+      for (const row of insc.tiers) expect(row.length).toBeGreaterThan(0);
+    }
+    // 机制型特色铭纹（feature condition+primitive，引擎原语池零新增）2~3 条。
+    expect(inscriptions.filter((it) => it.feature !== undefined).length).toBeGreaterThanOrEqual(2);
+    expect(inscriptions.filter((it) => it.feature !== undefined).length).toBeLessThanOrEqual(3);
+    // 条件铭纹（受火系防御）：元素条件引用已注册系别。
+    const nilin = inscriptions.find((it) => it.id === 'insc_nilin');
+    expect(nilin?.tiers[2]).toEqual([{ stat: 'def', zone: 'flat', value: 24, condition: { element: 'fire' } }]);
+    // 标签词表：器胚 preferredTags 的键域来源。
+    const tagVocab = new Set(inscriptions.flatMap((it) => it.tags ?? []));
+    for (const blank of pack.items.filter((it) => it.type === 'blank')) {
+      for (const tag of blank.preferredTags ?? []) expect(tagVocab.has(tag)).toBe(true);
+    }
   });
 
   it('消耗品：回气丹恢复三成，增益丹时长五分钟', () => {
@@ -311,26 +351,26 @@ describe('修仙题材包 · 数值基线', () => {
     ]);
   });
 
-  it('异宝掉落表全表', () => {
+  it('异宝掉落表全表（#14 起掉器胚，E5/E6 混池跨层段）', () => {
     const rows = pack.gearDrops.map((g) => [g.enemy, g.chance, g.pool]);
     expect(rows).toEqual([
-      ['e1', 0.1, ['scorp_tail', 'wolf_fang']],
-      ['e2', 0.1, ['scorp_tail', 'wolf_fang']],
-      ['e3', 0.09, ['corpse_nail', 'ghost_mask']],
-      ['e4', 0.09, ['corpse_nail', 'ghost_mask']],
-      ['e5', 0.08, ['blood_gourd', 'luo_shayi']],
-      ['e6', 0.08, ['blood_gourd', 'luo_shayi']],
-      ['e7', 0.07, ['mojun_blade', 'mojun_guan']],
-      ['e8', 0.15, ['taotie_fang', 'taotie_pi']],
+      ['e1', 0.1, ['blank_sword_1', 'blank_body_1', 'blank_acc_1']],
+      ['e2', 0.1, ['blank_sword_1', 'blank_body_1', 'blank_acc_1']],
+      ['e3', 0.09, ['blank_sword_2', 'blank_body_2', 'blank_acc_2']],
+      ['e4', 0.09, ['blank_sword_2', 'blank_body_2', 'blank_acc_2']],
+      ['e5', 0.08, ['blank_sword_2', 'blank_body_2', 'blank_acc_2', 'blank_sword_3', 'blank_body_3', 'blank_acc_3']],
+      ['e6', 0.08, ['blank_sword_2', 'blank_body_2', 'blank_acc_2', 'blank_sword_3', 'blank_body_3', 'blank_acc_3']],
+      ['e7', 0.07, ['blank_sword_3', 'blank_body_3', 'blank_acc_3']],
+      ['e8', 0.15, ['blank_sword_3', 'blank_body_3', 'blank_acc_3']],
     ]);
   });
 
-  it('稀有度词表全表（对照旧引擎掷点基线 70/20/8/2，#018 数据化）', () => {
+  it('稀有度词表全表（对照旧引擎掷点基线 70/20/8/2，#018 数据化；smelt 熔炼产出 #14）', () => {
     expect(pack.rarities).toEqual([
-      { id: 'common', name: '寻常', weight: 70, mult: 1, affix: 0, sell: 1 },
-      { id: 'fine', name: '精良', weight: 20, mult: 1.15, affix: 1, sell: 2 },
-      { id: 'rare', name: '罕见', weight: 8, mult: 1.3, affix: 2, sell: 4 },
-      { id: 'epic', name: '绝世', weight: 2, mult: 1.5, affix: 3, sell: 10, showcase: true },
+      { id: 'common', name: '寻常', weight: 70, mult: 1, affix: 0, sell: 1, smelt: 1 },
+      { id: 'fine', name: '精良', weight: 20, mult: 1.15, affix: 1, sell: 2, smelt: 2 },
+      { id: 'rare', name: '罕见', weight: 8, mult: 1.3, affix: 2, sell: 4, smelt: 4 },
+      { id: 'epic', name: '绝世', weight: 2, mult: 1.5, affix: 3, sell: 10, smelt: 8, showcase: true },
     ]);
     // ADR-016 裁决 ④：UI 特判走显式 bool，不写 = 普通档。
     expect(pack.rarities.filter((r) => r.showcase).map((r) => r.id)).toEqual(['epic']);
@@ -376,6 +416,16 @@ describe('修仙题材包 · 数值基线', () => {
     expect(pack.texts.shell.events.craftHalt).toContain('{name}');
   });
 
+  it('装备构筑协议面：config.gear 显式基线 + 熔炼/重铸文案在案（#14）', () => {
+    expect(pack.config?.gear).toEqual({ shardItem: 'gear_shard', reforgeCost: 3, tagWeightPerMatch: 1 });
+    expect(pack.texts.shell.pages.bag.smeltBtn).toBe('熔炼');
+    expect(pack.texts.shell.pages.bag.reforgeBtn).toBe('重铸');
+    expect(pack.texts.shell.pages.bag.inscTier).toContain('{tier}');
+    expect(pack.texts.shell.events.gearSmelt).toContain('{shard}');
+    expect(pack.texts.shell.events.gearReforge).toContain('{tier}');
+    expect(pack.texts.reject['gear:reforge']?.['no-shard']).toContain('{cost}');
+  });
+
   it('战斗文案：动词池/招式注册/词库结构', () => {
     const ct = pack.combatText;
     expect(Object.keys(ct.verbs)).toEqual(['sword', 'basic', 'claw', 'magic']);
@@ -383,11 +433,11 @@ describe('修仙题材包 · 数值基线', () => {
     expect(ct.verbs.basic).toHaveLength(3);
     expect(ct.verbs.claw).toHaveLength(5);
     expect(ct.verbs.magic).toHaveLength(5);
-    // 招式注册：basic + 9 件武器（4 剑 + 5 妖兵）+ 8 敌 + Boss 变招键（#8）
+    // 招式注册：basic + 7 件武器（4 剑 + 3 剑胚，#14 器胚武器同律）+ 8 敌 + Boss 变招键（#8）
     expect(Object.keys(ct.moves).sort()).toEqual(
       [
         'basic', 'sword1', 'sword2', 'sword3', 'sword4',
-        'scorp_tail', 'corpse_nail', 'blood_gourd', 'mojun_blade', 'taotie_fang',
+        'blank_sword_1', 'blank_sword_2', 'blank_sword_3',
         'e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8', 'e8_devour',
       ].sort(),
     );

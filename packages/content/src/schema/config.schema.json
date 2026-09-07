@@ -21,6 +21,11 @@
             "pattern": "^[a-z][a-z0-9_]*$",
             "description": "槽位 id：items 的 slot 字段引用它"
           },
+          "role": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "description": "槽位角色（#14 放宽，开放键域）：引擎只消费 'weapon' 角色（武器招式/动词池语义）；未声明时按 id === 'weapon' 兜底识别，自定义武器槽改名零引擎改动"
+          },
           "name": {
             "type": "string",
             "minLength": 1,
@@ -237,6 +242,28 @@
           "type": "number",
           "minimum": 0,
           "description": "装备产出稀有度偏置：掷档点数上移 技艺层 × 该值（高档位占比单调上升；#14 掉落管线复用同签名、不传 = 现行为）"
+        }
+      }
+    },
+    "gear": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "装备构筑循环参数（#14）。缺省 = 引擎基线：重铸耗器屑 1、标签加权系数 1（权重 = 基础 × (1+匹配数×加成)）。shardItem 缺省 = 无器屑经济（熔炼/重铸拒绝 not-available，零降级路径）",
+      "properties": {
+        "shardItem": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "器屑物品 id（熔炼产物/重铸消耗，语义校验 xref items 且须为 mat 类）；缺省 = 该包无熔炼/重铸玩法"
+        },
+        "reforgeCost": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "单条铭纹重铸消耗（器屑数量）"
+        },
+        "tagWeightPerMatch": {
+          "type": "number",
+          "minimum": 0,
+          "description": "标签加权系数：铭纹抽取权重 = 基础 × (1+匹配数×该值)，匹配数 = 器胚 preferredTags ∩ 铭纹 tags"
         }
       }
     }

@@ -195,22 +195,34 @@ function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
   pushDuplicates(pack.enemies, '/enemies', errors);
   pushDuplicates(pack.rarities, '/rarities', errors);
   pushDuplicates(pack.elements, '/elements', errors);
-  const slotIds = checkConfig(pack.config, errors);
+  const slotIds = checkConfig(pack.config, itemIndex, pack.items, errors);
 
-  const weaponIds = checkItemShapes(pack.items, slotIds, errors);
+  // 武器语义槽位（#14 role 放宽，与引擎 weaponSlotOf 同律）：role === 'weapon'
+  // 优先，未声明 role 的包按 id === 'weapon' 兜底；无 config（旧包形态）回落
+  // 'weapon' 字面量——既有包零破坏。
+  const weaponSlotIds = new Set<string>();
+  if (pack.config === undefined) {
+    weaponSlotIds.add('weapon');
+  } else {
+    for (const slot of pack.config.slots) {
+      if (slot.role === 'weapon' || slot.id === 'weapon') weaponSlotIds.add(slot.id);
+    }
+  }
+
+  const weaponIds = checkItemShapes(pack.items, slotIds, weaponSlotIds, errors);
 
   // 层数上限单一来源（#021 批 4，P2-1）：config.progression.maxLevel 存在时，
   // enemy.level 与活动/配方 unlockLevel 一律对照它（schema 魔法数 99 已清退）。
   const maxLevel = pack.config?.progression?.maxLevel;
 
-  checkSkills(pack.skills, itemIndex, maxLevel, errors);
-  checkRecipes(pack.recipes, itemIndex, skillIndex, pack.skills, maxLevel, errors);
+  checkSkills(pack.skills, itemIndex, pack.items, maxLevel, errors);
+  checkRecipes(pack.recipes, itemIndex, pack.items, skillIndex, pack.skills, maxLevel, errors);
 
   const moves = pack.combatText.moves;
   const verbs = pack.combatText.verbs;
-  checkEnemies(pack.enemies, itemIndex, moves, maxLevel, errors);
+  checkEnemies(pack.enemies, itemIndex, pack.items, moves, maxLevel, errors);
   checkGearDrops(pack.gearDrops, itemIndex, enemyIndex, pack.items, errors);
-  checkShop(pack.shop, itemIndex, errors);
+  checkShop(pack.shop, itemIndex, pack.items, errors);
   checkWeaponMoves(weaponIds, pack.items, moves, errors);
   // Boss 节（#8）：先于招式注册表检查（变招 moveKey 扩展合法注册键集）。
   const bossMoveKeys = checkBosses(pack.bosses ?? [], enemyIndex, itemIndex, moves, errors);
@@ -271,10 +283,14 @@ function pushDuplicates(
  * 槽位数据化（#16）：config 存在时返回槽位 id 集合并查重；
  * 缺省时返回 undefined（跳过槽位跨引用检查，对既有包零破坏）。
  * 玩法参数子节（#020）：字段边界由 schema 关卡保证，此处只补
- * schema 表达不了的跨字段规则——伤害档阈值须严格递增。
+ * schema 表达不了的跨字段规则——伤害档阈值须严格递增；
+ * gear 子节（#14）：shardItem xref items 且须为 mat 类（熔炼入袋的
+ * 必须是可堆叠材料，equip/consumable 类器屑是死物或药神）。
  */
 function checkConfig(
   config: Config | undefined,
+  items: ReadonlyMap<string, number>,
+  itemDefs: readonly Item[],
   errors: ContentError[],
 ): ReadonlySet<string> | undefined {
   if (config === undefined) {
@@ -294,7 +310,46 @@ function checkConfig(
       message: `伤害档阈值须严格递增（light ${combat.tierLightMax} < mid ${combat.tierMidMax} < heavy ${combat.tierHeavyMax}）`,
     });
   }
+  const shardItem = config.gear?.shardItem;
+  if (shardItem !== undefined) {
+    const itemAt = items.get(shardItem);
+    if (itemAt === undefined) {
+      errors.push({
+        path: '/config/gear/shardItem',
+        keyword: 'xref',
+        message: `器屑物品 "${shardItem}" 不存在于 items`,
+      });
+    } else if (itemDefs[itemAt]?.type !== 'mat') {
+      errors.push({
+        path: '/config/gear/shardItem',
+        keyword: 'xref',
+        message: `器屑物品 "${shardItem}" 须为 mat 类（熔炼产物入袋堆叠）`,
+      });
+    }
+  }
   return new Set(config.slots.map((slot) => slot.id));
+}
+
+/**
+ * 模板类物品（blank 器胚 / inscription 铭纹）禁入袋流（#14）：
+ * 两类是掉落管线的实例化模板，经袋子流通只会成为不可见死物
+ * （bag 只渲染 mat/consumable 分组），还能按 sell 折算灵石套利。
+ */
+function rejectTemplateItem(
+  itemDefs: readonly Item[],
+  itemAt: number | undefined,
+  path: string,
+  label: string,
+  errors: ContentError[],
+): void {
+  const def = itemAt !== undefined ? itemDefs[itemAt] : undefined;
+  if (def?.type === 'blank' || def?.type === 'inscription') {
+    errors.push({
+      path,
+      keyword: 'xref',
+      message: `${label} "${def.id}" 是${def.type === 'blank' ? '器胚' : '铭纹'}模板类（只经掉落管线实例化，不得进入袋流）`,
+    });
+  }
 }
 
 /**
@@ -305,6 +360,7 @@ function checkConfig(
 function checkItemShapes(
   items: readonly Item[],
   slotIds: ReadonlySet<string> | undefined,
+  weaponSlotIds: ReadonlySet<string>,
   errors: ContentError[],
 ): ReadonlySet<string> {
   const weaponIds = new Set<string>();
@@ -318,11 +374,14 @@ function checkItemShapes(
         message: `槽位 "${item.slot}" 未在 config.slots 定义`,
       });
     }
+    // 武器语义槽（#14 器胚同律 + role 放宽）：武器槽上的 equip/器胚都承担
+    // 武器语义（佩戴后引擎 weaponMoveKey 用其 itemId），招式注册键随之放行。
+    if ((item.type === 'equip' || item.type === 'blank') && item.slot !== undefined && weaponSlotIds.has(item.slot)) {
+      weaponIds.add(item.id);
+    }
     if (item.type === 'equip') {
       if (item.slot === undefined) {
         errors.push({ path: at('slot'), keyword: 'shape', message: 'equip 类物品缺少 slot' });
-      } else if (item.slot === 'weapon') {
-        weaponIds.add(item.id);
       }
       if (item.bonuses === undefined) {
         errors.push({ path: at('bonuses'), keyword: 'shape', message: 'equip 类物品缺少 bonuses' });
@@ -453,6 +512,7 @@ function checkPrototypes(
 function checkSkills(
   skills: readonly Skill[],
   items: ReadonlyMap<string, number>,
+  itemDefs: readonly Item[],
   maxLevel: number | undefined,
   errors: ContentError[],
 ): void {
@@ -487,6 +547,8 @@ function checkSkills(
           keyword: 'xref',
           message: `产出物品 "${activity.output.item}" 不存在于 items`,
         });
+      } else {
+        rejectTemplateItem(itemDefs, items.get(activity.output.item), `/skills/${i}/activities/${j}/output/item`, '产出物品', errors);
       }
       const bonus = activity.byproduct;
       if (bonus !== undefined && !items.has(bonus.item)) {
@@ -495,6 +557,8 @@ function checkSkills(
           keyword: 'xref',
           message: `副产出物品 "${bonus.item}" 不存在于 items`,
         });
+      } else if (bonus !== undefined) {
+        rejectTemplateItem(itemDefs, items.get(bonus.item), `/skills/${i}/activities/${j}/byproduct/item`, '副产出物品', errors);
       }
     }
   });
@@ -503,6 +567,7 @@ function checkSkills(
 function checkRecipes(
   recipes: ContentPack['recipes'],
   items: ReadonlyMap<string, number>,
+  itemDefs: readonly Item[],
   skills: ReadonlyMap<string, number>,
   skillDefs: readonly Skill[],
   maxLevel: number | undefined,
@@ -523,6 +588,8 @@ function checkRecipes(
         keyword: 'xref',
         message: `产出物品 "${recipe.output.item}" 不存在于 items`,
       });
+    } else {
+      rejectTemplateItem(itemDefs, items.get(recipe.output.item), `/recipes/${i}/output/item`, '产出物品', errors);
     }
     for (const [matId] of Object.entries(recipe.materials)) {
       if (!items.has(matId)) {
@@ -531,6 +598,8 @@ function checkRecipes(
           keyword: 'xref',
           message: `材料 "${matId}" 不存在于 items`,
         });
+      } else {
+        rejectTemplateItem(itemDefs, items.get(matId), `/recipes/${i}/materials/${matId}`, '材料', errors);
       }
     }
     const skillAt = skills.get(recipe.skill);
@@ -558,6 +627,7 @@ function hasMove(moves: Readonly<Record<string, readonly string[]>>, key: string
 function checkEnemies(
   enemies: ContentPack['enemies'],
   items: ReadonlyMap<string, number>,
+  itemDefs: readonly Item[],
   moves: Readonly<Record<string, readonly string[]>>,
   maxLevel: number | undefined,
   errors: ContentError[],
@@ -570,6 +640,8 @@ function checkEnemies(
           keyword: 'xref',
           message: `掉落物品 "${drop.item}" 不存在于 items`,
         });
+      } else {
+        rejectTemplateItem(itemDefs, items.get(drop.item), `/enemies/${i}/drops/${j}/item`, '掉落物品', errors);
       }
     }
     if (!hasMove(moves, enemy.id)) {
@@ -622,11 +694,12 @@ function checkGearDrops(
           keyword: 'xref',
           message: `异宝池引用的物品 "${itemId}" 不存在于 items`,
         });
-      } else if (itemDefs[itemAt]?.type !== 'equip') {
+      } else if (itemDefs[itemAt]?.type !== 'equip' && itemDefs[itemAt]?.type !== 'blank') {
+        // #14：异宝池放行器胚（掉落管线 ②③ 走底材实例化）；equip 兼容旧池。
         errors.push({
           path: `/gearDrops/${i}/pool/${j}`,
           keyword: 'xref',
-          message: `异宝池只能引用 equip 类物品，"${itemId}" 不是装备`,
+          message: `异宝池只能引用 equip/blank（器胚）类物品，"${itemId}" 不是装备或器胚`,
         });
       }
     }
@@ -636,6 +709,7 @@ function checkGearDrops(
 function checkShop(
   shop: ContentPack['shop'],
   items: ReadonlyMap<string, number>,
+  itemDefs: readonly Item[],
   errors: ContentError[],
 ): void {
   shop.forEach((entry, i) => {
@@ -645,6 +719,8 @@ function checkShop(
         keyword: 'xref',
         message: `货架物品 "${entry.item}" 不存在于 items`,
       });
+    } else {
+      rejectTemplateItem(itemDefs, items.get(entry.item), `/shop/${i}/item`, '货架物品', errors);
     }
   });
 }
@@ -678,7 +754,7 @@ function checkMoveRegistry(
       errors.push({
         path: `/combatText/moves/${key}`,
         keyword: 'xref',
-        message: '招式注册键必须是 basic、武器物品 id、敌人 id 或 Boss 变招键（#8）',
+        message: '招式注册键必须是 basic、武器物品 id（equip/器胚武器，#14）、敌人 id 或 Boss 变招键（#8）',
       });
     }
   }

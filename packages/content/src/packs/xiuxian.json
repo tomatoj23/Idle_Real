@@ -97,16 +97,28 @@
     { "id": "acc2", "name": "破妄金瞳", "icon": "瞳", "type": "equip", "slot": "accessory", "sell": 320, "bonuses": { "crit": 10 } },
     { "id": "acc3", "name": "混沌钟铃", "icon": "铃", "type": "equip", "slot": "accessory", "sell": 1200, "bonuses": { "crit": 18, "atk": 15, "def": 15 } },
 
-    { "id": "scorp_tail", "name": "蝎尾刺", "icon": "刺", "type": "equip", "slot": "weapon", "sell": 25, "description": "妖物专属掉落，不可炼制", "verbStyle": "sword", "bonuses": { "atk": 5 } },
-    { "id": "wolf_fang", "name": "妖狼牙坠", "icon": "坠", "type": "equip", "slot": "accessory", "sell": 60, "description": "妖物专属掉落，不可炼制", "bonuses": { "crit": 4, "atk": 2 } },
-    { "id": "corpse_nail", "name": "尸骨魔爪", "icon": "爪", "type": "equip", "slot": "weapon", "sell": 130, "description": "妖物专属掉落，不可炼制", "verbStyle": "sword", "bonuses": { "atk": 15 } },
-    { "id": "ghost_mask", "name": "鬼面傩具", "icon": "面", "type": "equip", "slot": "accessory", "sell": 160, "description": "妖物专属掉落，不可炼制", "bonuses": { "def": 8, "crit": 6 } },
-    { "id": "blood_gourd", "name": "血魔血葫", "icon": "葫", "type": "equip", "slot": "weapon", "sell": 420, "description": "妖物专属掉落，不可炼制", "verbStyle": "sword", "bonuses": { "atk": 40 } },
-    { "id": "luo_shayi", "name": "阴罗纱衣", "icon": "纱", "type": "equip", "slot": "body", "sell": 460, "description": "妖物专属掉落，不可炼制", "bonuses": { "def": 30, "hp": 220 } },
-    { "id": "mojun_blade", "name": "魔君残刃", "icon": "刃", "type": "equip", "slot": "weapon", "sell": 780, "description": "妖物专属掉落，不可炼制", "verbStyle": "sword", "bonuses": { "atk": 70 } },
-    { "id": "mojun_guan", "name": "魔君骨冠", "icon": "冠", "type": "equip", "slot": "accessory", "sell": 1250, "description": "妖物专属掉落，不可炼制", "bonuses": { "atk": 10, "def": 10, "crit": 8 } },
-    { "id": "taotie_fang", "name": "饕餮獠牙", "icon": "牙", "type": "equip", "slot": "weapon", "sell": 1550, "description": "妖物专属掉落，不可炼制", "verbStyle": "sword", "bonuses": { "atk": 95, "crit": 5 } },
-    { "id": "taotie_pi", "name": "饕餮皮裘", "icon": "裘", "type": "equip", "slot": "body", "sell": 1650, "description": "妖物专属掉落，不可炼制", "bonuses": { "def": 75, "hp": 500 } }
+    { "id": "gear_shard", "name": "器屑", "icon": "屑", "type": "mat", "sell": 8, "description": "熔炼法器所得的碎屑，重铸铭纹的消耗材料" },
+
+    { "id": "blank_sword_1", "name": "凡铁剑胚", "icon": "胚", "type": "blank", "sell": 0, "slot": "weapon", "floorRange": { "min": 1, "max": 5 }, "tierRange": { "min": 1, "max": 2 }, "preferredTags": ["offense"], "inherentModifiers": [{ "stat": "atk", "zone": "flat", "value": 4 }], "description": "妖物遗落的剑胚，淬入铭纹方能成器" },
+    { "id": "blank_sword_2", "name": "星纹剑胚", "icon": "胚", "type": "blank", "sell": 0, "slot": "weapon", "floorRange": { "min": 6, "max": 10 }, "tierRange": { "min": 2, "max": 3 }, "preferredTags": ["offense", "fortune"], "inherentModifiers": [{ "stat": "atk", "zone": "flat", "value": 10 }], "description": "陨星碎屑锻成的剑胚，纹路间隐有星辉" },
+    { "id": "blank_sword_3", "name": "诛仙剑胚", "icon": "胚", "type": "blank", "sell": 0, "slot": "weapon", "floorRange": { "min": 11, "max": 15 }, "tierRange": { "min": 3, "max": 3 }, "preferredTags": ["offense", "fortune"], "inherentModifiers": [{ "stat": "atk", "zone": "flat", "value": 24 }], "description": "上古剑冢深处出土的残胚，煞气未散" },
+    { "id": "blank_body_1", "name": "布纹甲胚", "icon": "胚", "type": "blank", "sell": 0, "slot": "body", "floorRange": { "min": 1, "max": 5 }, "tierRange": { "min": 1, "max": 2 }, "preferredTags": ["defense"], "inherentModifiers": [{ "stat": "def", "zone": "flat", "value": 3 }], "description": "妖物遗落的甲胚，可承铭纹护体" },
+    { "id": "blank_body_2", "name": "玄龟甲胚", "icon": "胚", "type": "blank", "sell": 0, "slot": "body", "floorRange": { "min": 6, "max": 10 }, "tierRange": { "min": 2, "max": 3 }, "preferredTags": ["defense", "sustain"], "inherentModifiers": [{ "stat": "def", "zone": "flat", "value": 8 }], "description": "千年玄龟蜕下的甲壳所炼，坚若磐石" },
+    { "id": "blank_body_3", "name": "不灭甲胚", "icon": "胚", "type": "blank", "sell": 0, "slot": "body", "floorRange": { "min": 11, "max": 15 }, "tierRange": { "min": 3, "max": 3 }, "preferredTags": ["defense", "sustain"], "inherentModifiers": [{ "stat": "def", "zone": "flat", "value": 20 }], "description": "不灭金身的残片锻成，金光不灭" },
+    { "id": "blank_acc_1", "name": "灵玉饰胚", "icon": "胚", "type": "blank", "sell": 0, "slot": "accessory", "floorRange": { "min": 1, "max": 5 }, "tierRange": { "min": 1, "max": 2 }, "preferredTags": ["fortune"], "inherentModifiers": [{ "stat": "crit", "zone": "flat", "value": 2 }], "description": "妖物遗落的饰胚，可承铭纹通灵" },
+    { "id": "blank_acc_2", "name": "洞灵饰胚", "icon": "胚", "type": "blank", "sell": 0, "slot": "accessory", "floorRange": { "min": 6, "max": 10 }, "tierRange": { "min": 2, "max": 3 }, "preferredTags": ["fortune", "sustain"], "inherentModifiers": [{ "stat": "crit", "zone": "flat", "value": 4 }], "description": "洞天灵气凝结的玉髓琢成，温润生辉" },
+    { "id": "blank_acc_3", "name": "混元饰胚", "icon": "胚", "type": "blank", "sell": 0, "slot": "accessory", "floorRange": { "min": 11, "max": 15 }, "tierRange": { "min": 3, "max": 3 }, "preferredTags": ["fortune", "offense"], "inherentModifiers": [{ "stat": "crit", "zone": "flat", "value": 7 }], "description": "开天辟地时的混元一气所凝，万物皆容" },
+
+    { "id": "insc_lieshi", "name": "裂石", "icon": "锐", "type": "inscription", "sell": 0, "tiers": [[{ "stat": "atk", "zone": "flat", "value": 4 }], [{ "stat": "atk", "zone": "flat", "value": 9 }], [{ "stat": "atk", "zone": "flat", "value": 18 }]], "tags": ["offense"], "description": "铭刻后攻击如裂石开山" },
+    { "id": "insc_suiyu", "name": "碎玉", "icon": "御", "type": "inscription", "sell": 0, "tiers": [[{ "stat": "def", "zone": "flat", "value": 3 }], [{ "stat": "def", "zone": "flat", "value": 7 }], [{ "stat": "def", "zone": "flat", "value": 14 }]], "tags": ["defense"], "description": "铭刻后护体如玉碎不摧" },
+    { "id": "insc_guyuan", "name": "固元", "icon": "固", "type": "inscription", "sell": 0, "tiers": [[{ "stat": "hp", "zone": "flat", "value": 20 }], [{ "stat": "hp", "zone": "flat", "value": 45 }], [{ "stat": "hp", "zone": "flat", "value": 90 }]], "tags": ["sustain"], "description": "铭刻后元气固若金汤" },
+    { "id": "insc_dongxuan", "name": "洞玄", "icon": "明", "type": "inscription", "sell": 0, "tiers": [[{ "stat": "crit", "zone": "flat", "value": 2 }], [{ "stat": "crit", "zone": "flat", "value": 4 }], [{ "stat": "crit", "zone": "flat", "value": 7 }]], "tags": ["fortune"], "description": "铭刻后目透玄机，破绽立现" },
+    { "id": "insc_ranxue", "name": "燃血", "icon": "燃", "type": "inscription", "sell": 0, "tiers": [[{ "stat": "atk", "zone": "addPct", "value": 4 }], [{ "stat": "atk", "zone": "addPct", "value": 8 }], [{ "stat": "atk", "zone": "addPct", "value": 15 }]], "tags": ["offense", "fortune"], "description": "铭刻后热血燃脉，攻势愈盛" },
+    { "id": "insc_tiebi", "name": "铁壁", "icon": "壁", "type": "inscription", "sell": 0, "tiers": [[{ "stat": "def", "zone": "addPct", "value": 4 }], [{ "stat": "def", "zone": "addPct", "value": 8 }], [{ "stat": "def", "zone": "addPct", "value": 15 }]], "tags": ["defense"], "description": "铭刻后护体灵光凝如铁壁" },
+    { "id": "insc_qifu", "name": "气府", "icon": "府", "type": "inscription", "sell": 0, "tiers": [[{ "stat": "hp", "zone": "addPct", "value": 4 }], [{ "stat": "hp", "zone": "addPct", "value": 8 }], [{ "stat": "hp", "zone": "addPct", "value": 12 }]], "tags": ["sustain"], "description": "铭刻后气府开阔，血气充盈" },
+    { "id": "insc_nilin", "name": "逆鳞", "icon": "鳞", "type": "inscription", "sell": 0, "tiers": [[{ "stat": "def", "zone": "flat", "value": 6, "condition": { "element": "fire" } }], [{ "stat": "def", "zone": "flat", "value": 12, "condition": { "element": "fire" } }], [{ "stat": "def", "zone": "flat", "value": 24, "condition": { "element": "fire" } }]], "tags": ["defense"], "description": "受火系攻击时如逆鳞奋张，防御大增" },
+    { "id": "insc_shigu", "name": "蚀骨", "icon": "蚀", "type": "inscription", "sell": 0, "tiers": [[{ "stat": "atk", "zone": "flat", "value": 3 }], [{ "stat": "atk", "zone": "flat", "value": 6 }], [{ "stat": "atk", "zone": "flat", "value": 12 }]], "feature": { "primitive": "poisonSpread", "value": 0.25 }, "tags": ["offense"], "description": "蚀骨毒氛，或有传染之效（原语待启）" },
+    { "id": "insc_yinlei", "name": "引雷", "icon": "雷", "type": "inscription", "sell": 0, "tiers": [[{ "stat": "crit", "zone": "flat", "value": 1 }], [{ "stat": "crit", "zone": "flat", "value": 3 }], [{ "stat": "crit", "zone": "flat", "value": 5 }]], "feature": { "primitive": "chainBolt", "value": 0.2 }, "tags": ["fortune", "offense"], "description": "引九天雷霆，或有连锁之效（原语待启）" }
   ],
   "recipes": [
     { "name": "炼制回气丹", "skill": "alchemy", "unlockLevel": 1, "output": { "item": "consumable_heal", "count": 1 }, "materials": { "herb1": 2 }, "successRate": 0.75, "interval": 3000, "exp": 8 },
@@ -170,14 +182,14 @@
     }
   ],
   "gearDrops": [
-    { "enemy": "e1", "chance": 0.1, "pool": [ "scorp_tail", "wolf_fang" ] },
-    { "enemy": "e2", "chance": 0.1, "pool": [ "scorp_tail", "wolf_fang" ] },
-    { "enemy": "e3", "chance": 0.09, "pool": [ "corpse_nail", "ghost_mask" ] },
-    { "enemy": "e4", "chance": 0.09, "pool": [ "corpse_nail", "ghost_mask" ] },
-    { "enemy": "e5", "chance": 0.08, "pool": [ "blood_gourd", "luo_shayi" ] },
-    { "enemy": "e6", "chance": 0.08, "pool": [ "blood_gourd", "luo_shayi" ] },
-    { "enemy": "e7", "chance": 0.07, "pool": [ "mojun_blade", "mojun_guan" ] },
-    { "enemy": "e8", "chance": 0.15, "pool": [ "taotie_fang", "taotie_pi" ] }
+    { "enemy": "e1", "chance": 0.1, "pool": [ "blank_sword_1", "blank_body_1", "blank_acc_1" ] },
+    { "enemy": "e2", "chance": 0.1, "pool": [ "blank_sword_1", "blank_body_1", "blank_acc_1" ] },
+    { "enemy": "e3", "chance": 0.09, "pool": [ "blank_sword_2", "blank_body_2", "blank_acc_2" ] },
+    { "enemy": "e4", "chance": 0.09, "pool": [ "blank_sword_2", "blank_body_2", "blank_acc_2" ] },
+    { "enemy": "e5", "chance": 0.08, "pool": [ "blank_sword_2", "blank_body_2", "blank_acc_2", "blank_sword_3", "blank_body_3", "blank_acc_3" ] },
+    { "enemy": "e6", "chance": 0.08, "pool": [ "blank_sword_2", "blank_body_2", "blank_acc_2", "blank_sword_3", "blank_body_3", "blank_acc_3" ] },
+    { "enemy": "e7", "chance": 0.07, "pool": [ "blank_sword_3", "blank_body_3", "blank_acc_3" ] },
+    { "enemy": "e8", "chance": 0.15, "pool": [ "blank_sword_3", "blank_body_3", "blank_acc_3" ] }
   ],
   "dungeons": [
     {
@@ -302,10 +314,10 @@
     { "id": "thunder", "name": "雷" }
   ],
   "rarities": [
-    { "id": "common", "name": "寻常", "weight": 70, "mult": 1, "affix": 0, "sell": 1 },
-    { "id": "fine", "name": "精良", "weight": 20, "mult": 1.15, "affix": 1, "sell": 2 },
-    { "id": "rare", "name": "罕见", "weight": 8, "mult": 1.3, "affix": 2, "sell": 4 },
-    { "id": "epic", "name": "绝世", "weight": 2, "mult": 1.5, "affix": 3, "sell": 10, "showcase": true }
+    { "id": "common", "name": "寻常", "weight": 70, "mult": 1, "affix": 0, "sell": 1, "smelt": 1 },
+    { "id": "fine", "name": "精良", "weight": 20, "mult": 1.15, "affix": 1, "sell": 2, "smelt": 2 },
+    { "id": "rare", "name": "罕见", "weight": 8, "mult": 1.3, "affix": 2, "sell": 4, "smelt": 4 },
+    { "id": "epic", "name": "绝世", "weight": 2, "mult": 1.5, "affix": 3, "sell": 10, "smelt": 8, "showcase": true }
   ],
   "affixPool": [
     { "name": "锐锋", "stat": "atk", "scale": 0.3 },
@@ -349,11 +361,9 @@
       "sword2": [ "玄铁崩山", "力劈华山" ],
       "sword3": [ "星河倒卷", "流光七杀" ],
       "sword4": [ "诛仙一线", "万剑归宗" ],
-      "scorp_tail": [ "毒尾点穴" ],
-      "corpse_nail": [ "白骨摧心" ],
-      "blood_gourd": [ "血河翻浪" ],
-      "mojun_blade": [ "残月断魂" ],
-      "taotie_fang": [ "吞天一咬" ],
+      "blank_sword_1": [ "凡铁出鞘" ],
+      "blank_sword_2": [ "星芒乍现" ],
+      "blank_sword_3": [ "诛仙剑气" ],
       "e1": [ "饿虎扑食" ],
       "e2": [ "毒尾横扫" ],
       "e3": [ "摄魂指" ],
@@ -489,6 +499,18 @@
         "not-found": "查无此器",
         "worn": "佩戴中的法器不可卖出"
       },
+      "gear:smelt": {
+        "not-found": "查无此器",
+        "worn": "佩戴中的法器不可熔炼",
+        "not-available": "此界并无熔炼之法"
+      },
+      "gear:reforge": {
+        "not-found": "查无此器",
+        "worn": "佩戴中的法器不可重铸",
+        "not-available": "此界并无重铸之法",
+        "no-shard": "器屑不足（需 {cost}，现有 {owned}）",
+        "no-inscription": "此器并无铭纹可重铸"
+      },
       "rebirth:perform": {
         "not-available": "此界并无兵解之法",
         "in-combat": "斗法之中，如何散功？先脱战再说",
@@ -597,7 +619,9 @@
         "dungeonLeave": "退出【{name}】：止步第 {floor} 层，最深曾至第 {best} 层",
         "bossPhase": "【{enemy}】显露「{name}」之相！（阶段 {phase}）",
         "achievementToast": "成就达成【{name}】！",
-        "achievementLog": "成就达成【{name}】"
+        "achievementLog": "成就达成【{name}】",
+        "gearSmelt": "熔炼【{name}】，得 {shard}×{count}",
+        "gearReforge": "重铸【{name}】，铭纹升至 T{tier}"
       },
       "pages": {
         "skills": {
@@ -662,7 +686,11 @@
           "noAffix": "无属性",
           "wearBtn": "佩戴",
           "takeOffBtn": "卸下",
-          "sellBtn": "卖出"
+          "sellBtn": "卖出",
+          "smeltBtn": "熔炼",
+          "reforgeBtn": "重铸",
+          "inscTier": "T{tier}",
+          "inscCondition": "（受{element}）"
         },
         "shop": {
           "title": "坊市",
@@ -803,6 +831,11 @@
       "successCap": 0.99,
       "failExpRefund": 0.25,
       "rarityBiasPerLevel": 0.0004
+    },
+    "gear": {
+      "shardItem": "gear_shard",
+      "reforgeCost": 3,
+      "tagWeightPerMatch": 1
     }
   },
   "rebirth": {

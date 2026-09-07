@@ -554,7 +554,9 @@
         "dungeonLeave": "You leave {name} at floor {floor} (deepest: {best}).",
         "bossPhase": "{enemy} enters {phase} phase: {name}!",
         "achievementToast": "Feat earned: {name}!",
-        "achievementLog": "Feat earned: {name}."
+        "achievementLog": "Feat earned: {name}.",
+        "gearSmelt": "Smelted {name}, gained {shard}×{count}.",
+        "gearReforge": "Reforged {name}: rune raised to T{tier}."
       },
       "pages": {
         "skills": {
@@ -619,7 +621,11 @@
           "noAffix": "No enchantments.",
           "wearBtn": "Wear",
           "takeOffBtn": "Remove",
-          "sellBtn": "Sell"
+          "sellBtn": "Sell",
+          "smeltBtn": "Smelt",
+          "reforgeBtn": "Reforge",
+          "inscTier": "T{tier}",
+          "inscCondition": " (vs {element})"
         },
         "shop": {
           "title": "Shop",

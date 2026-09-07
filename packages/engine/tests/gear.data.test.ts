@@ -87,7 +87,7 @@ describe('#018 · makeGear/gearName/gearSell/gearContributions 读内容表', ()
   it('词条量级系数（scale）来自内容池', () => {
     const pack = makePack();
     // random 恒 0.25：池内 index = floor(0.25*2)=0 → 锋锐(atk)；val = round(10*0.5*(0.8+0.25*0.4)) = 5
-    const gear = makeGear(pack, 'sword', { atk: 10 }, 1, () => 0.25, 'refined');
+    const gear = makeGear(pack, 'sword', { atk: 10 }, 1, () => 0.25, { rarity: 'refined' });
     expect(gear.rarity).toBe('refined');
     expect(gear.affixes).toEqual([{ name: '锋锐', stat: 'atk', val: 5 }]);
   });
@@ -101,7 +101,7 @@ describe('#018 · makeGear/gearName/gearSell/gearContributions 读内容表', ()
   it('缺档回退第一档：makeGear/gearName/gearSell/gearContributions 同律', () => {
     const pack = makePack();
     // 'bogus' 未命中 → 回退 rough（第一档）：零词条、mult 1、卖价倍率 1
-    const gear = makeGear(pack, 'sword', { atk: 10 }, 1, () => 0.5, 'bogus');
+    const gear = makeGear(pack, 'sword', { atk: 10 }, 1, () => 0.5, { rarity: 'bogus' });
     expect(gear.affixes).toEqual([]);
     expect(gearName(pack, '青锋剑', 'bogus')).toBe('粗坯·青锋剑');
     expect(gearSell(pack, 10, 'bogus')).toBe(10);
@@ -109,7 +109,7 @@ describe('#018 · makeGear/gearName/gearSell/gearContributions 读内容表', ()
       { modifier: { stat: 'atk', zone: 'flat', value: 10 }, source: { id: 'sword', kind: 'equip', uid: 1, name: '粗坯·青锋剑' } },
     ]);
     // 命中 refined：mult 2 → round(10*2)=20；卖价 round(10*4)=40
-    const rich = makeGear(pack, 'sword', { atk: 10 }, 2, () => 0.5, 'refined');
+    const rich = makeGear(pack, 'sword', { atk: 10 }, 2, () => 0.5, { rarity: 'refined' });
     expect(gearContributions(pack, rich, { atk: 10 }, '青锋剑')[0]?.modifier.value).toBe(20);
     expect(gearSell(pack, 10, 'refined')).toBe(40);
   });
@@ -118,7 +118,7 @@ describe('#018 · makeGear/gearName/gearSell/gearContributions 读内容表', ()
     const pack = makePack({ rarities: [], affixPool: [] });
     expect(gearName(pack, '青锋剑', 'anything')).toBe('青锋剑');
     expect(gearSell(pack, 10, 'anything')).toBe(10);
-    const gear = makeGear(pack, 'sword', { atk: 10 }, 1, () => 0.5, 'anything');
+    const gear = makeGear(pack, 'sword', { atk: 10 }, 1, () => 0.5, { rarity: 'anything' });
     expect(gear.affixes).toEqual([]);
     expect(gearContributions(pack, gear, { atk: 10 }, '青锋剑')[0]?.modifier.value).toBe(10);
   });
@@ -127,8 +127,8 @@ describe('#018 · makeGear/gearName/gearSell/gearContributions 读内容表', ()
     const base = { atk: 10 };
     const packA = makePack({ rarities: [{ id: 'rare', weight: 1, mult: 1.3, affix: 0, sell: 1 }] });
     const packB = makePack({ rarities: [{ id: 'rare', weight: 1, mult: 2.5, affix: 0, sell: 1 }] });
-    const gearA = makeGear(packA, 'sword', base, 1, () => 0.5, 'rare');
-    const gearB = makeGear(packB, 'sword', base, 1, () => 0.5, 'rare');
+    const gearA = makeGear(packA, 'sword', base, 1, () => 0.5, { rarity: 'rare' });
+    const gearB = makeGear(packB, 'sword', base, 1, () => 0.5, { rarity: 'rare' });
     expect(gearContributions(packA, gearA, base, '剑')[0]?.modifier.value).toBe(13);
     expect(gearContributions(packB, gearB, base, '剑')[0]?.modifier.value).toBe(25);
   });

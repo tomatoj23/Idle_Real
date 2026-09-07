@@ -27,8 +27,10 @@ export type { AutoSaveHandle, SaveAdapter } from './save.js';
 export {
   BASE_COMBAT_PARAMS,
   BASE_CRAFT_PARAMS,
+  BASE_GEAR_PARAMS,
   affixParamsOf,
   affixPoolOf,
+  blanksOf,
   combatLevelOf,
   combatParamsOf,
   combatTextOf,
@@ -38,14 +40,18 @@ export {
   enemyGateOf,
   enemiesOf,
   findActivity,
+  findBlank,
   findEnemy,
   findGearDrop,
+  findInscription,
   findItem,
   findRarity,
   findRecipe,
   findShopEntry,
   findSkill,
   gearDropsOf,
+  gearParamsOf,
+  inscriptionsOf,
   itemsOf,
   playerMaxHp,
   powerOf,
@@ -57,10 +63,12 @@ export {
   slotsOf,
   skillsOf,
   textsOf,
+  weaponSlotOf,
 } from './contentView.js';
 export type {
   ActivityView,
   AffixPoolView,
+  BlankView,
   ByproductView,
   CombatParamsView,
   CraftParamsView,
@@ -68,6 +76,8 @@ export type {
   EnemyGateView,
   EnemyView,
   GearDropView,
+  GearParamsView,
+  InscriptionView,
   ItemBonusesView,
   ItemEffectView,
   ItemView,
@@ -119,10 +129,25 @@ export {
   gearName,
   gearSell,
   makeGear,
+  makeInscribedGear,
   projectGearBase,
+  rollGear,
   rollRarity,
 } from './gear.js';
-export type { Affix, AffixParams, GearInstance, Rarity } from './gear.js';
+export type {
+  Affix,
+  AffixParams,
+  GearDropContext,
+  GearInscription,
+  GearInstance,
+  MakeGearOptions,
+  MakeInscribedGearOptions,
+  Rarity,
+} from './gear.js';
+
+// tag 倒排索引（#14，ADR-015 tags/flags 分工：归类批量捞）
+export { buildTagIndex, queryByTag } from './tags.js';
+export type { TaggedEntry } from './tags.js';
 
 // 修饰符聚合管线（issue #13，ADR-011）
 export { aggregateStat, aggregateStats, conditionMatches } from './modifiers.js';

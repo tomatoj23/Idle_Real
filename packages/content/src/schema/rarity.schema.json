@@ -43,6 +43,11 @@
           "exclusiveMinimum": 0,
           "description": "卖价倍率：卖价 = max(1, round(物品卖价 × sell))"
         },
+        "smelt": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "熔炼产出（#14）：熔炼该档装备所得器屑数量；缺省 = 引擎基线 1（ADR-016 裁决 ① 分策：数值参数引擎基线 + 内容覆盖）"
+        },
         "showcase": {
           "type": "boolean",
           "description": "UI 特判开关（ADR-016 裁决 ④）：true 时 UI 作「天降异宝」级特判（弹 toast/着色加强）；缺省 = 普通档（bool 缺省即 false，不写即不落盘包体积）"
