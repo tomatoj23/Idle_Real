@@ -940,12 +940,16 @@ export function buildUi(
         const desc = concealed
           ? T('pages.achievements.hiddenDesc')
           : (def.description ?? '');
-        // 进度行：已解锁不渲染（恒 100 无信息量）；布尔型（无 target）与反向阈值
-        // （lte 的 {current}/{target} 数值语义反直觉——「最快击杀」类只留进度条）不渲染。
+        // 进度条：已解锁不渲染（恒 100 无信息量）；布尔型（无 target）无进度可言。
+        // 数值行另拆：lte 的 {current}/{target} 语义反直觉（「最快击杀」5/3 读作
+        // 反向），只留进度条（真机验收裁决）。
+        const progressBar =
+          !unlocked && view.target !== undefined
+            ? `<div class="bar bar-thin"><i style="width:${percent}%"></i></div>`
+            : '';
         const progressRow =
           !unlocked && view.target !== undefined && def.condition.op !== 'lte'
-            ? `<div class="bar bar-thin"><i style="width:${percent}%"></i></div>
-               <div class="act-meta">${esc(T('pages.achievements.progress', { current: view.current ?? 0, target: view.target }))}</div>`
+            ? `<div class="act-meta">${esc(T('pages.achievements.progress', { current: view.current ?? 0, target: view.target }))}</div>`
             : '';
         // 奖励行：引擎入账结果的内容面直出（parts 由壳拼装，缺项省略）。
         const reward = def.reward;
@@ -965,6 +969,7 @@ export function buildUi(
         return `<article class="act-card ach-card${unlocked ? ' owned' : ''}${concealed ? ' locked' : ''}">
           <header><b><span class="sigil sigil-sm">${esc(concealed ? T('icons.unknown') : (def.icon ?? T('icons.unknown')))}</span> ${esc(name)}</b>${unlocked ? `<em class="act-badge">${esc(T('pages.achievements.unlockedBadge'))}</em>` : ''}</header>
           ${desc ? `<div class="talent-desc">${esc(desc)}</div>` : ''}
+          ${progressBar}
           ${progressRow}
           ${parts.length > 0 ? `<div class="act-meta ach-reward">${esc(parts.join(sep))}</div>` : ''}
         </article>`;

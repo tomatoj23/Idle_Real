@@ -57,8 +57,12 @@ describe('#9 · 成就页', () => {
     expect(page).toContain('兵解');
     // 阈值卡进度行（percent 引擎投影，壳零公式复算）。
     expect(page).toContain('0/100');
-    // 反向阈值卡不渲染数值行（{current}/{target} 对 lte 语义反直觉，只留进度条）。
+    // 反向阈值卡不渲染数值行（{current}/{target} 对 lte 语义反直觉），进度条保留。
     expect(page).not.toContain('0/3');
+    const swift = Array.from(root.querySelectorAll('.ach-card')).find((node) =>
+      node.textContent?.includes('三合速胜'),
+    )!;
+    expect(swift.querySelector('.bar')).not.toBeNull();
     // 隐藏卡：名与描述占位，条件不剧透。
     expect(page).toContain('？？？');
     expect(page).toContain('此乃隐藏成就');

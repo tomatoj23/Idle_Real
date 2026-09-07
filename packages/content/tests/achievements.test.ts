@@ -136,6 +136,22 @@ describe('#9 · achievements 语义关卡', () => {
     );
   });
 
+  it('奖励物品为 equip 类 → xref（装备须走掉落/炼制管线实例化，整袋发放成死物）', () => {
+    const pack = makePack([
+      { ...VALID, reward: { items: [{ item: 'sword1', count: 1 }] } },
+    ]) as Record<string, unknown>;
+    (pack['items'] as Array<{ id: string; type?: string }>).push({
+      id: 'sword1',
+      name: '青锋剑',
+      icon: '剑',
+      type: 'equip',
+      sell: 30,
+      slot: 'weapon',
+      bonuses: { atk: 6 },
+    });
+    expectError(validateContentPack(pack), '/achievements/0/reward/items/0/item', 'xref');
+  });
+
   it('缺 achievements 节照常通过（可选节零破坏）', () => {
     expect(validateContentPack(minimalPack()).ok).toBe(true);
     expect(validateContentPack(makePack([])).ok).toBe(true); // 空表合法（无成就玩法）

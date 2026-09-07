@@ -1057,6 +1057,8 @@ export function createGame(options: CreateGameOptions): Game {
           state.daoYunEarned += def.reward.daoYun; // 道韵双键同律（花掉不回锁）
         }
         for (const stack of def.reward.items ?? []) {
+          // 物品须存在（包校验 xref 已保证；引擎对坏包防御：静默跳过不建孤儿键）。
+          if (!findItem(content, stack.item)) continue;
           addItem(stack.item, stack.count);
           items[stack.item] = (items[stack.item] ?? 0) + stack.count;
         }

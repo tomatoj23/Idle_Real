@@ -43,7 +43,11 @@
  *      条目、父链不得成环（展平留待后续票，此处为门禁侧保险）；
  *    - 转生节（#6，可选节）：重置/保留清单键域 = 引擎注册表闭集且两集
  *      不相交；天赋树 id 去重、requires xref + DFS 查环（菱形合法）、效果
- *      修饰符区约束；解锁表目标 xref + 同目标重复拒绝；境界词表同层数重复拒绝。
+ *      修饰符区约束；解锁表目标 xref + 同目标重复拒绝；境界词表同层数重复拒绝；
+ *    - 成就节（#9，可选节）：id 去重（state.achievements 存档键）；条件 stat
+ *      对照引擎统计注册表闭集镜像（死条件加载期拒绝）；布尔型条件带 op 拒绝
+ *      （语义缝隙）；奖励物品 xref items 且只收 mat/consumable（equip 整袋
+ *      发放成不可见死物）。
  */
 
 import affixPoolSchemaJson from './affix-pool.schema.json';
@@ -224,8 +228,8 @@ function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
   // 秘境节（#7）：可选节，存在则查 id 去重、钥匙/敌人/奖励 xref、生命周期覆盖。
   checkDungeons(pack.dungeons ?? [], enemyIndex, itemIndex, errors);
 
-  // 成就节（#9）：可选节，存在则查 id 去重、统计键域闭集、奖励物品 xref。
-  checkAchievements(pack.achievements ?? [], itemIndex, errors);
+  // 成就节（#9）：可选节，存在则查 id 去重、统计键域闭集、奖励物品 xref + 类型关卡。
+  checkAchievements(pack.achievements ?? [], itemIndex, pack.items, errors);
 
   checkPrototypes(pack.skills, '/skills', errors);
   checkPrototypes(pack.items, '/items', errors);
@@ -987,11 +991,14 @@ const STAT_KEYS: ReadonlySet<string> = new Set([
  * 成就节语义检查（#9，可选节，存在才查）：
  * - id 去重（state.achievements 存档键）；
  * - 条件 stat 须命中引擎统计注册表（闭集镜像）；
- * - 奖励物品 xref items（装备实例走掉落/炼制管线，奖励只入袋 mat/consumable）。
+ * - 奖励物品 xref items + 类型关卡：只收 mat/consumable（装备实例走
+ *   掉落/炼制管线离散实例化，整袋发放只会成不可见死物——bag 不渲染
+ *   items 键，gear 卡只认 state.gear）。
  */
 function checkAchievements(
   achievements: readonly AchievementDef[],
   items: ReadonlyMap<string, number>,
+  itemDefs: readonly Item[],
   errors: ContentError[],
 ): void {
   pushDuplicates(achievements, '/achievements', errors);
@@ -1014,11 +1021,20 @@ function checkAchievements(
       });
     }
     for (const [j, stack] of (achievement.reward?.items ?? []).entries()) {
-      if (!items.has(stack.item)) {
+      const itemAt = items.get(stack.item);
+      if (itemAt === undefined) {
         errors.push({
           path: at(`reward/items/${j}/item`),
           keyword: 'xref',
           message: `奖励物品 "${stack.item}" 不存在于 items`,
+        });
+      } else if (itemDefs[itemAt]?.type === 'equip') {
+        // 装备实例走掉落/炼制管线离散实例化，整袋发放只会成不可见死物
+        // （bag 不渲染 items 键，gear 卡只认 state.gear）。
+        errors.push({
+          path: at(`reward/items/${j}/item`),
+          keyword: 'xref',
+          message: `奖励物品 "${stack.item}" 是 equip 类（装备须经掉落/炼制管线实例化，不能整袋发放）`,
         });
       }
     }

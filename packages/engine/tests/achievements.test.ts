@@ -191,6 +191,33 @@ describe('#9 · AC1：达成条件 → 解锁一次且仅一次', () => {
     ).toHaveLength(1);
   });
 
+  it('奖励物品 id 无效 → 静默跳过不建孤儿键（引擎对坏包防御），其余奖励照常', () => {
+    const pack = {
+      ...makeCombatPack(),
+      achievements: [
+        {
+          id: 'kill_1',
+          name: '初胜',
+          condition: { stat: 'kills', target: 1 },
+          reward: { gold: 100, items: [{ item: 'ghost_item', count: 3 }] },
+        },
+      ],
+    } as GameContent;
+    const game = createGame({
+      content: { ...pack, enemies: [...pack.enemies, EWEAK] } as GameContent,
+      clock: new ManualClock(),
+      seed: 7,
+    });
+    game.dispatch({ type: 'combat:start', payload: { enemyId: 'eweak' } });
+    const sink: GameEvent[] = [];
+    fightUntil(game, () => false, 8, sink);
+    const unlock = unlocksOf(sink, 'kill_1');
+    expect(unlock).toHaveLength(1);
+    expect(unlock[0]!.data?.['gold']).toBe(100); // 好奖励照发
+    expect(unlock[0]!.data?.['items']).toBeUndefined(); // 坏 item 不入事件
+    expect((game.snapshot().state['items'] as Record<string, number>)['ghost_item']).toBeUndefined();
+  });
+
   it('条件未达不成解锁：低目标包外零误触', () => {
     const pack = {
       ...makeCombatPack(),
