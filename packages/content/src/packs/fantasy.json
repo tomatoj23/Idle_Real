@@ -236,6 +236,19 @@
       ]
     }
   ],
+  "bosses": [
+    {
+      "enemy": "arcane_golem",
+      "phases": [
+        {
+          "threshold": 0.5,
+          "name": "Overload",
+          "mods": { "atk": 1.4, "attackInterval": 0.8 },
+          "narration": [ "The golem's core flares white-hot — {phase}!" ]
+        }
+      ]
+    }
+  ],
   "elements": [
     { "id": "arcane", "name": "Arcane" },
     { "id": "shadow", "name": "Shadow" }
@@ -537,7 +550,8 @@
         "dungeonFloor": "Floor {floor}/{floors} cleared: +{gold} gold {items}",
         "dungeonDaoYun": ", +{daoYun} attunement",
         "dungeonClear": "{name} fully cleared — all {floors} floors!",
-        "dungeonLeave": "You leave {name} at floor {floor} (deepest: {best})."
+        "dungeonLeave": "You leave {name} at floor {floor} (deepest: {best}).",
+        "bossPhase": "{enemy} enters {phase} phase: {name}!"
       },
       "pages": {
         "skills": {

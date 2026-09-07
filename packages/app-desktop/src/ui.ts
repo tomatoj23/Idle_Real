@@ -16,6 +16,7 @@
 import type { ContentPack } from '@wendao/content';
 import {
   EventBus,
+  bossEnemyOf,
   craftMissingOf,
   craftSuccessRateOf,
   dungeonFloorEnemyOf,
@@ -26,6 +27,7 @@ import {
   expBase,
   expToNext,
   fillTemplate,
+  findBossOf,
   findDungeon,
   findRarity,
   gearName,
@@ -39,6 +41,7 @@ import {
   realmOf,
   shopAffordOf,
   talentGateOf,
+  type EnemyView,
   type GameAction,
   type GameState,
   type GearInstance,
@@ -435,6 +438,24 @@ export function buildUi(
             best: Number(data.best ?? 0),
           }),
           't-sys',
+        );
+        break;
+      case 'boss:phase':
+        // Boss 阶段转场（#8）：{enemy} 敌名 / {name} 阶段名 / {phase} 阶段序号。
+        toast(
+          T('events.bossPhase', {
+            enemy: String(data.enemyName ?? ''),
+            name: String(data.name ?? ''),
+            phase: Number(data.phase ?? 0),
+          }),
+        );
+        log(
+          T('events.bossPhase', {
+            enemy: String(data.enemyName ?? ''),
+            name: String(data.name ?? ''),
+            phase: Number(data.phase ?? 0),
+          }),
+          't-red',
         );
         break;
       case 'offline-settled': {
@@ -864,6 +885,39 @@ export function buildUi(
       </section>`;
   }
 
+  /* ---------- Boss 呈现（#8）：阶段徽标 + 血条分段刻度 ---------- */
+
+  /** 战斗中的敌人生效视图（单点组合）：秘境层倍率在前、Boss 阶段修正在后。 */
+  const combatEnemyView = (st: GameState): EnemyView | undefined => {
+    const combat = st.combat;
+    if (!combat) return undefined;
+    let view: EnemyView | undefined;
+    if (st.dungeon) {
+      view = dungeonFloorEnemyOf(content, st.dungeon.dungeonId, st.dungeon.floor, combat.enemyId);
+    } else {
+      view = content.enemies.find((entry) => entry.id === combat.enemyId);
+    }
+    if (view && combat.bossPhase >= 0) {
+      view = bossEnemyOf(content, combat.enemyId, combat.bossPhase, view) ?? view;
+    }
+    return view;
+  };
+
+  /** Boss 徽标与血条分段刻度（非 Boss = 空串；刻度位置 = 阶段阈值，content 数据；
+   *  阶段下标越界（包变更缩表）时徽标不渲染——与 bossEnemyOf 的 undefined 兜底同律）。 */
+  const bossDecoOf = (st: GameState): { badge: string; ticks: string } => {
+    const combat = st.combat;
+    const boss = combat ? findBossOf(content, combat.enemyId) : undefined;
+    if (!boss) return { badge: '', ticks: '' };
+    const idx = combat!.bossPhase;
+    const phase = idx >= 0 ? boss.phases[idx] : undefined;
+    const badge = phase ? `<em class="act-badge boss-phase">${esc(phase.name ?? '')}</em>` : '';
+    const ticks = boss.phases
+      .map((p) => `<i class="tick" style="left:${Math.round((p.threshold ?? 0) * 100)}%"></i>`)
+      .join('');
+    return { badge, ticks };
+  };
+
   /* ---------- 秘境页（#7）：层进度 + 当前层战斗 + 撤退；未在攻略 = 秘境列表 ---------- */
 
   /** 锁定句归因（#7）：锁因走引擎 gate.daoYunLocked 单一来源；道韵复用 common.needDaoYun，钥匙用 entryKey。 */
@@ -888,10 +942,9 @@ export function buildUi(
       if (!dungeon) {
         return `<section class="page"><p class="empty">${esc(T('pages.dungeon.empty'))}</p></section>`;
       }
-      // 当前层敌人走引擎层倍率投影（dungeonFloorEnemyOf 单一来源，壳零缩放公式）。
-      const enemy = st.combat
-        ? dungeonFloorEnemyOf(content, run.dungeonId, run.floor, st.combat.enemyId)
-        : undefined;
+      // 当前层敌人走引擎组合投影（秘境层倍率 × Boss 阶段修正，combatEnemyView）。
+      const enemy = combatEnemyView(st);
+      const deco = bossDecoOf(st);
       const ehpPct =
         enemy && st.combat ? Math.max(0, Math.min(100, (st.combat.ehp / enemy.hp) * 100)) : 0;
       const hpPct = Math.max(0, Math.min(100, (st.hp / (snap.stats?.maxHp ?? 1)) * 100));
@@ -906,8 +959,8 @@ export function buildUi(
           <article class="enemy-card fighting">
             <div class="enemy-face"><span class="sigil sigil-big">${esc(enemy?.icon ?? T('icons.unknown'))}</span></div>
             <div class="enemy-main">
-              <div class="enemy-head"><b>${esc(enemy?.name ?? '')}</b><span class="enemy-lv">${esc(T('units.level', { v: enemy?.level ?? 0 }))}</span></div>
-              <div class="bar bar-red"><i data-bar="enemy" style="width:${ehpPct}%"></i></div>
+              <div class="enemy-head"><b>${esc(enemy?.name ?? '')}</b><span class="enemy-lv">${esc(T('units.level', { v: enemy?.level ?? 0 }))}</span>${deco.badge}</div>
+              <div class="bar bar-red">${deco.ticks}<i data-bar="enemy" style="width:${ehpPct}%"></i></div>
               <div class="enemy-sub">${esc(T('pages.combat.enemyHp', { ehp: st.combat ? Math.max(0, Math.ceil(st.combat.ehp)) : 0, hp: enemy?.hp ?? 0 }))}</div>
               <div class="bar bar-jade"><i style="width:${hpPct}%"></i></div>
               <div class="enemy-sub">${esc(T('pages.combat.selfStats', { hp: Math.floor(st.hp), max: snap.stats?.maxHp ?? '—', atk: statValueText('atk', snap.stats?.atk ?? '—'), def: statValueText('def', snap.stats?.def ?? '—'), crit: statValueText('crit', snap.stats?.crit ?? '—') }))}</div>
@@ -1017,8 +1070,10 @@ export function buildUi(
       </div>`;
 
     if (combat) {
-      const enemy = content.enemies.find((entry) => entry.id === combat.enemyId);
+      // 生效视图走引擎组合投影（Boss 阶段修正在案时随阶段变化，combatEnemyView）。
+      const enemy = combatEnemyView(st);
       if (!enemy) return `<section class="page"><p class="empty">${esc(T('pages.combat.enemyMissing'))}</p></section>`;
+      const deco = bossDecoOf(st);
       const ehpPct = Math.max(0, Math.min(100, (combat.ehp / enemy.hp) * 100));
       const resting = combat.respT > 0;
       const hpPct = Math.max(0, Math.min(100, (st.hp / (snap.stats?.maxHp ?? enemy.hp)) * 100));
@@ -1028,8 +1083,8 @@ export function buildUi(
           <article class="enemy-card fighting">
             <div class="enemy-face"><span class="sigil sigil-big">${esc(enemy.icon)}</span></div>
             <div class="enemy-main">
-              <div class="enemy-head"><b>${esc(enemy.name)}</b><span class="enemy-lv">${esc(T('units.level', { v: enemy.level }))}</span>${resting ? `<em class="act-badge">${esc(T('pages.combat.resting'))}</em>` : ''}</div>
-              <div class="bar bar-red"><i data-bar="enemy" style="width:${ehpPct}%"></i></div>
+              <div class="enemy-head"><b>${esc(enemy.name)}</b><span class="enemy-lv">${esc(T('units.level', { v: enemy.level }))}</span>${resting ? `<em class="act-badge">${esc(T('pages.combat.resting'))}</em>` : ''}${deco.badge}</div>
+              <div class="bar bar-red">${deco.ticks}<i data-bar="enemy" style="width:${ehpPct}%"></i></div>
               <div class="enemy-sub">${esc(T('pages.combat.enemyHp', { ehp: Math.max(0, Math.ceil(combat.ehp)), hp: enemy.hp }))}</div>
               <div class="bar bar-jade"><i style="width:${hpPct}%"></i></div>
               <div class="enemy-sub">${esc(T('pages.combat.selfStats', { hp: Math.floor(st.hp), max: snap.stats?.maxHp ?? '—', atk: statValueText('atk', snap.stats?.atk ?? '—'), def: statValueText('def', snap.stats?.def ?? '—'), crit: statValueText('crit', snap.stats?.crit ?? '—') }))}</div>
@@ -1205,14 +1260,11 @@ export function buildUi(
     return `<section class="page"><h2 class="page-title">${esc(T('pages.shop.title'))}</h2><p class="page-sub">${esc(T('pages.shop.subtitle'))}</p>${rows}</section>`;
   }
 
-  /** 敌方血条轻量更新（斗法页/秘境页存在时每帧刷新；秘境走层倍率投影）。 */
+  /** 敌方血条轻量更新（斗法页/秘境页存在时每帧刷新；组合投影与结算同调）。 */
   function updateEnemyBar(st: GameState): void {
     const bar = pageEl.querySelector<HTMLElement>('[data-bar="enemy"]');
     if (!bar || !st.combat) return;
-    const run = st.dungeon;
-    const enemy = run
-      ? dungeonFloorEnemyOf(content, run.dungeonId, run.floor, st.combat.enemyId)
-      : content.enemies.find((entry) => entry.id === st.combat?.enemyId);
+    const enemy = combatEnemyView(st);
     if (!enemy) return;
     bar.style.width = `${Math.max(0, Math.min(100, (st.combat.ehp / enemy.hp) * 100))}%`;
   }

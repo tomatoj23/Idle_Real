@@ -24,6 +24,8 @@ export type {
   Affinities,
   AffixDef,
   Bonuses,
+  BossDef,
+  BossPhase,
   Byproduct,
   CombatText,
   Config,

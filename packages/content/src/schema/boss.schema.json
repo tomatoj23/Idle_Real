@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BossesSection",
+  "description": "content 包 bosses 节（#8，可选节）：Boss 战阶段脚本。每条指向 enemies 节的一个敌人 id；phases 为递进脚本（血量比例 ≤ threshold 进入该阶段，全数组严格递减由语义校验保证）；moveKey 变招引用 combatText.moves 注册键（xref + 注册表放行）；narration 为阶段转场叙事池（{enemy}/{phase} 槽）；drops 为专属掉落表（叠于 enemy.drops 之上）。",
+  "type": "array",
+  "items": { "$ref": "#/definitions/boss" },
+  "definitions": {
+    "boss": {
+      "type": "object",
+      "required": ["enemy", "phases"],
+      "additionalProperties": false,
+      "properties": {
+        "enemy": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Boss 敌人 id（语义校验 xref enemies；每个敌人至多一条 Boss 定义）"
+        },
+        "phases": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/phase" }
+        },
+        "drops": {
+          "type": "array",
+          "description": "专属掉落表：击杀时与 enemy.drops 同机制叠加掷点",
+          "items": { "$ref": "#/definitions/drop" }
+        }
+      }
+    },
+    "phase": {
+      "type": "object",
+      "required": ["threshold", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "threshold": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1,
+          "description": "血量比例阈值（≤ 即进入该阶段）；全数组须严格递减（语义校验，递进顺序）"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 12,
+          "description": "阶段名（boss:phase 事件载荷 / 壳徽标展示）"
+        },
+        "mods": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "description": "阶段属性修正（乘区；键钉 atk/def/attackInterval——阶段是战斗过程修正，hp/gold/exp 不随阶段投影）",
+          "properties": {
+            "atk": { "type": "number", "exclusiveMinimum": 0 },
+            "def": { "type": "number", "exclusiveMinimum": 0 },
+            "attackInterval": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        "moveKey": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "变招：该阶段敌方出招名改用此 combatText.moves 注册键（语义校验 xref + 注册表放行）"
+        },
+        "narration": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "description": "阶段转场叙事池（{enemy}/{phase} 槽，进入该阶段时由引擎抽取一条播报 combat-note）"
+        }
+      }
+    },
+    "drop": {
+      "type": "object",
+      "required": ["item", "chance"],
+      "additionalProperties": false,
+      "properties": {
+        "item": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "description": "物品 id（语义校验 xref items）" },
+        "chance": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

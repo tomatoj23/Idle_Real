@@ -47,6 +47,7 @@
  */
 
 import affixPoolSchemaJson from './affix-pool.schema.json';
+import bossSchemaJson from './boss.schema.json';
 import combatTextSchemaJson from './combat-text.schema.json';
 import configSchemaJson from './config.schema.json';
 import dungeonSchemaJson from './dungeon.schema.json';
@@ -61,6 +62,7 @@ import shopSchemaJson from './shop.schema.json';
 import skillSchemaJson from './skill.schema.json';
 import textsSchemaJson from './texts.schema.json';
 import type {
+  BossDef,
   Config,
   ContentPack,
   DungeonDef,
@@ -89,6 +91,7 @@ const shopSchema = shopSchemaJson as unknown as JsonSchema;
 const configSchema = configSchemaJson as unknown as JsonSchema;
 const rebirthSchema = rebirthSchemaJson as unknown as JsonSchema;
 const dungeonSchema = dungeonSchemaJson as unknown as JsonSchema;
+const bossSchema = bossSchemaJson as unknown as JsonSchema;
 
 /** 内容节 → 该节值的独立 schema。 */
 const SECTION_SCHEMAS = {
@@ -106,6 +109,7 @@ const SECTION_SCHEMAS = {
   config: configSchema,
   rebirth: rebirthSchema,
   dungeons: dungeonSchema,
+  bosses: bossSchema,
 } as const;
 
 type SectionName = keyof typeof SECTION_SCHEMAS;
@@ -113,7 +117,7 @@ type SectionName = keyof typeof SECTION_SCHEMAS;
 const SECTION_NAMES = Object.keys(SECTION_SCHEMAS) as readonly SectionName[];
 
 /** 可选内容节：缺省合法（引擎安全兜底），存在则整节强校验。 */
-const OPTIONAL_SECTIONS: ReadonlySet<SectionName> = new Set(['config', 'rebirth', 'dungeons']);
+const OPTIONAL_SECTIONS: ReadonlySet<SectionName> = new Set(['config', 'rebirth', 'dungeons', 'bosses']);
 
 export type PackValidationResult =
   | { readonly ok: true; readonly pack: ContentPack }
@@ -194,7 +198,9 @@ function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
   checkGearDrops(pack.gearDrops, itemIndex, enemyIndex, pack.items, errors);
   checkShop(pack.shop, itemIndex, errors);
   checkWeaponMoves(weaponIds, pack.items, moves, errors);
-  checkMoveRegistry(moves, weaponIds, enemyIndex, errors);
+  // Boss 节（#8）：先于招式注册表检查（变招 moveKey 扩展合法注册键集）。
+  const bossMoveKeys = checkBosses(pack.bosses ?? [], enemyIndex, itemIndex, moves, errors);
+  checkMoveRegistry(moves, weaponIds, enemyIndex, bossMoveKeys, errors);
   checkBasicFallback(moves, errors);
   checkVerbStyles(pack.items, pack.enemies, verbs, errors);
 
@@ -647,14 +653,15 @@ function checkMoveRegistry(
   moves: Readonly<Record<string, readonly string[]>>,
   weaponIds: ReadonlySet<string>,
   enemies: ReadonlyMap<string, number>,
+  bossMoveKeys: ReadonlySet<string>,
   errors: ContentError[],
 ): void {
   for (const key of Object.keys(moves)) {
-    if (key !== 'basic' && !weaponIds.has(key) && !enemies.has(key)) {
+    if (key !== 'basic' && !weaponIds.has(key) && !enemies.has(key) && !bossMoveKeys.has(key)) {
       errors.push({
         path: `/combatText/moves/${key}`,
         keyword: 'xref',
-        message: '招式注册键必须是 basic、武器物品 id 或敌人 id',
+        message: '招式注册键必须是 basic、武器物品 id、敌人 id 或 Boss 变招键（#8）',
       });
     }
   }
@@ -870,6 +877,80 @@ function checkDungeons(
       });
     }
   });
+}
+
+/* ==================== Boss 节（#8） ==================== */
+
+/**
+ * Boss 节语义检查（#8，可选节，存在才查）：
+ * - enemy xref enemies + 每敌人至多一条 Boss 定义（战斗引用无歧义）；
+ * - 阶段阈值全数组严格递减（递进顺序：血量比例 ≤ threshold 进入该阶段，
+ *   降序保证阶段推进无歧义）；
+ * - 阶段 moveKey（变招）须在 combatText.moves 注册（xref），注册键集随之
+ *   放行给 checkMoveRegistry（悬空招式键检查不受影响）；
+ * - 专属掉落表 items xref。
+ * 返回 Boss 变招注册键集合（供招式注册表检查扩展合法键域）。
+ */
+function checkBosses(
+  bosses: readonly BossDef[],
+  enemies: ReadonlyMap<string, number>,
+  items: ReadonlyMap<string, number>,
+  moves: Readonly<Record<string, readonly string[]>>,
+  errors: ContentError[],
+): ReadonlySet<string> {
+  const moveKeys = new Set<string>();
+  const firstSeen = new Map<string, number>();
+  bosses.forEach((boss, i) => {
+    const at = (field: string) => `/bosses/${i}/${field}`;
+    if (!enemies.has(boss.enemy)) {
+      errors.push({
+        path: at('enemy'),
+        keyword: 'xref',
+        message: `Boss 敌人 "${boss.enemy}" 不存在于 enemies`,
+      });
+    }
+    const first = firstSeen.get(boss.enemy);
+    if (first !== undefined) {
+      errors.push({
+        path: at('enemy'),
+        keyword: 'duplicate',
+        message: `敌人 "${boss.enemy}" 已在第 ${first} 条登记 Boss 定义（每敌人至多一条）`,
+      });
+    } else {
+      firstSeen.set(boss.enemy, i);
+    }
+    boss.phases.forEach((phase, j) => {
+      const phaseAt = (field: string) => `/bosses/${i}/phases/${j}/${field}`;
+      const prev = j > 0 ? boss.phases[j - 1] : undefined;
+      if (prev !== undefined && phase.threshold >= prev.threshold) {
+        errors.push({
+          path: phaseAt('threshold'),
+          keyword: 'shape',
+          message: `阶段阈值须严格递减（${phase.threshold} 不得大于等于前一阶段的 ${prev.threshold}）`,
+        });
+      }
+      if (phase.moveKey !== undefined) {
+        moveKeys.add(phase.moveKey);
+        if (!hasMove(moves, phase.moveKey)) {
+          errors.push({
+            path: phaseAt('moveKey'),
+            keyword: 'xref',
+            message: `变招键 "${phase.moveKey}" 未在 combatText.moves 注册`,
+          });
+        }
+      }
+    });
+    for (const [k, drop] of (boss.drops ?? []).entries()) {
+      if (!items.has(drop.item)) {
+        errors.push({
+          path: at(`drops/${k}/item`),
+          keyword: 'xref',
+          message: `专属掉落物品 "${drop.item}" 不存在于 items`,
+        });
+      }
+    }
+  });
+  return moveKeys;
 }
 
 /* ==================== 转生节（#6） ==================== */

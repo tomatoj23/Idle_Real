@@ -24,6 +24,7 @@ engine `EnemyView` 未投影，靠 #15 票驱动补齐）。
 | `config` | **否** | config.schema.json | 全局配置：槽位（#16）+ 玩法参数四子节 combat/progression/affix（#020，缺省=引擎基线）+ crafting（#5） |
 | `rebirth` | **否** | rebirth.schema.json | 转生系统（#6）：重置/保留清单 + 道韵公式 + 天赋树 + 解锁表 + 境界词表；省略 = 无转生玩法（引擎零降级路径，壳不渲染转生页签） |
 | `dungeons` | **否** | dungeon.schema.json | 秘境分层爬塔（#7）：秘境定义 + 层表（敌人权重/层数倍率/层奖励/推荐战力软提示）+ 进入条件（道韵/钥匙）；省略 = 无秘境玩法（引擎零降级路径，壳不渲染秘境页签） |
+| `bosses` | **否** | boss.schema.json | Boss 战阶段脚本（#8）：敌人条目 + 阶段数组（阈值/阶段名/属性修正/变招/叙事）+ 专属掉落表；省略 = 无 Boss 玩法（全部敌人按普通敌人战斗，零降级路径） |
 
 ## items 五形态（#16 起 oneOf 分流，判别式 = `type`）
 
@@ -189,7 +190,7 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 | `basicName` | string（1~18 字，#027 按 CJK 密度假设放宽） | 无佩戴武器时的兵刃展示名（weaponName 槽兜底值） |
 | `reject` | 动作协议键 → 理由 code → 文案模板 | 展示文案映射。动作键域 schema 钉死：activity:start / bag:sell / shop:buy / combat:start / consumable:eat / dungeon:enter（#7）/ gear:equip / gear:sell / rebirth:perform / talent:buy（#6）/ `'*'`（跨动作兜底，bad-payload 等通用文案）；理由 code 键域开放 |
 | `reject` 槽位 | `{level}` `{activity}` `{item}` `{owned}` `{cost}` `{gold}` `{daoYun}` `{need}` `{xp}` | 由引擎按协议语境填入； combat:start 的 `{level}` = `enemy.level − 门控偏移`（偏移量只在引擎判定处单一来源，文案侧零副本——N1 文案侧裁决）；rebirth:perform 的 no-progress 带 `{need}/{xp}`、rebirth-locked 与 talent:buy 的 no-daoyun 带 `{daoYun}`/`{cost}`；dungeon:enter 的 locked 带 `{daoYun}`、no-key 带 `{item}`（#7） |
-| `shell`（#26） | ShellTexts 结构化节 | **壳层全部题材文案**（ADR-017 裁决 9：壳零题材字符串）：brand（sigil/name/locale/bootError）、topbar、tabs、side、stats.labels、units、icons、common、events（37 键，#7 起含 dungeonEnter/dungeonFloor/dungeonDaoYun/dungeonClear/dungeonLeave）、pages（skills/craft/combat/dungeon/bag/shop/rebirth/talents，#7 起八页）。schema required + additionalProperties:false 全程钉死 |
+| `shell`（#26） | ShellTexts 结构化节 | **壳层全部题材文案**（ADR-017 裁决 9：壳零题材字符串）：brand（sigil/name/locale/bootError）、topbar、tabs、side、stats.labels、units、icons、common、events（38 键，#8 起含 bossPhase）、pages（skills/craft/combat/dungeon/bag/shop/rebirth/talents，#7 起八页）。schema required + additionalProperties:false 全程钉死 |
 
 - 命中序：精确动作 → `'*'` → **键名回显**（`{action}/{reason}`，防御可见）。
 - 协议 code 本体归引擎，本节只承载展示文案；code 未命中/缺节绝不崩，toast
@@ -417,6 +418,70 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 - **离线不可续跑**：`settleOffline` 就地离境（最高层已随进层登记，欠账不丢）；
 - 瞬态/资产分界：进行中攻略（`state.dungeon`）为瞬态（恢复需战斗在身，战斗散 =
   攻略作废）；最高层记录（`state.dungeonBest`）为记录资产——兵解 default-keep 长存。
+
+## bosses Boss 节（#8：阶段脚本）
+
+**可选节**：省略 = 该包无 Boss 玩法（全部敌人按普通敌人战斗，引擎/壳零降级路径）。
+
+```json
+"bosses": [
+  {
+    "enemy": "e8",
+    "drops": [ { "item": "core3", "chance": 1 } ],
+    "phases": [
+      {
+        "threshold": 0.6, "name": "血目暴睁",
+        "mods": { "atk": 1.3, "attackInterval": 0.85 },
+        "narration": [ "饕餮血目暴睁，凶性大发！" ]
+      },
+      { "threshold": 0.35, "name": "吞天之相", "mods": { "atk": 1.6 }, "moveKey": "e8_devour", "narration": ["…"] },
+      { "threshold": 0.15, "name": "饕餮真身", "mods": { "atk": 2, "attackInterval": 0.6 }, "narration": ["…"] }
+    ]
+  }
+]
+```
+
+### 归属划界与机制语义
+
+| 归 content | 归引擎 |
+|---|---|
+| 阶段数组（阈值/阶段名/属性修正/变招 moveKey/叙事池）、专属掉落表 | 阈值判定与阶段推进（跳级逐级补发事件/叙事）、阶段属性修正投影、bossPhase 随战斗态持久（自动再战重置归位） |
+
+### 字段约定
+
+| 字段 | 形态 | 约定 |
+|---|---|---|
+| `enemy` | string（`^[a-z][a-z0-9_]*$`） | Boss 敌人 id（xref enemies）；**每敌人至多一条 Boss 定义**（去重，战斗引用无歧义） |
+| `phases[].threshold` | number（0 < t < 1） | 血量比例阈值（≤ 即进入该阶段）；全数组**严格递减**（递进顺序，语义校验 shape） |
+| `phases[].name` | string（1~12 字） | 阶段名（boss:phase 事件载荷 / 壳徽标展示，content 数据直出） |
+| `phases[].mods` | `{atk?, def?, attackInterval?}`（乘区 > 0） | 阶段属性修正；键域 schema 钉死（additionalProperties）——阶段是战斗过程修正，**hp/gold/exp 不随阶段投影**（阈值分母恒定的前提） |
+| `phases[].moveKey` | string（`^[a-z][a-z0-9_]*$`，可选） | 变招：该阶段敌方出招名注册键（xref combatText.moves + 招式注册表随之放行）；未声明回退敌人 id 键 |
+| `phases[].narration` | string[]（1~80 字/条，可选） | 阶段转场叙事池（{enemy}/{phase} 槽）：per-boss-per-phase 脚本数据归 bosses 节本地（talents.description 先例），不进 combatText 共享词库 |
+| `drops[]` | `{item, chance}`（可选） | 专属掉落表：victory 与 enemy.drops 同机制叠加掷点（items xref） |
+
+- **阈值语义**：敌人血量比例 ≤ `threshold` 进入该阶段；全数组须**严格递减**
+  （递进顺序，语义校验 shape）；单击跨多阈值逐级补发（每级一次
+  `boss:phase` 事件 + 叙事 combat-note，`{enemy}/{phase}` 槽）。
+- **阶段修正**：`mods` 乘区键钉 `atk/def/attackInterval`（schema
+  additionalProperties 钉死——阶段是战斗过程修正，hp/gold/exp 不随阶段
+  投影）；投影单一来源 = 引擎 `bossEnemyOf`（与战斗结算、壳生效视图同调，
+  禁壳内复制缩放式）。
+- **变招**：`moveKey` 覆盖该阶段敌方出招名注册键（须在 combatText.moves
+  注册，xref + 招式注册表随之放行该键；未声明回退敌人 id 键）。
+- **专属掉落**：`drops` 与 `enemy.drops` 同机制在 victory 叠加掷点（items xref）。
+- **复合语义**：Boss 阶段修正与秘境层倍率**叠乘**（先层倍率后阶段修正，
+  resolveEnemy 单点组合）——秘境每 10 层插 Boss（#7/#8 联动）零特判；
+  修仙包妖窟顶 层 / 鬼庙第 10 层即饕餮三阶段 Boss。
+- **持久/重置**：`bossPhase` 存 CombatState 随档（中途存档续演）；自动再战
+  重置归位（Boss 重生从头演阶段）；普通敌人（未注册 Boss）恒 -1 零扰动。
+- **召唤原语不实施**：需多敌战斗状态机，另开票（裁决见 #8 票评）；
+  本票阶段脚本词表 = 变招 / 狂暴（属性修正）/ 专属掉落。
+
+### 引擎事件与协议
+
+- 事件：`boss:phase`（`{enemyId, enemyName, phase: 1 起序号, name: 阶段名}`）；
+- UI 呈现：阶段徽标（阶段名 content 直出）+ 血条分段刻度（刻度位置 =
+  阈值），生效数值走 `combatEnemyView` 组合投影（秘境 × Boss 单点组合）。
 
 ## elements 系别键域注册表（#25 键域开放，ADR-017 裁决 8）
 

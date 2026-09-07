@@ -361,12 +361,12 @@ describe('修仙题材包 · 数值基线', () => {
     expect(ct.verbs.basic).toHaveLength(3);
     expect(ct.verbs.claw).toHaveLength(5);
     expect(ct.verbs.magic).toHaveLength(5);
-    // 招式注册：basic + 9 件武器（4 剑 + 5 妖兵）+ 8 敌
+    // 招式注册：basic + 9 件武器（4 剑 + 5 妖兵）+ 8 敌 + Boss 变招键（#8）
     expect(Object.keys(ct.moves).sort()).toEqual(
       [
         'basic', 'sword1', 'sword2', 'sword3', 'sword4',
         'scorp_tail', 'corpse_nail', 'blood_gourd', 'mojun_blade', 'taotie_fang',
-        'e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8',
+        'e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8', 'e8_devour',
       ].sort(),
     );
     expect(ct.moves.sword4).toEqual(['诛仙一线', '万剑归宗']);

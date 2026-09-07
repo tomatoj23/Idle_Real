@@ -208,7 +208,7 @@
         },
         {
           "floor": { "min": 10, "max": 10 },
-          "enemies": [ { "enemy": "e4", "weight": 1 } ],
+          "enemies": [ { "enemy": "e8", "weight": 1 } ],
           "mult": { "hp": 2.2, "atk": 1.5, "gold": 2.5, "exp": 1.5 },
           "rewards": { "gold": 400, "daoYun": 3, "items": [ { "item": "core2", "count": 2 }, { "item": "guimiao_yaofu", "count": 1 } ] },
           "recommendedPower": { "min": 170, "max": 280 }
@@ -228,11 +228,18 @@
           "recommendedPower": { "min": 120, "max": 220 }
         },
         {
-          "floor": { "min": 6, "max": 10 },
+          "floor": { "min": 6, "max": 9 },
           "enemies": [ { "enemy": "e5", "weight": 5 }, { "enemy": "e6", "weight": 3 } ],
           "mult": { "hp": 1.6, "atk": 1.35, "gold": 2 },
           "rewards": { "gold": 260, "daoYun": 2, "items": [ { "item": "core3", "count": 1 } ] },
           "recommendedPower": { "min": 220, "max": 360 }
+        },
+        {
+          "floor": { "min": 10, "max": 10 },
+          "enemies": [ { "enemy": "e8", "weight": 1 } ],
+          "mult": { "hp": 1.6, "atk": 1.35, "gold": 2 },
+          "rewards": { "gold": 600, "daoYun": 2, "items": [ { "item": "core3", "count": 2 } ] },
+          "recommendedPower": { "min": 300, "max": 420 }
         },
         {
           "floor": { "min": 11, "max": 14 },
@@ -247,6 +254,40 @@
           "mult": { "hp": 2.4, "atk": 1.6, "gold": 3, "exp": 1.6 },
           "rewards": { "gold": 1200, "daoYun": 6, "items": [ { "item": "core3", "count": 2 } ] },
           "recommendedPower": { "min": 540, "max": 760 }
+        }
+      ]
+    }
+  ],
+  "bosses": [
+    {
+      "enemy": "e8",
+      "drops": [ { "item": "core3", "chance": 1 } ],
+      "phases": [
+        {
+          "threshold": 0.6,
+          "name": "血目暴睁",
+          "mods": { "atk": 1.3, "attackInterval": 0.85 },
+          "narration": [
+            "饕餮血目暴睁，凶性大发——煞气如潮水般向你压来！",
+            "饕餮发出震地咆哮，周身煞气暴涨数倍！"
+          ]
+        },
+        {
+          "threshold": 0.35,
+          "name": "吞天之相",
+          "mods": { "atk": 1.6, "def": 1.2, "attackInterval": 0.7 },
+          "moveKey": "e8_devour",
+          "narration": [
+            "饕餮仰天长啸，头顶张开吞天之相——天地灵气尽数被吸成漩涡！"
+          ]
+        },
+        {
+          "threshold": 0.15,
+          "name": "饕餮真身",
+          "mods": { "atk": 2, "attackInterval": 0.6 },
+          "narration": [
+            "饕餮现出真身——遮天巨口当头咬落，退无可退，唯死战耳！"
+          ]
         }
       ]
     }
@@ -320,7 +361,8 @@
       "e5": [ "血遁噬魂" ],
       "e6": [ "阴罗鬼爪" ],
       "e7": [ "万魔噬心" ],
-      "e8": [ "吞天噬地" ]
+      "e8": [ "吞天噬地" ],
+      "e8_devour": [ "万象俱噬", "吞天灭地" ]
     },
     "openings": [
       "你渊渟岳峙，气机先锁对方周身要害",
@@ -551,7 +593,8 @@
         "dungeonFloor": "第 {floor}/{floors} 层已通：+{gold} 灵石 {items}",
         "dungeonDaoYun": "，道韵 +{daoYun}",
         "dungeonClear": "【{name}】通贯 {floors} 层，满载而归！",
-        "dungeonLeave": "退出【{name}】：止步第 {floor} 层，最深曾至第 {best} 层"
+        "dungeonLeave": "退出【{name}】：止步第 {floor} 层，最深曾至第 {best} 层",
+        "bossPhase": "【{enemy}】显露「{name}」之相！（阶段 {phase}）"
       },
       "pages": {
         "skills": {

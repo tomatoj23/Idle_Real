@@ -186,3 +186,7 @@ export type {
   DungeonRewardView,
   DungeonView,
 } from './dungeon.js';
+
+// Boss 战框架（#8：阶段脚本/阈值推进/阶段修正投影）
+export { bossEnemyOf, bossesOf, findBossOf } from './bosses.js';
+export type { BossPhaseView, BossView } from './bosses.js';

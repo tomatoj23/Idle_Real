@@ -182,7 +182,8 @@
             "offlineToast", "offlineLog", "offlineNoYield", "offlineExpSuffix",
             "craftFail", "craftHalt",
             "rebirthToast", "rebirthLog", "talentBuyToast", "talentBuyLog",
-            "dungeonEnter", "dungeonFloor", "dungeonDaoYun", "dungeonClear", "dungeonLeave"
+            "dungeonEnter", "dungeonFloor", "dungeonDaoYun", "dungeonClear", "dungeonLeave",
+            "bossPhase"
           ],
           "additionalProperties": false,
           "properties": {
@@ -222,7 +223,8 @@
             "dungeonFloor": { "$ref": "#/definitions/template", "description": "层奖励修行录行（#7，dungeon:floor 事件）；槽位 {floor}/{floors}/{gold}/{items}" },
             "dungeonDaoYun": { "$ref": "#/definitions/template", "description": "层奖励道韵修行录行（#7，daoYun > 0 时随层奖励行）；槽位 {daoYun}" },
             "dungeonClear": { "$ref": "#/definitions/template", "description": "通关浮提示（#7，dungeon:clear 事件）；槽位 {name}/{floors}" },
-            "dungeonLeave": { "$ref": "#/definitions/template", "description": "离境修行录行（#7，dungeon:leave 事件）；槽位 {name}/{floor}/{best}" }
+            "dungeonLeave": { "$ref": "#/definitions/template", "description": "离境修行录行（#7，dungeon:leave 事件）；槽位 {name}/{floor}/{best}" },
+            "bossPhase": { "$ref": "#/definitions/template", "description": "Boss 阶段转场修行录行（#8，boss:phase 事件）；槽位 {name}/{phase}" }
           }
         },
         "pages": {

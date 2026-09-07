@@ -19,6 +19,7 @@ import {
   raritiesOf,
   skillsOf,
 } from './contentView.js';
+import { findBossOf } from './bosses.js';
 import { findDungeon } from './dungeon.js';
 import { type Affix, type GearInstance, type Rarity } from './gear.js';
 import type { DamageTier, EncounterRecord, RoundTally } from './combat.js';
@@ -49,6 +50,11 @@ export interface CombatState extends RoundTally {
   /** 胜利后休整倒计时（毫秒）。 */
   respT: number;
   tiers: Record<DamageTier, number>;
+  /**
+   * Boss 当前阶段下标（#8，-1 = 未入脚本阶段）：阈值推进随战斗态持久，
+   * 自动再战重置归位（Boss 重生从头演阶段）；普通敌人恒 -1。
+   */
+  bossPhase: number;
 }
 
 /**
@@ -369,6 +375,12 @@ function restoreCombatState(
     const tierOf = (value: unknown): number =>
       typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
     const tiers = c.tiers;
+    // Boss 阶段（#8）：数值钳 ≥ -1；Boss 定义已移除（包变更）→ 归位普通敌人。
+    const rawPhase = c.bossPhase;
+    const restoredPhase =
+      typeof rawPhase === 'number' && Number.isFinite(rawPhase) && rawPhase >= -1
+        ? Math.floor(rawPhase)
+        : -1;
     state.combat = {
       enemyId: c.enemyId,
       ehp: c.ehp,
@@ -383,6 +395,7 @@ function restoreCombatState(
         heavy: isObj(tiers) ? tierOf(tiers.heavy) : 0,
         deadly: isObj(tiers) ? tierOf(tiers.deadly) : 0,
       },
+      bossPhase: findBossOf(content, c.enemyId) !== undefined ? restoredPhase : -1,
     };
   }
 

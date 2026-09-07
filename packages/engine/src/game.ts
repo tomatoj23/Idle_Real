@@ -83,6 +83,7 @@ import {
   pickDungeonEnemyOf,
   type DungeonView,
 } from './dungeon.js';
+import { bossEnemyOf, findBossOf } from './bosses.js';
 
 export interface CreateGameOptions {
   /** 由 content 包校验过的内容包；引擎零内容感知，仅透明持有。 */
@@ -607,11 +608,50 @@ export function createGame(options: CreateGameOptions): Game {
 
   /* ---------- 秘境（#7）：层序列战斗复用既有战斗状态机 ---------- */
 
-  /** 秘境感知的敌人解析：层表倍率投影（dungeonFloorEnemyOf 单一来源）；脱境 = 敌人定义原值。 */
+  /**
+   * 战斗中的敌人解析（#7/#8 单点组合）：秘境层倍率投影在前，Boss 阶段
+   * 修正在后（叠乘——秘境深层插 Boss 零特判）；两者皆无 = 敌人定义原值。
+   */
   function resolveEnemy(enemyId: string): EnemyView | undefined {
     const run = state.dungeon;
-    if (!run) return findEnemy(content, enemyId);
-    return dungeonFloorEnemyOf(content, run.dungeonId, run.floor, enemyId);
+    let view = run
+      ? dungeonFloorEnemyOf(content, run.dungeonId, run.floor, enemyId)
+      : findEnemy(content, enemyId);
+    if (!view) return undefined;
+    const c = state.combat;
+    if (c !== null && c.bossPhase >= 0) {
+      view = bossEnemyOf(content, enemyId, c.bossPhase, view) ?? view;
+    }
+    return view;
+  }
+
+  /**
+   * Boss 阶段推进（#8，玩家一击落点后消费）：血量比例 ≤ 阈值即进入该阶段；
+   * 单击跨多阈值逐级补发（每级一次 boss:phase 事件 + 阶段叙事）。
+   * 阶段修正经 resolveEnemy 在后续轮次解算生效（bossPhase 随战斗态持久，
+   * 自动再战重置归位）；普通敌人（未注册 Boss）恒跳过。
+   */
+  function checkBossPhase(enemy: EnemyView, c: CombatState): void {
+    const boss = findBossOf(content, enemy.id);
+    if (!boss || c.bossPhase >= boss.phases.length - 1) return;
+    const ratio = enemy.hp > 0 ? c.ehp / enemy.hp : 1;
+    while (c.bossPhase + 1 < boss.phases.length) {
+      const next = boss.phases[c.bossPhase + 1]!;
+      const threshold =
+        typeof next.threshold === 'number' && Number.isFinite(next.threshold) ? next.threshold : 0;
+      if (ratio > threshold) break;
+      c.bossPhase += 1;
+      const name = typeof next.name === 'string' && next.name.length > 0 ? next.name : '';
+      events.emit({
+        type: 'boss:phase',
+        time,
+        data: { enemyId: enemy.id, enemyName: enemy.name, phase: c.bossPhase + 1, name },
+      });
+      const narration = pickText(next.narration, random);
+      if (narration !== undefined) {
+        emitNote(fillTemplate(narration, { enemy: enemy.name, phase: name }), enemy.id);
+      }
+    }
   }
 
   /** 进入指定层：加权抽敌 → 以层倍率投影的气血开战（战斗状态机与解算零分叉）。 */
@@ -628,6 +668,7 @@ export function createGame(options: CreateGameOptions): Game {
       rounds: 0,
       crits: 0,
       tiers: { light: 0, mid: 0, heavy: 0, deadly: 0 },
+      bossPhase: -1,
     };
     emitNote(noteFrom('start', { enemy: scaled.name }), scaled.id);
     return true;
@@ -726,7 +767,11 @@ export function createGame(options: CreateGameOptions): Game {
       time,
       data: { side: 'player', enemyId: enemy.id, enemyName: enemy.name, text, dmg, crit, tier },
     });
-    if (c.ehp <= 0) victory(enemy, c);
+    if (c.ehp <= 0) {
+      victory(enemy, c);
+      return;
+    }
+    checkBossPhase(enemy, c); // Boss 阶段阈值推进（#8；普通敌人空转）
   }
 
   /** 敌人一击：减伤解算 → 文案 → 玩家倒下判定。 */
@@ -735,12 +780,16 @@ export function createGame(options: CreateGameOptions): Game {
     const dmg = calcDmg(enemy.atk, def, random, cparams);
     state.hp -= dmg;
     const tier = hitTierOf(dmg, enemy.atk, def, cparams);
+    // 变招（#8）：Boss 当前阶段声明的出招注册键覆盖敌人 id 键（未声明回退）。
+    const boss = findBossOf(content, enemy.id);
+    const phaseMoveKey = boss && c.bossPhase >= 0 ? boss.phases[c.bossPhase]?.moveKey : undefined;
+    const moveKey = typeof phaseMoveKey === 'string' && phaseMoveKey.length > 0 ? phaseMoveKey : enemy.id;
     const text = makeAttackText(
       combatText,
       {
         side: 'enemy',
         enemyName: enemy.name,
-        moveKey: enemy.id,
+        moveKey,
         // 动词池键 = 敌人内容声明的 kind（开放键域，#021 批 4）；'claw' 不再是
         // 引擎缺省词汇，防御路径回落引擎兜底键（未注册由文案层再兜底）。
         verbStyle: enemy.kind ?? BASIC_KEY,
@@ -773,6 +822,15 @@ export function createGame(options: CreateGameOptions): Game {
 
     const drops: string[] = [];
     for (const drop of enemy.drops ?? []) {
+      if (drop.item && random() < drop.chance) {
+        addItem(drop.item, 1);
+        emitLoot(drop.item, 1, 'drop');
+        drops.push(drop.item);
+      }
+    }
+
+    // Boss 专属掉落（#8）：与 enemy.drops 同机制叠加掷点（bosses[].drops）。
+    for (const drop of findBossOf(content, enemy.id)?.drops ?? []) {
       if (drop.item && random() < drop.chance) {
         addItem(drop.item, 1);
         emitLoot(drop.item, 1, 'drop');
@@ -934,6 +992,7 @@ export function createGame(options: CreateGameOptions): Game {
             c.rounds = 0;
             c.crits = 0;
             c.tiers = { light: 0, mid: 0, heavy: 0, deadly: 0 };
+            c.bossPhase = -1; // Boss 重生从头演阶段（#8：阶段随再战重置归位）
             emitNote(noteFrom('reengage', { enemy: enemy.name }), enemy.id);
           } else {
             stopCombat(noteFrom('retreatVictory'));
@@ -1432,6 +1491,7 @@ export function createGame(options: CreateGameOptions): Game {
             rounds: 0,
             crits: 0,
             tiers: { light: 0, mid: 0, heavy: 0, deadly: 0 },
+            bossPhase: -1,
           };
           emitNote(noteFrom('start', { enemy: enemy.name }), enemy.id);
           return;

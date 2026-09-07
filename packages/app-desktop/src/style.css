@@ -436,6 +436,20 @@ body {
 .bar-red { background: rgba(201, 106, 106, 0.18); }
 .bar-red i { background: linear-gradient(90deg, #a34e4e, #c96a6a); }
 
+/* Boss 血条分段（#8）：阶段阈值刻度（content 数据驱动，非 Boss 无刻度） */
+.bar { position: relative; }
+.bar > i.tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--gold);
+  opacity: 0.8;
+  border-radius: 0;
+  transition: none;
+}
+.boss-phase { border-color: var(--border-gold); color: var(--gold); }
+
 .combat-toggles { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
 .btn.on { border-color: var(--border-gold); color: var(--gold); }
 

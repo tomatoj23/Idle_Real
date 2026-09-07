@@ -4,7 +4,7 @@ import type { ContentError } from '../src/index.js';
 import { xiuxianPackJson } from '../src/packs/xiuxian.js';
 import { fantasyPackJson, loadFantasyPack } from '../src/packs/fantasy.js';
 import { loadXiuxianPack } from '../src/packs/xiuxian.js';
-import { shellFixture } from './fixtures.js';
+import { minimalPack } from './fixtures.js';
 
 /**
  * #7 验收：dungeons 节（秘境分层爬塔）——
@@ -13,113 +13,10 @@ import { shellFixture } from './fixtures.js';
  * 可选节：省略合法（引擎零降级路径）。修仙/魔幻两包为换包生效样张。
  */
 
-const BASE_PACK: unknown = {
-  skills: [
-    { id: 'fight', name: '斗法', icon: '斗', kind: 'combat' },
-    { id: 'smith', name: '炼器', icon: '器', kind: 'craft' },
-  ],
-  items: [
-    { id: 'herb1', name: '青灵草', icon: '青', type: 'mat', sell: 4 },
-    { id: 'key1', name: '钥符', icon: '钥', type: 'mat', sell: 5 },
-  ],
-  recipes: [
-    {
-      name: '锻钥符',
-      skill: 'smith',
-      unlockLevel: 1,
-      output: { item: 'key1', count: 1 },
-      materials: { herb1: 2 },
-      successRate: 1,
-      interval: 4000,
-      exp: 10,
-    },
-  ],
-  enemies: [
-    {
-      id: 'e1', name: '青鬃狼', icon: '狼', level: 1, kind: 'claw',
-      hp: 60, atk: 9, def: 2, attackInterval: 2800, exp: 16,
-      gold: { min: 4, max: 10 }, drops: [],
-    },
-    {
-      id: 'e2', name: '赤尾妖蝎', icon: '蝎', level: 8, kind: 'claw',
-      hp: 140, atk: 17, def: 6, attackInterval: 2600, exp: 40,
-      gold: { min: 12, max: 24 }, drops: [],
-    },
-  ],
-  gearDrops: [],
-  elements: [],
-  rarities: [
-    { id: 'common', name: '寻常', weight: 70, mult: 1, affix: 0, sell: 1 },
-    { id: 'fine', name: '精良', weight: 20, mult: 1.15, affix: 1, sell: 2 },
-    { id: 'rare', name: '罕见', weight: 8, mult: 1.3, affix: 2, sell: 4 },
-    { id: 'epic', name: '绝世', weight: 2, mult: 1.5, affix: 3, sell: 10, showcase: true },
-  ],
-  affixPool: [
-    { name: '锐锋', stat: 'atk', scale: 0.3 },
-    { name: '罡气', stat: 'def', scale: 0.3 },
-    { name: '浑厚', stat: 'hp', scale: 1.5 },
-    { name: '通明', stat: 'crit', scale: 0.25 },
-  ],
-  combatText: {
-    verbs: {
-      basic: [{ v: '击', limbs: ['面门'] }],
-      claw: [{ v: '抓', limbs: ['肩头'] }],
-    },
-    moves: { basic: ['搏兔一击'], e1: ['饿虎扑食'], e2: ['毒尾横扫'] },
-    openings: ['你足尖一点'],
-    critIntro: ['你气机鼓荡'],
-    cons: {
-      hit: {
-        light: ['{defender}受创{d}点。'],
-        mid: ['{defender}受创{d}点。'],
-        heavy: ['{defender}受创{d}点。'],
-        deadly: ['{defender}受创{d}点。'],
-      },
-      hurt: {
-        light: ['你受创{d}点。'],
-        mid: ['你受创{d}点。'],
-        heavy: ['你受创{d}点。'],
-        deadly: ['你受创{d}点。'],
-      },
-    },
-    fatal: { hit: '{defender}受创{d}点！', hurt: '你受创{d}点。' },
-    templates: {
-      playerLight: ['你一招「{move}」，{weapon}{verb}向{defender}的{limb}。'],
-      playerHeavy: ['{opening}——一招「{move}」，{weapon}{verb}向{defender}的{limb}。'],
-      playerCrit: ['{critIntro}——「{move}」，{weapon}{verb}向{defender}的{limb}！'],
-      enemyLight: ['{enemy}一式「{move}」，{verb}向你的{limb}。'],
-      enemyHeavy: ['{enemy}凶性大发——「{move}」，{verb}向你的{limb}！'],
-    },
-    notes: {
-      retreat: ['你收势撤战'],
-      retreatToGather: ['你收势离战'],
-      retreatWounded: ['你暂且退避'],
-      retreatVictory: ['你见好就收'],
-      reengage: ['你再度向【{enemy}】出手'],
-      start: ['你与【{enemy}】战至一处'],
-      autoConsume: ['你服下【{item}】'],
-    },
-    summary: {
-      tiers: {
-        light: ['轻痕积胜'], mid: ['稳中求进'], heavy: ['重创连绵'], deadly: ['锋芒毕露'],
-      },
-      base: ['{rounds} 合击倒 · {flavor}'],
-      crit: ['{rounds} 合击倒 · {flavor} · {crits} 会心'],
-    },
-    compare: {
-      revenge: ['今 {rounds} 合雪耻'],
-      faster: ['今 {rounds} 合胜'],
-      slower: ['今 {rounds} 合方克'],
-      even: ['与前番 {rounds} 合如一'],
-    },
-  },
-  texts: {
-    basicName: '拳脚',
-    reject: { '*': { 'bad-payload': '指令无效' } },
-    shell: shellFixture(),
-  },
-  shop: [{ item: 'herb1', price: 10 }],
-  dungeons: [
+/** 基准包 = 共享最小合法包（fixtures.minimalPack）+ 一座全字段秘境。 */
+function basePack(): Record<string, unknown> {
+  const pack = minimalPack();
+  (pack as Record<string, unknown>).dungeons = [
     {
       id: 'crypt',
       name: '妖窟秘境',
@@ -141,11 +38,12 @@ const BASE_PACK: unknown = {
         },
       ],
     },
-  ],
-};
+  ];
+  return pack;
+}
 
 function makePack(): Record<string, any> {
-  return JSON.parse(JSON.stringify(BASE_PACK));
+  return JSON.parse(JSON.stringify(basePack()));
 }
 
 function expectError(result: ReturnType<typeof validateContentPack>, path: string, keyword: string): void {
@@ -157,7 +55,7 @@ function expectError(result: ReturnType<typeof validateContentPack>, path: strin
 
 describe('validateContentPack · dungeons 秘境节（#7）', () => {
   it('基准夹具通过（可选节 + 全字段）', () => {
-    const result = validateContentPack(BASE_PACK);
+    const result = validateContentPack(basePack());
     if (!result.ok) {
       console.error(result.errors.map((e) => `${e.path} [${e.keyword}] ${e.message}`).join('\n'));
     }

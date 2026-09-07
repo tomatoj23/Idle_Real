@@ -512,6 +512,8 @@ export interface ShellEvents {
   readonly talentBuyToast: string;
   /** 天赋点亮修行录行（#6；槽位 {name}/{daoYun}）。 */
   readonly talentBuyLog: string;
+  /** Boss 阶段转场修行录行（#8，boss:phase 事件；槽位 {name}/{phase}）。 */
+  readonly bossPhase: string;
 }
 
 /** 修炼页文案。 */
@@ -812,6 +814,38 @@ export interface DungeonDef {
   readonly layers: readonly DungeonLayer[];
 }
 
+/* ---------- Boss 战（#8：阶段脚本） ---------- */
+
+/**
+ * Boss 单个阶段（脚本行）：敌人血量比例 ≤ threshold 时进入；
+ * 全数组 threshold 须严格递减（递进顺序，语义校验）。
+ */
+export interface BossPhase {
+  readonly threshold: number;
+  /** 阶段名（boss:phase 事件载荷 / 壳徽标展示）。 */
+  readonly name: string;
+  /** 阶段属性修正（乘区；键钉 atk/def/attackInterval——hp/gold/exp 不随阶段投影）。 */
+  readonly mods?: {
+    readonly atk?: number;
+    readonly def?: number;
+    readonly attackInterval?: number;
+  };
+  /** 变招：该阶段敌方出招名改用此 combatText.moves 注册键（xref + 注册表放行）。 */
+  readonly moveKey?: string;
+  /** 阶段转场叙事池（{enemy}/{phase} 槽）。 */
+  readonly narration?: readonly string[];
+}
+
+/**
+ * Boss 定义（bosses 节条目，#8，包级可选节）：enemy 引用 enemies 节的
+ * 一个敌人 id（每敌人至多一条 Boss 定义）；drops 专属掉落表叠于 enemy.drops。
+ */
+export interface BossDef {
+  readonly enemy: string;
+  readonly phases: readonly BossPhase[];
+  readonly drops?: readonly ItemDrop[];
+}
+
 /* ---------- 坊市 ---------- */
 
 export interface ShopEntry {
@@ -957,4 +991,8 @@ export interface ContentPack {
    * 秘境节（#7）；可选节，省略 = 无秘境玩法（引擎零降级路径，壳不渲染秘境页签）。
    */
   readonly dungeons?: readonly DungeonDef[];
+  /**
+   * Boss 节（#8）；可选节，省略 = 无 Boss 玩法（全部敌人按普通敌人战斗，零降级路径）。
+   */
+  readonly bosses?: readonly BossDef[];
 }
