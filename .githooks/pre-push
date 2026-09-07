@@ -1,0 +1,15 @@
+#!/bin/sh
+# 交付门禁：push 前全量 check + test（交付=push 的机械保障）。
+# test 必须透传 --pool=vmThreads：threads/forks pool 复现 worker 状态注入
+# 损坏，所有套件在 import 行报 Cannot read properties of undefined（必挂）。
+echo "[pre-push] workspace check..."
+npm run check --workspaces --if-present || {
+  echo "[pre-push] check 未过，push 中止。修复后再推（勿 --no-verify 绕过）。" >&2
+  exit 1
+}
+echo "[pre-push] workspace test (vmThreads)..."
+npm run test --workspaces --if-present -- --pool=vmThreads || {
+  echo "[pre-push] test 未过，push 中止。修复后再推（勿 --no-verify 绕过）。" >&2
+  exit 1
+}
+echo "[pre-push] 全绿，放行。"

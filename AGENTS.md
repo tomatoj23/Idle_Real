@@ -22,3 +22,7 @@ single-context 布局：根目录 `CONTEXT.md` + `docs/adr/`（按需懒创建�
 - engine 源码禁引用平台全局名（localStorage/document/window/setInterval 等），环境能力走 globalThis 运行时探测（先例 `save.ts` 的 `platformOf()`），缺失时降级，勿为省事给 engine 加 DOM/node lib。
 - 凡从 globalThis/window 解构原生方法（定时器/storage/console 等），必须 bind 宿主再存函数值，否则真机抛 Illegal invocation；happy-dom 不校验 this，测试全绿完全遮蔽（e93727e 教训）。
 - 真实浏览器首跑是必要验收步骤，UI 冒烟（vitest+happy-dom）不能替代。
+
+## Git 钩子（交付门禁）
+
+- `npm run setup` 启用 `.githooks/`（core.hooksPath 不入库，换克隆后须重跑一次）。pre-push = 全量 check + test（vmThreads）；push 被钩子拦下时**修复后再推，禁 `--no-verify` 绕过**。

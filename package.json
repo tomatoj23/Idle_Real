@@ -10,6 +10,7 @@
     "packages/app-desktop"
   ],
   "scripts": {
+    "setup": "git config core.hooksPath .githooks",
     "dev": "npm run dev -w @wendao/app-desktop",
     "dev:editor": "npm run dev -w @wendao/editor",
     "test": "npm run test --workspaces --if-present",
