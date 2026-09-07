@@ -5,10 +5,13 @@ import {
   fillTemplate,
   localStorageSaveAdapter,
   type GameAction,
+  type SaveAdapter,
+  type SaveData,
 } from '@wendao/engine';
 import type { ContentPack } from '@wendao/content';
 import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
 import { buildUi, esc } from './ui';
+import { desktopBridgeOf, desktopSaveAdapter, wireAchievementReporting } from './desktop';
 
 // #24：状态键 gp/pill/fist → gold/consumable/basic 是存档形状 breaking change。
 // 旧存档不迁移（ADR-008）：v2 档留在旧键下永不读，新档从 v3 起。
@@ -42,7 +45,13 @@ try {
   document.title = content.texts.shell.brand.name;
   document.documentElement.lang = content.texts.shell.brand.locale;
 
-  const adapter = localStorageSaveAdapter(SAVE_KEY);
+  // 桌面桥（#10）：Electron preload 注入 window.wendao 时走平台槽位适配
+  //（mock=文件槽位 / steam=Steam Cloud）；纯浏览器 dev 缺桥回落 localStorage。
+  const bridge = desktopBridgeOf();
+  if (bridge) console.info(`[wendao] adapter=${bridge.mode} (desktop bridge)`);
+  const adapter: SaveAdapter & { flushSync?(data: SaveData): void } = bridge
+    ? desktopSaveAdapter(SAVE_KEY, bridge)
+    : localStorageSaveAdapter(SAVE_KEY);
   const save = adapter.load() ?? undefined;
   const game = createGame({
     content,
@@ -51,8 +60,15 @@ try {
     seed: Math.floor(Math.random() * 0x7fffffff),
   });
 
+  // 成就上报管道（#10）：挂载须早于 settleOffline——启动欠账结算即可触发解锁。
+  if (bridge) wireAchievementReporting(game.events, bridge);
+
   const autoSave = attachAutoSave(game, adapter, AUTOSAVE_MS);
-  window.addEventListener('beforeunload', () => autoSave.flush());
+  window.addEventListener('beforeunload', () => {
+    autoSave.flush();
+    // 关闭即保存兜底（#10）：同步通道，退出竞态下异步 send 可能不达主进程。
+    adapter.flushSync?.(game.snapshot());
+  });
 
   // UI 只消费 events + snapshot + texts.shell（事件→日志/浮提示/重绘的接线在 buildUi 内）。
   const ui = buildUi(app, content, () => game.snapshot(), game.events);

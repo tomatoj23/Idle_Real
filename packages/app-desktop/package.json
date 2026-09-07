@@ -1,20 +1,32 @@
 {
   "name": "@wendao/app-desktop",
+  "productName": "问道长生",
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "description": "问道长生 —— 放置修仙（Electron 桌面壳）",
+  "author": "tomatoj23",
+  "license": "UNLICENSED",
+  "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "dev:electron": "npm run build && electron .",
+    "build": "tsc --noEmit && tsc --noEmit -p tsconfig.electron.json && vite build && tsc -p tsconfig.electron.json && node -e \"require('fs').copyFileSync('electron/preload.cjs','dist-electron/preload.cjs')\"",
     "preview": "vite preview",
-    "check": "tsc --noEmit",
+    "dist": "electron-builder --win",
+    "check": "tsc --noEmit && tsc --noEmit -p tsconfig.electron.json",
     "test": "vitest run"
   },
-  "dependencies": {
-    "@wendao/content": "*",
-    "@wendao/engine": "*"
+  "dependencies": {},
+  "optionalDependencies": {
+    "steamworks.js": "^0.4.0"
   },
   "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@wendao/content": "*",
+    "@wendao/engine": "*",
+    "electron": "38.8.6",
+    "electron-builder": "^26.0.12",
     "happy-dom": "^18.0.1",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",

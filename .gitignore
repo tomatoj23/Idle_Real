@@ -2,5 +2,7 @@
 *.log
 node_modules/
 dist/
+dist-electron/
+release/
 *.tsbuildinfo
 .scratch/

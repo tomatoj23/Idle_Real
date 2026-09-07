@@ -1,0 +1,20 @@
+# #10：Windows 双击安装包（NSIS oneClick：双击即装即玩）。
+# 产物输出 release/（已 gitignore）；steamworks.js 原生模块必须 asar 解包才能加载 .node。
+# renderer 产物 dist/ 与主进程产物 dist-electron/ 均为构建期产物；
+# @wendao/* 已由 vite 内联进 renderer bundle，且为主进程无关依赖（devDependencies 不打包）。
+appId: com.wendao.changsheng
+productName: 问道长生
+directories:
+  output: release
+files:
+  - dist/**
+  - dist-electron/**
+asarUnpack:
+  - '**/node_modules/steamworks.js/**'
+win:
+  target: nsis
+nsis:
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
