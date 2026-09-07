@@ -17,11 +17,11 @@
       "minProperties": 1,
       "additionalProperties": false,
       "patternProperties": {
-        "^(activity:start|bag:sell|shop:buy|combat:start|consumable:eat|gear:equip|gear:sell|rebirth:perform|talent:buy|\\*)$": {
+        "^(activity:start|bag:sell|shop:buy|combat:start|consumable:eat|dungeon:enter|gear:equip|gear:sell|rebirth:perform|talent:buy|\\*)$": {
           "$ref": "#/definitions/reasonMap"
         }
       },
-      "description": "reject 展示文案：动作协议键 → 理由 code → 文案模板；'*' 为跨动作兜底键（bad-payload/unknown-action 等通用文案），命中序 = 精确动作优先、'*' 次之、键名回显殿后。模板槽位 {level}/{activity}/{item}/{owned}/{cost}/{gold}/{daoYun}/{need}/{xp} 由引擎按协议语境填入（rebirth:perform 的 no-progress 带 {need}/{xp}，rebirth-locked 带 {daoYun}；talent:buy 的 no-daoyun 带 {cost}/{daoYun}）"
+      "description": "reject 展示文案：动作协议键 → 理由 code → 文案模板；'*' 为跨动作兜底键（bad-payload/unknown-action 等通用文案），命中序 = 精确动作优先、'*' 次之、键名回显殿后。模板槽位 {level}/{activity}/{item}/{owned}/{cost}/{gold}/{daoYun}/{need}/{xp} 由引擎按协议语境填入（rebirth:perform 的 no-progress 带 {need}/{xp}，rebirth-locked 带 {daoYun}；talent:buy 的 no-daoyun 带 {cost}/{daoYun}；dungeon:enter 的 locked 带 {daoYun}、no-key 带 {item}，#7）"
     },
     "shell": {
       "$ref": "#/definitions/shellTexts"
@@ -102,7 +102,7 @@
         },
         "tabs": {
           "type": "object",
-          "required": ["skills", "craft", "combat", "bag", "shop", "rebirth", "talents"],
+          "required": ["skills", "craft", "combat", "bag", "shop", "rebirth", "talents", "dungeon"],
           "additionalProperties": false,
           "properties": {
             "skills": { "$ref": "#/definitions/line" },
@@ -111,7 +111,8 @@
             "bag": { "$ref": "#/definitions/line" },
             "shop": { "$ref": "#/definitions/line" },
             "rebirth": { "$ref": "#/definitions/line", "description": "转生页签（#6；包无 rebirth 节时壳不渲染该页签）" },
-            "talents": { "$ref": "#/definitions/line", "description": "天赋页签（#6；同上）" }
+            "talents": { "$ref": "#/definitions/line", "description": "天赋页签（#6；同上）" },
+            "dungeon": { "$ref": "#/definitions/line", "description": "秘境页签（#7；包无 dungeons 节时壳不渲染该页签）" }
           }
         },
         "side": {
@@ -180,7 +181,8 @@
             "sellLog", "buyLog", "rejectFallback",
             "offlineToast", "offlineLog", "offlineNoYield", "offlineExpSuffix",
             "craftFail", "craftHalt",
-            "rebirthToast", "rebirthLog", "talentBuyToast", "talentBuyLog"
+            "rebirthToast", "rebirthLog", "talentBuyToast", "talentBuyLog",
+            "dungeonEnter", "dungeonFloor", "dungeonDaoYun", "dungeonClear", "dungeonLeave"
           ],
           "additionalProperties": false,
           "properties": {
@@ -215,12 +217,17 @@
             "rebirthToast": { "$ref": "#/definitions/template", "description": "兵解功成浮提示（#6）；槽位 {daoYun}" },
             "rebirthLog": { "$ref": "#/definitions/template", "description": "兵解修行录行（#6）；槽位 {xp}/{daoYun}/{count}" },
             "talentBuyToast": { "$ref": "#/definitions/template", "description": "天赋点亮浮提示（#6）；槽位 {name}/{cost}" },
-            "talentBuyLog": { "$ref": "#/definitions/template", "description": "天赋点亮修行录行（#6）；槽位 {name}/{daoYun}" }
+            "talentBuyLog": { "$ref": "#/definitions/template", "description": "天赋点亮修行录行（#6）；槽位 {name}/{daoYun}" },
+            "dungeonEnter": { "$ref": "#/definitions/template", "description": "踏入秘境浮提示（#7，dungeon:enter 事件）；槽位 {name}/{floor}/{floors}" },
+            "dungeonFloor": { "$ref": "#/definitions/template", "description": "层奖励修行录行（#7，dungeon:floor 事件）；槽位 {floor}/{floors}/{gold}/{items}" },
+            "dungeonDaoYun": { "$ref": "#/definitions/template", "description": "层奖励道韵修行录行（#7，daoYun > 0 时随层奖励行）；槽位 {daoYun}" },
+            "dungeonClear": { "$ref": "#/definitions/template", "description": "通关浮提示（#7，dungeon:clear 事件）；槽位 {name}/{floors}" },
+            "dungeonLeave": { "$ref": "#/definitions/template", "description": "离境修行录行（#7，dungeon:leave 事件）；槽位 {name}/{floor}/{best}" }
           }
         },
         "pages": {
           "type": "object",
-          "required": ["skills", "craft", "combat", "bag", "shop", "rebirth", "talents"],
+          "required": ["skills", "craft", "combat", "bag", "shop", "rebirth", "talents", "dungeon"],
           "additionalProperties": false,
           "properties": {
             "skills": {
@@ -371,6 +378,25 @@
                 "needPrereq": { "$ref": "#/definitions/template", "description": "前置未点亮锁定文案（无槽位）" },
                 "owned": { "$ref": "#/definitions/template", "description": "已点亮徽标（无槽位）" },
                 "buyBtn": { "$ref": "#/definitions/template", "description": "点亮按钮（无槽位）" }
+              }
+            },
+            "dungeon": {
+              "type": "object",
+              "required": ["title", "subtitle", "empty", "floorNow", "best", "powerNow", "powerRec", "enterBtn", "retreatBtn", "entryKey", "clearBadge"],
+              "additionalProperties": false,
+              "description": "秘境页（#7）：层数进度 + 当前层战斗（复用斗法页敌卡文案）+ 撤退/继续；卡列表含最高层记录与进入门控（道韵门槛复用 common.needDaoYun，钥匙门槛用 entryKey）",
+              "properties": {
+                "title": { "$ref": "#/definitions/line" },
+                "subtitle": { "$ref": "#/definitions/template", "description": "秘境页副标题（无槽位）" },
+                "empty": { "$ref": "#/definitions/template", "description": "包无秘境空态（无槽位）" },
+                "floorNow": { "$ref": "#/definitions/template", "description": "进行中层进度行；槽位 {floor}/{floors}" },
+                "best": { "$ref": "#/definitions/template", "description": "最高层记录行；槽位 {best}" },
+                "powerNow": { "$ref": "#/definitions/template", "description": "玩家战力行（引擎 powerOf 读数）；槽位 {power}" },
+                "powerRec": { "$ref": "#/definitions/template", "description": "推荐战力区间行（软提示，#7 recommendedPower）；槽位 {min}/{max}" },
+                "enterBtn": { "$ref": "#/definitions/template", "description": "进入按钮（无槽位）" },
+                "retreatBtn": { "$ref": "#/definitions/template", "description": "撤退按钮（无槽位）" },
+                "entryKey": { "$ref": "#/definitions/template", "description": "钥匙未持锁定句；槽位 {item}" },
+                "clearBadge": { "$ref": "#/definitions/template", "description": "已通关徽标（best ≥ floors 时显示；无槽位）" }
               }
             }
           }

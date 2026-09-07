@@ -18,13 +18,19 @@ import {
   EventBus,
   craftMissingOf,
   craftSuccessRateOf,
+  dungeonFloorEnemyOf,
+  dungeonGateOf,
+  dungeonLayerOf,
+  dungeonsOf,
   enemyGateOf,
   expBase,
   expToNext,
   fillTemplate,
+  findDungeon,
   findRarity,
   gearName,
   levelFromXp,
+  powerOf,
   progressionParamsOf,
   projectGearBase,
   rebirthGateOf,
@@ -41,7 +47,7 @@ import {
   type SaveData,
 } from '@wendao/engine';
 
-export type TabId = 'skills' | 'craft' | 'combat' | 'bag' | 'shop' | 'rebirth' | 'talents';
+export type TabId = 'skills' | 'craft' | 'combat' | 'dungeon' | 'bag' | 'shop' | 'rebirth' | 'talents';
 
 export interface Ui {
   bindActions(handler: (action: GameAction) => void): void;
@@ -75,6 +81,9 @@ export function buildUi(
   // 转生玩法（#6）：包无 rebirth 节 = 无转生页签（引擎零降级路径的同款壳面）。
   const rebirthSection = rebirthOf(content);
   const hasRebirth = rebirthSection !== undefined;
+  // 秘境玩法（#7）：包无 dungeons 节 = 无秘境页签与斗法页入口。
+  const dungeonList = dungeonsOf(content);
+  const hasDungeons = dungeonList.length > 0;
 
   // 稀有度词表由内容包 rarities 节驱动（#018，ADR-016 裁决 ①/④）：
   // 档名/着色类/倍率来源/特判全部查内容 def，UI 零档位词、零引擎常量表；
@@ -152,6 +161,7 @@ export function buildUi(
       <button class="tab" data-act="tab" data-tab="skills">${esc(T('tabs.skills'))}</button>
       <button class="tab" data-act="tab" data-tab="craft">${esc(T('tabs.craft'))}</button>
       <button class="tab" data-act="tab" data-tab="combat">${esc(T('tabs.combat'))}</button>
+      ${hasDungeons ? `<button class="tab" data-act="tab" data-tab="dungeon">${esc(T('tabs.dungeon'))}</button>` : ''}
       <button class="tab" data-act="tab" data-tab="bag">${esc(T('tabs.bag'))}</button>
       <button class="tab" data-act="tab" data-tab="shop">${esc(T('tabs.shop'))}</button>
       ${hasRebirth ? `<button class="tab" data-act="tab" data-tab="rebirth">${esc(T('tabs.rebirth'))}</button>
@@ -225,6 +235,16 @@ export function buildUi(
         break;
       case 'fight':
         handler({ type: 'combat:start', payload: { enemyId: el.dataset.enemy } });
+        break;
+      case 'dungeon-enter':
+        // 秘境入口（#7，斗法页/秘境页共用）：入门 + 切到秘境页看层进度。
+        handler({ type: 'dungeon:enter', payload: { dungeonId: el.dataset.dungeon } });
+        activeTab = 'dungeon';
+        lastSig = '';
+        render();
+        break;
+      case 'dungeon-leave':
+        handler({ type: 'dungeon:leave' });
         break;
       case 'flee':
         handler({ type: 'combat:stop' });
@@ -378,6 +398,45 @@ export function buildUi(
         toast(T('events.talentBuyToast', { name: String(data.name ?? ''), cost: Number(data.cost ?? 0) }));
         log(T('events.talentBuyLog', { name: String(data.name ?? ''), daoYun: Number(data.daoYun ?? 0) }), 't-jade');
         break;
+      case 'dungeon:enter':
+        toast(T('events.dungeonEnter', {
+          name: String(data.dungeonName ?? ''),
+          floor: Number(data.floor ?? 0),
+          floors: Number(data.floors ?? 0),
+        }));
+        break;
+      case 'dungeon:floor': {
+        // 层奖励行：{items} 槽由壳按 nameOf + itemListSep 拼装（offlineLog 同律）；
+        // 道韵后缀（events.dungeonDaoYun）仅在实际入账时拼接。
+        const items = Object.entries((data.items ?? {}) as Record<string, number>)
+          .map(([id, n]) => `${nameOf(id)}×${n}`)
+          .join(T('common.itemListSep'));
+        const daoYunSuffix =
+          Number(data.daoYun ?? 0) > 0 ? T('events.dungeonDaoYun', { daoYun: Number(data.daoYun) }) : '';
+        log(
+          T('events.dungeonFloor', {
+            floor: Number(data.floor ?? 0),
+            floors: Number(data.floors ?? 0),
+            gold: Number(data.gold ?? 0),
+            items,
+          }) + daoYunSuffix,
+          't-gold',
+        );
+        break;
+      }
+      case 'dungeon:clear':
+        toast(T('events.dungeonClear', { name: String(data.dungeonName ?? ''), floors: Number(data.floors ?? 0) }));
+        break;
+      case 'dungeon:leave':
+        log(
+          T('events.dungeonLeave', {
+            name: String(data.dungeonName ?? ''),
+            floor: Number(data.floor ?? 0),
+            best: Number(data.best ?? 0),
+          }),
+          't-sys',
+        );
+        break;
       case 'offline-settled': {
         const seconds = Math.max(0, Math.floor(Number(data.seconds) || 0));
         const h = Math.floor(seconds / 3600);
@@ -428,6 +487,8 @@ export function buildUi(
       st.daoYun,
       st.daoYunEarned,
       [...st.talents].sort(),
+      st.dungeon ? [st.dungeon.dungeonId, st.dungeon.floor] : null,
+      Object.entries(st.dungeonBest).sort(),
       snap.stats ?? null,
     ]);
 
@@ -488,11 +549,12 @@ export function buildUi(
     if (activeTab === 'skills') pageEl.innerHTML = renderSkills(st);
     else if (activeTab === 'craft') pageEl.innerHTML = renderCraft(st);
     else if (activeTab === 'combat') pageEl.innerHTML = renderCombat(st, snap);
+    else if (activeTab === 'dungeon') pageEl.innerHTML = renderDungeon(st, snap);
     else if (activeTab === 'bag') pageEl.innerHTML = renderBag(st);
     else if (activeTab === 'rebirth') pageEl.innerHTML = renderRebirth(st);
     else if (activeTab === 'talents') pageEl.innerHTML = renderTalents(st);
     else pageEl.innerHTML = renderShop(st);
-    if (activeTab === 'combat') {
+    if (activeTab === 'combat' || activeTab === 'dungeon') {
       // 页面重建会丢滚动位置与日志内容：全量重放战斗日志并恢复到底部。
       const box = pageEl.querySelector<HTMLElement>('#flog');
       if (box) {
@@ -802,6 +864,93 @@ export function buildUi(
       </section>`;
   }
 
+  /* ---------- 秘境页（#7）：层进度 + 当前层战斗 + 撤退；未在攻略 = 秘境列表 ---------- */
+
+  /** 锁定句归因（#7）：锁因走引擎 gate.daoYunLocked 单一来源；道韵复用 common.needDaoYun，钥匙用 entryKey。 */
+  const dungeonLockMsgOf =
+    (st: GameState) =>
+    (dungeonId: string): string => {
+      const gate = dungeonGateOf(content, dungeonId, { daoYunEarned: st.daoYunEarned, items: st.items });
+      if (gate.daoYunLocked) {
+        return T('common.needDaoYun', { daoYun: gate.requiredDaoYun });
+      }
+      return T('pages.dungeon.entryKey', { item: itemById.get(gate.keyItem ?? '')?.name ?? (gate.keyItem ?? '') });
+    };
+
+  function renderDungeon(st: GameState, snap: SaveData): string {
+    const dungeons = dungeonList;
+    if (dungeons.length === 0) {
+      return `<section class="page"><p class="empty">${esc(T('pages.dungeon.empty'))}</p></section>`;
+    }
+    const run = st.dungeon;
+    if (run) {
+      const dungeon = findDungeon(content, run.dungeonId);
+      if (!dungeon) {
+        return `<section class="page"><p class="empty">${esc(T('pages.dungeon.empty'))}</p></section>`;
+      }
+      // 当前层敌人走引擎层倍率投影（dungeonFloorEnemyOf 单一来源，壳零缩放公式）。
+      const enemy = st.combat
+        ? dungeonFloorEnemyOf(content, run.dungeonId, run.floor, st.combat.enemyId)
+        : undefined;
+      const ehpPct =
+        enemy && st.combat ? Math.max(0, Math.min(100, (st.combat.ehp / enemy.hp) * 100)) : 0;
+      const hpPct = Math.max(0, Math.min(100, (st.hp / (snap.stats?.maxHp ?? 1)) * 100));
+      const best = st.dungeonBest[dungeon.id] ?? 0;
+      const rec = dungeonLayerOf(dungeon, run.floor)?.recommendedPower;
+      const power = snap.stats ? powerOf(snap.stats) : 0;
+      const consumables = consumablesHtml(st);
+      return `
+        <section class="page">
+          <h2 class="page-title">${esc(T('pages.dungeon.title'))}</h2>
+          <p class="page-sub">${esc(T('pages.dungeon.floorNow', { floor: run.floor, floors: dungeon.floors }))} · ${esc(T('pages.dungeon.best', { best }))}</p>
+          <article class="enemy-card fighting">
+            <div class="enemy-face"><span class="sigil sigil-big">${esc(enemy?.icon ?? T('icons.unknown'))}</span></div>
+            <div class="enemy-main">
+              <div class="enemy-head"><b>${esc(enemy?.name ?? '')}</b><span class="enemy-lv">${esc(T('units.level', { v: enemy?.level ?? 0 }))}</span></div>
+              <div class="bar bar-red"><i data-bar="enemy" style="width:${ehpPct}%"></i></div>
+              <div class="enemy-sub">${esc(T('pages.combat.enemyHp', { ehp: st.combat ? Math.max(0, Math.ceil(st.combat.ehp)) : 0, hp: enemy?.hp ?? 0 }))}</div>
+              <div class="bar bar-jade"><i style="width:${hpPct}%"></i></div>
+              <div class="enemy-sub">${esc(T('pages.combat.selfStats', { hp: Math.floor(st.hp), max: snap.stats?.maxHp ?? '—', atk: statValueText('atk', snap.stats?.atk ?? '—'), def: statValueText('def', snap.stats?.def ?? '—'), crit: statValueText('crit', snap.stats?.crit ?? '—') }))}</div>
+            </div>
+            <div class="enemy-ops">
+              <button class="btn btn-ghost" data-act="dungeon-leave">${esc(T('pages.dungeon.retreatBtn'))}</button>
+            </div>
+          </article>
+          ${rec ? `<p class="page-sub">${esc(T('pages.dungeon.powerNow', { power }))} · ${esc(T('pages.dungeon.powerRec', { min: rec.min, max: rec.max }))}</p>` : ''}
+          ${consumables ? `<div class="consumable-bar">${consumables}</div>` : `<p class="page-sub">${esc(T('pages.combat.noConsumables'))}</p>`}
+          <div class="flog" id="flog"></div>
+        </section>`;
+    }
+    const lockMsgOf = dungeonLockMsgOf(st);
+    const cards = dungeons
+      .map((dungeon) => {
+        const gate = dungeonGateOf(content, dungeon.id, { daoYunEarned: st.daoYunEarned, items: st.items });
+        const best = st.dungeonBest[dungeon.id] ?? 0;
+        const cleared = best >= dungeon.floors;
+        return `<article class="enemy-card${gate.locked ? ' locked' : ''}">
+          <div class="enemy-face"><span class="sigil sigil-big">${esc(dungeon.icon ?? T('icons.unknown'))}</span></div>
+          <div class="enemy-main">
+            <div class="enemy-head"><b>${esc(dungeon.name)}</b><span class="enemy-lv">${esc(T('units.level', { v: dungeon.floors }))}</span>${cleared ? `<em class="act-badge">${esc(T('pages.dungeon.clearBadge'))}</em>` : ''}</div>
+            <div class="enemy-sub">${esc(T('pages.dungeon.best', { best }))}</div>
+          </div>
+          <div class="enemy-ops">
+            ${
+              gate.locked
+                ? `<span class="act-lockmsg">${esc(lockMsgOf(dungeon.id))}</span>`
+                : `<button class="btn" data-act="dungeon-enter" data-dungeon="${dungeon.id}">${esc(T('pages.dungeon.enterBtn'))}</button>`
+            }
+          </div>
+        </article>`;
+      })
+      .join('');
+    return `
+      <section class="page">
+        <h2 class="page-title">${esc(T('pages.dungeon.title'))}</h2>
+        <p class="page-sub">${esc(T('pages.dungeon.subtitle'))}</p>
+        <div class="enemy-grid">${cards}</div>
+      </section>`;
+  }
+
   /* ---------- 斗法页（issue #4） ---------- */
 
   /** 战斗日志内存缓冲：页面未挂载时暂存，进页全量重放（容量受控）。 */
@@ -831,19 +980,35 @@ export function buildUi(
     if (el) el.scrollTop = el.scrollHeight;
   }
 
-  function renderCombat(st: GameState, snap: SaveData): string {
-    const combat = st.combat;
-    // N2 修复（#018）：斗法修为读数按 combatSkillId 解析，禁硬编码内容 id。
-    const clv = levelFromXp(st.skills[combatSkillId]?.xp ?? 0, prog);
-    const sep = T('common.itemListSep');
-
-    const consumables = content.items
+  /** 背包中可服用的回气类消耗品按钮行（斗法页/秘境页共用）。 */
+  const consumablesHtml = (st: GameState): string =>
+    content.items
       .filter((item) => item.type === 'consumable' && (st.items[item.id] ?? 0) > 0)
       .map(
         (item) =>
           `<button class="btn btn-consumable" data-act="eat" data-item="${item.id}">${esc(item.icon)} ${esc(item.name)} ×${st.items[item.id]}</button>`,
       )
       .join('');
+
+  function renderCombat(st: GameState, snap: SaveData): string {
+    const combat = st.combat;
+    // N2 修复（#018）：斗法修为读数按 combatSkillId 解析，禁硬编码内容 id。
+    const clv = levelFromXp(st.skills[combatSkillId]?.xp ?? 0, prog);
+    const sep = T('common.itemListSep');
+    const consumables = consumablesHtml(st);
+
+    // 秘境进行中（#7）：层序列战斗在身，野战一律拒绝——斗法页改为指向页。
+    if (st.dungeon) {
+      const runDungeon = findDungeon(content, st.dungeon.dungeonId);
+      return `
+        <section class="page">
+          <h2 class="page-title">${esc(T('pages.combat.title'))}</h2>
+          <p class="page-sub">${esc(T('pages.combat.subtitle', { level: clv }))}</p>
+          <p class="page-sub">${esc(T('pages.dungeon.floorNow', { floor: st.dungeon.floor, floors: runDungeon?.floors ?? 0 }))}</p>
+          <button class="btn" data-act="tab" data-tab="dungeon">${esc(T('tabs.dungeon'))}</button>
+          <div class="consumable-bar">${consumables || ''}</div>
+        </section>`;
+    }
 
     const toggles = `
       <div class="combat-toggles">
@@ -913,10 +1078,31 @@ export function buildUi(
       })
       .join('');
 
+    // 秘境入口（#7，票面：入口在斗法页）：入门即切到秘境页；锁定句复用 dungeonLockMsgOf。
+    const lockMsgOf = dungeonLockMsgOf(st);
+    const dungeonEntries = hasDungeons
+      ? dungeonList
+          .map((dungeon) => {
+            const gate = dungeonGateOf(content, dungeon.id, { daoYunEarned: st.daoYunEarned, items: st.items });
+            const best = st.dungeonBest[dungeon.id] ?? 0;
+            return `<div class="bag-row">
+              <span class="sigil sigil-sm">${esc(dungeon.icon ?? T('icons.unknown'))}</span>
+              <span class="bag-name">${esc(dungeon.name)}<small>${esc(T('pages.dungeon.best', { best }))}</small></span>
+              <span class="bag-ops">${
+                gate.locked
+                  ? `<span class="act-lockmsg">${esc(lockMsgOf(dungeon.id))}</span>`
+                  : `<button class="btn" data-act="dungeon-enter" data-dungeon="${dungeon.id}">${esc(T('pages.dungeon.enterBtn'))}</button>`
+              }</span>
+            </div>`;
+          })
+          .join('')
+      : '';
+
     return `
       <section class="page">
         <h2 class="page-title">${esc(T('pages.combat.title'))}</h2>
         <p class="page-sub">${esc(T('pages.combat.subtitle', { level: clv }))}</p>
+        ${dungeonEntries}
         <div class="enemy-grid">${cards}</div>
         <div class="consumable-bar">${consumables || ''}</div>
       </section>`;
@@ -1019,11 +1205,14 @@ export function buildUi(
     return `<section class="page"><h2 class="page-title">${esc(T('pages.shop.title'))}</h2><p class="page-sub">${esc(T('pages.shop.subtitle'))}</p>${rows}</section>`;
   }
 
-  /** 敌方血条轻量更新（战斗页存在时每帧刷新）。 */
+  /** 敌方血条轻量更新（斗法页/秘境页存在时每帧刷新；秘境走层倍率投影）。 */
   function updateEnemyBar(st: GameState): void {
     const bar = pageEl.querySelector<HTMLElement>('[data-bar="enemy"]');
     if (!bar || !st.combat) return;
-    const enemy = content.enemies.find((entry) => entry.id === st.combat?.enemyId);
+    const run = st.dungeon;
+    const enemy = run
+      ? dungeonFloorEnemyOf(content, run.dungeonId, run.floor, st.combat.enemyId)
+      : content.enemies.find((entry) => entry.id === st.combat?.enemyId);
     if (!enemy) return;
     bar.style.width = `${Math.max(0, Math.min(100, (st.combat.ehp / enemy.hp) * 100))}%`;
   }

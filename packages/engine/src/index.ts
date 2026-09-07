@@ -48,6 +48,7 @@ export {
   gearDropsOf,
   itemsOf,
   playerMaxHp,
+  powerOf,
   progressionParamsOf,
   raritiesOf,
   recipesOf,
@@ -78,7 +79,7 @@ export type {
   StackView,
 } from './contentView.js';
 export { cloneState, initialState, restoreState } from './state.js';
-export type { ActivityState, CombatState, GameState, SkillProgress } from './state.js';
+export type { ActivityState, CombatState, DungeonState, GameState, SkillProgress } from './state.js';
 
 export type {
   Clock,
@@ -165,3 +166,23 @@ export type {
   TalentGateView,
   TalentNodeView,
 } from './rebirth.js';
+
+// 秘境分层爬塔（#7：层序列战斗/层表投影/加权抽敌/进入门控）
+export {
+  dungeonFloorEnemyOf,
+  dungeonGateOf,
+  dungeonLayerOf,
+  dungeonsOf,
+  findDungeon,
+  pickDungeonEnemyOf,
+} from './dungeon.js';
+export type {
+  DungeonEnemyEntryView,
+  DungeonEntryView,
+  DungeonFloorRangeView,
+  DungeonGateView,
+  DungeonLayerView,
+  DungeonMultView,
+  DungeonRewardView,
+  DungeonView,
+} from './dungeon.js';

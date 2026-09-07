@@ -1,0 +1,120 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DungeonsSection",
+  "description": "content 包 dungeons 节（#7，可选节）：秘境分层爬塔定义。floors 决定攻略生命周期，层表 rows 覆盖 1..floors（语义校验查覆盖缺口/重叠）；进入条件（道韵门槛/钥匙道具）皆可选；recommendedPower 为软提示字段（引擎不消费，UI 展示对照）。",
+  "type": "array",
+  "items": { "$ref": "#/definitions/dungeon" },
+  "definitions": {
+    "dungeon": {
+      "type": "object",
+      "required": ["id", "name", "icon", "floors", "layers"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "秘境 id，发布后不可变：state.dungeonBest 存档键（最高层记录）+ 秘境攻略稳定引用"
+        },
+        "name": { "type": "string", "minLength": 1, "maxLength": 12 },
+        "icon": { "type": "string", "minLength": 1, "maxLength": 2 },
+        "floors": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "总层数：攻略生命周期（层表须无缝覆盖 1..floors，语义校验强制）"
+        },
+        "entry": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "description": "进入条件（皆可选，缺省 = 自由进入）；道韵按累计道韵判定（花掉不回锁）",
+          "properties": {
+            "daoYun": { "type": "integer", "minimum": 0, "description": "累计道韵门槛" },
+            "key": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "description": "钥匙道具 id（须持有 ≥1，不消耗）；语义校验 xref items" }
+          }
+        },
+        "layers": {
+          "type": "array",
+          "minItems": 1,
+          "description": "层表：按层数段定义的行集合（覆盖 1..floors）",
+          "items": { "$ref": "#/definitions/layer" }
+        }
+      }
+    },
+    "layer": {
+      "type": "object",
+      "required": ["floor", "enemies"],
+      "additionalProperties": false,
+      "properties": {
+        "floor": {
+          "type": "object",
+          "required": ["min", "max"],
+          "additionalProperties": false,
+          "description": "本行覆盖的层数段（含端点；方向性 min ≤ max 与生命周期覆盖由语义校验保证）",
+          "properties": {
+            "min": { "type": "integer", "minimum": 1 },
+            "max": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "enemies": {
+          "type": "array",
+          "minItems": 1,
+          "description": "层敌人权重池：按占比归一化加权抽取（权重无需配成 1）",
+          "items": { "$ref": "#/definitions/enemyEntry" }
+        },
+        "mult": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "层数倍率：相对敌人定义值的缩放（引擎投影 round 取整，hp/atk 下限 1；缺省字段 = 原值）",
+          "properties": {
+            "hp": { "type": "number", "exclusiveMinimum": 0 },
+            "atk": { "type": "number", "exclusiveMinimum": 0 },
+            "def": { "type": "number", "exclusiveMinimum": 0 },
+            "gold": { "type": "number", "exclusiveMinimum": 0 },
+            "exp": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        "rewards": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "description": "层奖励：通关该层时入账（每轮推塔重复可得）；daoYun 入账走余额+累计双键（与转生同律）",
+          "properties": {
+            "gold": { "type": "integer", "minimum": 0 },
+            "daoYun": { "type": "integer", "minimum": 0 },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["item", "count"],
+                "additionalProperties": false,
+                "properties": {
+                  "item": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "description": "物品 id（语义校验 xref items）" },
+                  "count": { "type": "integer", "minimum": 1 }
+                }
+              }
+            }
+          }
+        },
+        "recommendedPower": {
+          "type": "object",
+          "required": ["min", "max"],
+          "additionalProperties": false,
+          "description": "推荐战力区间（软提示字段，#7 第一天预留）：引擎不消费不门控，仅 UI 与玩家战力读数（引擎 powerOf）同量纲对照；方向性由语义校验保证",
+          "properties": {
+            "min": { "type": "integer", "minimum": 0 },
+            "max": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "enemyEntry": {
+      "type": "object",
+      "required": ["enemy", "weight"],
+      "additionalProperties": false,
+      "properties": {
+        "enemy": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "description": "敌人 id（语义校验 xref enemies）" },
+        "weight": { "type": "number", "exclusiveMinimum": 0, "description": "抽取权重（正数；按占比归一化）" }
+      }
+    }
+  }
+}

@@ -749,6 +749,69 @@ export interface RebirthSection {
   readonly realms?: readonly RealmDef[];
 }
 
+/* ---------- 秘境（#7：分层爬塔） ---------- */
+
+/** 层数段/推荐战力区间（min ≤ max，方向性与覆盖由语义校验保证）。 */
+export interface DungeonFloorRange {
+  readonly min: number;
+  readonly max: number;
+}
+
+/** 层敌人权重行：enemy 引用包内 enemies 节（语义校验 xref）。 */
+export interface DungeonEnemyEntry {
+  readonly enemy: string;
+  readonly weight: number;
+}
+
+/**
+ * 层奖励：通关该层时入账（每轮推塔重复可得——挂机长线消耗方）；
+ * daoYun 入账走余额 + 累计双键（与转生同律，花掉不回锁）。
+ */
+export interface DungeonReward {
+  readonly gold?: number;
+  readonly daoYun?: number;
+  readonly items?: readonly Stack[];
+}
+
+/** 层数倍率：相对敌人定义值的缩放（引擎投影 round 取整；缺省字段 = 原值）。 */
+export interface DungeonMult {
+  readonly hp?: number;
+  readonly atk?: number;
+  readonly def?: number;
+  readonly gold?: number;
+  readonly exp?: number;
+}
+
+/** 层表行：层数段 + 敌人权重池 + 倍率 + 层奖励 + 推荐战力（软提示）。 */
+export interface DungeonLayer {
+  readonly floor: DungeonFloorRange;
+  readonly enemies: readonly DungeonEnemyEntry[];
+  readonly mult?: DungeonMult;
+  readonly rewards?: DungeonReward;
+  /** 推荐战力区间（软提示字段，第一天预留）：引擎不消费，UI 与引擎 powerOf 对照展示。 */
+  readonly recommendedPower?: DungeonFloorRange;
+}
+
+/** 进入条件（皆可选，缺省 = 自由进入）：道韵按累计道韵判定；钥匙须持有 ≥1（不消耗）。 */
+export interface DungeonEntry {
+  readonly daoYun?: number;
+  readonly key?: string;
+}
+
+/**
+ * 秘境定义（dungeons 节条目，#7，包级可选节）：floors 决定攻略生命周期，
+ * 层表 rows 覆盖 1..floors（语义校验查覆盖缺口/重叠）；id 存档键
+ * （state.dungeonBest 引用），发布后不可变。
+ */
+export interface DungeonDef {
+  readonly id: string;
+  readonly name: string;
+  readonly icon: string;
+  readonly floors: number;
+  readonly entry?: DungeonEntry;
+  readonly layers: readonly DungeonLayer[];
+}
+
 /* ---------- 坊市 ---------- */
 
 export interface ShopEntry {
@@ -890,4 +953,8 @@ export interface ContentPack {
    * 转生节（#6）；可选节，省略 = 无转生玩法（引擎零降级路径，壳不渲染转生页签）。
    */
   readonly rebirth?: RebirthSection;
+  /**
+   * 秘境节（#7）；可选节，省略 = 无秘境玩法（引擎零降级路径，壳不渲染秘境页签）。
+   */
+  readonly dungeons?: readonly DungeonDef[];
 }

@@ -23,6 +23,7 @@ engine `EnemyView` 未投影，靠 #15 票驱动补齐）。
 | `shop` | 是 | shop.schema.json | 坊市货架（无 id 关系行） |
 | `config` | **否** | config.schema.json | 全局配置：槽位（#16）+ 玩法参数四子节 combat/progression/affix（#020，缺省=引擎基线）+ crafting（#5） |
 | `rebirth` | **否** | rebirth.schema.json | 转生系统（#6）：重置/保留清单 + 道韵公式 + 天赋树 + 解锁表 + 境界词表；省略 = 无转生玩法（引擎零降级路径，壳不渲染转生页签） |
+| `dungeons` | **否** | dungeon.schema.json | 秘境分层爬塔（#7）：秘境定义 + 层表（敌人权重/层数倍率/层奖励/推荐战力软提示）+ 进入条件（道韵/钥匙）；省略 = 无秘境玩法（引擎零降级路径，壳不渲染秘境页签） |
 
 ## items 五形态（#16 起 oneOf 分流，判别式 = `type`）
 
@@ -186,9 +187,9 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 | 字段 | 形状 | 说明 |
 |---|---|---|
 | `basicName` | string（1~18 字，#027 按 CJK 密度假设放宽） | 无佩戴武器时的兵刃展示名（weaponName 槽兜底值） |
-| `reject` | 动作协议键 → 理由 code → 文案模板 | 展示文案映射。动作键域 schema 钉死：activity:start / bag:sell / shop:buy / combat:start / consumable:eat / gear:equip / gear:sell / rebirth:perform / talent:buy（#6）/ `'*'`（跨动作兜底，bad-payload 等通用文案）；理由 code 键域开放 |
-| `reject` 槽位 | `{level}` `{activity}` `{item}` `{owned}` `{cost}` `{gold}` `{daoYun}` `{need}` `{xp}` | 由引擎按协议语境填入； combat:start 的 `{level}` = `enemy.level − 门控偏移`（偏移量只在引擎判定处单一来源，文案侧零副本——N1 文案侧裁决）；rebirth:perform 的 no-progress 带 `{need}/{xp}`、rebirth-locked 与 talent:buy 的 no-daoyun 带 `{daoYun}`/`{cost}` |
-| `shell`（#26） | ShellTexts 结构化节 | **壳层全部题材文案**（ADR-017 裁决 9：壳零题材字符串）：brand（sigil/name/locale/bootError）、topbar、tabs、side、stats.labels、units、icons、common、events（32 键）、pages（skills/craft/combat/bag/shop/rebirth/talents，#6 起七页）。schema required + additionalProperties:false 全程钉死 |
+| `reject` | 动作协议键 → 理由 code → 文案模板 | 展示文案映射。动作键域 schema 钉死：activity:start / bag:sell / shop:buy / combat:start / consumable:eat / dungeon:enter（#7）/ gear:equip / gear:sell / rebirth:perform / talent:buy（#6）/ `'*'`（跨动作兜底，bad-payload 等通用文案）；理由 code 键域开放 |
+| `reject` 槽位 | `{level}` `{activity}` `{item}` `{owned}` `{cost}` `{gold}` `{daoYun}` `{need}` `{xp}` | 由引擎按协议语境填入； combat:start 的 `{level}` = `enemy.level − 门控偏移`（偏移量只在引擎判定处单一来源，文案侧零副本——N1 文案侧裁决）；rebirth:perform 的 no-progress 带 `{need}/{xp}`、rebirth-locked 与 talent:buy 的 no-daoyun 带 `{daoYun}`/`{cost}`；dungeon:enter 的 locked 带 `{daoYun}`、no-key 带 `{item}`（#7） |
+| `shell`（#26） | ShellTexts 结构化节 | **壳层全部题材文案**（ADR-017 裁决 9：壳零题材字符串）：brand（sigil/name/locale/bootError）、topbar、tabs、side、stats.labels、units、icons、common、events（37 键，#7 起含 dungeonEnter/dungeonFloor/dungeonDaoYun/dungeonClear/dungeonLeave）、pages（skills/craft/combat/dungeon/bag/shop/rebirth/talents，#7 起八页）。schema required + additionalProperties:false 全程钉死 |
 
 - 命中序：精确动作 → `'*'` → **键名回显**（`{action}/{reason}`，防御可见）。
 - 协议 code 本体归引擎，本节只承载展示文案；code 未命中/缺节绝不崩，toast
@@ -211,9 +212,11 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
   consumable:eat/equip:wear/levelup/sell/buy/reject/offline-settled；
   #5 起含 craft-fail/craft-halt 的 craftFail/craftHalt 与 loot source=craft
   的 lootCraft；#6 起含 rebirth 事件的 rebirthToast/rebirthLog 与
-  talent:buy 事件的 talentBuyToast/talentBuyLog）；
-  `pages.*` 键 = 壳 TabId 协议面（skills/craft/combat/bag/shop/rebirth/talents，
-  #5 起五页、#6 起七页）；
+  talent:buy 事件的 talentBuyToast/talentBuyLog；#7 起含 dungeon:enter/floor/
+  clear/leave 事件的 dungeonEnter/dungeonFloor/dungeonDaoYun/dungeonClear/
+  dungeonLeave）；
+  `pages.*` 键 = 壳 TabId 协议面（skills/craft/combat/dungeon/bag/shop/rebirth/
+  talents，#5 起五页、#6 起七页、#7 起八页）；
   `units.*` 承载层级/时长读数的单位模板（`{v}` 数值、`{m}` 分、`{h}` 时）；
   `topbar.*Sigil` 承载顶栏资源图章字；`common.itemListSep` 为物品名列表
   分隔符（掉落预览/离线产出共用）；`pages.combat.selfStats` 的属性行数值
@@ -356,6 +359,64 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
   `talent:buy`（reject：not-available / not-found / prereq / no-daoyun，已点亮幂等）；
 - snapshot 展示投影：`stats`（含天赋贡献）+ `activityInterval`（有效采集轮间隔，
   gatherSpeed 消费点的壳面投影，恢复侧忽略）。
+
+## dungeons 秘境节（#7：分层爬塔 / 层序列战斗）
+
+**可选节**：省略 = 该题材无秘境玩法（引擎一切消费点零降级路径，壳不渲染秘境页签）。
+
+```json
+"dungeons": [
+  {
+    "id": "yaoku", "name": "妖窟秘境", "icon": "窟",
+    "floors": 10,
+    "entry": { "daoYun": 10 },
+    "layers": [
+      {
+        "floor": { "min": 1, "max": 3 },
+        "enemies": [ { "enemy": "e1", "weight": 6 }, { "enemy": "e2", "weight": 3 } ],
+        "mult": { "hp": 1.2, "atk": 1.1, "gold": 1.2 },
+        "rewards": { "gold": 20 },
+        "recommendedPower": { "min": 20, "max": 45 }
+      }
+    ]
+  }
+]
+```
+
+### 归属划界（ADR-017：机制归引擎，参数归 content）
+
+| 归 content | 归引擎 |
+|---|---|
+| 秘境定义（floors/entry/layers）、敌人权重、层数倍率、层奖励（gold/daoYun/items）、推荐战力区间（软提示） | 层序列战斗（胜利推进/败退离境）、层表解析、层敌人加权抽取、层倍率投影、进入门控判定、最高层记录 |
+
+### 字段约定
+
+| 字段 | 形态 | 约定 |
+|---|---|---|
+| `id` | string（`^[a-z][a-z0-9_]*$`） | 秘境 id，**发布后不可变**：`state.dungeonBest` 存档键（最高层记录）+ 攻略稳定引用；id 去重（语义检查） |
+| `name` / `icon` | string（≤12 / ≤2 字） | 展示名与图章字（壳/编辑器消费，引擎零感知） |
+| `floors` | integer（≥ 1） | 总层数 = 攻略生命周期；层表须**无缝覆盖 1..floors**（缺口 = 攻略中断点、重叠 = 同层双行歧义，语义校验皆拒绝——区间算术，无逐层步进） |
+| `entry` | `{daoYun?, key?}`（皆可选） | 进入条件：`daoYun` 按**累计道韵**判定（花掉不回锁，与 rebirth 解锁表同律）；`key` = 钥匙道具 id（须持有 ≥1，**不消耗**），xref items。判定单一来源 = 引擎 `dungeonGateOf`（与壳锁定态同调，N1 同款收敛） |
+| `layers[].floor` | `{min,max}` | 层数段（含端点，min ≥ 1；超 floors 拒绝） |
+| `layers[].enemies` | `{enemy, weight}[]` | 层敌人权重池：按占比归一化加权抽取（注入 RNG，ADR-013）；enemy xref enemies；weight > 0（schema 关卡） |
+| `layers[].mult` | `{hp?,atk?,def?,gold?,exp?}` | 层数倍率：相对敌人定义值缩放，引擎投影 round 取整（hp/atk 下限 1）；缺省字段 = 原值。投影单一来源 = 引擎 `dungeonFloorEnemyOf`（战斗结算与壳展示同调，禁壳内复制缩放式） |
+| `layers[].rewards` | `{gold?, daoYun?, items?}` | 层奖励：通关该层时入账，**每轮推塔重复可得**（挂机长线消耗方）；`daoYun` 入账走余额 + 累计双键（与 rebirth 同律——深层秘境供养兵解，票面联动点）；items xref items |
+| `layers[].recommendedPower` | `{min,max}` | **推荐战力区间（软提示字段，第一天预留）**：引擎不消费、不门控；UI 与玩家战力读数（引擎 `powerOf` = atk+def+maxHp/10+crit，单一来源）同量纲对照展示；方向性 min ≤ max（语义校验） |
+
+### 引擎事件与协议
+
+- 事件：`dungeon:enter`（`{dungeonId, dungeonName, floor, floors}`）、`dungeon:floor`
+  （`{dungeonId, dungeonName, floor, floors, gold, daoYun, items}`，层奖励入账承载体）、
+  `dungeon:clear`（`{dungeonId, dungeonName, floors}`）、`dungeon:leave`
+  （`{dungeonId, dungeonName, floor, best}`）；
+- 动作：`dungeon:enter`（reject：not-found / in-dungeon / in-combat / locked `{daoYun}` /
+  no-key `{item}` / low-hp / no-layer）、`dungeon:leave`（幂等，未在秘境静默）；
+- **层序列与既有战斗机制复用同一状态机**：胜利休整到期自动进层（与 autoFight 开关
+  无关，爬塔即挂机）；残血退避同律（hp < lowHpFraction×cap → 离境保留最高层）；
+  落败即离境；斗法页开野战 / 兵解在攻略战斗中一律拒绝（in-dungeon / in-combat）；
+- **离线不可续跑**：`settleOffline` 就地离境（最高层已随进层登记，欠账不丢）；
+- 瞬态/资产分界：进行中攻略（`state.dungeon`）为瞬态（恢复需战斗在身，战斗散 =
+  攻略作废）；最高层记录（`state.dungeonBest`）为记录资产——兵解 default-keep 长存。
 
 ## elements 系别键域注册表（#25 键域开放，ADR-017 裁决 8）
 

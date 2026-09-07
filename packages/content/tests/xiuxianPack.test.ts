@@ -16,7 +16,7 @@ describe('修仙题材包 · 验收（issue #2）', () => {
   it('loadXiuxianPack 强校验通过并返回完整包', () => {
     const pack = loadXiuxianPack();
     expect(pack.skills).toHaveLength(6);
-    expect(pack.items).toHaveLength(42);
+    expect(pack.items).toHaveLength(43);
     expect(pack.recipes).toHaveLength(16);
     expect(pack.enemies).toHaveLength(8);
     expect(pack.gearDrops).toHaveLength(8);
@@ -130,6 +130,7 @@ describe('修仙题材包 · 数值基线', () => {
       core1: ['mat', 25],
       core2: ['mat', 90],
       core3: ['mat', 320],
+      guimiao_yaofu: ['mat', 25],
       consumable_heal: ['consumable', 18],
       consumable_qi: ['consumable', 50],
       consumable_atk: ['consumable', 130],

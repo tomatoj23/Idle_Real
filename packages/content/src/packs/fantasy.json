@@ -204,6 +204,38 @@
       "pool": ["rune_blade", "arcane_robe", "seer_ring"]
     }
   ],
+  "dungeons": [
+    {
+      "id": "sunken_crypt",
+      "name": "Sunken Crypt",
+      "icon": "C",
+      "floors": 5,
+      "entry": { "daoYun": 3 },
+      "layers": [
+        {
+          "floor": { "min": 1, "max": 2 },
+          "enemies": [ { "enemy": "cave_bat", "weight": 4 }, { "enemy": "arcane_golem", "weight": 1 } ],
+          "mult": { "hp": 1.3, "atk": 1.2, "gold": 1.3 },
+          "rewards": { "gold": 30 },
+          "recommendedPower": { "min": 15, "max": 30 }
+        },
+        {
+          "floor": { "min": 3, "max": 4 },
+          "enemies": [ { "enemy": "arcane_golem", "weight": 4 }, { "enemy": "cave_bat", "weight": 1 } ],
+          "mult": { "hp": 1.6, "atk": 1.35, "gold": 1.7 },
+          "rewards": { "gold": 80, "daoYun": 1, "items": [ { "item": "crystal", "count": 2 } ] },
+          "recommendedPower": { "min": 30, "max": 60 }
+        },
+        {
+          "floor": { "min": 5, "max": 5 },
+          "enemies": [ { "enemy": "arcane_golem", "weight": 1 } ],
+          "mult": { "hp": 2, "atk": 1.5, "gold": 2, "exp": 1.5 },
+          "rewards": { "gold": 200, "daoYun": 2, "items": [ { "item": "crystal", "count": 4 } ] },
+          "recommendedPower": { "min": 60, "max": 90 }
+        }
+      ]
+    }
+  ],
   "elements": [
     { "id": "arcane", "name": "Arcane" },
     { "id": "shadow", "name": "Shadow" }
@@ -402,6 +434,14 @@
         "prereq": "Light its prerequisites first.",
         "no-daoyun": "Not enough attunement: need {cost}, you have {daoYun}."
       },
+      "dungeon:enter": {
+        "not-found": "No such delve is known.",
+        "in-dungeon": "You are already inside the delve.",
+        "in-combat": "Finish the fight before entering the delve.",
+        "locked": "The delve gate needs {daoYun} lifetime attunement.",
+        "no-key": "You lack the {item} required to enter.",
+        "low-hp": "Too hurt — recover before delving."
+      },
       "*": {
         "bad-payload": "That action cannot be performed."
       }
@@ -428,7 +468,8 @@
         "bag": "Bag",
         "shop": "Shop",
         "rebirth": "Rebirth",
-        "talents": "Talents"
+        "talents": "Talents",
+        "dungeon": "Delve"
       },
       "side": {
         "title": "Chronicle"
@@ -491,7 +532,12 @@
         "rebirthToast": "Reborn! {daoYun} attunement gained.",
         "rebirthLog": "Rebirth: {xp} exp dissolved, {daoYun} attunement gained (life {count}).",
         "talentBuyToast": "Talent {name} lit ({cost} attunement).",
-        "talentBuyLog": "Lit {name} — {daoYun} attunement left."
+        "talentBuyLog": "Lit {name} — {daoYun} attunement left.",
+        "dungeonEnter": "You enter {name} — floor {floor}/{floors}.",
+        "dungeonFloor": "Floor {floor}/{floors} cleared: +{gold} gold {items}",
+        "dungeonDaoYun": ", +{daoYun} attunement",
+        "dungeonClear": "{name} fully cleared — all {floors} floors!",
+        "dungeonLeave": "You leave {name} at floor {floor} (deepest: {best})."
       },
       "pages": {
         "skills": {
@@ -598,6 +644,19 @@
           "needPrereq": "Light its prerequisites first",
           "owned": "Lit",
           "buyBtn": "Light"
+        },
+        "dungeon": {
+          "title": "Delve",
+          "subtitle": "Floor by floor, deeper and deadlier — every floor pays.",
+          "empty": "No delves are known in this realm.",
+          "floorNow": "Now · floor {floor}/{floors}",
+          "best": "Deepest · floor {best}",
+          "powerNow": "Power {power}",
+          "powerRec": "Suggested {min}~{max}",
+          "enterBtn": "Enter",
+          "retreatBtn": "Retreat",
+          "entryKey": "Requires {item} x1",
+          "clearBadge": "Cleared"
         }
       }
     }

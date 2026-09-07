@@ -19,6 +19,7 @@ import {
   raritiesOf,
   skillsOf,
 } from './contentView.js';
+import { findDungeon } from './dungeon.js';
 import { type Affix, type GearInstance, type Rarity } from './gear.js';
 import type { DamageTier, EncounterRecord, RoundTally } from './combat.js';
 import type { Contribution } from './modifiers.js';
@@ -48,6 +49,16 @@ export interface CombatState extends RoundTally {
   /** 胜利后休整倒计时（毫秒）。 */
   respT: number;
   tiers: Record<DamageTier, number>;
+}
+
+/**
+ * 进行中的一次秘境攻略（#7）：瞬态——兵解/离线/内容包变更一律清空；
+ * 最高层记录另存 state.dungeonBest（记录资产，default-keep）。
+ */
+export interface DungeonState {
+  readonly dungeonId: string;
+  /** 当前层（1 起）。 */
+  floor: number;
 }
 
 export interface GameState {
@@ -87,12 +98,16 @@ export interface GameState {
   daoYunEarned: number;
   /** 已点亮天赋节点 id（内容包 rebirth.talents 稳定引用，ADR-015）。 */
   talents: string[];
+  /** 进行中的秘境攻略；null = 不在秘境（#7，瞬态）。 */
+  dungeon: DungeonState | null;
+  /** 秘境历史最高到达层：秘境 id → 层号（记录资产，兵解 default-keep，#7）。 */
+  dungeonBest: Record<string, number>;
 }
 
 const RESERVED_KEYS = new Set([
   'gold', 'hp', 'items', 'skills', 'activity', 'rngSeed',
   'gear', 'gearSeq', 'equips', 'buffs', 'combat', 'autoFight', 'autoEat', 'lastEncounter',
-  'rebirths', 'daoYun', 'daoYunEarned', 'talents',
+  'rebirths', 'daoYun', 'daoYunEarned', 'talents', 'dungeon', 'dungeonBest',
 ]);
 
 export function initialState(
@@ -125,6 +140,8 @@ export function initialState(
     daoYun: 0,
     daoYunEarned: 0,
     talents: [],
+    dungeon: null,
+    dungeonBest: {},
   };
 }
 
@@ -223,6 +240,37 @@ export function restoreState(
     }
 
     restoreCombatState(content, raw, state, save);
+
+    // —— 秘境最高层记录（#7）：键须指向现存秘境（包已变更的旧记录丢弃），
+    // 数值钳非负；层号语义 = 「达到过」的最高层（进层即登记）。
+    if (isObj(raw.dungeonBest)) {
+      for (const [dungeonId, best] of Object.entries(raw.dungeonBest)) {
+        if (
+          typeof best === 'number' &&
+          Number.isFinite(best) &&
+          best >= 0 &&
+          findDungeon(content, dungeonId) !== undefined
+        ) {
+          state.dungeonBest[dungeonId] = Math.floor(best);
+        }
+      }
+    }
+    // —— 秘境进行中（#7）：定义存在 + 层号合法 + 战斗在身才收编
+    //（中途存档随战斗态一并续跑；战斗已散 = 攻略作废）。
+    const run = raw.dungeon;
+    if (
+      isObj(run) &&
+      typeof run.dungeonId === 'string' &&
+      typeof run.floor === 'number' &&
+      Number.isInteger(run.floor) &&
+      run.floor >= 1 &&
+      state.combat !== null
+    ) {
+      const dungeon = findDungeon(content, run.dungeonId);
+      if (dungeon && run.floor <= dungeon.floors) {
+        state.dungeon = { dungeonId: run.dungeonId, floor: run.floor };
+      }
+    }
 
     // —— 转生（#6）：数值钳非负有限；daoYunEarned 未落盘时以余额兜底
     //（旧档升级：解锁门槛不应低于当前余额）；talents 逐项字符串去重保序。
@@ -381,5 +429,7 @@ export function cloneState(state: GameState): GameState {
       Object.entries(state.lastEncounter).map(([id, rec]) => [id, { ...rec }]),
     ),
     talents: [...state.talents],
+    dungeon: state.dungeon ? { ...state.dungeon } : null,
+    dungeonBest: { ...state.dungeonBest },
   };
 }

@@ -110,4 +110,25 @@ describe('西方魔幻迷你包 · 验收 tracer（#28）', () => {
     ]);
     expect(pack.config?.progression?.maxLevel).toBe(20);
   });
+
+  it('dungeons 秘境样张：英语层表/层奖励/道韵门在案（#7 换包生效第二题材面）', () => {
+    const pack = loadFantasyPack();
+    expect(pack.dungeons).toHaveLength(1);
+    const delve = pack.dungeons![0]!;
+    expect(delve.id).toBe('sunken_crypt');
+    expect(delve.floors).toBe(5);
+    expect(delve.entry).toEqual({ daoYun: 3 });
+    // 层表覆盖 5 层（3 行：1-2 / 3-4 / 5）；深层奖励含道韵（与转生联动）。
+    expect(delve.layers.map((l) => l.floor)).toEqual([
+      { min: 1, max: 2 },
+      { min: 3, max: 4 },
+      { min: 5, max: 5 },
+    ]);
+    expect(delve.layers[2]!.rewards).toEqual({
+      gold: 200,
+      daoYun: 2,
+      items: [{ item: 'crystal', count: 4 }],
+    });
+    expect(delve.layers[0]!.recommendedPower).toEqual({ min: 15, max: 30 });
+  });
 });

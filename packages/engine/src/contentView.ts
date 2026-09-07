@@ -4,7 +4,7 @@
  * "引擎零内容感知"的落地方式：不 import @wendao/content，只按内容包
  * 约定形状读取注入对象；缺节/缺字段一律安全兜底，绝不因内容缺失崩溃。
  */
-import type { GameContent } from './types.js';
+import type { GameContent, PlayerStatsView } from './types.js';
 import {
   BASE_PROGRESSION,
   levelFromXp,
@@ -549,4 +549,15 @@ export function enemyGateOf(
     locked: clv + offset < enemy.level,
     requiredLevel: Math.max(0, enemy.level - offset),
   };
+}
+
+/* ---------- 玩家战力读数（软提示对照，#7 推荐战力） ---------- */
+
+/**
+ * 玩家战力（#7 软提示读数）：atk + def + maxHp/10 + crit 的确定性合成，
+ * 供层表 recommendedPower 推荐战力区间（content 软提示字段）同量纲对照。
+ * 引擎单一来源，壳零公式（shopAffordOf 同款收敛）；快照 stats 直接代入。
+ */
+export function powerOf(stats: PlayerStatsView): number {
+  return Math.round(stats.atk + stats.def + stats.maxHp / 10 + stats.crit);
 }

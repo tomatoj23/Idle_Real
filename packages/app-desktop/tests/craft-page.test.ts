@@ -46,7 +46,7 @@ function mount(save: SaveData = makeSave()): {
 describe('#5 · 炼制页（craft 页）渲染', () => {
   it('页签齐备（#6 起七页签）：craft/转生/道韵页签出现且文案 texts 驱动', () => {
     const { root } = mount();
-    expect(root.querySelectorAll('#tabs .tab')).toHaveLength(7);
+    expect(root.querySelectorAll('#tabs .tab')).toHaveLength(8);
     expect(root.querySelector('.tab[data-tab="craft"]')?.textContent).toBe('炼制');
     expect(root.querySelector('.tab[data-tab="rebirth"]')?.textContent).toBe('转生');
     expect(root.querySelector('.tab[data-tab="talents"]')?.textContent).toBe('道韵');

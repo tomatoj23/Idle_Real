@@ -77,6 +77,7 @@
     { "id": "core1", "name": "浊妖丹", "icon": "丹", "type": "mat", "sell": 25, "description": "低阶妖兽内丹" },
     { "id": "core2", "name": "煞妖丹", "icon": "煞", "type": "mat", "sell": 90, "description": "中阶妖兽内丹，煞气凝然" },
     { "id": "core3", "name": "魔妖丹", "icon": "魔", "type": "mat", "sell": 320, "description": "大妖内丹，魔气冲霄" },
+    { "id": "guimiao_yaofu", "name": "鬼庙钥符", "icon": "符", "type": "mat", "sell": 25, "description": "开启鬼庙秘境的钥符，妖窟深处偶得" },
 
     { "id": "consumable_heal", "name": "回气丹", "icon": "回", "type": "consumable", "sell": 18, "description": "服用后恢复三成气血", "heal": { "percent": 0.3 } },
     { "id": "consumable_qi", "name": "聚气丹", "icon": "聚", "type": "consumable", "sell": 50, "description": "五分钟内采集类经验 +25%", "effect": { "duration": 300000, "multipliers": { "gatherXp": 1.25 } } },
@@ -177,6 +178,78 @@
     { "enemy": "e6", "chance": 0.08, "pool": [ "blood_gourd", "luo_shayi" ] },
     { "enemy": "e7", "chance": 0.07, "pool": [ "mojun_blade", "mojun_guan" ] },
     { "enemy": "e8", "chance": 0.15, "pool": [ "taotie_fang", "taotie_pi" ] }
+  ],
+  "dungeons": [
+    {
+      "id": "yaoku", "name": "妖窟秘境", "icon": "窟",
+      "floors": 10,
+      "entry": { "daoYun": 10 },
+      "layers": [
+        {
+          "floor": { "min": 1, "max": 3 },
+          "enemies": [ { "enemy": "e1", "weight": 6 }, { "enemy": "e2", "weight": 3 } ],
+          "mult": { "hp": 1.2, "atk": 1.1, "gold": 1.2 },
+          "rewards": { "gold": 20 },
+          "recommendedPower": { "min": 20, "max": 45 }
+        },
+        {
+          "floor": { "min": 4, "max": 6 },
+          "enemies": [ { "enemy": "e2", "weight": 5 }, { "enemy": "e3", "weight": 3 } ],
+          "mult": { "hp": 1.5, "atk": 1.25, "gold": 1.6 },
+          "rewards": { "gold": 60, "items": [ { "item": "core1", "count": 2 } ] },
+          "recommendedPower": { "min": 45, "max": 95 }
+        },
+        {
+          "floor": { "min": 7, "max": 9 },
+          "enemies": [ { "enemy": "e3", "weight": 5 }, { "enemy": "e4", "weight": 3 } ],
+          "mult": { "hp": 1.8, "atk": 1.4, "gold": 2 },
+          "rewards": { "gold": 150, "daoYun": 1, "items": [ { "item": "core2", "count": 1 } ] },
+          "recommendedPower": { "min": 95, "max": 170 }
+        },
+        {
+          "floor": { "min": 10, "max": 10 },
+          "enemies": [ { "enemy": "e4", "weight": 1 } ],
+          "mult": { "hp": 2.2, "atk": 1.5, "gold": 2.5, "exp": 1.5 },
+          "rewards": { "gold": 400, "daoYun": 3, "items": [ { "item": "core2", "count": 2 }, { "item": "guimiao_yaofu", "count": 1 } ] },
+          "recommendedPower": { "min": 170, "max": 280 }
+        }
+      ]
+    },
+    {
+      "id": "guimiao", "name": "鬼庙秘境", "icon": "庙",
+      "floors": 15,
+      "entry": { "key": "guimiao_yaofu" },
+      "layers": [
+        {
+          "floor": { "min": 1, "max": 5 },
+          "enemies": [ { "enemy": "e4", "weight": 5 }, { "enemy": "e5", "weight": 3 } ],
+          "mult": { "hp": 1.3, "atk": 1.2, "gold": 1.5 },
+          "rewards": { "gold": 120, "daoYun": 1 },
+          "recommendedPower": { "min": 120, "max": 220 }
+        },
+        {
+          "floor": { "min": 6, "max": 10 },
+          "enemies": [ { "enemy": "e5", "weight": 5 }, { "enemy": "e6", "weight": 3 } ],
+          "mult": { "hp": 1.6, "atk": 1.35, "gold": 2 },
+          "rewards": { "gold": 260, "daoYun": 2, "items": [ { "item": "core3", "count": 1 } ] },
+          "recommendedPower": { "min": 220, "max": 360 }
+        },
+        {
+          "floor": { "min": 11, "max": 14 },
+          "enemies": [ { "enemy": "e6", "weight": 5 }, { "enemy": "e7", "weight": 3 } ],
+          "mult": { "hp": 1.9, "atk": 1.5, "gold": 2.5 },
+          "rewards": { "gold": 480, "daoYun": 3, "items": [ { "item": "core3", "count": 1 } ] },
+          "recommendedPower": { "min": 360, "max": 540 }
+        },
+        {
+          "floor": { "min": 15, "max": 15 },
+          "enemies": [ { "enemy": "e7", "weight": 1 } ],
+          "mult": { "hp": 2.4, "atk": 1.6, "gold": 3, "exp": 1.6 },
+          "rewards": { "gold": 1200, "daoYun": 6, "items": [ { "item": "core3", "count": 2 } ] },
+          "recommendedPower": { "min": 540, "max": 760 }
+        }
+      ]
+    }
   ],
   "elements": [
     { "id": "metal", "name": "金" },
@@ -384,6 +457,14 @@
         "not-found": "查无此天赋",
         "prereq": "前置天赋未成，不可越阶点亮",
         "no-daoyun": "道韵不足（需 {cost}，现有 {daoYun}）"
+      },
+      "dungeon:enter": {
+        "not-found": "查无此秘境",
+        "in-dungeon": "已在秘境之中",
+        "in-combat": "斗法未歇，先脱战再入秘境",
+        "locked": "道韵不足（需 {daoYun}，累计可得），秘境之门未开",
+        "no-key": "缺少「{item}」，不得其门而入",
+        "low-hp": "气血未复，先调息片刻"
       }
     },
     "shell": {
@@ -408,7 +489,8 @@
         "bag": "乾坤袋",
         "shop": "坊市",
         "rebirth": "转生",
-        "talents": "道韵"
+        "talents": "道韵",
+        "dungeon": "秘境"
       },
       "side": { "title": "修行录" },
       "stats": {
@@ -464,7 +546,12 @@
         "rebirthToast": "兵解功成！得道韵 {daoYun}，重入轮回",
         "rebirthLog": "兵解重修：散尽 {xp} 修为，得道韵 {daoYun}（第 {count} 世）",
         "talentBuyToast": "天赋【{name}】已点亮（{cost} 道韵）",
-        "talentBuyLog": "点亮【{name}】，尚余 {daoYun} 道韵"
+        "talentBuyLog": "点亮【{name}】，尚余 {daoYun} 道韵",
+        "dungeonEnter": "踏入【{name}】· 第 {floor}/{floors} 层",
+        "dungeonFloor": "第 {floor}/{floors} 层已通：+{gold} 灵石 {items}",
+        "dungeonDaoYun": "，道韵 +{daoYun}",
+        "dungeonClear": "【{name}】通贯 {floors} 层，满载而归！",
+        "dungeonLeave": "退出【{name}】：止步第 {floor} 层，最深曾至第 {best} 层"
       },
       "pages": {
         "skills": {
@@ -571,6 +658,19 @@
           "needPrereq": "需先点亮前置天赋",
           "owned": "已点亮",
           "buyBtn": "点亮"
+        },
+        "dungeon": {
+          "title": "秘境",
+          "subtitle": "层境相叠，步步凶险，层层有赏。",
+          "empty": "此界并无秘境。",
+          "floorNow": "当前 · 第 {floor}/{floors} 层",
+          "best": "最深 · 第 {best} 层",
+          "powerNow": "战力 {power}",
+          "powerRec": "推荐战力 {min}~{max}",
+          "enterBtn": "踏入秘境",
+          "retreatBtn": "撤退出秘境",
+          "entryKey": "需持「{item}」",
+          "clearBadge": "已通关"
         }
       }
     }

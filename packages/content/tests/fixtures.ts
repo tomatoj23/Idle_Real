@@ -17,7 +17,7 @@ export function shellFixture(): Record<string, unknown> {
       hpTitle: '气血',
       hpSigil: '血',
     },
-    tabs: { skills: '修炼', craft: '炼制', combat: '斗法', bag: '乾坤袋', shop: '坊市', rebirth: '转生', talents: '道韵' },
+    tabs: { skills: '修炼', craft: '炼制', combat: '斗法', bag: '乾坤袋', shop: '坊市', rebirth: '转生', talents: '道韵', dungeon: '秘境' },
     side: { title: '修行录' },
     stats: { labels: { atk: { label: '攻' }, crit: { label: '暴', percent: true } } },
     units: {
@@ -61,6 +61,11 @@ export function shellFixture(): Record<string, unknown> {
       rebirthLog: '兵解重修：{xp} 修为，{daoYun} 道韵（第 {count} 世）',
       talentBuyToast: '点亮【{name}】（{cost} 道韵）',
       talentBuyLog: '点亮【{name}】，余 {daoYun} 道韵',
+      dungeonEnter: '踏入【{name}】第 {floor}/{floors} 层',
+      dungeonFloor: '第 {floor}/{floors} 层已通：+{gold} 灵石 {items}',
+      dungeonDaoYun: '，道韵 +{daoYun}',
+      dungeonClear: '【{name}】已通关（{floors} 层）！',
+      dungeonLeave: '退出【{name}】（第 {floor} 层，最深 {best}）',
     },
     pages: {
       skills: {
@@ -153,6 +158,19 @@ export function shellFixture(): Record<string, unknown> {
         needPrereq: '前置未成',
         owned: '已点亮',
         buyBtn: '点亮',
+      },
+      dungeon: {
+        title: '秘境',
+        subtitle: '层表驱动，逐层推进',
+        empty: '无秘境',
+        floorNow: '当前 · 第 {floor}/{floors} 层',
+        best: '最深 · 第 {best} 层',
+        powerNow: '战力 {power}',
+        powerRec: '推荐 {min}~{max}',
+        enterBtn: '进入',
+        retreatBtn: '撤退',
+        entryKey: '需 {item} ×1',
+        clearBadge: '已通关',
       },
     },
   };

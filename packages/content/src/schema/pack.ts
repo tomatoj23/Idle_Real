@@ -49,6 +49,7 @@
 import affixPoolSchemaJson from './affix-pool.schema.json';
 import combatTextSchemaJson from './combat-text.schema.json';
 import configSchemaJson from './config.schema.json';
+import dungeonSchemaJson from './dungeon.schema.json';
 import elementSchemaJson from './element.schema.json';
 import enemySchemaJson from './enemy.schema.json';
 import gearDropSchemaJson from './gear-drop.schema.json';
@@ -62,6 +63,7 @@ import textsSchemaJson from './texts.schema.json';
 import type {
   Config,
   ContentPack,
+  DungeonDef,
   Item,
   Modifier,
   ModifierCondition,
@@ -86,6 +88,7 @@ const textsSchema = textsSchemaJson as unknown as JsonSchema;
 const shopSchema = shopSchemaJson as unknown as JsonSchema;
 const configSchema = configSchemaJson as unknown as JsonSchema;
 const rebirthSchema = rebirthSchemaJson as unknown as JsonSchema;
+const dungeonSchema = dungeonSchemaJson as unknown as JsonSchema;
 
 /** 内容节 → 该节值的独立 schema。 */
 const SECTION_SCHEMAS = {
@@ -102,6 +105,7 @@ const SECTION_SCHEMAS = {
   shop: shopSchema,
   config: configSchema,
   rebirth: rebirthSchema,
+  dungeons: dungeonSchema,
 } as const;
 
 type SectionName = keyof typeof SECTION_SCHEMAS;
@@ -109,7 +113,7 @@ type SectionName = keyof typeof SECTION_SCHEMAS;
 const SECTION_NAMES = Object.keys(SECTION_SCHEMAS) as readonly SectionName[];
 
 /** 可选内容节：缺省合法（引擎安全兜底），存在则整节强校验。 */
-const OPTIONAL_SECTIONS: ReadonlySet<SectionName> = new Set(['config', 'rebirth']);
+const OPTIONAL_SECTIONS: ReadonlySet<SectionName> = new Set(['config', 'rebirth', 'dungeons']);
 
 export type PackValidationResult =
   | { readonly ok: true; readonly pack: ContentPack }
@@ -200,6 +204,9 @@ function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
 
   // 转生节（#6）：可选节，存在则查清单键域、天赋树 xref/查环、解锁表 xref、境界词表。
   checkRebirth(pack, enemyIndex, skillIndex, errors);
+
+  // 秘境节（#7）：可选节，存在则查 id 去重、钥匙/敌人/奖励 xref、生命周期覆盖。
+  checkDungeons(pack.dungeons ?? [], enemyIndex, itemIndex, errors);
 
   checkPrototypes(pack.skills, '/skills', errors);
   checkPrototypes(pack.items, '/items', errors);
@@ -754,6 +761,113 @@ function checkElementRefs(
     });
     if (item.feature !== undefined) {
       checkCondition(item.feature.condition, `/items/${i}/feature/condition/element`);
+    }
+  });
+}
+
+/* ==================== 秘境节（#7） ==================== */
+
+/**
+ * 秘境节语义检查（#7，可选节，存在才查）：
+ * - id 去重（state.dungeonBest 存档键）；
+ * - 进入条件 key 引用 xref items；
+ * - 层表生命周期覆盖：floor 行须无缝覆盖 1..floors（缺口 = 攻略中断点，
+ *   重叠 = 同层双行歧义，皆拒绝）；超出总层数的层段拒绝；
+ * - 层敌人权重行 xref enemies；层奖励 items xref；
+ * - recommendedPower 方向性 min ≤ max。
+ */
+function checkDungeons(
+  dungeons: readonly DungeonDef[],
+  enemies: ReadonlyMap<string, number>,
+  items: ReadonlyMap<string, number>,
+  errors: ContentError[],
+): void {
+  pushDuplicates(dungeons, '/dungeons', errors);
+  dungeons.forEach((dungeon, i) => {
+    const at = (field: string) => `/dungeons/${i}/${field}`;
+    if (dungeon.entry?.key !== undefined && !items.has(dungeon.entry.key)) {
+      errors.push({
+        path: at('entry/key'),
+        keyword: 'xref',
+        message: `钥匙物品 "${dungeon.entry.key}" 不存在于 items`,
+      });
+    }
+
+    // 逐行引用与方向性检查。
+    dungeon.layers.forEach((layer, j) => {
+      const layerAt = (field: string) => `/dungeons/${i}/layers/${j}/${field}`;
+      for (const [k, entry] of layer.enemies.entries()) {
+        if (!enemies.has(entry.enemy)) {
+          errors.push({
+            path: layerAt(`enemies/${k}/enemy`),
+            keyword: 'xref',
+            message: `层敌人 "${entry.enemy}" 不存在于 enemies`,
+          });
+        }
+      }
+      for (const [k, stack] of (layer.rewards?.items ?? []).entries()) {
+        if (!items.has(stack.item)) {
+          errors.push({
+            path: layerAt(`rewards/items/${k}/item`),
+            keyword: 'xref',
+            message: `层奖励物品 "${stack.item}" 不存在于 items`,
+          });
+        }
+      }
+      if (
+        layer.recommendedPower !== undefined &&
+        layer.recommendedPower.min > layer.recommendedPower.max
+      ) {
+        errors.push({
+          path: layerAt('recommendedPower'),
+          keyword: 'shape',
+          message: `推荐战力区间 min(${layer.recommendedPower.min}) 不得大于 max(${layer.recommendedPower.max})`,
+        });
+      }
+    });
+
+    // —— 生命周期覆盖（区间算术，避免逐层步进的巨数循环）：行按 min 排序
+    // 后须无缝衔接 1..floors；缝隙 = 覆盖缺口，先行覆盖内再起行 = 重叠歧义。
+    const ordered = [...dungeon.layers.keys()].sort(
+      (a, b) => dungeon.layers[a]!.floor.min - dungeon.layers[b]!.floor.min,
+    );
+    let expectNext = 1;
+    const gaps: string[] = [];
+    let overlapSeen = false;
+    for (const j of ordered) {
+      const { min, max } = dungeon.layers[j]!.floor;
+      if (max > dungeon.floors) {
+        errors.push({
+          path: `/dungeons/${i}/layers/${j}/floor`,
+          keyword: 'shape',
+          message: `层段终点 ${max} 超出秘境总层数（floors = ${dungeon.floors}）`,
+        });
+      }
+      if (min < expectNext) {
+        if (!overlapSeen) {
+          errors.push({
+            path: `/dungeons/${i}/layers/${j}/floor`,
+            keyword: 'duplicate',
+            message: `层段 ${min}~${max} 与先行层表行重叠（同层歧义）`,
+          });
+          overlapSeen = true;
+        }
+        continue;
+      }
+      if (min > expectNext && expectNext <= dungeon.floors) {
+        gaps.push(`${expectNext}~${Math.min(min - 1, dungeon.floors)}`);
+      }
+      expectNext = Math.max(expectNext, max + 1);
+    }
+    if (expectNext <= dungeon.floors) {
+      gaps.push(`${expectNext}~${dungeon.floors}`);
+    }
+    if (gaps.length > 0) {
+      errors.push({
+        path: at('layers'),
+        keyword: 'shape',
+        message: `层表未覆盖全部层数（生命周期覆盖缺口：${gaps.join('、')}）`,
+      });
     }
   });
 }

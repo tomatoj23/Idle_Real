@@ -75,6 +75,14 @@ import {
   type AggregationContext,
   type Contribution,
 } from './modifiers.js';
+import {
+  dungeonFloorEnemyOf,
+  dungeonGateOf,
+  dungeonLayerOf,
+  findDungeon,
+  pickDungeonEnemyOf,
+  type DungeonView,
+} from './dungeon.js';
 
 export interface CreateGameOptions {
   /** 由 content 包校验过的内容包；引擎零内容感知，仅透明持有。 */
@@ -597,11 +605,89 @@ export function createGame(options: CreateGameOptions): Game {
     events.emit({ type: 'combat-note', time, data: enemyId ? { text, enemyId } : { text } });
   }
 
+  /* ---------- 秘境（#7）：层序列战斗复用既有战斗状态机 ---------- */
+
+  /** 秘境感知的敌人解析：层表倍率投影（dungeonFloorEnemyOf 单一来源）；脱境 = 敌人定义原值。 */
+  function resolveEnemy(enemyId: string): EnemyView | undefined {
+    const run = state.dungeon;
+    if (!run) return findEnemy(content, enemyId);
+    return dungeonFloorEnemyOf(content, run.dungeonId, run.floor, enemyId);
+  }
+
+  /** 进入指定层：加权抽敌 → 以层倍率投影的气血开战（战斗状态机与解算零分叉）。 */
+  function enterDungeonFloor(dungeon: DungeonView, floor: number): boolean {
+    const enemy = pickDungeonEnemyOf(content, dungeon, floor, random);
+    if (!enemy) return false;
+    const scaled = dungeonFloorEnemyOf(content, dungeon.id, floor, enemy.id) ?? enemy;
+    state.combat = {
+      enemyId: scaled.id,
+      ehp: scaled.hp,
+      pt: 0,
+      et: 0,
+      respT: 0,
+      rounds: 0,
+      crits: 0,
+      tiers: { light: 0, mid: 0, heavy: 0, deadly: 0 },
+    };
+    emitNote(noteFrom('start', { enemy: scaled.name }), scaled.id);
+    return true;
+  }
+
+  /** 离境结算（#7）：清攻略 + dungeon:leave 事件（最高层已随进层实时登记）。 */
+  function leaveDungeon(): void {
+    const run = state.dungeon;
+    if (!run) return;
+    state.dungeon = null;
+    const dungeon = findDungeon(content, run.dungeonId);
+    events.emit({
+      type: 'dungeon:leave',
+      time,
+      data: {
+        dungeonId: run.dungeonId,
+        dungeonName: dungeon?.name ?? run.dungeonId,
+        floor: run.floor,
+        best: Math.max(state.dungeonBest[run.dungeonId] ?? 0, run.floor),
+      },
+    });
+  }
+
+  /**
+   * 秘境层推进（胜利休整到期消费，#7）：顶层已清 → 通关离境；否则层号 +1、
+   * 登记最高层、抽敌开战下一层。层奖励已在 victory 入账（dungeon:floor），
+   * 此处只决定去留；层表空/敌人全缺失 = 防御离境（绝不抛错卡死）。
+   */
+  function advanceDungeonFloor(): void {
+    const run = state.dungeon;
+    if (!run) return;
+    const dungeon = findDungeon(content, run.dungeonId);
+    if (!dungeon) {
+      state.dungeon = null; // 内容包已变更：安全弃置
+      return;
+    }
+    if (run.floor >= dungeon.floors) {
+      state.dungeon = null;
+      events.emit({
+        type: 'dungeon:clear',
+        time,
+        data: { dungeonId: dungeon.id, dungeonName: dungeon.name, floors: dungeon.floors },
+      });
+      stopCombat(noteFrom('retreatVictory'));
+      return;
+    }
+    run.floor += 1;
+    state.dungeonBest[run.dungeonId] = Math.max(state.dungeonBest[run.dungeonId] ?? 0, run.floor);
+    if (!enterDungeonFloor(dungeon, run.floor)) {
+      state.dungeon = null;
+      stopCombat();
+    }
+  }
+
   function stopCombat(note?: string): void {
     const c = state.combat;
     if (!c) return;
     state.combat = null;
     emitNote(note ?? noteFrom('retreat'), c.enemyId);
+    leaveDungeon(); // 秘境攻略随战团散去（#7：撤退/退避/转赴修行一律离境）
   }
 
   /** 玩家一击：暴击 roll → 伤害 → 伤害档累计 → 文案 → 胜负判定。 */
@@ -746,6 +832,49 @@ export function createGame(options: CreateGameOptions): Game {
         ...(compare !== undefined ? { compare } : {}),
       },
     });
+
+    // 秘境层奖励（#7）：层表 rewards 逐项入账 + dungeon:floor 事件；
+    // 道韵双键同律（daoYunEarned 只增不减——花掉不回锁，深层秘境供养兵解）。
+    if (state.dungeon) {
+      const run = state.dungeon;
+      const dungeon = findDungeon(content, run.dungeonId);
+      const rewards = dungeon ? dungeonLayerOf(dungeon, run.floor)?.rewards : undefined;
+      const goldReward =
+        typeof rewards?.gold === 'number' && Number.isFinite(rewards.gold) && rewards.gold > 0
+          ? Math.floor(rewards.gold)
+          : 0;
+      if (goldReward > 0) state.gold += goldReward;
+      const items: Record<string, number> = {};
+      for (const stack of rewards?.items ?? []) {
+        const count = stack?.count;
+        if (typeof stack?.item === 'string' && typeof count === 'number' && Number.isFinite(count) && count > 0) {
+          addItem(stack.item, Math.floor(count));
+          items[stack.item] = (items[stack.item] ?? 0) + Math.floor(count);
+        }
+      }
+      const rawDaoYun = rewards?.daoYun;
+      const daoYunReward =
+        typeof rawDaoYun === 'number' && Number.isFinite(rawDaoYun) && rawDaoYun > 0
+          ? Math.floor(rawDaoYun)
+          : 0;
+      if (daoYunReward > 0) {
+        state.daoYun += daoYunReward;
+        state.daoYunEarned += daoYunReward;
+      }
+      events.emit({
+        type: 'dungeon:floor',
+        time,
+        data: {
+          dungeonId: run.dungeonId,
+          dungeonName: dungeon?.name ?? run.dungeonId,
+          floor: run.floor,
+          floors: dungeon?.floors ?? 0,
+          gold: goldReward,
+          daoYun: daoYunReward,
+          items,
+        },
+      });
+    }
   }
 
   /** 落败：残血被救回，对照记录 won=false（「前番不敌」的基准）。 */
@@ -754,6 +883,7 @@ export function createGame(options: CreateGameOptions): Game {
     state.hp = Math.max(1, Math.round(maxHp * cparams.lowHpFraction));
     state.combat = null;
     state.lastEncounter[enemy.id] = { rounds: c.rounds, won: false, at: time };
+    leaveDungeon(); // 秘境败退：攻略作废，最高层记录保留（#7）
     events.emit({
       type: 'defeat',
       time,
@@ -771,9 +901,10 @@ export function createGame(options: CreateGameOptions): Game {
     let guard = 0;
     while (remaining > 0 && state.combat && guard++ < 1_000_000) {
       const c = state.combat;
-      const enemy = findEnemy(content, c.enemyId);
+      const enemy = resolveEnemy(c.enemyId);
       if (!enemy) {
         state.combat = null; // 内容包已变更：安全弃置
+        leaveDungeon(); // 秘境层敌失引用：连攻略一并自愈（防孤儿锁死 enter/combat:start）
         return;
       }
       if (c.respT > 0) {
@@ -781,6 +912,16 @@ export function createGame(options: CreateGameOptions): Game {
         c.respT -= step;
         remaining -= step;
         if (c.respT <= 0) {
+          if (state.dungeon) {
+            // 秘境推进（#7）：残血退避同律（挂机不送死，离境保留最高层），
+            // 否则自动进入下一层——层序列与 autoFight 开关无关（爬塔即挂机）。
+            if (state.hp < playerStats(hpContext()).maxHp * cparams.lowHpFraction) {
+              stopCombat(noteFrom('retreatWounded'));
+              return;
+            }
+            advanceDungeonFloor();
+            continue;
+          }
           if (state.autoFight) {
             // 自动再战前复查气血：残血且无自动补给时退避（挂机不送死）。
             if (state.hp < playerStats(hpContext()).maxHp * cparams.lowHpFraction) {
@@ -840,6 +981,7 @@ export function createGame(options: CreateGameOptions): Game {
   function settleOffline(elapsedMs: number): void {
     if (elapsedMs <= 0) return;
     if (state.combat) state.combat = null; // 离线不可战斗：视作离场休整，回满血由下方统一处理
+    if (state.dungeon) state.dungeon = null; // 秘境不可离线续跑：就地离境（最高层已随进层登记，#7）
     // 离线上限（offlineCap 消费点，#6）：Σflat 毫秒，≤ 0 = 不设限（基线行为
     // 完全一致）；超限部分不入账（上限的语义本体）。
     const cap = offlineCapOf(playerContributions());
@@ -1262,6 +1404,11 @@ export function createGame(options: CreateGameOptions): Game {
             reject(action.type, 'rebirth-locked', { daoYun: String(rGate.requiredDaoYun) });
             return;
           }
+          // 秘境进行中不可接野战（#7）：层序列战斗在身，先撤退离境再言斗法。
+          if (state.dungeon) {
+            reject(action.type, 'in-dungeon');
+            return;
+          }
           if (state.combat?.enemyId === enemyId) return; // 幂等
           if (state.hp < playerStats(hpContext()).maxHp * cparams.lowHpFraction) {
             reject(action.type, 'low-hp');
@@ -1302,6 +1449,83 @@ export function createGame(options: CreateGameOptions): Game {
 
         case 'combat:auto-eat': {
           state.autoEat = !state.autoEat;
+          return;
+        }
+
+        case 'dungeon:enter': {
+          // 秘境入门（#7）：定义 → 幂等/互斥 → 门控（道韵/钥匙，判定与 UI 同源
+          // dungeonGateOf）→ 气血门控 → 清活动 → 自第 1 层开战（进层即登记最高层）。
+          const payload = action.payload as { dungeonId?: unknown } | undefined;
+          const dungeonId = payload?.dungeonId;
+          if (typeof dungeonId !== 'string') {
+            reject(action.type, 'bad-payload');
+            return;
+          }
+          const dungeon = findDungeon(content, dungeonId);
+          if (!dungeon) {
+            reject(action.type, 'not-found');
+            return;
+          }
+          if (state.dungeon) {
+            reject(action.type, 'in-dungeon');
+            return;
+          }
+          if (state.combat) {
+            reject(action.type, 'in-combat');
+            return;
+          }
+          const gate = dungeonGateOf(content, dungeonId, {
+            daoYunEarned: state.daoYunEarned,
+            items: state.items,
+          });
+          if (gate.locked) {
+            // 锁因归一走 gate.daoYunLocked（单一来源，UI 锁定态同调）。
+            if (gate.daoYunLocked) {
+              reject(action.type, 'locked', { daoYun: String(gate.requiredDaoYun) });
+            } else {
+              const keyName = findItem(content, gate.keyItem ?? '')?.name ?? gate.keyItem ?? '';
+              reject(action.type, 'no-key', { item: keyName });
+            }
+            return;
+          }
+          if (state.hp < playerStats(hpContext()).maxHp * cparams.lowHpFraction) {
+            reject(action.type, 'low-hp');
+            return;
+          }
+          if (state.activity) {
+            const act = state.activity;
+            state.activity = null; // 秘境与采集互斥（与 combat:start 同律）
+            events.emit({
+              type: 'activity-stop',
+              time,
+              data: { skillId: act.skillId, activityName: act.name },
+            });
+          }
+          state.dungeon = { dungeonId: dungeon.id, floor: 1 };
+          state.dungeonBest[dungeon.id] = Math.max(state.dungeonBest[dungeon.id] ?? 0, 1);
+          if (!enterDungeonFloor(dungeon, 1)) {
+            // 层表空/敌人全缺失：防御离境（包校验已拦，引擎不崩）
+            state.dungeon = null;
+            reject(action.type, 'no-layer');
+            return;
+          }
+          events.emit({
+            type: 'dungeon:enter',
+            time,
+            data: { dungeonId: dungeon.id, dungeonName: dungeon.name, floor: 1, floors: dungeon.floors },
+          });
+          return;
+        }
+
+        case 'dungeon:leave': {
+          // 撤退离境（#7）：战斗在身走 stopCombat（撤退 note + dungeon:leave）；
+          // 无战斗（异常态防御）直接清攻略。未在秘境 = 幂等。
+          if (!state.dungeon) return;
+          if (state.combat) {
+            stopCombat();
+          } else {
+            leaveDungeon();
+          }
           return;
         }
 
@@ -1428,6 +1652,7 @@ export function createGame(options: CreateGameOptions): Game {
           state.rebirths += 1;
           state.activity = null; // 散功：进度一并弃置（结算事件承载体，不另发 activity-stop）
           state.combat = null;
+          state.dungeon = null; // 攻略作废（瞬态）；dungeonBest 为记录资产，default-keep 长存（#7）
           state.hp = hpCap(); // 新一世气血回满（上限已随重置/天赋重算）
           events.emit({
             type: 'rebirth',
