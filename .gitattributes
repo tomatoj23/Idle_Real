@@ -1,0 +1,2 @@
+# 钩子脚本必须 LF：CRLF 会破坏 shebang/行尾（Git Bash 报 bad interpreter 或 $'\r' 错）
+.githooks/** text eol=lf
