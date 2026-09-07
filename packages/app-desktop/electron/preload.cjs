@@ -5,7 +5,7 @@
  * 暴露面（window.wendao）：
  * - mode：平台模式（'mock' | 'steam'），preload 求值期同步取得；
  * - loadSave/flushSave：同步 IPC（启动一次性读档 / 关闭即保存兜底）；
- * - saveSave / reportAchievement：异步 send（周期自动保存 / 成就上报管道）。
+ * - writeSave / reportAchievement：异步 send（周期自动保存 / 成就上报管道）。
  */
 const { contextBridge, ipcRenderer } = require('electron');
 
