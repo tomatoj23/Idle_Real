@@ -532,7 +532,8 @@
         "shop": "坊市",
         "rebirth": "转生",
         "talents": "道韵",
-        "dungeon": "秘境"
+        "dungeon": "秘境",
+        "achievements": "成就"
       },
       "side": { "title": "修行录" },
       "stats": {
@@ -594,7 +595,9 @@
         "dungeonDaoYun": "，道韵 +{daoYun}",
         "dungeonClear": "【{name}】通贯 {floors} 层，满载而归！",
         "dungeonLeave": "退出【{name}】：止步第 {floor} 层，最深曾至第 {best} 层",
-        "bossPhase": "【{enemy}】显露「{name}」之相！（阶段 {phase}）"
+        "bossPhase": "【{enemy}】显露「{name}」之相！（阶段 {phase}）",
+        "achievementToast": "成就达成【{name}】！",
+        "achievementLog": "成就达成【{name}】"
       },
       "pages": {
         "skills": {
@@ -714,6 +717,28 @@
           "retreatBtn": "撤退出秘境",
           "entryKey": "需持「{item}」",
           "clearBadge": "已通关"
+        },
+        "achievements": {
+          "title": "成就",
+          "subtitle": "已解锁 {unlocked}/{total}",
+          "empty": "此界并无成就。",
+          "statsTitle": "修行统计",
+          "statLabels": {
+            "kills": "斩妖",
+            "deaths": "败绩",
+            "rebirths": "兵解",
+            "cycles": "劳作",
+            "dungeonFloorBest": "最深秘境",
+            "maxHit": "最大一击",
+            "fastestKill": "最快击杀（合）"
+          },
+          "hiddenName": "？？？",
+          "hiddenDesc": "此乃隐藏成就，达成之时自会揭晓。",
+          "unlockedBadge": "已达成",
+          "progress": "{current}/{target}",
+          "rewardGold": "灵石 +{gold}",
+          "rewardDaoYun": "道韵 +{daoYun}",
+          "rewardItems": "{items}"
         }
       }
     }
@@ -809,5 +834,95 @@
       { "level": 80, "name": "合体期" },
       { "level": 93, "name": "大乘期" }
     ]
-  }
+  },
+  "achievements": [
+    {
+      "id": "kill_100",
+      "name": "百战妖氛",
+      "icon": "战",
+      "description": "累计斩杀一百只妖物。",
+      "condition": { "stat": "kills", "target": 100 },
+      "reward": { "gold": 200 }
+    },
+    {
+      "id": "kill_1000",
+      "name": "千妖斩尽",
+      "icon": "斩",
+      "description": "累计斩杀一千只妖物。",
+      "condition": { "stat": "kills", "target": 1000 },
+      "reward": { "gold": 1200, "items": [{ "item": "core3", "count": 2 }] }
+    },
+    {
+      "id": "fast_kill_3",
+      "name": "三合速胜",
+      "icon": "疾",
+      "description": "三合之内击倒一只妖物。",
+      "condition": { "stat": "fastestKill", "op": "lte", "target": 3 },
+      "reward": { "gold": 150 }
+    },
+    {
+      "id": "max_hit_100",
+      "name": "一击破百",
+      "icon": "破",
+      "description": "单次攻击造成一百点伤害。",
+      "condition": { "stat": "maxHit", "target": 100 },
+      "reward": { "items": [{ "item": "core1", "count": 5 }] }
+    },
+    {
+      "id": "max_hit_500",
+      "name": "一击破五百",
+      "icon": "钧",
+      "description": "单次攻击造成五百点伤害。",
+      "condition": { "stat": "maxHit", "target": 500 },
+      "reward": { "gold": 800 }
+    },
+    {
+      "id": "first_death",
+      "name": "败中求生",
+      "description": "第一次不敌妖物，仍被救回。",
+      "hidden": true,
+      "condition": { "stat": "deaths" },
+      "reward": { "gold": 50 }
+    },
+    {
+      "id": "cycles_100",
+      "name": "百炼成艺",
+      "icon": "艺",
+      "description": "累计完成一百轮采集或炼制。",
+      "condition": { "stat": "cycles", "target": 100 },
+      "reward": { "items": [{ "item": "consumable_heal", "count": 10 }] }
+    },
+    {
+      "id": "dungeon_floor_5",
+      "name": "妖窟深入",
+      "icon": "窟",
+      "description": "在秘境中抵达第五层。",
+      "condition": { "stat": "dungeonFloorBest", "target": 5 },
+      "reward": { "gold": 300 }
+    },
+    {
+      "id": "dungeon_floor_15",
+      "name": "鬼庙镇魂",
+      "icon": "庙",
+      "description": "在秘境中抵达第十五层。",
+      "condition": { "stat": "dungeonFloorBest", "target": 15 },
+      "reward": { "daoYun": 20 }
+    },
+    {
+      "id": "rebirth_1",
+      "name": "兵解初悟",
+      "icon": "解",
+      "description": "完成第一次兵解重修。",
+      "condition": { "stat": "rebirths", "target": 1 },
+      "reward": { "daoYun": 5 }
+    },
+    {
+      "id": "rebirth_10",
+      "name": "十世道行",
+      "icon": "世",
+      "description": "累计历经十世兵解。",
+      "condition": { "stat": "rebirths", "target": 10 },
+      "reward": { "daoYun": 30 }
+    }
+  ]
 }

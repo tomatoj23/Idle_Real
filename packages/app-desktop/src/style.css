@@ -534,3 +534,31 @@ body {
 .talent-desc { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
 .talent-card.owned { border-color: var(--border-gold); box-shadow: 0 0 12px rgba(224, 200, 143, 0.08); }
 .talent-card.owned header b { color: var(--gold); }
+
+/* ---------- 成就页（#9）：统计区 + 成就卡 ---------- */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.stat-box {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 8px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.02);
+}
+.stat-box b {
+  display: block;
+  font-family: var(--serif);
+  font-size: 18px;
+  color: var(--gold);
+}
+.stat-box span { color: var(--muted); font-size: 12px; }
+
+.ach-card.owned { border-color: var(--border-gold); box-shadow: 0 0 12px rgba(224, 200, 143, 0.08); }
+.ach-card.owned header b { color: var(--gold); }
+.ach-card.locked { opacity: 0.72; }
+.ach-reward { color: var(--gold-dim); }

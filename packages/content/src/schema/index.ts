@@ -14,6 +14,9 @@ export { validateContentPack, formatContentErrors } from './pack.js';
 export type { PackValidationResult } from './pack.js';
 
 export type {
+  AchievementCondition,
+  AchievementDef,
+  AchievementReward,
   Activity,
   Affinities,
   AffixDef,

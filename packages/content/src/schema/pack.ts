@@ -47,6 +47,7 @@
  */
 
 import affixPoolSchemaJson from './affix-pool.schema.json';
+import achievementsSchemaJson from './achievements.schema.json';
 import bossSchemaJson from './boss.schema.json';
 import combatTextSchemaJson from './combat-text.schema.json';
 import configSchemaJson from './config.schema.json';
@@ -66,6 +67,7 @@ import type {
   Config,
   ContentPack,
   DungeonDef,
+  AchievementDef,
   Item,
   Modifier,
   ModifierCondition,
@@ -92,6 +94,7 @@ const configSchema = configSchemaJson as unknown as JsonSchema;
 const rebirthSchema = rebirthSchemaJson as unknown as JsonSchema;
 const dungeonSchema = dungeonSchemaJson as unknown as JsonSchema;
 const bossSchema = bossSchemaJson as unknown as JsonSchema;
+const achievementsSchema = achievementsSchemaJson as unknown as JsonSchema;
 
 /** 内容节 → 该节值的独立 schema。 */
 const SECTION_SCHEMAS = {
@@ -110,6 +113,7 @@ const SECTION_SCHEMAS = {
   rebirth: rebirthSchema,
   dungeons: dungeonSchema,
   bosses: bossSchema,
+  achievements: achievementsSchema,
 } as const;
 
 type SectionName = keyof typeof SECTION_SCHEMAS;
@@ -117,7 +121,13 @@ type SectionName = keyof typeof SECTION_SCHEMAS;
 const SECTION_NAMES = Object.keys(SECTION_SCHEMAS) as readonly SectionName[];
 
 /** 可选内容节：缺省合法（引擎安全兜底），存在则整节强校验。 */
-const OPTIONAL_SECTIONS: ReadonlySet<SectionName> = new Set(['config', 'rebirth', 'dungeons', 'bosses']);
+const OPTIONAL_SECTIONS: ReadonlySet<SectionName> = new Set([
+  'config',
+  'rebirth',
+  'dungeons',
+  'bosses',
+  'achievements',
+]);
 
 export type PackValidationResult =
   | { readonly ok: true; readonly pack: ContentPack }
@@ -213,6 +223,9 @@ function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
 
   // 秘境节（#7）：可选节，存在则查 id 去重、钥匙/敌人/奖励 xref、生命周期覆盖。
   checkDungeons(pack.dungeons ?? [], enemyIndex, itemIndex, errors);
+
+  // 成就节（#9）：可选节，存在则查 id 去重、统计键域闭集、奖励物品 xref。
+  checkAchievements(pack.achievements ?? [], itemIndex, errors);
 
   checkPrototypes(pack.skills, '/skills', errors);
   checkPrototypes(pack.items, '/items', errors);
@@ -951,6 +964,65 @@ function checkBosses(
     }
   });
   return moveKeys;
+}
+
+/* ==================== 成就节（#9） ==================== */
+
+/**
+ * 引擎统计键注册表镜像（#9，与 engine src/stats.ts STAT_KEYS 同值闭集；
+ * REBIRTH_RESET_KEYS 先例：schema 只钉键形态，键域合法性在语义层收口）。
+ * 条件 stat 引用未登记键 = 死条件（引擎永不累积该键），加载期大声拒绝。
+ */
+const STAT_KEYS: ReadonlySet<string> = new Set([
+  'kills',
+  'deaths',
+  'rebirths',
+  'cycles',
+  'dungeonFloorBest',
+  'maxHit',
+  'fastestKill',
+]);
+
+/**
+ * 成就节语义检查（#9，可选节，存在才查）：
+ * - id 去重（state.achievements 存档键）；
+ * - 条件 stat 须命中引擎统计注册表（闭集镜像）；
+ * - 奖励物品 xref items（装备实例走掉落/炼制管线，奖励只入袋 mat/consumable）。
+ */
+function checkAchievements(
+  achievements: readonly AchievementDef[],
+  items: ReadonlyMap<string, number>,
+  errors: ContentError[],
+): void {
+  pushDuplicates(achievements, '/achievements', errors);
+  achievements.forEach((achievement, i) => {
+    const at = (field: string) => `/achievements/${i}/${field}`;
+    if (!STAT_KEYS.has(achievement.condition.stat)) {
+      errors.push({
+        path: at('condition/stat'),
+        keyword: 'xref',
+        message: `统计键 "${achievement.condition.stat}" 不在引擎统计注册表（${[...STAT_KEYS].join('/')}）`,
+      });
+    }
+    // 布尔型（无 target）声明 op = 语义歧义（引擎静默忽略，作者误以为反向阈值生效）：
+    // 加载期大声拒绝，堵校验缝隙（双轴评审 spec(c)4）。
+    if (achievement.condition.target === undefined && achievement.condition.op !== undefined) {
+      errors.push({
+        path: at('condition/op'),
+        keyword: 'shape',
+        message: '布尔型条件（无 target）不应声明 op（比较方向仅对阈值型有意义）',
+      });
+    }
+    for (const [j, stack] of (achievement.reward?.items ?? []).entries()) {
+      if (!items.has(stack.item)) {
+        errors.push({
+          path: at(`reward/items/${j}/item`),
+          keyword: 'xref',
+          message: `奖励物品 "${stack.item}" 不存在于 items`,
+        });
+      }
+    }
+  });
 }
 
 /* ==================== 转生节（#6） ==================== */

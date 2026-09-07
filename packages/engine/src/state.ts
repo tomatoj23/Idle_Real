@@ -24,6 +24,7 @@ import { findDungeon } from './dungeon.js';
 import { type Affix, type GearInstance, type Rarity } from './gear.js';
 import type { DamageTier, EncounterRecord, RoundTally } from './combat.js';
 import type { Contribution } from './modifiers.js';
+import { restoreStats, type StatSnapshot } from './stats.js';
 
 export interface SkillProgress {
   xp: number;
@@ -108,12 +109,17 @@ export interface GameState {
   dungeon: DungeonState | null;
   /** 秘境历史最高到达层：秘境 id → 层号（记录资产，兵解 default-keep，#7）。 */
   dungeonBest: Record<string, number>;
+  /** 事件流累积统计（#9）：stat 键 = 引擎注册表闭集（records 资产，兵解 default-keep）。 */
+  stats: StatSnapshot;
+  /** 已解锁成就 id（内容包 achievements 稳定引用，ADR-015；记录资产，兵解 default-keep）。 */
+  achievements: string[];
 }
 
 const RESERVED_KEYS = new Set([
   'gold', 'hp', 'items', 'skills', 'activity', 'rngSeed',
   'gear', 'gearSeq', 'equips', 'buffs', 'combat', 'autoFight', 'autoEat', 'lastEncounter',
   'rebirths', 'daoYun', 'daoYunEarned', 'talents', 'dungeon', 'dungeonBest',
+  'stats', 'achievements',
 ]);
 
 export function initialState(
@@ -148,6 +154,8 @@ export function initialState(
     talents: [],
     dungeon: null,
     dungeonBest: {},
+    stats: {},
+    achievements: [],
   };
 }
 
@@ -289,6 +297,21 @@ export function restoreState(
         if (typeof id === 'string' && id.length > 0 && !seen.has(id)) {
           seen.add(id);
           state.talents.push(id);
+        }
+      }
+    }
+
+    // —— 统计快照（#9）：键域收口 + 数值钳非负整数（records 资产，default-keep）。
+    state.stats = restoreStats(raw.stats);
+
+    // —— 已解锁成就（#9）：id 稳定引用（ADR-15 同 talents 策略），逐项去重保序；
+    // 内容包已移除的成就 id 原样保留（换包回装不重触发，解锁一次且仅一次）。
+    if (Array.isArray(raw.achievements)) {
+      const seen = new Set<string>();
+      for (const id of raw.achievements) {
+        if (typeof id === 'string' && id.length > 0 && !seen.has(id)) {
+          seen.add(id);
+          state.achievements.push(id);
         }
       }
     }
@@ -444,5 +467,7 @@ export function cloneState(state: GameState): GameState {
     talents: [...state.talents],
     dungeon: state.dungeon ? { ...state.dungeon } : null,
     dungeonBest: { ...state.dungeonBest },
+    stats: { ...state.stats },
+    achievements: [...state.achievements],
   };
 }

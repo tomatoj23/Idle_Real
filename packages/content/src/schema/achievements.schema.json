@@ -1,0 +1,103 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AchievementsSection",
+  "description": "content 包 achievements 节（#9 成就与统计）：成就表本体——条件（阈值型/布尔型/反向阈值）、奖励、隐藏成就全部来自本节，换包即换成就（引擎零改动，票面验收 ②）。本节在包级校验中可选：省略 = 该题材无成就玩法（引擎零降级路径，壳不渲染成就页签）。判定只读引擎事件流累积的统计 snapshot（stat 键 = 引擎注册表闭集，键域合法性由语义校验对照注册表收口——REBIRTH_RESET_KEYS 先例），与平台（Steam）解耦。id 一经发布不可变（state.achievements 存档键，ADR-015）；解锁由引擎幂等保证（一次且仅一次）。",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id", "name", "condition"],
+    "additionalProperties": false,
+    "description": "成就条目：id 去重（语义检查，state.achievements 存档键）；奖励可选（缺省 = 无奖励纯荣誉）；hidden 声明隐藏成就（解锁前壳以占位展示，引擎透传）",
+    "properties": {
+      "id": {
+        "type": "string",
+        "pattern": "^[a-z][a-zA-Z0-9_]*$",
+        "description": "成就 id：存档键（state.achievements），一经发布不可变；id 去重（语义检查）"
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 18,
+        "description": "成就名（unlock 事件载荷与壳卡片展示，content 数据直出）；上限按非 CJK 等义文本放宽（#027 先例）"
+      },
+      "icon": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2,
+        "description": "单字图标（可选）"
+      },
+      "description": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 60,
+        "description": "成就描述（可选；达成条件的题材表述）"
+      },
+      "hidden": {
+        "type": "boolean",
+        "description": "隐藏成就：true 时壳在解锁前以占位文案展示（不剧透条件）"
+      },
+      "condition": {
+        "type": "object",
+        "required": ["stat"],
+        "additionalProperties": false,
+        "description": "达成条件（判定只读统计 snapshot）：target 缺省 = 布尔型（stat 有记录且 > 0）；target 存在时 op 缺省 gte（stat ≥ target，进度条按比值投影）、op=lte 为反向阈值（stat ≤ target，进度条按反比投影——最快击杀类）",
+        "properties": {
+          "stat": {
+            "type": "string",
+            "pattern": "^[a-z][a-zA-Z0-9_]*$",
+            "description": "统计键（引擎注册表闭集：kills/deaths/rebirths/cycles/dungeonFloorBest/maxHit/fastestKill，语义校验收口）"
+          },
+          "target": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "阈值（布尔型省略）；gte/lte 共用同一正整数语义"
+          },
+          "op": {
+            "enum": ["gte", "lte"],
+            "description": "比较方向：gte = stat ≥ target（缺省）；lte = stat ≤ target（min 累积统计如 fastestKill）"
+          }
+        }
+      },
+      "reward": {
+        "type": "object",
+        "minProperties": 1,
+        "additionalProperties": false,
+        "description": "解锁奖励（可选；引擎入账并随 achievement:unlock 事件承载）：items 只引用 mat/consumable 类物品（装备实例走掉落/炼制管线，不入袋）",
+        "properties": {
+          "gold": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "灵石奖励"
+          },
+          "daoYun": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "道韵奖励（余额 + 累计双键同入账，与转生/秘境同律）"
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "description": "物品奖励（items xref，语义校验）",
+            "items": {
+              "type": "object",
+              "required": ["item", "count"],
+              "additionalProperties": false,
+              "properties": {
+                "item": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "物品 id（xref items）"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "数量"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

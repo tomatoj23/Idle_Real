@@ -25,6 +25,7 @@ engine `EnemyView` 未投影，靠 #15 票驱动补齐）。
 | `rebirth` | **否** | rebirth.schema.json | 转生系统（#6）：重置/保留清单 + 道韵公式 + 天赋树 + 解锁表 + 境界词表；省略 = 无转生玩法（引擎零降级路径，壳不渲染转生页签） |
 | `dungeons` | **否** | dungeon.schema.json | 秘境分层爬塔（#7）：秘境定义 + 层表（敌人权重/层数倍率/层奖励/推荐战力软提示）+ 进入条件（道韵/钥匙）；省略 = 无秘境玩法（引擎零降级路径，壳不渲染秘境页签） |
 | `bosses` | **否** | boss.schema.json | Boss 战阶段脚本（#8）：敌人条目 + 阶段数组（阈值/阶段名/属性修正/变招/叙事）+ 专属掉落表；省略 = 无 Boss 玩法（全部敌人按普通敌人战斗，零降级路径） |
+| `achievements` | **否** | achievements.schema.json | 成就表（#9）：条件（阈值型/布尔型/反向阈值）+ 奖励（gold/daoYun/items）+ 隐藏；判定只读引擎统计 snapshot；省略 = 无成就玩法（壳不渲染成就页签） |
 
 ## items 五形态（#16 起 oneOf 分流，判别式 = `type`）
 
@@ -190,7 +191,7 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 | `basicName` | string（1~18 字，#027 按 CJK 密度假设放宽） | 无佩戴武器时的兵刃展示名（weaponName 槽兜底值） |
 | `reject` | 动作协议键 → 理由 code → 文案模板 | 展示文案映射。动作键域 schema 钉死：activity:start / bag:sell / shop:buy / combat:start / consumable:eat / dungeon:enter（#7）/ gear:equip / gear:sell / rebirth:perform / talent:buy（#6）/ `'*'`（跨动作兜底，bad-payload 等通用文案）；理由 code 键域开放 |
 | `reject` 槽位 | `{level}` `{activity}` `{item}` `{owned}` `{cost}` `{gold}` `{daoYun}` `{need}` `{xp}` | 由引擎按协议语境填入； combat:start 的 `{level}` = `enemy.level − 门控偏移`（偏移量只在引擎判定处单一来源，文案侧零副本——N1 文案侧裁决）；rebirth:perform 的 no-progress 带 `{need}/{xp}`、rebirth-locked 与 talent:buy 的 no-daoyun 带 `{daoYun}`/`{cost}`；dungeon:enter 的 locked 带 `{daoYun}`、no-key 带 `{item}`（#7） |
-| `shell`（#26） | ShellTexts 结构化节 | **壳层全部题材文案**（ADR-017 裁决 9：壳零题材字符串）：brand（sigil/name/locale/bootError）、topbar、tabs、side、stats.labels、units、icons、common、events（38 键，#8 起含 bossPhase）、pages（skills/craft/combat/dungeon/bag/shop/rebirth/talents，#7 起八页）。schema required + additionalProperties:false 全程钉死 |
+| `shell`（#26） | ShellTexts 结构化节 | **壳层全部题材文案**（ADR-017 裁决 9：壳零题材字符串）：brand（sigil/name/locale/bootError）、topbar、tabs、side、stats.labels、units、icons、common、events（40 键，#9 起含 achievementToast/achievementLog）、pages（skills/craft/combat/dungeon/bag/shop/rebirth/talents/achievements，#9 起九页）。schema required + additionalProperties:false 全程钉死 |
 
 - 命中序：精确动作 → `'*'` → **键名回显**（`{action}/{reason}`，防御可见）。
 - 协议 code 本体归引擎，本节只承载展示文案；code 未命中/缺节绝不崩，toast
@@ -217,7 +218,7 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
   clear/leave 事件的 dungeonEnter/dungeonFloor/dungeonDaoYun/dungeonClear/
   dungeonLeave）；
   `pages.*` 键 = 壳 TabId 协议面（skills/craft/combat/dungeon/bag/shop/rebirth/
-  talents，#5 起五页、#6 起七页、#7 起八页）；
+  talents/achievements，#5 起五页、#6 起七页、#7 起八页、#9 起九页）；
   `units.*` 承载层级/时长读数的单位模板（`{v}` 数值、`{m}` 分、`{h}` 时）；
   `topbar.*Sigil` 承载顶栏资源图章字；`common.itemListSep` 为物品名列表
   分隔符（掉落预览/离线产出共用）；`pages.combat.selfStats` 的属性行数值
@@ -482,6 +483,71 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 - 事件：`boss:phase`（`{enemyId, enemyName, phase: 1 起序号, name: 阶段名}`）；
 - UI 呈现：阶段徽标（阶段名 content 直出）+ 血条分段刻度（刻度位置 =
   阈值），生效数值走 `combatEnemyView` 组合投影（秘境 × Boss 单点组合）。
+
+## achievements 成就节（#9：统计 snapshot 驱动）
+
+**可选节**：省略 = 该题材无成就玩法（引擎零降级路径，壳不渲染成就页签）。
+成就表 100% 来自 content：**换包即换成就，引擎零改动**（票面验收 ②）。
+判定只读引擎事件流累积的统计 snapshot（`state.stats`），与平台（Steam）解耦（票面设计约定）。
+
+```json
+"achievements": [
+  {
+    "id": "kill_100", "name": "百战妖氛", "icon": "战",
+    "description": "累计斩杀一百只妖物。",
+    "condition": { "stat": "kills", "target": 100 },
+    "reward": { "gold": 200 }
+  },
+  { "id": "fast_kill_3", "name": "三合速胜", "condition": { "stat": "fastestKill", "op": "lte", "target": 3 } },
+  { "id": "first_death", "name": "败中求生", "hidden": true, "condition": { "stat": "deaths" } }
+]
+```
+
+### 归属划界（ADR-017：机制归引擎，数据归 content）
+
+| 归 content | 归引擎 |
+|---|---|
+| 成就表本体（条件目标/奖励/隐藏/文案）、统计区呈现面（shell.statLabels） | 统计累积（事件流 → snapshot）、条件判定、进度投影、解锁幂等（一次且仅一次）、奖励入账 |
+
+### 字段约定
+
+| 字段 | 形态 | 约定 |
+|---|---|---|
+| `id` | string（`^[a-z][a-zA-Z0-9_]*$`） | 成就 id，**发布后不可变**：`state.achievements` 存档键（ADR-015）；id 去重（语义检查） |
+| `name` / `icon` / `description` | string（≤18 / ≤2 / ≤60 字） | 展示文案，unlock 事件载荷与壳卡片 content 数据直出 |
+| `hidden` | bool（可选） | 隐藏成就：解锁前壳以占位文案展示（不剧透条件），引擎透传 |
+| `condition.stat` | string | **统计键 = 引擎注册表闭集**（下表），键域合法性由语义校验对照镜像收口（REBIRTH_RESET_KEYS 先例），死条件加载期拒绝 |
+| `condition.target` | integer（≥ 1，可选） | 缺省 = 布尔型（stat 有记录且 > 0） |
+| `condition.op` | `gte`（缺省）/ `lte` | gte = stat ≥ target（进度按比值投影）；lte = stat ≤ target（反向阈值，进度按反比投影） |
+| `reward` | `{gold?, daoYun?, items?}`（可选） | 解锁奖励，引擎入账并随事件承载；`daoYun` 走余额+累计双键（与转生同律）；items 只引用 mat/consumable 类（xref items，装备实例走掉落/炼制管线不入袋） |
+
+### 引擎统计键注册表（闭集，单源于 engine `src/stats.ts` STAT_KEYS）
+
+| 键 | 累积语义 | 事件源 |
+|---|---|---|
+| `kills` | Σ 击杀数 | victory +1 |
+| `deaths` | Σ 落败数 | defeat +1 |
+| `rebirths` | Σ 兵解次数 | rebirth +1 |
+| `cycles` | Σ 采集/炼制轮数（在线/离线同路） | activity-complete +1 / offline-settled +cycles |
+| `dungeonFloorBest` | 历史最高到达秘境层（max） | dungeon:enter/floor/leave |
+| `maxHit` | 历史最大单次伤害（玩家侧，max） | attack(side=player) |
+| `fastestKill` | 最快击杀回合数（min；未击杀过 = 无记录） | victory(rounds) |
+
+- **持久语义**：`stats`/`achievements` 为记录资产，兵解 default-keep（未登记进
+  重置清单即保留，兵解不吞资产的既有约定）；
+- **解锁一次且仅一次**：引擎在 tick/dispatch/settleOffline 末尾统一评估，
+  `state.achievements` 成员幂等；存档往返/换包回装同 id 不重触发；
+- **壳零公式复算**：进度百分比由引擎 `achievementProgressOf` 投影（percent
+  0~100），统计区呈现面 = `texts.shell.pages.achievements.statLabels`
+  （键 = 上表闭集，包决定呈现哪些统计）。
+
+### 引擎事件与协议
+
+- 事件：`achievement:unlock`（`{id, name, gold?, daoYun?, items?}`，奖励入账承载体）；
+- 壳文案：`events.achievementToast/achievementLog`（槽位 `{name}`）+
+  `pages.achievements` 页面组（title/subtitle `{unlocked}/{total}`/statLabels/
+  hiddenName/hiddenDesc/unlockedBadge/progress `{current}/{target}`/
+  rewardGold/rewardDaoYun/rewardItems）。
 
 ## elements 系别键域注册表（#25 键域开放，ADR-017 裁决 8）
 

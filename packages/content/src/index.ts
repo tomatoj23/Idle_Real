@@ -20,6 +20,9 @@ export type {
 // 下面的类型清单与 src/schema/index.ts 保持一致（新增类型两处同步）：
 // 主入口刻意不复用 `export *`，以便导出面恒为纯协议、可被测试守卫断言。
 export type {
+  AchievementCondition,
+  AchievementDef,
+  AchievementReward,
   Activity,
   Affinities,
   AffixDef,

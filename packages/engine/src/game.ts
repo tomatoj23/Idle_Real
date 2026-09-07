@@ -84,6 +84,8 @@ import {
   type DungeonView,
 } from './dungeon.js';
 import { bossEnemyOf, findBossOf } from './bosses.js';
+import { applyStatsEvent } from './stats.js';
+import { achievementConditionMet, achievementsOf } from './achievements.js';
 
 export interface CreateGameOptions {
   /** 由 content 包校验过的内容包；引擎零内容感知，仅透明持有。 */
@@ -154,6 +156,9 @@ export function createGame(options: CreateGameOptions): Game {
     state.rngSeed = rng.state(); // 随机状态随档持久化（ADR-013）
     return value;
   };
+  // 统计累积（#9）：订阅自身事件总线，emit 即同步累积到 state.stats
+  //（监听器异常由 EventBus 吞掉；成就评估在 tick/dispatch/settleOffline 末尾统一进行）。
+  events.subscribe((event) => applyStatsEvent(state.stats, event));
   const hpCap = (): number => playerStats(hpContext()).maxHp;
   const xpOf = (skillId: string): number => state.skills[skillId]?.xp ?? 0;
   const levelOf = (skillId: string): number => levelFromXp(xpOf(skillId), pparams);
@@ -1033,11 +1038,49 @@ export function createGame(options: CreateGameOptions): Game {
   }
 
   /**
+   * 成就评估（#9）：按 content 包成就表对照统计 snapshot 判定。
+   * 解锁一次且仅一次（state.achievements 稳定引用幂等）；奖励（灵石/道韵/物品）
+   * 由引擎入账并随 achievement:unlock 事件承载（物品静默入袋，不重发 loot）。
+   * 消费点：tick/dispatch/settleOffline 末尾各评估一次——统计只在事件流中变化，
+   * 单次调用末评估即可覆盖全部增长点（离线只发单条 offline-settled 的契约不受影响）。
+   */
+  function evaluateAchievements(): void {
+    for (const def of achievementsOf(content)) {
+      if (state.achievements.includes(def.id)) continue;
+      if (!achievementConditionMet(def.condition, state.stats)) continue;
+      state.achievements.push(def.id);
+      const items: Record<string, number> = {};
+      if (def.reward) {
+        if (def.reward.gold !== undefined) state.gold += def.reward.gold;
+        if (def.reward.daoYun !== undefined) {
+          state.daoYun += def.reward.daoYun;
+          state.daoYunEarned += def.reward.daoYun; // 道韵双键同律（花掉不回锁）
+        }
+        for (const stack of def.reward.items ?? []) {
+          addItem(stack.item, stack.count);
+          items[stack.item] = (items[stack.item] ?? 0) + stack.count;
+        }
+      }
+      events.emit({
+        type: 'achievement:unlock',
+        time,
+        data: {
+          id: def.id,
+          name: def.name,
+          ...(def.reward?.gold !== undefined ? { gold: def.reward.gold } : {}),
+          ...(def.reward?.daoYun !== undefined ? { daoYun: def.reward.daoYun } : {}),
+          ...(Object.keys(items).length > 0 ? { items } : {}),
+        },
+      });
+    }
+  }
+
+  /**
    * 离线补偿结算（ADR-013 观察时补偿）：O(1) 算清欠账——
    * 完整轮次产出直接累加；副产出用 floor(期望) + 余数伯努利一次掷定，
    * 不逐轮回放。气血按脱战回满。只产出一条 offline-settled 汇总事件。
    */
-  function settleOffline(elapsedMs: number): void {
+  function settleOfflineInner(elapsedMs: number): void {
     if (elapsedMs <= 0) return;
     if (state.combat) state.combat = null; // 离线不可战斗：视作离场休整，回满血由下方统一处理
     if (state.dungeon) state.dungeon = null; // 秘境不可离线续跑：就地离境（最高层已随进层登记，#7）
@@ -1230,7 +1273,10 @@ export function createGame(options: CreateGameOptions): Game {
   return {
     events,
 
-    settleOffline,
+    settleOffline(elapsedMs: number): void {
+      settleOfflineInner(elapsedMs);
+      evaluateAchievements();
+    },
 
     tick(dt: number): void {
       if (!Number.isFinite(dt) || dt <= 0) {
@@ -1249,10 +1295,12 @@ export function createGame(options: CreateGameOptions): Game {
         settleActivity(dt);
       }
       events.emit({ type: 'tick', time, data: { dt } });
+      evaluateAchievements(); // 成就评估在 tick 末尾统一进行（#9）
     },
 
     dispatch(action: GameAction): void {
-      switch (action.type) {
+      try {
+        switch (action.type) {
         case 'activity:start': {
           // 战斗与采集互斥：开修行即收势离战。
           if (state.combat) stopCombat(noteFrom('retreatToGather'));
@@ -1765,6 +1813,10 @@ export function createGame(options: CreateGameOptions): Game {
 
         default:
           reject(action.type, 'unknown-action');
+      }
+      } finally {
+        // 早退路径（各 case 的 return）同样评估：finally 保证出口全覆盖（#9）。
+        evaluateAchievements();
       }
     },
 

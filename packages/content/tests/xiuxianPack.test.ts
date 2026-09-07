@@ -86,6 +86,28 @@ describe('修仙题材包 · 验收（issue #2）', () => {
     expect(pack.texts.shell.pages.shop.price).toBe('{price} 灵石');
     expect(pack.texts.shell.units.level).toBe('{v} 层');
   });
+
+  it('achievements 成就节：四型条件齐备、隐藏成就与奖励在案（#9）', () => {
+    const pack = loadXiuxianPack();
+    expect(pack.achievements).toHaveLength(11);
+    const byId = Object.fromEntries(pack.achievements!.map((a) => [a.id, a]));
+    expect(byId['kill_100']).toBeDefined();
+    expect(byId['kill_100']!.condition).toEqual({ stat: 'kills', target: 100 });
+    // 反向阈值（最快击杀）与布尔型（隐藏败绩）各一。
+    expect(byId['fast_kill_3']!.condition).toEqual({ stat: 'fastestKill', op: 'lte', target: 3 });
+    expect(byId['first_death']!.hidden).toBe(true);
+    expect(byId['first_death']!.condition).toEqual({ stat: 'deaths' });
+    // 兵解/秘境联动成就的奖励面。
+    expect(byId['rebirth_1']!.reward).toEqual({ daoYun: 5 });
+    expect(byId['dungeon_floor_5']!.reward).toEqual({ gold: 300 });
+    // 壳文案：页签/副标题槽/统计标签表（键域 = 引擎统计注册表）。
+    expect(pack.texts.shell.tabs.achievements).toBe('成就');
+    expect(pack.texts.shell.pages.achievements.subtitle).toContain('{unlocked}');
+    expect(Object.keys(pack.texts.shell.pages.achievements.statLabels).sort()).toEqual(
+      ['cycles', 'deaths', 'dungeonFloorBest', 'fastestKill', 'kills', 'maxHit', 'rebirths'].sort(),
+    );
+    expect(pack.texts.shell.events.achievementToast).toContain('{name}');
+  });
 });
 
 describe('content 包分居（#23，#29 守卫补强）', () => {

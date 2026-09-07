@@ -17,7 +17,7 @@ export function shellFixture(): Record<string, unknown> {
       hpTitle: '气血',
       hpSigil: '血',
     },
-    tabs: { skills: '修炼', craft: '炼制', combat: '斗法', bag: '乾坤袋', shop: '坊市', rebirth: '转生', talents: '道韵', dungeon: '秘境' },
+    tabs: { skills: '修炼', craft: '炼制', combat: '斗法', bag: '乾坤袋', shop: '坊市', rebirth: '转生', talents: '道韵', dungeon: '秘境', achievements: '成就' },
     side: { title: '修行录' },
     stats: { labels: { atk: { label: '攻' }, crit: { label: '暴', percent: true } } },
     units: {
@@ -67,6 +67,8 @@ export function shellFixture(): Record<string, unknown> {
       dungeonClear: '【{name}】已通关（{floors} 层）！',
       dungeonLeave: '退出【{name}】（第 {floor} 层，最深 {best}）',
       bossPhase: '【{enemy}】显露「{name}」之相！（阶段 {phase}）',
+      achievementToast: '成就达成【{name}】',
+      achievementLog: '成就达成【{name}】',
     },
     pages: {
       skills: {
@@ -172,6 +174,20 @@ export function shellFixture(): Record<string, unknown> {
         retreatBtn: '撤退',
         entryKey: '需 {item} ×1',
         clearBadge: '已通关',
+      },
+      achievements: {
+        title: '成就',
+        subtitle: '已解锁 {unlocked}/{total}',
+        empty: '无成就',
+        statsTitle: '修行统计',
+        statLabels: { kills: '击杀', deaths: '败绩', rebirths: '兵解', cycles: '劳作', dungeonFloorBest: '最深秘境', maxHit: '最大一击', fastestKill: '最快击杀' },
+        hiddenName: '？？？',
+        hiddenDesc: '隐藏成就，达成后揭晓',
+        unlockedBadge: '已达成',
+        progress: '{current}/{target}',
+        rewardGold: '灵石 +{gold}',
+        rewardDaoYun: '道韵 +{daoYun}',
+        rewardItems: '{items}',
       },
     },
   };

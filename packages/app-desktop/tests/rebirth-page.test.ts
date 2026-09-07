@@ -84,10 +84,12 @@ describe('#6 · 兵解确认页', () => {
     expect(st.skills.herb?.xp).toBe(0);
     expect(st.items).toEqual({});
     expect(st.gold).toBe(0);
-    expect(st.daoYun).toBe(6); // 2 + 4
-    expect(st.daoYunEarned).toBe(6);
+    expect(st.daoYun).toBe(11); // 2 + 4 + 兵解初悟成就奖励 5（#9 联动）
+    expect(st.daoYunEarned).toBe(11);
     expect(st.rebirths).toBe(1);
     expect(st.gear).toHaveLength(1); // 法宝随保留集长存
+    expect(st.achievements).toContain('rebirth_1'); // 兵解成就一次且仅一次（#9）
+    expect(st.stats?.['rebirths']).toBe(1); // 统计累积随事件流（#9）
   });
 });
 

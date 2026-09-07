@@ -16,6 +16,7 @@
 import type { ContentPack } from '@wendao/content';
 import {
   EventBus,
+  achievementProgressOf,
   bossEnemyOf,
   craftMissingOf,
   craftSuccessRateOf,
@@ -50,7 +51,16 @@ import {
   type SaveData,
 } from '@wendao/engine';
 
-export type TabId = 'skills' | 'craft' | 'combat' | 'dungeon' | 'bag' | 'shop' | 'rebirth' | 'talents';
+export type TabId =
+  | 'skills'
+  | 'craft'
+  | 'combat'
+  | 'dungeon'
+  | 'bag'
+  | 'shop'
+  | 'rebirth'
+  | 'talents'
+  | 'achievements';
 
 export interface Ui {
   bindActions(handler: (action: GameAction) => void): void;
@@ -87,6 +97,8 @@ export function buildUi(
   // 秘境玩法（#7）：包无 dungeons 节 = 无秘境页签与斗法页入口。
   const dungeonList = dungeonsOf(content);
   const hasDungeons = dungeonList.length > 0;
+  // 成就玩法（#9）：包无 achievements 节 = 无成就页签（引擎零降级路径的同款壳面）。
+  const hasAchievements = (content.achievements ?? []).length > 0;
 
   // 稀有度词表由内容包 rarities 节驱动（#018，ADR-016 裁决 ①/④）：
   // 档名/着色类/倍率来源/特判全部查内容 def，UI 零档位词、零引擎常量表；
@@ -169,6 +181,7 @@ export function buildUi(
       <button class="tab" data-act="tab" data-tab="shop">${esc(T('tabs.shop'))}</button>
       ${hasRebirth ? `<button class="tab" data-act="tab" data-tab="rebirth">${esc(T('tabs.rebirth'))}</button>
       <button class="tab" data-act="tab" data-tab="talents">${esc(T('tabs.talents'))}</button>` : ''}
+      ${hasAchievements ? `<button class="tab" data-act="tab" data-tab="achievements">${esc(T('tabs.achievements'))}</button>` : ''}
     </nav>
     <div class="layout">
       <main class="page-root" id="page-root"></main>
@@ -458,6 +471,11 @@ export function buildUi(
           't-red',
         );
         break;
+      case 'achievement:unlock':
+        // 成就达成（#9）：浮提示 + 修行录行；奖励已在引擎入账，页面卡片承载展示。
+        toast(T('events.achievementToast', { name: String(data.name ?? '') }));
+        log(T('events.achievementLog', { name: String(data.name ?? '') }), 't-gold');
+        break;
       case 'offline-settled': {
         const seconds = Math.max(0, Math.floor(Number(data.seconds) || 0));
         const h = Math.floor(seconds / 3600);
@@ -510,6 +528,8 @@ export function buildUi(
       [...st.talents].sort(),
       st.dungeon ? [st.dungeon.dungeonId, st.dungeon.floor] : null,
       Object.entries(st.dungeonBest).sort(),
+      Object.entries(st.stats ?? {}).sort(),
+      [...(st.achievements ?? [])].sort(),
       snap.stats ?? null,
     ]);
 
@@ -574,6 +594,7 @@ export function buildUi(
     else if (activeTab === 'bag') pageEl.innerHTML = renderBag(st);
     else if (activeTab === 'rebirth') pageEl.innerHTML = renderRebirth(st);
     else if (activeTab === 'talents') pageEl.innerHTML = renderTalents(st);
+    else if (activeTab === 'achievements') pageEl.innerHTML = renderAchievements(st);
     else pageEl.innerHTML = renderShop(st);
     if (activeTab === 'combat' || activeTab === 'dungeon') {
       // 页面重建会丢滚动位置与日志内容：全量重放战斗日志并恢复到底部。
@@ -881,6 +902,81 @@ export function buildUi(
       <section class="page">
         <h2 class="page-title">${esc(T('pages.talents.title'))}</h2>
         <p class="page-sub">${esc(T('pages.talents.subtitle', { daoYun: st.daoYun }))}</p>
+        <div class="act-grid">${cards}</div>
+      </section>`;
+  }
+
+  /* ---------- 成就页（#9）：统计区（包声明呈现面）+ 成就卡（进度条/奖励） ---------- */
+
+  function renderAchievements(st: GameState): string {
+    const defs = content.achievements ?? [];
+    if (defs.length === 0) {
+      return `<section class="page"><p class="empty">${esc(T('pages.achievements.empty'))}</p></section>`;
+    }
+    // 进度投影走引擎 achievementProgressOf（与解锁判定同式同源，壳零公式复算）。
+    const stats = st.stats ?? {};
+    const views = achievementProgressOf(content, stats, st.achievements ?? []);
+    const unlockedCount = views.filter((view) => view.unlocked).length;
+    const sep = T('common.itemListSep');
+
+    // 统计区：呈现面由包 statLabels 声明（键 = 引擎统计注册表闭集），零记录读 0。
+    const statLabelMap = shellGet('pages.achievements.statLabels');
+    const statRows =
+      statLabelMap !== null && typeof statLabelMap === 'object'
+        ? Object.entries(statLabelMap as Record<string, unknown>)
+            .filter(([, label]) => typeof label === 'string' && label.length > 0)
+            .map(
+              ([key, label]) =>
+                `<div class="stat-box"><b>${Math.floor(stats[key] ?? 0).toLocaleString(locale)}</b><span>${esc(String(label))}</span></div>`,
+            )
+            .join('')
+        : '';
+
+    const cards = views
+      .map((view) => {
+        const { def, unlocked, percent } = view;
+        const concealed = def.hidden && !unlocked;
+        const name = concealed ? T('pages.achievements.hiddenName') : def.name;
+        const desc = concealed
+          ? T('pages.achievements.hiddenDesc')
+          : (def.description ?? '');
+        // 进度行：已解锁不渲染（恒 100 无信息量）；布尔型（无 target）与反向阈值
+        // （lte 的 {current}/{target} 数值语义反直觉——「最快击杀」类只留进度条）不渲染。
+        const progressRow =
+          !unlocked && view.target !== undefined && def.condition.op !== 'lte'
+            ? `<div class="bar bar-thin"><i style="width:${percent}%"></i></div>
+               <div class="act-meta">${esc(T('pages.achievements.progress', { current: view.current ?? 0, target: view.target }))}</div>`
+            : '';
+        // 奖励行：引擎入账结果的内容面直出（parts 由壳拼装，缺项省略）。
+        const reward = def.reward;
+        const parts: string[] = [];
+        if (!concealed && reward) {
+          if (reward.gold !== undefined) parts.push(T('pages.achievements.rewardGold', { gold: reward.gold }));
+          if (reward.daoYun !== undefined)
+            parts.push(T('pages.achievements.rewardDaoYun', { daoYun: reward.daoYun }));
+          if (reward.items !== undefined && reward.items.length > 0) {
+            parts.push(
+              T('pages.achievements.rewardItems', {
+                items: reward.items.map((stack) => `${nameOf(stack.item)}×${stack.count}`).join(sep),
+              }),
+            );
+          }
+        }
+        return `<article class="act-card ach-card${unlocked ? ' owned' : ''}${concealed ? ' locked' : ''}">
+          <header><b><span class="sigil sigil-sm">${esc(concealed ? T('icons.unknown') : (def.icon ?? T('icons.unknown')))}</span> ${esc(name)}</b>${unlocked ? `<em class="act-badge">${esc(T('pages.achievements.unlockedBadge'))}</em>` : ''}</header>
+          ${desc ? `<div class="talent-desc">${esc(desc)}</div>` : ''}
+          ${progressRow}
+          ${parts.length > 0 ? `<div class="act-meta ach-reward">${esc(parts.join(sep))}</div>` : ''}
+        </article>`;
+      })
+      .join('');
+
+    return `
+      <section class="page">
+        <h2 class="page-title">${esc(T('pages.achievements.title'))}</h2>
+        <p class="page-sub">${esc(T('pages.achievements.subtitle', { unlocked: unlockedCount, total: views.length }))}</p>
+        <h3 class="group-title">${esc(T('pages.achievements.statsTitle'))}</h3>
+        ${statRows ? `<div class="stat-grid">${statRows}</div>` : ''}
         <div class="act-grid">${cards}</div>
       </section>`;
   }

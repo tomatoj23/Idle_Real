@@ -102,7 +102,7 @@
         },
         "tabs": {
           "type": "object",
-          "required": ["skills", "craft", "combat", "bag", "shop", "rebirth", "talents", "dungeon"],
+          "required": ["skills", "craft", "combat", "bag", "shop", "rebirth", "talents", "dungeon", "achievements"],
           "additionalProperties": false,
           "properties": {
             "skills": { "$ref": "#/definitions/line" },
@@ -112,7 +112,8 @@
             "shop": { "$ref": "#/definitions/line" },
             "rebirth": { "$ref": "#/definitions/line", "description": "转生页签（#6；包无 rebirth 节时壳不渲染该页签）" },
             "talents": { "$ref": "#/definitions/line", "description": "天赋页签（#6；同上）" },
-            "dungeon": { "$ref": "#/definitions/line", "description": "秘境页签（#7；包无 dungeons 节时壳不渲染该页签）" }
+            "dungeon": { "$ref": "#/definitions/line", "description": "秘境页签（#7；包无 dungeons 节时壳不渲染该页签）" },
+            "achievements": { "$ref": "#/definitions/line", "description": "成就页签（#9；包无 achievements 节时壳不渲染该页签）" }
           }
         },
         "side": {
@@ -183,7 +184,8 @@
             "craftFail", "craftHalt",
             "rebirthToast", "rebirthLog", "talentBuyToast", "talentBuyLog",
             "dungeonEnter", "dungeonFloor", "dungeonDaoYun", "dungeonClear", "dungeonLeave",
-            "bossPhase"
+            "bossPhase",
+            "achievementToast", "achievementLog"
           ],
           "additionalProperties": false,
           "properties": {
@@ -224,12 +226,14 @@
             "dungeonDaoYun": { "$ref": "#/definitions/template", "description": "层奖励道韵修行录行（#7，daoYun > 0 时随层奖励行）；槽位 {daoYun}" },
             "dungeonClear": { "$ref": "#/definitions/template", "description": "通关浮提示（#7，dungeon:clear 事件）；槽位 {name}/{floors}" },
             "dungeonLeave": { "$ref": "#/definitions/template", "description": "离境修行录行（#7，dungeon:leave 事件）；槽位 {name}/{floor}/{best}" },
-            "bossPhase": { "$ref": "#/definitions/template", "description": "Boss 阶段转场修行录行（#8，boss:phase 事件）；槽位 {name}/{phase}" }
+            "bossPhase": { "$ref": "#/definitions/template", "description": "Boss 阶段转场修行录行（#8，boss:phase 事件）；槽位 {name}/{phase}" },
+            "achievementToast": { "$ref": "#/definitions/template", "description": "成就达成浮提示（#9，achievement:unlock 事件）；槽位 {name}" },
+            "achievementLog": { "$ref": "#/definitions/template", "description": "成就达成修行录行（#9）；槽位 {name}" }
           }
         },
         "pages": {
           "type": "object",
-          "required": ["skills", "craft", "combat", "bag", "shop", "rebirth", "talents", "dungeon"],
+          "required": ["skills", "craft", "combat", "bag", "shop", "rebirth", "talents", "dungeon", "achievements"],
           "additionalProperties": false,
           "properties": {
             "skills": {
@@ -399,6 +403,34 @@
                 "retreatBtn": { "$ref": "#/definitions/template", "description": "撤退按钮（无槽位）" },
                 "entryKey": { "$ref": "#/definitions/template", "description": "钥匙未持锁定句；槽位 {item}" },
                 "clearBadge": { "$ref": "#/definitions/template", "description": "已通关徽标（best ≥ floors 时显示；无槽位）" }
+              }
+            },
+            "achievements": {
+              "type": "object",
+              "required": ["title", "subtitle", "empty", "statsTitle", "statLabels", "hiddenName", "hiddenDesc", "unlockedBadge", "progress", "rewardGold", "rewardDaoYun", "rewardItems"],
+              "additionalProperties": false,
+              "description": "成就页（#9）：成就卡数据（名称/描述/图标/奖励）来自 achievements 节，统计区呈现面由 statLabels 声明（键 = 引擎统计注册表闭集）；进度百分比由引擎 achievementProgressOf 投影，壳零公式复算",
+              "properties": {
+                "title": { "$ref": "#/definitions/line" },
+                "subtitle": { "$ref": "#/definitions/template", "description": "成就页副标题；槽位 {unlocked}/{total}" },
+                "empty": { "$ref": "#/definitions/template", "description": "无成就空态（无槽位）" },
+                "statsTitle": { "$ref": "#/definitions/line", "description": "统计区标题" },
+                "statLabels": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "additionalProperties": false,
+                  "patternProperties": {
+                    "^(kills|deaths|rebirths|cycles|dungeonFloorBest|maxHit|fastestKill)$": { "$ref": "#/definitions/line" }
+                  },
+                  "description": "统计展示标签表：键 = 引擎统计注册表闭集（与 engine STAT_KEYS 同源）；壳遍历此表渲染统计区（包决定呈现哪些统计）"
+                },
+                "hiddenName": { "$ref": "#/definitions/line", "description": "隐藏成就未解锁名占位（无槽位）" },
+                "hiddenDesc": { "$ref": "#/definitions/template", "description": "隐藏成就未解锁描述占位（无槽位）" },
+                "unlockedBadge": { "$ref": "#/definitions/template", "description": "已解锁徽标（无槽位）" },
+                "progress": { "$ref": "#/definitions/template", "description": "阈值进度行；槽位 {current}/{target}（布尔型不渲染进度行）" },
+                "rewardGold": { "$ref": "#/definitions/template", "description": "灵石奖励行；槽位 {gold}" },
+                "rewardDaoYun": { "$ref": "#/definitions/template", "description": "道韵奖励行；槽位 {daoYun}" },
+                "rewardItems": { "$ref": "#/definitions/template", "description": "物品奖励行；槽位 {items}（壳按 nameOf + itemListSep 拼装）" }
               }
             }
           }

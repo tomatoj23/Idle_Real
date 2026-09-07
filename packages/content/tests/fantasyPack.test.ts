@@ -101,6 +101,21 @@ describe('西方魔幻迷你包 · 验收 tracer（#28）', () => {
     expect(pack.texts.shell.events.craftHalt).toContain('{name}');
   });
 
+  it('achievements 成就节第二题材样张：同引擎不同成就表（#9 换包即换成就）', () => {
+    const pack = loadFantasyPack();
+    expect(pack.achievements).toHaveLength(7);
+    const byId = Object.fromEntries(pack.achievements!.map((a) => [a.id, a]));
+    expect(byId['kill_25']!.condition).toEqual({ stat: 'kills', target: 25 });
+    expect(byId['fast_kill_3']!.condition).toEqual({ stat: 'fastestKill', op: 'lte', target: 3 });
+    expect(byId['first_death']!.hidden).toBe(true);
+    expect(byId['delve_floor_5']!.reward).toEqual({ gold: 250, daoYun: 2 });
+    // 奖励物品 xref items（crystal 在魔幻包 items 节）。
+    expect(byId['max_hit_20']!.reward).toEqual({ items: [{ item: 'crystal', count: 2 }] });
+    expect(pack.texts.shell.tabs.achievements).toBe('Feats');
+    expect(pack.texts.shell.pages.achievements.statLabels['maxHit']).toBe('Max Hit');
+    expect(pack.texts.shell.events.achievementLog).toContain('{name}');
+  });
+
   it('config 槽位节：weapon/body/accessory 三槽英语命名（#16 槽位数据化）', () => {
     const pack = loadFantasyPack();
     expect(pack.config?.slots).toEqual([

@@ -482,7 +482,8 @@
         "shop": "Shop",
         "rebirth": "Rebirth",
         "talents": "Talents",
-        "dungeon": "Delve"
+        "dungeon": "Delve",
+        "achievements": "Feats"
       },
       "side": {
         "title": "Chronicle"
@@ -551,7 +552,9 @@
         "dungeonDaoYun": ", +{daoYun} attunement",
         "dungeonClear": "{name} fully cleared — all {floors} floors!",
         "dungeonLeave": "You leave {name} at floor {floor} (deepest: {best}).",
-        "bossPhase": "{enemy} enters {phase} phase: {name}!"
+        "bossPhase": "{enemy} enters {phase} phase: {name}!",
+        "achievementToast": "Feat earned: {name}!",
+        "achievementLog": "Feat earned: {name}."
       },
       "pages": {
         "skills": {
@@ -671,6 +674,28 @@
           "retreatBtn": "Retreat",
           "entryKey": "Requires {item} x1",
           "clearBadge": "Cleared"
+        },
+        "achievements": {
+          "title": "Feats",
+          "subtitle": "{unlocked}/{total} unlocked",
+          "empty": "No feats are known in this realm.",
+          "statsTitle": "Chronicle",
+          "statLabels": {
+            "kills": "Kills",
+            "deaths": "Falls",
+            "rebirths": "Rebirths",
+            "cycles": "Labors",
+            "dungeonFloorBest": "Deepest Floor",
+            "maxHit": "Max Hit",
+            "fastestKill": "Fastest Kill (rounds)"
+          },
+          "hiddenName": "???",
+          "hiddenDesc": "A hidden feat — revealed when earned.",
+          "unlockedBadge": "Earned",
+          "progress": "{current}/{target}",
+          "rewardGold": "+{gold} gold",
+          "rewardDaoYun": "+{daoYun} attunement",
+          "rewardItems": "{items}"
         }
       }
     }
@@ -705,5 +730,63 @@
       { "level": 15, "name": "Archmage" },
       { "level": 20, "name": "Legend" }
     ]
-  }
+  },
+  "achievements": [
+    {
+      "id": "kill_25",
+      "name": "Foe Slayer",
+      "icon": "S",
+      "description": "Slay 25 foes.",
+      "condition": { "stat": "kills", "target": 25 },
+      "reward": { "gold": 100 }
+    },
+    {
+      "id": "fast_kill_3",
+      "name": "Swift Victory",
+      "icon": "W",
+      "description": "Slay a foe within 3 rounds.",
+      "condition": { "stat": "fastestKill", "op": "lte", "target": 3 },
+      "reward": { "gold": 80 }
+    },
+    {
+      "id": "max_hit_20",
+      "name": "Heavy Hand",
+      "icon": "H",
+      "description": "Deal 20 damage in a single hit.",
+      "condition": { "stat": "maxHit", "target": 20 },
+      "reward": { "items": [{ "item": "crystal", "count": 2 }] }
+    },
+    {
+      "id": "first_death",
+      "name": "A Hard Lesson",
+      "description": "Fall to a foe and live to tell the tale.",
+      "hidden": true,
+      "condition": { "stat": "deaths" },
+      "reward": { "gold": 25 }
+    },
+    {
+      "id": "cycles_50",
+      "name": "Industrious",
+      "icon": "L",
+      "description": "Complete 50 gathering or crafting cycles.",
+      "condition": { "stat": "cycles", "target": 50 },
+      "reward": { "items": [{ "item": "potion", "count": 5 }] }
+    },
+    {
+      "id": "delve_floor_5",
+      "name": "Crypt Cleared",
+      "icon": "D",
+      "description": "Reach floor 5 of the Sunken Crypt.",
+      "condition": { "stat": "dungeonFloorBest", "target": 5 },
+      "reward": { "gold": 250, "daoYun": 2 }
+    },
+    {
+      "id": "rebirth_1",
+      "name": "Second Life",
+      "icon": "R",
+      "description": "Dissolve this life and rebuild once.",
+      "condition": { "stat": "rebirths", "target": 1 },
+      "reward": { "daoYun": 3 }
+    }
+  ]
 }

@@ -190,3 +190,18 @@ export type {
 // Boss 战框架（#8：阶段脚本/阈值推进/阶段修正投影）
 export { bossEnemyOf, bossesOf, findBossOf } from './bosses.js';
 export type { BossPhaseView, BossView } from './bosses.js';
+
+// 统计聚合器与成就判定器（#9：事件流累积 snapshot / 条件判定 / 进度投影）
+export { STAT_KEYS, applyStatsEvent, restoreStats } from './stats.js';
+export type { StatKey, StatSnapshot } from './stats.js';
+export {
+  achievementConditionMet,
+  achievementProgressOf,
+  achievementsOf,
+} from './achievements.js';
+export type {
+  AchievementConditionView,
+  AchievementProgressView,
+  AchievementRewardView,
+  AchievementView,
+} from './achievements.js';

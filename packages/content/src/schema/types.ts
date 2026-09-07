@@ -425,7 +425,7 @@ export interface ShellTopbar {
   readonly hpSigil: string;
 }
 
-/** 页签文案（键 = TabId 协议键，壳钉死七键；craft 随 #5、rebirth/talents 随 #6 加入）。 */
+/** 页签文案（键 = TabId 协议键，壳钉死九键；craft 随 #5、rebirth/talents 随 #6、dungeon 随 #7、achievements 随 #9 加入）。 */
 export interface ShellTabs {
   readonly skills: string;
   readonly craft: string;
@@ -436,6 +436,10 @@ export interface ShellTabs {
   readonly rebirth: string;
   /** 天赋页签（#6）；同上。 */
   readonly talents: string;
+  /** 秘境页签（#7）；包无 dungeons 节时壳不渲染该页签。 */
+  readonly dungeon: string;
+  /** 成就页签（#9）；包无 achievements 节时壳不渲染该页签。 */
+  readonly achievements: string;
 }
 
 /** 侧栏（修行录）文案。 */
@@ -514,6 +518,10 @@ export interface ShellEvents {
   readonly talentBuyLog: string;
   /** Boss 阶段转场修行录行（#8，boss:phase 事件；槽位 {name}/{phase}）。 */
   readonly bossPhase: string;
+  /** 成就达成浮提示（#9，achievement:unlock 事件；槽位 {name}）。 */
+  readonly achievementToast: string;
+  /** 成就达成修行录行（#9；槽位 {name}）。 */
+  readonly achievementLog: string;
 }
 
 /** 修炼页文案。 */
@@ -652,7 +660,58 @@ export interface ShellPageTalents {
   readonly buyBtn: string;
 }
 
-/** 页面文案分组（键 = TabId 协议键；craft 随 #5、rebirth/talents 随 #6 加入）。 */
+/** 秘境页文案（#7）。 */
+export interface ShellPageDungeon {
+  readonly title: string;
+  readonly subtitle: string;
+  readonly empty: string;
+  /** 进行中层进度行；槽位 {floor}/{floors}。 */
+  readonly floorNow: string;
+  /** 最高层记录行；槽位 {best}。 */
+  readonly best: string;
+  /** 玩家战力行（引擎 powerOf 读数）；槽位 {power}。 */
+  readonly powerNow: string;
+  /** 推荐战力区间行（软提示）；槽位 {min}/{max}。 */
+  readonly powerRec: string;
+  readonly enterBtn: string;
+  readonly retreatBtn: string;
+  /** 钥匙未持锁定句；槽位 {item}。 */
+  readonly entryKey: string;
+  /** 已通关徽标（best ≥ floors）。 */
+  readonly clearBadge: string;
+}
+
+/**
+ * 成就页文案（#9）：成就卡数据（名称/描述/图标）来自 achievements 节
+ * （content 数据直出），壳只承载结构性文案；统计区呈现面由 statLabels
+ * 声明（键 = 引擎统计注册表闭集，包决定呈现哪些统计与展示名）。
+ */
+export interface ShellPageAchievements {
+  readonly title: string;
+  /** 副标题；槽位 {unlocked}/{total} = 已解锁/成就总数。 */
+  readonly subtitle: string;
+  readonly empty: string;
+  /** 统计区标题。 */
+  readonly statsTitle: string;
+  /** 统计展示标签表：键 = 引擎统计注册表闭集（shell 遍历渲染，值缺省回退键名）。 */
+  readonly statLabels: Readonly<Record<string, string>>;
+  /** 隐藏成就未解锁名占位（无槽位）。 */
+  readonly hiddenName: string;
+  /** 隐藏成就未解锁描述占位（无槽位）。 */
+  readonly hiddenDesc: string;
+  /** 已解锁徽标（无槽位）。 */
+  readonly unlockedBadge: string;
+  /** 阈值进度行；槽位 {current}/{target}。 */
+  readonly progress: string;
+  /** 灵石奖励行；槽位 {gold}。 */
+  readonly rewardGold: string;
+  /** 道韵奖励行；槽位 {daoYun}。 */
+  readonly rewardDaoYun: string;
+  /** 物品奖励行；槽位 {items}（壳按 nameOf + itemListSep 拼装）。 */
+  readonly rewardItems: string;
+}
+
+/** 页面文案分组（键 = TabId 协议键；craft 随 #5、rebirth/talents 随 #6、dungeon 随 #7、achievements 随 #9 加入）。 */
 export interface ShellPages {
   readonly skills: ShellPageSkills;
   readonly craft: ShellPageCraft;
@@ -661,6 +720,8 @@ export interface ShellPages {
   readonly shop: ShellPageShop;
   readonly rebirth: ShellPageRebirth;
   readonly talents: ShellPageTalents;
+  readonly dungeon: ShellPageDungeon;
+  readonly achievements: ShellPageAchievements;
 }
 
 /** 壳层文案节（#26）：模板槽 {slot} 由壳按语境填入，缺键回显键名（裁决 ④ 同策略）。 */
@@ -853,6 +914,42 @@ export interface ShopEntry {
   readonly price: number;
 }
 
+/* ---------- 成就（#9：统计 snapshot 驱动，条件/奖励/隐藏全 content） ---------- */
+
+/**
+ * 成就条件：判定只读引擎事件流累积的统计 snapshot。
+ * target 缺省 = 布尔型（stat 有记录且 > 0）；target 存在时 op 缺省 'gte'
+ * （stat ≥ target）；op 'lte' 为反向阈值（stat ≤ target，最快击杀类）。
+ */
+export interface AchievementCondition {
+  /** 统计键（引擎注册表闭集，语义校验 xref）。 */
+  readonly stat: string;
+  readonly target?: number;
+  readonly op?: 'gte' | 'lte';
+}
+
+/** 成就奖励（可选，缺省 = 无奖励纯荣誉）；items 只引用 mat/consumable 类物品。 */
+export interface AchievementReward {
+  readonly gold?: number;
+  readonly daoYun?: number;
+  readonly items?: readonly Stack[];
+}
+
+/**
+ * 成就定义（achievements 节条目，#9，包级可选节）：
+ * id 一经发布不可变（state.achievements 存档键，ADR-015）；解锁由引擎幂等保证。
+ */
+export interface AchievementDef {
+  readonly id: string;
+  readonly name: string;
+  readonly icon?: string;
+  readonly description?: string;
+  /** 隐藏成就：解锁前壳以占位文案展示（引擎透传，UI 消费）。 */
+  readonly hidden?: boolean;
+  readonly condition: AchievementCondition;
+  readonly reward?: AchievementReward;
+}
+
 /* ---------- 全局配置（槽位数据化 + 玩法参数） ---------- */
 
 /** 槽位定义（config.slots 条目）；icon 未显式写入即不落盘（ADR-013）。 */
@@ -995,4 +1092,8 @@ export interface ContentPack {
    * Boss 节（#8）；可选节，省略 = 无 Boss 玩法（全部敌人按普通敌人战斗，零降级路径）。
    */
   readonly bosses?: readonly BossDef[];
+  /**
+   * 成就节（#9）；可选节，省略 = 无成就玩法（引擎零降级路径，壳不渲染成就页签）。
+   */
+  readonly achievements?: readonly AchievementDef[];
 }
