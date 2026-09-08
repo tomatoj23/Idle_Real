@@ -1,0 +1,4 @@
+# steamcmd 构建输出（日志/分段缓存），仅本机有意义
+steamworks_build_output/
+# 向导写入的本机办理结果（AppID/DepotID/构建器账号）
+steamworks.local.env

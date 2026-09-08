@@ -9,6 +9,7 @@ import { shellFixture } from './fixtures.js';
  * 各用例在深拷贝上做单点破坏，断言字段级错误。
  */
 const BASE_PACK: unknown = {
+  version: '0.1.0',
   skills: [
     {
       id: 'herb',
@@ -524,5 +525,55 @@ describe('validateContentPack · 题材包破坏演示（验收）', () => {
     ]) {
       expect(result.errors.find((e) => e.path === path), path).toBeDefined();
     }
+  });
+});
+
+describe('validateContentPack · 包版本 version（#12 版本策略）', () => {
+  it('基准夹具携带 version 通过，并回读到类型化包', () => {
+    const result = validateContentPack(BASE_PACK);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.pack.version).toBe(BASE_PACK.version);
+    }
+  });
+
+  it('version 非 semver 三段 → pattern', () => {
+    for (const bad of ['v1', '1.2', '1.2.3.4', 'abc', '', '1.2.3-rc.1+b1+x']) {
+      const pack = makePack();
+      pack.version = bad;
+      expectError(validateContentPack(pack), '/version', 'pattern');
+    }
+  });
+
+  it('version 合法后缀形态放行：prerelease 与 build 可并存（semver 规范）', () => {
+    for (const good of ['1.2.3-rc.1', '1.2.3+b1', '1.2.3-rc.1+b1']) {
+      const pack = makePack();
+      pack.version = good;
+      expect(validateContentPack(pack).ok).toBe(true);
+    }
+  });
+
+  it('version 非字符串 → type', () => {
+    const pack = makePack();
+    pack.version = 3;
+    expectError(validateContentPack(pack), '/version', 'type');
+  });
+
+  it('两题材包均声明合法 version（发版追踪的地基）', () => {
+    expect(String(xiuxianPackJson['version'])).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+});
+
+describe('texts.shell · footer 版本行（#12 版本策略）', () => {
+  it('shell 缺 footer → required', () => {
+    const pack = makePack();
+    delete pack.texts.shell.footer;
+    expectError(validateContentPack(pack), '/texts/shell/footer', 'required');
+  });
+
+  it('footer 缺 versionLine → required', () => {
+    const pack = makePack();
+    pack.texts.shell.footer = {};
+    expectError(validateContentPack(pack), '/texts/shell/footer/versionLine', 'required');
   });
 });

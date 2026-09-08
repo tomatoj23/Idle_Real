@@ -10,6 +10,7 @@ content 包的字段级约定。**schema 变更三处同步纪律（ADR-015）**
 
 | 节 | 必填 | schema | 说明 |
 |---|---|---|---|
+| `version` | 是 | （pack.ts 语义关卡，无独立 schema 文件） | **包版本（#12）**：semver 三段（可带 prerelease/build 后缀），游戏内页脚版本行展示 + 发版追踪；改内容 = 改版本 |
 | `skills` | 是 | skill.schema.json | 技艺定义（gather 带 activities） |
 | `items` | 是 | item.schema.json | 物品，oneOf 五形态分流（见下） |
 | `recipes` | 是 | recipe.schema.json | 配方（无 id 的关系行，不参与原型继承） |
@@ -231,6 +232,10 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
   `topbar.*Sigil` 承载顶栏资源图章字；`common.itemListSep` 为物品名列表
   分隔符（掉落预览/离线产出共用）；`pages.combat.selfStats` 的属性行数值
   槽（{atk}/{def}/{crit}）由壳按 statLabels 量纲填入，模板不写字面 `%`。
+- **footer.versionLine（#12）**：页脚版本行模板，槽位 `{name}`（brand.name）、
+  `{content}`（包顶层 `version`）、`{engine}`（引擎 `ENGINE_VERSION`，
+  `packages/engine/src/version.ts`，与 engine package.json version 由测试钉住一致）。
+  发版流程：改包 version → 页脚玩家可见 → `npm run dist` 重打包。
 
 ## config 槽位数据化（#16）与玩法参数数据化（#020）
 

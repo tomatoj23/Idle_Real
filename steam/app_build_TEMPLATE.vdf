@@ -1,0 +1,19 @@
+// SteamPipe 应用构建脚本模板（#12）。
+// 由 steam/wizard-steamworks-setup.sh 填充后另存为 app_build_<AppID>.vdf；
+// 占位符：<<APPID>>（Steamworks AppID）、<<DEPOTID>>（主 depot ID）、
+// <<CONTENT_ROOT>>（electron-builder 产物 release/win-unpacked 的绝对路径，
+// 写正斜杠形式如 D:/My_Projects/SmallRpg/...，SteamPipe 原生接受）。
+// 字段语义见 https://partner.steamgames.com/doc/sdk/uploading（SteamPipe 构建脚本）。
+"appbuild"
+{
+  "appid" "<<APPID>>"
+  "desc" "wendao build <<APPID>>"
+  "buildoutput" "steamworks_build_output"
+  "contentroot" "<<CONTENT_ROOT>>"
+  // setlive 留空 = 上传不自动发布；首次上传验证后再由 partner 站手动 set live。
+  "setlive" ""
+  "depots"
+  {
+    "<<DEPOTID>>" "depot_build_<<DEPOTID>>.vdf"
+  }
+}

@@ -9,6 +9,7 @@
 export function shellFixture(): Record<string, unknown> {
   return {
     brand: { sigil: '道', name: '问道长生', locale: 'zh-CN', bootError: '中止：{message}' },
+    footer: { versionLine: '{name} v{content} · 引擎 v{engine}' },
     topbar: {
       statsTitle: '属性',
       statsSigil: '斗',
@@ -206,6 +207,7 @@ export function shellFixture(): Record<string, unknown> {
  */
 export function minimalPack(): Record<string, unknown> {
   return {
+    version: '0.1.0',
     skills: [
       { id: 'fight', name: '斗法', icon: '斗', kind: 'combat' },
       { id: 'smith', name: '炼器', icon: '器', kind: 'craft' },

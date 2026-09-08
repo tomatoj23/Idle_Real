@@ -71,9 +71,17 @@
       },
       "description": "stat 展示标签 + 量纲标记。键 = stat id（开放键域，与 bonuses/affixPool.stat 同一注册表，键形态与 #25 elements 一致）；未注册 stat 由壳回退 stat 键名展示"
     },
+    "footerTexts": {
+      "type": "object",
+      "required": ["versionLine"],
+      "additionalProperties": false,
+      "properties": {
+        "versionLine": { "$ref": "#/definitions/template", "description": "页脚版本行模板（#12）；槽位 {name}（游戏名）/{content}（包版本）/{engine}（引擎版本）" }
+      }
+    },
     "shellTexts": {
       "type": "object",
-      "required": ["brand", "topbar", "tabs", "side", "stats", "units", "icons", "common", "events", "pages"],
+      "required": ["brand", "topbar", "tabs", "side", "stats", "units", "icons", "common", "events", "pages", "footer"],
       "additionalProperties": false,
       "properties": {
         "brand": {
@@ -441,7 +449,8 @@
               }
             }
           }
-        }
+        },
+        "footer": { "$ref": "#/definitions/footerTexts", "description": "页脚（#12 版本策略）：版本行模板，槽位 {name}/{content}/{engine}" }
       }
     }
   }

@@ -1,0 +1,17 @@
+// SteamPipe depot 构建脚本模板（#12）。
+// 由 steam/wizard-steamworks-setup.sh 填充后另存为 depot_build_<DepotID>.vdf；
+// 占位符：<<DEPOTID>>。LocalPath 相对 app_build 的 contentroot。
+// steam_appid.txt 是开发期调试桥，禁止进 depot（FileExclusion 双保险——
+// 即使被手工放进 win-unpacked 也不会随构建上传）。
+"DepotBuild"
+{
+  "DepotID" "<<DEPOTID>>"
+  "FileMapping"
+  {
+    "LocalPath" "*"
+    "DepotPath" "."
+    "recursive" "1"
+  }
+  "FileExclusion" "*.pdb"
+  "FileExclusion" "steam_appid.txt"
+}

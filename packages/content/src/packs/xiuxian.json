@@ -1,4 +1,5 @@
 {
+  "version": "0.1.0",
   "skills": [
     {
       "id": "qi",
@@ -554,6 +555,7 @@
       }
     },
     "shell": {
+      "footer": { "versionLine": "{name} v{content} · 引擎 v{engine}" },
       "brand": {
         "sigil": "道",
         "name": "问道长生",

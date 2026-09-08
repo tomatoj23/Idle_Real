@@ -241,3 +241,6 @@ export type {
   AchievementRewardView,
   AchievementView,
 } from './achievements.js';
+
+// 引擎版本（#12 版本策略：游戏内页脚版本行展示）
+export { ENGINE_VERSION } from './version.js';

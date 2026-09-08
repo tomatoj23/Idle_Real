@@ -16,6 +16,7 @@
 import type { ContentPack } from '@wendao/content';
 import {
   EventBus,
+  ENGINE_VERSION,
   achievementProgressOf,
   bossEnemyOf,
   craftMissingOf,
@@ -209,6 +210,15 @@ export function buildUi(
         <ul class="log" id="log"></ul>
       </aside>
     </div>
+    <footer class="version-line">${esc(
+      T('footer.versionLine', {
+        name: T('brand.name'),
+        // 类型必填 ≠ 运行时必有：测试夹具/旧形态包缺 version 时回退空串，
+        // 不让页脚渲染出 "undefined"（防御路径，与缺键回显同策略）。
+        content: content.version ?? '',
+        engine: ENGINE_VERSION,
+      }),
+    )}</footer>
     <div class="toasts" id="toasts"></div>
   `;
 

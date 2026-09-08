@@ -15,7 +15,8 @@
     "dev:editor": "npm run dev -w @wendao/editor",
     "test": "npm run test --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
-    "build:desktop": "npm run build -w @wendao/app-desktop && npm run dist -w @wendao/app-desktop",
+    "dist": "npm run build --workspaces --if-present && npm run dist -w @wendao/app-desktop",
+    "build:desktop": "npm run dist",
     "check": "npm run check --workspaces --if-present"
   },
   "devDependencies": {

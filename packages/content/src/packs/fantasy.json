@@ -1,4 +1,5 @@
 {
+  "version": "0.1.0",
   "skills": [
     {
       "id": "herbalism",
@@ -460,6 +461,7 @@
       }
     },
     "shell": {
+      "footer": { "versionLine": "{name} v{content} · engine v{engine}" },
       "brand": {
         "sigil": "G",
         "name": "Grim Vale",

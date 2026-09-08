@@ -140,6 +140,9 @@ export type PackValidationResult =
   | { readonly ok: true; readonly pack: ContentPack }
   | { readonly ok: false; readonly errors: readonly ContentError[] };
 
+/** 包版本形态（#12 版本策略）：semver 三段，prerelease/build 后缀可并存（1.2.3-rc.1+b1）。 */
+const PACK_VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+
 /** 校验完整内容包：先过各节 schema，再跑跨引用与形态语义检查。 */
 export function validateContentPack(json: unknown): PackValidationResult {
   if (typeof json !== 'object' || json === null || Array.isArray(json)) {
@@ -151,6 +154,28 @@ export function validateContentPack(json: unknown): PackValidationResult {
 
   const errors: ContentError[] = [];
   const pack = json as Record<string, unknown>;
+
+  // 包版本（#12）：非内容节，先行单独校验（游戏内版本行 + 发版追踪的依据）。
+  const version = pack['version'];
+  if (version === undefined) {
+    errors.push({
+      path: '/version',
+      keyword: 'required',
+      message: '缺少包版本 version（semver 三段，如 1.2.3）',
+    });
+  } else if (typeof version !== 'string') {
+    errors.push({
+      path: '/version',
+      keyword: 'type',
+      message: `包版本 version 须为字符串，实际：${typeof version}`,
+    });
+  } else if (!PACK_VERSION_RE.test(version)) {
+    errors.push({
+      path: '/version',
+      keyword: 'pattern',
+      message: `包版本须为 semver 三段（如 1.2.3），实际：${JSON.stringify(version)}`,
+    });
+  }
 
   for (const section of SECTION_NAMES) {
     const value = pack[section];

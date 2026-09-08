@@ -1,2 +1,4 @@
 # 钩子脚本必须 LF：CRLF 会破坏 shebang/行尾（Git Bash 报 bad interpreter 或 $'\r' 错）
 .githooks/** text eol=lf
+# bash 脚本同律必须 LF（steam/ 向导在 Git Bash 运行，CRLF 破坏 shebang）
+steam/**/*.sh text eol=lf

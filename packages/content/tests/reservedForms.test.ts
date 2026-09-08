@@ -30,6 +30,7 @@ function expectError(
 /** 最小合法包：单 craft 技艺 + 单材料 + 单配方 + 单敌人 + 兜底文案。 */
 function makeBasePack(): Record<string, any> {
   return {
+    version: '0.1.0',
     skills: [{ id: 'smith', name: '炼器', icon: '器', kind: 'craft' }],
     items: [{ id: 'ore1', name: '凡铁', icon: '铁', type: 'mat', sell: 5 }],
     recipes: [

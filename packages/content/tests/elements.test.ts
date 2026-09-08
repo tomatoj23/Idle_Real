@@ -27,6 +27,7 @@ const SEVEN = [
 /** 最小合法包：单技艺 + 材料/铭纹 + 单敌人 + 兜底文案；elements 缺省空域。 */
 function makeBasePack(): Record<string, any> {
   return {
+    version: '0.1.0',
     skills: [{ id: 'smith', name: '炼器', icon: '器', kind: 'craft' }],
     items: [
       { id: 'ore1', name: '凡铁', icon: '铁', type: 'mat', sell: 5 },

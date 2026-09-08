@@ -796,6 +796,13 @@ export interface ShellTexts {
   readonly common: ShellCommon;
   readonly events: ShellEvents;
   readonly pages: ShellPages;
+  /** 页脚（#12 版本策略）：版本行措辞随内容包，壳零版本文案硬编码。 */
+  readonly footer: ShellFooter;
+}
+
+/** 页脚文案（#12）：版本行模板，槽位 {name}（brand.name）/ {content}（包版本）/ {engine}（引擎版本）。 */
+export interface ShellFooter {
+  readonly versionLine: string;
 }
 
 /* ---------- 转生系统（#6：兵解重修 / 道韵 / 天赋树） ---------- */
@@ -1145,6 +1152,12 @@ export interface Config {
 /* ---------- 内容包整体 ---------- */
 
 export interface ContentPack {
+  /**
+   * 包版本（#12 版本策略）：semver 三段（1.2.3，可带 prerelease/build 后缀）。
+   * 游戏内页脚版本行展示 + 发版追踪的单一来源——改内容 = 改版本，玩家可见。
+   * id 一经发布不可变（ADR-015）约束的是键名；版本随内容变更递增。
+   */
+  readonly version: string;
   readonly skills: readonly Skill[];
   readonly items: readonly Item[];
   readonly recipes: readonly Recipe[];

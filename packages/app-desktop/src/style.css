@@ -336,6 +336,16 @@ body {
   pointer-events: none;
 }
 
+/* ---------- 页脚版本行（#12 版本策略） ---------- */
+
+.version-line {
+  margin-top: 18px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  user-select: text;
+}
+
 .toast {
   background: var(--panel2);
   border: 1px solid var(--border-gold);
