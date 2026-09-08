@@ -81,6 +81,21 @@ export type Element = string;
 export type Affinities = Readonly<Partial<Record<Element, number>>>;
 
 /**
+ * 系别机制签名（elements[].signature，#15，ADR-012 每系一个可观测机制签名）：
+ * 原语归引擎闭集注册表（engine combat.ts ELEMENT_COMBAT_PRIMITIVES：第一波
+ * defenseBreak/slow/swift；火/木 DoT 原语第二波另票），数值/时长全归 content
+ * ——换包改系数引擎零改动。未声明签名 = 纯风味系（机制层凡击）。
+ */
+export interface ElementSignature {
+  /** 引擎机制原语键（闭集，语义校验对照注册表镜像收口，未注册原语加载期拒绝）。 */
+  readonly primitive: string;
+  /** 原语参数：defenseBreak/swift = 缩减比例（0~1），slow = 延长比例（0~1）。 */
+  readonly value?: number;
+  /** 临时态时长（毫秒）；机械原语必填（语义校验）。 */
+  readonly duration?: number;
+}
+
+/**
  * 系别定义（elements 节条目，#25）：包内系别键域的唯一注册表。
  * id 一经发布不可变（enemy.element / affinities / 铭纹条件 element 引用它）；
  * name 供壳层/编辑器展示（引擎零感知）。空 elements = 无系别玩法。
@@ -89,6 +104,8 @@ export interface ElementDef {
   readonly id: string;
   /** 展示名（1~6 字）。 */
   readonly name: string;
+  /** 机制签名（#15，可选）：缺省 = 该系无机械原语（纯风味/纯亲和系）。 */
+  readonly signature?: ElementSignature;
 }
 
 /* ---------- 修饰符（器胚胚纹 / 铭纹 tiers 的最小单元，#13 聚合管线消费） ---------- */
@@ -189,6 +206,11 @@ export interface Item {
   readonly feature?: Feature;
   /** inscription 类（铭纹）：标签加权抽取归类。 */
   readonly tags?: readonly string[];
+  /**
+   * 系别（#15，equip/blank 分支）：引擎只消费武器槽物品——佩戴后玩家攻击
+   * 携带该系；须在 elements 节注册（语义校验 xref）。其余槽位为未来留门。
+   */
+  readonly element?: Element;
 }
 
 /* ---------- 配方 ---------- */
@@ -308,6 +330,22 @@ export type VerbStyle = string;
 /** 伤害档：按相对期望伤害分池。 */
 export type DamageTier = 'light' | 'mid' | 'heavy' | 'deadly';
 
+/**
+ * 系别风味句池（combatText.elementFlavor 条目，#15）：攻方系别键 → 四池，
+ * 引擎按「被克/克制（受击者亲和反应）> 暴击专属（雷·霆爆）> 普通」路由，
+ * 追加为独立一句；槽位 {defender}/{enemy}/{d}，全缺省句不造（裁决 ④）。
+ */
+export interface ElementFlavorPools {
+  /** 普通系别击风味句（起手/后果皆可）。 */
+  readonly attacks?: readonly string[];
+  /** 暴击专属风味句（雷·霆爆：暴击金框文案的载体）。 */
+  readonly crits?: readonly string[];
+  /** 克制专属风味句（受击者对该系亲和 > 0，易伤）。 */
+  readonly counters?: readonly string[];
+  /** 被克专属风味句（受击者对该系亲和 < 0，抗性挫败感）。 */
+  readonly resists?: readonly string[];
+}
+
 export interface CombatText {
   readonly verbs: Readonly<Record<VerbStyle, readonly VerbEntry[]>>;
   /**
@@ -374,6 +412,11 @@ export interface CombatText {
     readonly slower: readonly string[];
     readonly even: readonly string[];
   };
+  /**
+   * 系别风味句池（#15，可选节）：键 = elements 注册系别（语义校验 xref）。
+   * 缺省 = 该包无系别风味（战斗文案零扰动）。
+   */
+  readonly elementFlavor?: Readonly<Record<string, ElementFlavorPools>>;
 }
 
 /* ---------- 系统展示文案（#019 批 2）+ 壳层文案（#26） ---------- */

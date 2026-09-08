@@ -65,7 +65,8 @@
         "prototypeParent": { "$ref": "#/definitions/prototypeParent" },
         "slot": { "$ref": "#/definitions/slot" },
         "bonuses": { "$ref": "#/definitions/bonuses" },
-        "verbStyle": { "$ref": "#/definitions/verbStyle" }
+        "verbStyle": { "$ref": "#/definitions/verbStyle" },
+        "element": { "$ref": "#/definitions/elementKey" }
       }
     },
     "blank": {
@@ -86,7 +87,8 @@
         "floorRange": { "$ref": "#/definitions/floorRange" },
         "tierRange": { "$ref": "#/definitions/tierRange" },
         "preferredTags": { "$ref": "#/definitions/preferredTags" },
-        "inherentModifiers": { "$ref": "#/definitions/inherentModifiers" }
+        "inherentModifiers": { "$ref": "#/definitions/inherentModifiers" },
+        "element": { "$ref": "#/definitions/elementKey" }
       }
     },
     "inscription": {
@@ -151,6 +153,11 @@
       "type": "string",
       "pattern": "^[a-z][a-zA-Z0-9_]*$",
       "description": "动词池键（#021 批 4 开放键域，combatText.verbs）：仅 weapon 槽位物品被引擎消费；未注册即语义校验 xref；缺省 = 引擎兜底键 basic 池"
+    },
+    "elementKey": {
+      "type": "string",
+      "pattern": "^[a-z][a-zA-Z0-9_]*$",
+      "description": "系别键（#15，elements 键域开放）：须在包 elements 节注册（语义校验 xref）。引擎只消费武器槽物品的 element——佩戴后玩家攻击携带该系（机制签名/亲和度/风味句路由的攻方来源）；其余槽位声明为未来留门"
     },
     "bonuses": {
       "type": "object",

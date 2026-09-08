@@ -3,8 +3,8 @@
 content 包的字段级约定。**schema 变更三处同步纪律（ADR-015）**：任何字段变更须同步
 `packages/content/src/schema/*.schema.json`、`packages/content/src/schema/types.ts`、
 本文件，三者缺一即返工。**引擎消费点（contentView 的 View 类型、state.ts 规范化）
-不在三处清单内，随消费票同步**（P2-2 教训：enemy schema 已含 `affinities` 而
-engine `EnemyView` 未投影，靠 #15 票驱动补齐）。
+不在三处清单内，随消费票同步**（P2-2 教训：enemy schema 先行预留的 `affinities`
+曾滞后于引擎投影，#15 票已补齐——新预留字段落地时同律）。
 
 ## 节清单
 
@@ -34,12 +34,15 @@ engine `EnemyView` 未投影，靠 #15 票驱动补齐）。
 | `mat` | 材料 | 公共字段（id/name/icon/type/sell） | — |
 | `consumable` | 消耗品（丹药等） | 公共字段 | effect、heal（至少其一，语义检查） |
 | `equip` | 装备 | 公共字段 | slot、bonuses（须都有，语义检查）、verbStyle（#021 批 4） |
-| `blank` | **器胚**（装备底材模板） | 公共字段 + slot + floorRange + tierRange | preferredTags、inherentModifiers |
+| `blank` | **器胚**（装备底材模板） | 公共字段 + slot + floorRange + tierRange | preferredTags、inherentModifiers、element（#15） |
 | `inscription` | **铭纹**（装备词缀模板） | 公共字段 + tiers | feature、tags |
 
 - 跨形态字段由 oneOf 分支 `additionalProperties:false` 在 schema 关卡拒绝；
   分支内规则（equip 缺 bonuses、consumable 无 effect/heal、区间方向、修饰符区约束）
   由 `validateContentPack` 语义检查补全（ADR-010 分工）。
+- **`element`（#15，equip/blank 分支可选）**：系别键，须在 elements 节注册（xref）。
+  引擎只消费**武器槽**物品的 element——佩戴后玩家攻击携带该系（机制签名/亲和度/
+  风味句路由的攻方来源）；其余槽位为未来留门，不配系（见下「系别机制签名」）。
 - **空集合合法**：`preferredTags: []`、`inherentModifiers: []`、`tags: []` 均合法；
   `items: []` 仍被拒（#2 定下的节下限不放宽，每包至少一个物品）。
 - 器胚/铭纹机制消费方已随 **#14 落地**（rollGear 掉落管线 + 熔炼/重铸）：
@@ -187,6 +190,7 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 | `notes` | 七池：retreat/retreatToGather/retreatWounded/retreatVictory/reengage/start/autoConsume | 系统 combat-note 叙事。start/reengage 带 `{enemy}`、autoConsume 带 `{item}` |
 | `summary` | tiers（四档画句池）+ base/crit 整行模板 | 战后一行签名画像：引擎按主导伤害档取画句填 `{flavor}`，`{rounds}`/`{crits}` 填数值 |
 | `compare` | 四池：revenge/faster/slower/even | 同对手再战对照语：`{rounds}` 今番、`{prev}` 前番回合数；无从对照返回空（事件不带 compare） |
+| `elementFlavor`（#15，可选节） | 键 = elements 注册系别（xref）→ 四池：attacks/crits/counters/resists | 系别风味句池（只读日志盲测的文案载体，ADR-012）。引擎按「被克 resists（受击者亲和 < 0）/ 克制 counters（亲和 > 0）> 暴击专属 crits（雷·霆爆金框文案）> 普通 attacks」路由，抽一条**追加为独立句**；槽位 `{defender}`/`{enemy}`/`{d}`（敌方出招侧 {defender} 指向敌人自身，宜用无主语句式）；全缺省句不造（裁决 ④）。缺节 = 该包无系别风味（战斗文案零扰动） |
 
 ### texts（系统展示文案 + 壳层文案）
 
@@ -585,26 +589,61 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
   hiddenName/hiddenDesc/unlockedBadge/progress `{current}/{target}`/
   rewardGold/rewardDaoYun/rewardItems）。
 
-## elements 系别键域注册表（#25 键域开放，ADR-017 裁决 8）
+## elements 系别键域注册表（#25 键域开放 + #15 机制签名，ADR-017 裁决 8）
 
 循 #21 VerbStyle 先例：schema 不钉死七系枚举，系别键域由包自声明——`elements`
 节是包内系别键域的唯一注册表；`enemy.element`、`affinities` 键、铭纹条件
-`condition.element` 的引用合法性由语义校验对照本节强制（xref，坏包加载期拒绝，
-报错逐字段可定位）。
+`condition.element`、武器 `element`（equip/blank，#15）、`elementFlavor` 池键
+（#15）的引用合法性由语义校验对照本节强制（xref，坏包加载期拒绝，报错逐字段可定位）。
 
 | 字段 | 形态 | 约定 |
 |---|---|---|
 | `id` | string（`^[a-z][a-zA-Z0-9_]*$`） | 系别键，键形态与 stat/verbStyle 统一（#021 批 4）；一经发布不可变；id 去重（语义检查） |
 | `name` | string（1~6 字） | 展示名，词表归 content（ADR-016 延伸）；引擎零感知，壳层/编辑器消费 |
+| `signature`（#15，可选） | `{primitive, value?, duration?}` | 机制签名（见下节）；缺省 = 该系无机械原语（纯风味/纯亲和系） |
 
 - 金木水火土风雷七系只是官方包内容约定（ADR-012：每系一个可观测机制签名，
   拒绝纯数值系——自定义系别同样应满足结构签名判据）。
 - `elements: []` 合法 = 无系别玩法（敌人缺省凡击）。
-- **缺省/兜底行为**：敌人不填 `element` = 凡击；聚合语境无 element 维度时
+- **缺省/兜底行为**：敌人/武器不填 `element` = 凡击；聚合语境无 element 维度时
   `condition.element` 修饰符不生效（引擎 `conditionMatches` 语义不变）；
   引用未注册系别键 = 加载期拒绝（不静默降级）。
 - 引擎零感知：系别只是条件匹配的不透明键（engine `modifiers.ts` 为 `string`）；
-  `affinities` 的引擎消费随 #15（schema/校验先行，View 投影未接）。
+  `affinities`/`element` 的引擎消费已随 **#15 落地**（EnemyView/ItemView 投影 +
+  战斗解算接线）。
+
+### 系别机制签名（#15，ADR-012 第一波：雷/金/水/风）
+
+**归属划界**：机制原语归引擎（闭集注册表），数值/时长/相克关系全归 content
+（换包改系数引擎零改动）。
+
+| 原语（引擎闭集） | 机制语义 | 参数 |
+|---|---|---|
+| `defenseBreak`（金·破防） | 命中即给受击者挂「破防」临时态：在效期间其 def ×(1−value)，伤害档对**未破防期望**判档 → 档位跃迁可见 | value = 缩减比例（0~1）；duration 毫秒 |
+| `slow`（水·滞缓） | 命中即挂「滞缓」：在效期间敌方攻击间隔 ×(1+value) | 同上 |
+| `swift`（风·迅疾） | 命中即挂「迅疾」：在效期间自身（玩家）攻击间隔 ×(1−value) | 同上 |
+| （无原语，雷·霆爆） | 复用既有暴击体系：暴击时走 `elementFlavor.crits` 专属风味句（金框文案的载体），零机械参数 | — |
+
+**机制约定**：
+
+- **攻击系别来源**：玩家 = 佩戴武器（weapon 槽 equip/器胚）的 `element`；
+  敌人 = 敌人 `element`（第一波只路由风味句，敌方机械签名（打玩家挂临时态）未启）。
+- **临时态不落盘**（票面裁决：抗性/临时态不进存档新字段）：只在引擎闭包内，
+  命中即续（时间 = 当前 + duration）；开战/自动再战/秘境进层/离线离场一律归零，
+  存档恢复即散尽。修仙包时长 8000ms ≈ 3~4 击，持续输出即近乎常驻。
+- **亲和度**：`enemy.affinities[element]`（百分点，−100~100，schema 关卡）作用于
+  玩家攻敌伤害：dmg ×(1 + aff/100)，下限 1。负 = 抗性被克（`resists` 句 +
+  档位读轻），正 = 易伤克制（`counters` 句 + 档位读高）。五行相克由 content 配
+  （修仙包样例：饕餮 fire，`{water: +50, metal: -50}`——水克火、火克金），
+  引擎零相克表。**亲和度只给 Boss/特色怪配**。
+- **玩家抗性** = 铭纹/胚纹条件修饰符（`condition:{element}`），走 ADR-011 管线：
+  防侧（def/hp）条件匹配**来袭**系别（敌人 element），攻侧（atk/crit）条件匹配
+  **自身攻击**系别（武器 element）——同一个 condition 字段，按聚合一侧解释语境。
+  修仙包样例：逆鳞（受火系 def+）、掌心雷（雷系攻击 atk+%）。
+- **伤害链**：减伤解算（可含破防）→ 亲和乘区 → 暴击乘区；RNG 抽取顺序与旧版
+  逐点一致（波动 → 暴击），无系内容零漂移。
+- **事件面**：attack 事件 data 增可选 `element`（攻方系别，凡击不带）——四系签名
+  的断言锚点（破防档位跃迁 / 间隔变化 / 暴击专属文案）皆在既有 attack 流内可断言。
 
 ## enemies 系别字段（#16，可选零破坏）
 
@@ -612,8 +651,8 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 |---|---|---|
 | `kind` | string（`^[a-z][a-zA-Z0-9_]*$`） | 动词池键（#021 批 4 开放键域）：须在 `combatText.verbs` 注册（语义校验 xref）；'claw'/'magic' 为官方包约定 |
 | `level` | integer（≥ 1） | 层数；上限**单一来源** = `config.progression.maxLevel`（#021 批 4：语义校验对照，config 缺省时跳过；schema 魔法数 99 已清退）。另一有效上限来自开战门控 `clv + levelGateOffset ≥ level` |
-| `element` | string（`^[a-z][a-zA-Z0-9_]*$`） | 系别键（#25 键域开放）：须在 `elements` 节注册（语义校验 xref）；**不填=凡击无系别**；只给 Boss/特色怪配 |
-| `affinities` | `{[系别]: −100~100}` | 系别亲和：受该系攻击的伤害调整百分点（负=抗性，正=易伤）；键域开放（#25）：系别键须在 `elements` 节注册（语义校验 xref） |
+| `element` | string（`^[a-z][a-zA-Z0-9_]*$`） | 系别键（#25 键域开放）：须在 `elements` 节注册（语义校验 xref）；**不填=凡击无系别**；只给 Boss/特色怪配。#15 起：风味句按攻方系别路由（敌方机械签名未启，见「系别机制签名」） |
+| `affinities` | `{[系别]: −100~100}` | 系别亲和（#15 起引擎消费）：受该系攻击的伤害 ×(1+值/100)（负=抗性被克读轻档，正=易伤克制读高档）；键域开放（#25）：系别键须在 `elements` 节注册（语义校验 xref）；**只给 Boss 配** |
 
 系别是结构签名不是数值皮肤（ADR-012）：配 `element` 的敌人应携带对应机制原语，
 否则宁可不配（宁 4 真系勿 7 假系）。

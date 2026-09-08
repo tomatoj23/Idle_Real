@@ -67,6 +67,17 @@ export function rollCrit(critChancePct: number, random: () => number): boolean {
 
 export type DamageTier = 'light' | 'mid' | 'heavy' | 'deadly';
 
+/**
+ * 系别机制签名原语注册表（#15 第一波闭集，ADR-012 每系一个可观测机制签名）：
+ * 金·破防（受击者 def 临时降低）/ 水·滞缓（敌方攻击间隔延长）/ 风·迅疾
+ * （自身间隔缩短）；雷·霆爆复用暴击体系（风味句路由，零机械原语）。
+ * 火/木 DoT 原语依赖状态原语（ADR-013），第二波另票扩展本注册表——
+ * content 侧校验镜像同值（validateContentPack 的 ELEMENT_COMBAT_PRIMITIVES）。
+ */
+export const ELEMENT_COMBAT_PRIMITIVES = ['defenseBreak', 'slow', 'swift'] as const;
+
+export type ElementCombatPrimitive = (typeof ELEMENT_COMBAT_PRIMITIVES)[number];
+
 /** 伤害档：相对期望伤害（已计防御减免）。 */
 export function hitTierOf(
   dmg: number,
@@ -82,6 +93,58 @@ export function hitTierOf(
 /** 剩余生命档（仅致命一击门控使用）。 */
 export function isCriticalHp(hp: number, max: number, m: DamageMechanics = BASE_DAMAGE_MECHANICS): boolean {
   return max > 0 && hp / max <= m.criticalHpFraction;
+}
+
+/* ---------- 系别亲和与风味句（#15） ---------- */
+
+/**
+ * 亲和度乘区：受某系攻击的伤害调整百分点（负 = 抗性被克，正 = 易伤克制）。
+ * 缺省/非法 = 1（凡击同律）；乘数钳 ≥ 0（全抗 −100 → 伤害下限 1 由调用方钳）。
+ */
+export function affinityMultiplier(affinity: number | undefined): number {
+  if (typeof affinity !== 'number' || !Number.isFinite(affinity)) return 1;
+  return Math.max(0, 1 + affinity / 100);
+}
+
+/** 系别风味句池（combatText.elementFlavor 条目，#15）：攻方系别键 → 四池。 */
+export interface ElementFlavorPools {
+  /** 普通系别击风味句（起手/后果皆可，槽位 {defender}/{enemy}/{d}）。 */
+  readonly attacks?: unknown;
+  /** 暴击专属风味句（雷·霆爆：暴击金框文案的载体）。 */
+  readonly crits?: unknown;
+  /** 克制专属风味句（受击者对该系亲和 > 0，易伤）。 */
+  readonly counters?: unknown;
+  /** 被克专属风味句（受击者对该系亲和 < 0，抗性挫败感）。 */
+  readonly resists?: unknown;
+}
+
+/**
+ * 系别风味句抽取（攻方系别路由，#15）：被克/克制（受击者亲和反应）优先，
+ * 其次暴击专属池，再普通池；按序取首个非空池，全缺返回空串（不造句）。
+ * 返回原始模板，槽位填充由 makeAttackText 统一处理。
+ */
+export function pickElementFlavor(
+  pools: CombatTextPools,
+  element: string | undefined,
+  affinity: number | undefined,
+  crit: boolean,
+  random: () => number,
+): string {
+  if (element === undefined) return '';
+  const root = pools.elementFlavor as Record<string, ElementFlavorPools> | undefined;
+  const entry = root && typeof root === 'object' ? root[element] : undefined;
+  if (!entry || typeof entry !== 'object') return '';
+  const preferred: unknown[] = [
+    affinity !== undefined && affinity < 0 ? entry.resists : undefined,
+    affinity !== undefined && affinity > 0 ? entry.counters : undefined,
+    crit ? entry.crits : undefined,
+    entry.attacks,
+  ];
+  for (const pool of preferred) {
+    const text = pickText(pool, random);
+    if (text !== undefined) return text;
+  }
+  return '';
 }
 
 /* ---------- 通用词库抽取器 ---------- */
@@ -135,6 +198,8 @@ export interface CombatTextPools {
   readonly summary?: unknown;
   /** 同对手对照语池（#019：revenge/faster/slower/even）。 */
   readonly compare?: unknown;
+  /** 系别风味句池（#15：键 = elements 注册系别，见 ElementFlavorPools）。 */
+  readonly elementFlavor?: unknown;
 }
 
 /** 文案生成入参：双方身份、数值与随机源。 */
@@ -158,6 +223,10 @@ export interface AttackTextArgs {
   /** 受击后剩余生命 / 上限。 */
   readonly defenderHp: number;
   readonly defenderMaxHp: number;
+  /** 攻方系别（#15）：玩家 = 武器 element，敌人 = 敌人 element；缺省 = 凡击。 */
+  readonly element?: string;
+  /** 受击者对攻方系别的亲和（#15）：玩家攻妖时 = 敌人 affinities[element]。 */
+  readonly affinity?: number;
 }
 
 interface VerbLike {
@@ -264,7 +333,13 @@ export function makeAttackText(
       (tierText(pools, args.side, tier, random) ?? '{d}')
         .replaceAll('{defender}', args.enemyName)
         .replaceAll('{d}', String(args.dmg));
-  const full = line + tail;
+  // 系别风味句（#15）：攻方系别路由（被克/克制 > 暴击专属 > 普通），槽位
+  // 与出招句同一体系；全缺 = 空串（不造句，裁决 ④）。
+  const flavor = pickElementFlavor(pools, args.element, args.affinity, args.crit, random)
+    .replaceAll('{defender}', args.enemyName)
+    .replaceAll('{enemy}', args.enemyName)
+    .replaceAll('{d}', String(args.dmg));
+  const full = line + tail + flavor;
   return full === '' ? String(args.dmg) : full;
 }
 

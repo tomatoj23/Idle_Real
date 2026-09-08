@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ElementsSection",
-  "description": "content 包 elements 节：系别键域注册表（#25 键域开放，循 #21 VerbStyle 先例，ADR-017 裁决 8）。schema 不钉死七系枚举——包在此声明自己的系别键域，enemy.element / affinities 键 / 铭纹条件 element 的引用合法性由语义校验对照本节强制（xref，坏包加载期拒绝）。金木水火土风雷七系只是官方包内容约定（ADR-012：每系一个可观测机制签名，拒绝纯数值系）；空数组 = 无系别玩法（敌人缺省凡击）。",
+  "description": "content 包 elements 节：系别键域注册表（#25 键域开放，循 #21 VerbStyle 先例，ADR-017 裁决 8）。schema 不钉死七系枚举——包在此声明自己的系别键域，enemy.element / affinities 键 / 铭纹条件 element 的引用合法性由语义校验对照本节强制（xref，坏包加载期拒绝）。金木水火土风雷七系只是官方包内容约定（ADR-012：每系一个可观测机制签名，拒绝纯数值系）；空数组 = 无系别玩法（敌人缺省凡击）。#15 起 entries 可声明机制签名（signature）：原语归引擎闭集注册表（语义校验对照镜像收口），数值/时长全归 content。",
   "type": "array",
   "items": {
     "type": "object",
@@ -18,6 +18,30 @@
         "minLength": 1,
         "maxLength": 6,
         "description": "系别展示名（1~6 字），词表归 content（ADR-016 延伸）；引擎零感知，壳层/编辑器消费"
+      },
+      "signature": {
+        "type": "object",
+        "required": ["primitive"],
+        "additionalProperties": false,
+        "description": "机制签名（#15，ADR-012）：该系占用的引擎机制原语与系数。原语键域 = 引擎闭集（第一波 defenseBreak/slow/swift，语义校验拒绝未注册原语——假系宁大声失败）；value/duration 为机械原语必填（语义校验），未声明签名 = 纯风味系（如雷系走暴击风味句路由，零机械原语）",
+        "properties": {
+          "primitive": {
+            "type": "string",
+            "pattern": "^[a-z][a-zA-Z0-9_]*$",
+            "description": "引擎机制原语键（#15 第一波：defenseBreak 破防（受击者 def 临时降低）/ slow 滞缓（敌方攻击间隔延长）/ swift 迅疾（自身间隔缩短））；未在引擎注册表 = 语义校验 xref 拒绝"
+          },
+          "value": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "exclusiveMaximum": 1,
+            "description": "原语参数：defenseBreak/swift = 缩减比例（0~1），slow = 延长比例（0~1）；机械原语必填（语义校验）"
+          },
+          "duration": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "临时态时长（毫秒）：命中即续；机械原语必填（语义校验）。临时态只在引擎闭包内，不进存档"
+          }
+        }
       }
     }
   }

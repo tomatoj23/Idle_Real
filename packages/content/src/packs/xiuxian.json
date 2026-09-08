@@ -86,8 +86,8 @@
     { "id": "consumable_gold", "name": "九转金丹", "icon": "金", "type": "consumable", "sell": 700, "description": "五分钟内攻防 +40%、暴击 +10%", "effect": { "duration": 300000, "multipliers": { "atk": 1.4, "def": 1.4 }, "crit": 10 } },
 
     { "id": "sword1", "name": "青锋剑", "icon": "剑", "type": "equip", "slot": "weapon", "sell": 30, "verbStyle": "sword", "bonuses": { "atk": 6 } },
-    { "id": "sword2", "name": "玄铁重剑", "icon": "剑", "type": "equip", "slot": "weapon", "sell": 120, "verbStyle": "sword", "bonuses": { "atk": 18 } },
-    { "id": "sword3", "name": "星辰剑", "icon": "剑", "type": "equip", "slot": "weapon", "sell": 400, "verbStyle": "sword", "bonuses": { "atk": 45 } },
+    { "id": "sword2", "name": "玄铁重剑", "icon": "剑", "type": "equip", "slot": "weapon", "sell": 120, "verbStyle": "sword", "bonuses": { "atk": 18 }, "element": "metal", "description": "玄铁无锋，金锐剑气破防而入" },
+    { "id": "sword3", "name": "星辰剑", "icon": "剑", "type": "equip", "slot": "weapon", "sell": 400, "verbStyle": "sword", "bonuses": { "atk": 45 }, "element": "thunder", "description": "剑引星辰之力，落点如霆爆炸裂" },
     { "id": "sword4", "name": "诛仙剑", "icon": "剑", "type": "equip", "slot": "weapon", "sell": 1500, "verbStyle": "sword", "bonuses": { "atk": 105 } },
     { "id": "body1", "name": "布道袍", "icon": "衣", "type": "equip", "slot": "body", "sell": 35, "bonuses": { "def": 6, "hp": 25 } },
     { "id": "body2", "name": "玄铁甲", "icon": "甲", "type": "equip", "slot": "body", "sell": 140, "bonuses": { "def": 16, "hp": 70 } },
@@ -100,8 +100,8 @@
     { "id": "gear_shard", "name": "器屑", "icon": "屑", "type": "mat", "sell": 8, "description": "熔炼法器所得的碎屑，重铸铭纹的消耗材料" },
 
     { "id": "blank_sword_1", "name": "凡铁剑胚", "icon": "胚", "type": "blank", "sell": 0, "slot": "weapon", "floorRange": { "min": 1, "max": 5 }, "tierRange": { "min": 1, "max": 2 }, "preferredTags": ["offense"], "inherentModifiers": [{ "stat": "atk", "zone": "flat", "value": 4 }], "description": "妖物遗落的剑胚，淬入铭纹方能成器" },
-    { "id": "blank_sword_2", "name": "星纹剑胚", "icon": "胚", "type": "blank", "sell": 0, "slot": "weapon", "floorRange": { "min": 6, "max": 10 }, "tierRange": { "min": 2, "max": 3 }, "preferredTags": ["offense", "fortune"], "inherentModifiers": [{ "stat": "atk", "zone": "flat", "value": 10 }], "description": "陨星碎屑锻成的剑胚，纹路间隐有星辉" },
-    { "id": "blank_sword_3", "name": "诛仙剑胚", "icon": "胚", "type": "blank", "sell": 0, "slot": "weapon", "floorRange": { "min": 11, "max": 15 }, "tierRange": { "min": 3, "max": 3 }, "preferredTags": ["offense", "fortune"], "inherentModifiers": [{ "stat": "atk", "zone": "flat", "value": 24 }], "description": "上古剑冢深处出土的残胚，煞气未散" },
+    { "id": "blank_sword_2", "name": "星纹剑胚", "icon": "胚", "type": "blank", "sell": 0, "slot": "weapon", "floorRange": { "min": 6, "max": 10 }, "tierRange": { "min": 2, "max": 3 }, "preferredTags": ["offense", "fortune"], "inherentModifiers": [{ "stat": "atk", "zone": "flat", "value": 10 }], "element": "water", "description": "陨星碎屑锻成的剑胚，寒纹如水波流转" },
+    { "id": "blank_sword_3", "name": "诛仙剑胚", "icon": "胚", "type": "blank", "sell": 0, "slot": "weapon", "floorRange": { "min": 11, "max": 15 }, "tierRange": { "min": 3, "max": 3 }, "preferredTags": ["offense", "fortune"], "inherentModifiers": [{ "stat": "atk", "zone": "flat", "value": 24 }], "element": "wind", "description": "上古剑冢深处出土的残胚，剑气如风未散" },
     { "id": "blank_body_1", "name": "布纹甲胚", "icon": "胚", "type": "blank", "sell": 0, "slot": "body", "floorRange": { "min": 1, "max": 5 }, "tierRange": { "min": 1, "max": 2 }, "preferredTags": ["defense"], "inherentModifiers": [{ "stat": "def", "zone": "flat", "value": 3 }], "description": "妖物遗落的甲胚，可承铭纹护体" },
     { "id": "blank_body_2", "name": "玄龟甲胚", "icon": "胚", "type": "blank", "sell": 0, "slot": "body", "floorRange": { "min": 6, "max": 10 }, "tierRange": { "min": 2, "max": 3 }, "preferredTags": ["defense", "sustain"], "inherentModifiers": [{ "stat": "def", "zone": "flat", "value": 8 }], "description": "千年玄龟蜕下的甲壳所炼，坚若磐石" },
     { "id": "blank_body_3", "name": "不灭甲胚", "icon": "胚", "type": "blank", "sell": 0, "slot": "body", "floorRange": { "min": 11, "max": 15 }, "tierRange": { "min": 3, "max": 3 }, "preferredTags": ["defense", "sustain"], "inherentModifiers": [{ "stat": "def", "zone": "flat", "value": 20 }], "description": "不灭金身的残片锻成，金光不灭" },
@@ -118,7 +118,8 @@
     { "id": "insc_qifu", "name": "气府", "icon": "府", "type": "inscription", "sell": 0, "tiers": [[{ "stat": "hp", "zone": "addPct", "value": 4 }], [{ "stat": "hp", "zone": "addPct", "value": 8 }], [{ "stat": "hp", "zone": "addPct", "value": 12 }]], "tags": ["sustain"], "description": "铭刻后气府开阔，血气充盈" },
     { "id": "insc_nilin", "name": "逆鳞", "icon": "鳞", "type": "inscription", "sell": 0, "tiers": [[{ "stat": "def", "zone": "flat", "value": 6, "condition": { "element": "fire" } }], [{ "stat": "def", "zone": "flat", "value": 12, "condition": { "element": "fire" } }], [{ "stat": "def", "zone": "flat", "value": 24, "condition": { "element": "fire" } }]], "tags": ["defense"], "description": "受火系攻击时如逆鳞奋张，防御大增" },
     { "id": "insc_shigu", "name": "蚀骨", "icon": "蚀", "type": "inscription", "sell": 0, "tiers": [[{ "stat": "atk", "zone": "flat", "value": 3 }], [{ "stat": "atk", "zone": "flat", "value": 6 }], [{ "stat": "atk", "zone": "flat", "value": 12 }]], "feature": { "primitive": "poisonSpread", "value": 0.25 }, "tags": ["offense"], "description": "蚀骨毒氛，或有传染之效（原语待启）" },
-    { "id": "insc_yinlei", "name": "引雷", "icon": "雷", "type": "inscription", "sell": 0, "tiers": [[{ "stat": "crit", "zone": "flat", "value": 1 }], [{ "stat": "crit", "zone": "flat", "value": 3 }], [{ "stat": "crit", "zone": "flat", "value": 5 }]], "feature": { "primitive": "chainBolt", "value": 0.2 }, "tags": ["fortune", "offense"], "description": "引九天雷霆，或有连锁之效（原语待启）" }
+    { "id": "insc_yinlei", "name": "引雷", "icon": "雷", "type": "inscription", "sell": 0, "tiers": [[{ "stat": "crit", "zone": "flat", "value": 1 }], [{ "stat": "crit", "zone": "flat", "value": 3 }], [{ "stat": "crit", "zone": "flat", "value": 5 }]], "feature": { "primitive": "chainBolt", "value": 0.2 }, "tags": ["fortune", "offense"], "description": "引九天雷霆，或有连锁之效（原语待启）" },
+    { "id": "insc_zhangxinlei", "name": "掌心雷", "icon": "霆", "type": "inscription", "sell": 0, "tiers": [[{ "stat": "atk", "zone": "addPct", "value": 6, "condition": { "element": "thunder" } }], [{ "stat": "atk", "zone": "addPct", "value": 12, "condition": { "element": "thunder" } }], [{ "stat": "atk", "zone": "addPct", "value": 20, "condition": { "element": "thunder" } }]], "tags": ["offense", "fortune"], "description": "雷系攻击时掌心雷霆随锋而落，攻势愈盛" }
   ],
   "recipes": [
     { "name": "炼制回气丹", "skill": "alchemy", "unlockLevel": 1, "output": { "item": "consumable_heal", "count": 1 }, "materials": { "herb1": 2 }, "successRate": 0.75, "interval": 3000, "exp": 8 },
@@ -178,6 +179,7 @@
     {
       "id": "e8", "name": "上古凶兽·饕餮", "icon": "凶", "level": 92, "kind": "claw",
       "hp": 6000, "atk": 240, "def": 150, "attackInterval": 2400, "exp": 2600, "gold": { "min": 850, "max": 1500 },
+      "element": "fire", "affinities": { "water": 50, "metal": -50 },
       "drops": [ { "item": "core3", "chance": 0.8 }, { "item": "consumable_gold", "chance": 0.2 } ]
     }
   ],
@@ -305,12 +307,12 @@
     }
   ],
   "elements": [
-    { "id": "metal", "name": "金" },
+    { "id": "metal", "name": "金", "signature": { "primitive": "defenseBreak", "value": 0.4, "duration": 8000 } },
     { "id": "wood", "name": "木" },
-    { "id": "water", "name": "水" },
+    { "id": "water", "name": "水", "signature": { "primitive": "slow", "value": 0.25, "duration": 8000 } },
     { "id": "fire", "name": "火" },
     { "id": "earth", "name": "土" },
-    { "id": "wind", "name": "风" },
+    { "id": "wind", "name": "风", "signature": { "primitive": "swift", "value": 0.2, "duration": 8000 } },
     { "id": "thunder", "name": "雷" }
   ],
   "rarities": [
@@ -459,6 +461,26 @@
       "faster": [ "前番苦战 {prev} 合，今 {rounds} 合击倒" ],
       "slower": [ "今番 {rounds} 合方克，比前番 {prev} 合多费周章" ],
       "even": [ "与前番 {rounds} 合如出一辙" ]
+    },
+    "elementFlavor": {
+      "metal": {
+        "attacks": [ "金锐剑气撕开{defender}的护体罡气——破防了！", "锋刃过处，{defender}的防御如朽木般崩裂。" ],
+        "resists": [ "金锐之气撞上赤焰煞气，锋芒顿挫。", "烈焰灼得剑身发烫，金气锐势大减。" ]
+      },
+      "water": {
+        "attacks": [ "寒潮随剑涌出，{defender}身形一滞。", "水气弥漫，{defender}的动作滞了几分。" ],
+        "counters": [ "寒潮暴涨，赤焰煞气遇水即熄！", "水克火之势尽显，{defender}的凶焰被压得奄奄一息。" ]
+      },
+      "wind": {
+        "attacks": [ "罡风绕体，你的身法又快了一线。", "风随剑走，出招愈见迅疾。" ]
+      },
+      "thunder": {
+        "attacks": [ "雷光缠绕剑锋，噼啪作响。", "细碎的电弧顺着{defender}的伤口窜入。" ],
+        "crits": [ "霆爆！紫雷自九天而落，在{defender}周身炸成雷狱！", "雷霆轰然炸裂——{defender}在雷光中剧烈抽搐！" ]
+      },
+      "fire": {
+        "attacks": [ "炎潮般的煞气翻涌而至，灼热扑面。", "赤焰煞气如浪打来，四周空气都在扭曲。" ]
+      }
     }
   },
   "texts": {

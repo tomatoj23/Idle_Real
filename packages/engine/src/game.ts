@@ -23,6 +23,7 @@ import {
   gearParamsOf,
   playerMaxHp,
   progressionParamsOf,
+  signatureOf,
   skillsOf,
   textsOf,
   weaponSlotOf,
@@ -33,16 +34,19 @@ import {
   type SkillView,
 } from './contentView.js';
 import {
+  affinityMultiplier,
   calcDmg,
   compareEncounterText,
   fillTemplate,
   BASIC_KEY,
+  ELEMENT_COMBAT_PRIMITIVES,
   hitTierOf,
   makeAttackText,
   pickText,
   rollCrit,
   summarizeRounds,
   type DamageTier,
+  type ElementCombatPrimitive,
 } from './combat.js';
 import {
   gearContributions,
@@ -253,6 +257,55 @@ export function createGame(options: CreateGameOptions): Game {
     return typeof declared === 'string' && declared.length > 0 ? declared : BASIC_KEY;
   }
 
+  /* ---------- 系别（#15，ADR-012 结构签名）：签名/亲和/风味全 content 参数化 ---------- */
+
+  /**
+   * 玩家攻击系别：佩戴武器的 element（开放键域，elements 注册表）；无武器 /
+   * 未声明 = 凡击。签名/亲和度/风味句的攻方来源单点。
+   */
+  function weaponElement(): string | undefined {
+    const element = wornWeapon()?.item.element;
+    return typeof element === 'string' && element.length > 0 ? element : undefined;
+  }
+
+  /**
+   * 攻击系别的机制签名（系数/时长全读 content，引擎零写死）：签名解析失败
+   * （未注册/形状非法）= 纯风味系，机制层静默降级为凡击。
+   */
+  function attackSignature() {
+    return signatureOf(content, weaponElement());
+  }
+
+  /**
+   * 系别临时态过期时刻（#15）：金·破防 / 水·滞缓 / 风·迅疾 → 过期游戏内时间。
+   * **只在闭包内，不落盘**（票面约束：抗性/临时态不进存档新字段）——开战/
+   * 再战/离线一律重置，存档恢复即散尽。数值不在此存：每次消费按当前武器
+   * 系别现读 content 签名（改包即生效，无第二份缓存）。
+   */
+  const elemExpiry: Record<ElementCombatPrimitive, number> = { defenseBreak: 0, slow: 0, swift: 0 };
+  const resetElemExpiry = (): void => {
+    for (const primitive of Object.keys(elemExpiry)) {
+      elemExpiry[primitive as ElementCombatPrimitive] = 0;
+    }
+  };
+
+  /** 系别命中：机械原语签名即时生效（过期时间 = 当前时刻 + 时长，命中即续）。 */
+  function applyElementProc(element: string | undefined): void {
+    const signature = element !== undefined ? signatureOf(content, element) : undefined;
+    if (!signature) return;
+    elemExpiry[signature.primitive as ElementCombatPrimitive] = time + signature.duration!;
+  }
+
+  /** 临时态在效时取原语参数（比例钳 [0,1)，防御坏内容；系数现读 content）。 */
+  function activeSignatureValue(
+    primitive: ElementCombatPrimitive,
+    expiry: number,
+    signature: ReturnType<typeof attackSignature>,
+  ): number {
+    if (!signature || signature.primitive !== primitive || expiry <= time) return 0;
+    return Math.min(0.999, Math.max(0, signature.value ?? 0));
+  }
+
   /**
    * 全部属性贡献：静态注入（createGame.contributions）+ 装备实例投影
    * （flat）+ 生效中的丹药 buff（倍率区 mult / 暴击百分点 flat）+
@@ -314,7 +367,8 @@ export function createGame(options: CreateGameOptions): Game {
     };
   }
 
-  /** 战斗双方语境合成：攻侧 moveId、防侧来袭 element（一次取齐）。 */
+  /** 战斗双方语境合成：攻侧 moveId+系别（武器 element，#15）、防侧来袭 element
+   * （条件修饰符门控：受某系伤害的抗性铭纹走此语境）。 */
   function combatStats(enemy: EnemyView): {
     atk: number;
     crit: number;
@@ -322,7 +376,11 @@ export function createGame(options: CreateGameOptions): Game {
     maxHp: number;
   } {
     const moveKey = weaponMoveKey();
-    const atkSide = aggregateStats(statBase(), playerContributions(), { moveId: moveKey });
+    const element = weaponElement();
+    const atkSide = aggregateStats(statBase(), playerContributions(), {
+      moveId: moveKey,
+      ...(element !== undefined ? { element } : {}),
+    });
     const defSide = aggregateStats(statBase(), playerContributions(), {
       element: enemy.element,
     });
@@ -675,6 +733,7 @@ export function createGame(options: CreateGameOptions): Game {
     const enemy = pickDungeonEnemyOf(content, dungeon, floor, random);
     if (!enemy) return false;
     const scaled = dungeonFloorEnemyOf(content, dungeon.id, floor, enemy.id) ?? enemy;
+    resetElemExpiry(); // 系别临时态不跨战团（开新战一律归零，#15）
     state.combat = {
       enemyId: scaled.id,
       ehp: scaled.hp,
@@ -747,17 +806,30 @@ export function createGame(options: CreateGameOptions): Game {
     leaveDungeon(); // 秘境攻略随战团散去（#7：撤退/退避/转赴修行一律离境）
   }
 
-  /** 玩家一击：暴击 roll → 伤害 → 伤害档累计 → 文案 → 胜负判定。 */
+  /** 玩家一击：系别签名（破防/亲和/风味）→ 暴击 roll → 伤害 → 伤害档累计 →
+   * 文案 → 胜负判定。伤害链：减伤解算（可含金·破防）→ 亲和乘区 → 暴击乘区；
+   * 伤害档对**未破防**期望判档——破防/克制的可观测签名 = 档位跃迁（ADR-012）。 */
   function playerAttackRound(enemy: EnemyView, c: CombatState): void {
     const moveKey = weaponMoveKey();
     const weapon = wornWeapon();
+    const element = weaponElement();
     const { atk, crit: critChance } = combatStats(enemy);
-    const dmgBase = calcDmg(atk, enemy.def, random, cparams);
+    // 金·破防（临时态在效）：受击者 def 临时降低 → 减伤解算按破防后 def。
+    const signature = attackSignature();
+    const breakValue = activeSignatureValue('defenseBreak', elemExpiry.defenseBreak, signature);
+    const defEff = enemy.def * (1 - breakValue);
+    const dmgBase = calcDmg(atk, defEff, random, cparams);
+    // 亲和乘区（#25 预留 affinities 的引擎消费面）：受击者对该系的易伤/抗性。
+    const affinity = element !== undefined ? enemy.affinities?.[element] : undefined;
+    let dmg = Math.max(1, Math.round(dmgBase * affinityMultiplier(affinity)));
     const crit = rollCrit(critChance, random);
-    const dmg = crit ? Math.round(dmgBase * cparams.critMultiplier) : dmgBase;
+    if (crit) dmg = Math.round(dmg * cparams.critMultiplier);
     c.ehp -= dmg;
     c.rounds += 1;
     if (crit) c.crits += 1;
+    // 系别命中：机械签名临时态即时生效（命中即续，时长归 content）。
+    applyElementProc(element);
+    // 伤害档对未破防/未亲和的期望判档：破防/克制读高档、被克读轻档（签名可见）。
     const tier = hitTierOf(dmg, atk, enemy.def, cparams);
     c.tiers[tier] += 1;
     const text = makeAttackText(
@@ -774,6 +846,8 @@ export function createGame(options: CreateGameOptions): Game {
         defenderDef: enemy.def,
         defenderHp: Math.max(0, c.ehp),
         defenderMaxHp: enemy.hp,
+        ...(element !== undefined ? { element } : {}),
+        ...(affinity !== undefined ? { affinity } : {}),
       },
       random,
       cparams,
@@ -781,7 +855,16 @@ export function createGame(options: CreateGameOptions): Game {
     events.emit({
       type: 'attack',
       time,
-      data: { side: 'player', enemyId: enemy.id, enemyName: enemy.name, text, dmg, crit, tier },
+      data: {
+        side: 'player',
+        enemyId: enemy.id,
+        enemyName: enemy.name,
+        text,
+        dmg,
+        crit,
+        tier,
+        ...(element !== undefined ? { element } : {}),
+      },
     });
     if (c.ehp <= 0) {
       victory(enemy, c);
@@ -816,6 +899,8 @@ export function createGame(options: CreateGameOptions): Game {
         defenderDef: def,
         defenderHp: Math.max(0, state.hp),
         defenderMaxHp: maxHp,
+        // 敌方系别（#15）：风味句按攻方系别路由；玩家侧无亲和表，语境缺省。
+        ...(enemy.element !== undefined ? { element: enemy.element } : {}),
       },
       random,
       cparams,
@@ -823,7 +908,15 @@ export function createGame(options: CreateGameOptions): Game {
     events.emit({
       type: 'attack',
       time,
-      data: { side: 'enemy', enemyId: enemy.id, enemyName: enemy.name, text, dmg, tier },
+      data: {
+        side: 'enemy',
+        enemyId: enemy.id,
+        enemyName: enemy.name,
+        text,
+        dmg,
+        tier,
+        ...(enemy.element !== undefined ? { element: enemy.element } : {}),
+      },
     });
     if (state.hp <= 0) defeat(enemy, c);
   }
@@ -1011,6 +1104,7 @@ export function createGame(options: CreateGameOptions): Game {
             c.crits = 0;
             c.tiers = { light: 0, mid: 0, heavy: 0, deadly: 0 };
             c.bossPhase = -1; // Boss 重生从头演阶段（#8：阶段随再战重置归位）
+            resetElemExpiry(); // 系别临时态随再战归零（Boss 重生不带残效，#15）
             emitNote(noteFrom('reengage', { enemy: enemy.name }), enemy.id);
           } else {
             stopCombat(noteFrom('retreatVictory'));
@@ -1030,20 +1124,34 @@ export function createGame(options: CreateGameOptions): Game {
       }
       if (!state.combat) return;
       // 推进到下一个事件点（玩家出招 / 敌人出招 / dt 消化完）
+      // 有效间隔 = 基础间隔 ×（1 ∓ 系别速率修正，#15）：风·迅疾缩短玩家间隔、
+      // 水·滞缓延长敌方间隔（临时态在效时；系数现读 content 签名）。
       // 敌人缺省攻击间隔 = 玩家间隔（config.combat.playerAttackInterval，#020）。
-      const pWait = cparams.playerAttackInterval - c.pt;
-      const eWait = Math.max(1, enemy.attackInterval ?? cparams.playerAttackInterval) - c.et;
-      const step = Math.min(remaining, pWait, eWait);
+      const signature = attackSignature();
+      const pInterval = Math.max(
+        1,
+        Math.round(
+          cparams.playerAttackInterval * (1 - activeSignatureValue('swift', elemExpiry.swift, signature)),
+        ),
+      );
+      const enemyBase = Math.max(1, enemy.attackInterval ?? cparams.playerAttackInterval);
+      const eInterval = Math.max(
+        1,
+        Math.round(enemyBase * (1 + activeSignatureValue('slow', elemExpiry.slow, signature))),
+      );
+      const pWait = pInterval - c.pt;
+      const eWait = eInterval - c.et;
+      const step = Math.max(0, Math.min(remaining, pWait, eWait));
       c.pt += step;
       c.et += step;
       remaining -= step;
-      if (c.pt >= cparams.playerAttackInterval) {
-        c.pt -= cparams.playerAttackInterval;
+      if (c.pt >= pInterval) {
+        c.pt -= pInterval;
         playerAttackRound(enemy, c);
         if (!state.combat) return;
       }
-      if (c.et >= (enemy.attackInterval ?? cparams.playerAttackInterval)) {
-        c.et -= enemy.attackInterval ?? cparams.playerAttackInterval;
+      if (c.et >= eInterval) {
+        c.et -= eInterval;
         enemyAttackRound(enemy, c);
         if (!state.combat) return;
       }
@@ -1097,7 +1205,10 @@ export function createGame(options: CreateGameOptions): Game {
    */
   function settleOfflineInner(elapsedMs: number): void {
     if (elapsedMs <= 0) return;
-    if (state.combat) state.combat = null; // 离线不可战斗：视作离场休整，回满血由下方统一处理
+    if (state.combat) {
+      state.combat = null; // 离线不可战斗：视作离场休整，回满血由下方统一处理
+      resetElemExpiry(); // 系别临时态不落盘，离线离场即散（#15）
+    }
     if (state.dungeon) state.dungeon = null; // 秘境不可离线续跑：就地离境（最高层已随进层登记，#7）
     // 离线上限（offlineCap 消费点，#6）：Σflat 毫秒，≤ 0 = 不设限（基线行为
     // 完全一致）；超限部分不入账（上限的语义本体）。
@@ -1551,6 +1662,7 @@ export function createGame(options: CreateGameOptions): Game {
             tiers: { light: 0, mid: 0, heavy: 0, deadly: 0 },
             bossPhase: -1,
           };
+          resetElemExpiry(); // 开新战：系别临时态归零（不跨战团，#15）
           emitNote(noteFrom('start', { enemy: enemy.name }), enemy.id);
           return;
         }

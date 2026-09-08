@@ -16,7 +16,7 @@ describe('修仙题材包 · 验收（issue #2）', () => {
   it('loadXiuxianPack 强校验通过并返回完整包', () => {
     const pack = loadXiuxianPack();
     expect(pack.skills).toHaveLength(6);
-    expect(pack.items).toHaveLength(53);
+    expect(pack.items).toHaveLength(54);
     expect(pack.recipes).toHaveLength(16);
     expect(pack.enemies).toHaveLength(8);
     expect(pack.gearDrops).toHaveLength(8);
@@ -63,13 +63,42 @@ describe('修仙题材包 · 验收（issue #2）', () => {
   it('elements 系别注册表：七系在案（#25 键域开放，官方包约定）', () => {
     const pack = loadXiuxianPack();
     expect(pack.elements).toEqual([
-      { id: 'metal', name: '金' },
+      { id: 'metal', name: '金', signature: { primitive: 'defenseBreak', value: 0.4, duration: 8000 } },
       { id: 'wood', name: '木' },
-      { id: 'water', name: '水' },
+      { id: 'water', name: '水', signature: { primitive: 'slow', value: 0.25, duration: 8000 } },
       { id: 'fire', name: '火' },
       { id: 'earth', name: '土' },
-      { id: 'wind', name: '风' },
+      { id: 'wind', name: '风', signature: { primitive: 'swift', value: 0.2, duration: 8000 } },
       { id: 'thunder', name: '雷' },
+    ]);
+  });
+
+  it('系别第一波（#15）：武器系别 / Boss 亲和 / elementFlavor 池 / 系别条件铭纹在案', () => {
+    const pack = loadXiuxianPack();
+    const itemById = new Map(pack.items.map((it) => [it.id, it]));
+    // 四系构筑载体：金重剑（破防）/ 星辰剑（雷·霆爆）/ 星纹胚（水·滞缓）/ 诛仙胚（风·迅疾）。
+    expect(itemById.get('sword2')?.element).toBe('metal');
+    expect(itemById.get('sword3')?.element).toBe('thunder');
+    expect(itemById.get('blank_sword_2')?.element).toBe('water');
+    expect(itemById.get('blank_sword_3')?.element).toBe('wind');
+    // 无系武器可见（凡击回退）。
+    expect(itemById.get('sword1')?.element).toBeUndefined();
+    expect(itemById.get('sword4')?.element).toBeUndefined();
+    // Boss 亲和度（只给 Boss 配）：水克火易伤、火克金抗性（五行相克归 content）。
+    const e8 = pack.enemies.find((enemy) => enemy.id === 'e8');
+    expect(e8?.element).toBe('fire');
+    expect(e8?.affinities).toEqual({ water: 50, metal: -50 });
+    // 风味句池：四系 + 火系（Boss 攻击侧），雷系带霆爆专属 crits 池。
+    expect(Object.keys(pack.combatText.elementFlavor ?? {}).sort()).toEqual([
+      'fire', 'metal', 'thunder', 'water', 'wind',
+    ]);
+    expect(pack.combatText.elementFlavor?.thunder?.crits?.length).toBeGreaterThan(0);
+    // 攻侧系别条件铭纹（掌心雷：雷系攻击 atk+%）与抗性铭纹（逆鳞：受火系 def+）。
+    expect(itemById.get('insc_zhangxinlei')?.tiers?.[2]).toEqual([
+      { stat: 'atk', zone: 'addPct', value: 20, condition: { element: 'thunder' } },
+    ]);
+    expect(itemById.get('insc_nilin')?.tiers?.[2]).toEqual([
+      { stat: 'def', zone: 'flat', value: 24, condition: { element: 'fire' } },
     ]);
   });
 
@@ -189,6 +218,7 @@ describe('修仙题材包 · 数值基线', () => {
       insc_nilin: ['inscription', 0],
       insc_shigu: ['inscription', 0],
       insc_yinlei: ['inscription', 0],
+      insc_zhangxinlei: ['inscription', 0],
     });
   });
 

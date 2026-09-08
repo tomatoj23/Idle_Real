@@ -44,6 +44,8 @@ export type {
   DungeonReward,
   Element,
   ElementDef,
+  ElementFlavorPools,
+  ElementSignature,
   Enemy,
   EnemyKind,
   Feature,

@@ -37,10 +37,12 @@ export {
   craftMissingOf,
   craftParamsOf,
   craftSuccessRateOf,
+  elementsOf,
   enemyGateOf,
   enemiesOf,
   findActivity,
   findBlank,
+  findElementOf,
   findEnemy,
   findGearDrop,
   findInscription,
@@ -60,6 +62,7 @@ export {
   recipesOf,
   shopAffordOf,
   shopOf,
+  signatureOf,
   slotsOf,
   skillsOf,
   textsOf,
@@ -72,6 +75,8 @@ export type {
   ByproductView,
   CombatParamsView,
   CraftParamsView,
+  ElementSignatureView,
+  ElementView,
   EnemyDropView,
   EnemyGateView,
   EnemyView,
@@ -100,9 +105,12 @@ export type {
   SaveData,
 } from './types.js';
 
-// 战斗机制与装备实例（issue #4；机制参数化 #020：九常量清退为基线对象）
+// 战斗机制与装备实例（issue #4；机制参数化 #020：九常量清退为基线对象；
+// 系别机制签名/亲和/风味句 #15）
 export {
   BASE_DAMAGE_MECHANICS,
+  ELEMENT_COMBAT_PRIMITIVES,
+  affinityMultiplier,
   calcDmg,
   compareEncounterText,
   emptyTally,
@@ -111,6 +119,7 @@ export {
   hitTierOf,
   isCriticalHp,
   makeAttackText,
+  pickElementFlavor,
   pickText,
   rollCrit,
   summarizeRounds,
@@ -120,6 +129,8 @@ export type {
   CombatTextPools,
   DamageMechanics,
   DamageTier,
+  ElementCombatPrimitive,
+  ElementFlavorPools,
   EncounterRecord,
   RoundTally,
 } from './combat.js';

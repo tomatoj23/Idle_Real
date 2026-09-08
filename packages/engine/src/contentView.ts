@@ -11,7 +11,12 @@ import {
   maxHpForLevel,
   type ProgressionParams,
 } from './progression.js';
-import { BASE_DAMAGE_MECHANICS, type DamageMechanics } from './combat.js';
+import {
+  BASE_DAMAGE_MECHANICS,
+  ELEMENT_COMBAT_PRIMITIVES,
+  type DamageMechanics,
+  type ElementCombatPrimitive,
+} from './combat.js';
 import { BASE_AFFIX_PARAMS, type AffixParams, type GearBonuses } from './gear.js';
 import {
   aggregateStat,
@@ -80,6 +85,11 @@ export interface ItemView {
   readonly effect?: ItemEffectView;
   /** consumable 类：即时恢复（percent = 气血上限比例）。 */
   readonly heal?: { readonly percent: number };
+  /**
+   * 系别（#15，键域 = elements 注册表）：引擎只消费武器槽物品——佩戴后玩家
+   * 攻击携带该系（机制签名/亲和度/风味句路由的攻方来源）；其余槽位为未来留门。
+   */
+  readonly element?: string;
 }
 
 export interface ShopEntryView {
@@ -226,6 +236,12 @@ export interface EnemyView {
   readonly drops?: readonly EnemyDropView[];
   /** 系别（#15 起启用）；缺省 = 凡击。 */
   readonly element?: string;
+  /**
+   * 系别亲和（#15，#25 预留字段的引擎消费面）：键 = 系别键，值 = 受该系
+   * 攻击的伤害调整百分点（负 = 抗性被克，正 = 易伤克制）；缺省/缺键 = 无调整。
+   * 形状与 content 包 Affinities（Partial Record）同构，坏键防御交 affinityMultiplier。
+   */
+  readonly affinities?: Readonly<Partial<Record<string, number>>>;
 }
 
 export function enemiesOf(content: GameContent): readonly EnemyView[] {
@@ -235,6 +251,57 @@ export function enemiesOf(content: GameContent): readonly EnemyView[] {
 
 export function findEnemy(content: GameContent, enemyId: string): EnemyView | undefined {
   return enemiesOf(content).find((enemy) => enemy.id === enemyId);
+}
+
+/* ---------- 系别（#15：结构签名机制面，ADR-012） ---------- */
+
+/**
+ * 系别机制签名（elements[].signature，#15）：content 声明该系占用的引擎
+ * 机制原语与系数——原语归引擎闭集注册表（combat.ts ELEMENT_COMBAT_PRIMITIVES，
+ * 存在性由包校验强制），数值/时长全归 content（换包改系数引擎零改动）。
+ */
+export interface ElementSignatureView {
+  /** 机制原语键（engine 闭集：defenseBreak/slow/swift；火/木 DoT 原语第二波另票）。 */
+  readonly primitive: string;
+  /** 原语参数：defenseBreak/swift = 缩减比例（0~1），slow = 延长比例（0~1）。 */
+  readonly value?: number;
+  /** 临时态时长（毫秒）；机械原语必填（包校验）。 */
+  readonly duration?: number;
+}
+
+/** 系别视图（elements 节条目）：包内系别键域注册表（#25）+ 机制签名（#15）。 */
+export interface ElementView {
+  readonly id: string;
+  readonly name: string;
+  readonly signature?: ElementSignatureView;
+}
+
+/** 系别列表：缺节/形状非法 → 空表（安全兜底，无系别玩法）。 */
+export function elementsOf(content: GameContent): readonly ElementView[] {
+  const elements = (content as { elements?: unknown }).elements;
+  return Array.isArray(elements) ? (elements as ElementView[]) : [];
+}
+
+/** 按系别键取定义；未注册返回 undefined。 */
+export function findElementOf(content: GameContent, elementId: string): ElementView | undefined {
+  return elementsOf(content).find((element) => element.id === elementId);
+}
+
+/**
+ * 系别机制签名解析：元素未注册 / 未声明签名 / 签名形状非法（原语不在引擎
+ * 注册表、参数非正数）一律 undefined——无签名 = 纯风味系，机制层零降级路径。
+ */
+export function signatureOf(
+  content: GameContent,
+  elementId: string | undefined,
+): ElementSignatureView | undefined {
+  const signature = elementId !== undefined ? findElementOf(content, elementId)?.signature : undefined;
+  if (!signature || typeof signature !== 'object') return undefined;
+  if (typeof signature.primitive !== 'string') return undefined;
+  if (!ELEMENT_COMBAT_PRIMITIVES.includes(signature.primitive as ElementCombatPrimitive)) return undefined;
+  if (typeof signature.duration !== 'number' || !(signature.duration > 0)) return undefined;
+  if (typeof signature.value !== 'number' || !(signature.value > 0)) return undefined;
+  return signature;
 }
 
 /* ---------- 异宝掉落表 ---------- */

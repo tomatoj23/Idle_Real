@@ -35,6 +35,9 @@
  *      系别键域的唯一注册表（schema 不钉七系枚举），敌人 element、affinities
  *      键、铭纹条件 element 引用的系别键都必须命中注册表（坏包加载期拒绝，
  *      报错逐字段可定位）；敌人不填 element = 凡击，引擎条件匹配语义不变；
+ *      #15 扩引用面：武器 element（equip/blank）与 elementFlavor 池键同律
+ *      xref；机制签名原语对照引擎闭集镜像（未注册原语 = 假系，加载期大声
+ *      拒绝；机械原语的 value/duration 必填，schema 边界 + 语义校验双关卡）；
  *    - config 玩法参数子节（#020，ADR-016 裁决 ① 分策）：combat/
  *      progression/affix 子节全可选（缺省 = 引擎基线），伤害档阈值
  *      跨字段递增由语义检查补全；
@@ -233,6 +236,8 @@ function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
   // 系别存在性（#25 键域开放）：注册表构建一次，三处引用面统一对照。
   const elementIds = new Set(pack.elements.map((entry) => entry.id));
   checkElementRefs(pack, elementIds, errors);
+  // 系别机制签名（#15，ADR-012）：原语闭集镜像 + 机械原语参数必填。
+  checkElementSignatures(pack.elements, errors);
 
   // 转生节（#6）：可选节，存在则查清单键域、天赋树 xref/查环、解锁表 xref、境界词表。
   checkRebirth(pack, enemyIndex, skillIndex, errors);
@@ -816,9 +821,10 @@ function checkVerbStyles(
 /**
  * 系别存在性（#25 键域开放的存在性关卡，循 #21 动词风格先例）：
  * schema 只钉键形态不钉取值，引用合法性在此收口——敌人 element、
- * affinities 键、铭纹条件 element（胚纹/三阶表/feature 三落点）引用的
- * 系别键都必须命中 elements 节注册表（坏包加载期拒绝，逐字段可定位）。
- * 缺省/兜底约定：敌人不填 element = 凡击；聚合语境无 element 维度时
+ * affinities 键、铭纹条件 element（胚纹/三阶表/feature 三落点）、武器
+ * element（equip/blank，#15）、elementFlavor 池键（#15）引用的系别键都
+ * 必须命中 elements 节注册表（坏包加载期拒绝，逐字段可定位）。
+ * 缺省/兜底约定：敌人/武器不填 element = 凡击；聚合语境无 element 维度时
  * 条件修饰符不生效（引擎 conditionMatches 语义不变）。
  */
 function checkElementRefs(
@@ -846,6 +852,15 @@ function checkElementRefs(
     }
   });
   pack.items.forEach((item, i) => {
+    // 武器系别（#15）：equip/blank 分支的 element 引用合法性（schema 已按
+    // 分支钉形态，此处只收键域——引擎只消费武器槽，其余槽位为未来留门）。
+    if (item.element !== undefined && !registered.has(item.element)) {
+      errors.push({
+        path: `/items/${i}/element`,
+        keyword: 'xref',
+        message: message(item.element),
+      });
+    }
     const checkCondition = (condition: ModifierCondition | undefined, path: string): void => {
       if (condition?.element !== undefined && !registered.has(condition.element)) {
         errors.push({ path, keyword: 'xref', message: message(condition.element) });
@@ -861,6 +876,65 @@ function checkElementRefs(
     });
     if (item.feature !== undefined) {
       checkCondition(item.feature.condition, `/items/${i}/feature/condition/element`);
+    }
+  });
+  // 系别风味句池键（#15）：combatText.elementFlavor 键 = elements 注册系别。
+  for (const [key] of Object.entries(pack.combatText.elementFlavor ?? {})) {
+    if (!registered.has(key)) {
+      errors.push({
+        path: `/combatText/elementFlavor/${key}`,
+        keyword: 'xref',
+        message: message(key),
+      });
+    }
+  }
+}
+
+/* ==================== 系别机制签名（#15，ADR-012） ==================== */
+
+/**
+ * 引擎机制签名原语注册表镜像（#15，与 engine combat.ts
+ * ELEMENT_COMBAT_PRIMITIVES 同值闭集；STAT_KEYS 镜像先例：schema 只钉键
+ * 形态，键域合法性在语义层收口）。未注册原语 = 引擎静默忽略的假系
+ * （ADR-012：宁 4 真系勿 7 假系），加载期大声拒绝；
+ * 火/木 DoT 原语第二波另票，届时两侧镜像同步扩展。
+ */
+const ELEMENT_COMBAT_PRIMITIVES: ReadonlySet<string> = new Set(['defenseBreak', 'slow', 'swift']);
+
+/**
+ * 系别机制签名检查（#15，可选字段，声明才查）：
+ * - primitive 须命中引擎原语注册表镜像（假系大声失败）；
+ * - 机械原语 value/duration 必填（schema 边界只钉 (0,1)/>0 的形态，
+ *   「有没有」由语义校验收口——纯风味系如雷·霆爆不声明签名，零参数路径）。
+ */
+function checkElementSignatures(
+  elements: ContentPack['elements'],
+  errors: ContentError[],
+): void {
+  elements.forEach((element, i) => {
+    const signature = element.signature;
+    if (signature === undefined) return;
+    const at = (field: string) => `/elements/${i}/signature/${field}`;
+    if (!ELEMENT_COMBAT_PRIMITIVES.has(signature.primitive)) {
+      errors.push({
+        path: at('primitive'),
+        keyword: 'xref',
+        message: `机制原语 "${signature.primitive}" 不在引擎签名注册表（${[...ELEMENT_COMBAT_PRIMITIVES].join('/')}）`,
+      });
+    }
+    if (typeof signature.value !== 'number' || !(signature.value > 0)) {
+      errors.push({
+        path: at('value'),
+        keyword: 'shape',
+        message: `机械原语（${signature.primitive}）缺 value（缩减/延长比例，0~1）`,
+      });
+    }
+    if (typeof signature.duration !== 'number' || !(signature.duration > 0)) {
+      errors.push({
+        path: at('duration'),
+        keyword: 'shape',
+        message: `机械原语（${signature.primitive}）缺 duration（临时态时长，毫秒）`,
+      });
     }
   });
 }

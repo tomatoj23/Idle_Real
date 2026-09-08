@@ -295,3 +295,93 @@ describe('#25 · schema 边界保留', () => {
     expectError(validateContentPack(pack), '/enemies/0/affinities/Fire', 'additionalProperties');
   });
 });
+
+/* ==================== 机制签名与风味句（#15，ADR-012 结构签名） ==================== */
+
+describe('#15 · elements 机制签名', () => {
+  it('机械签名（破防/滞缓/迅疾）配 value+duration → 通过', () => {
+    const pack = makeBasePack();
+    pack.elements = [
+      { id: 'metal', name: '金', signature: { primitive: 'defenseBreak', value: 0.4, duration: 8000 } },
+      { id: 'water', name: '水', signature: { primitive: 'slow', value: 0.25, duration: 8000 } },
+      { id: 'wind', name: '风', signature: { primitive: 'swift', value: 0.2, duration: 8000 } },
+    ];
+    expect(validateContentPack(pack).ok).toBe(true);
+  });
+
+  it('纯风味系（雷·霆爆零机械原语）不声明 signature → 合法', () => {
+    const pack = makeBasePack();
+    pack.elements = [{ id: 'thunder', name: '雷' }];
+    expect(validateContentPack(pack).ok).toBe(true);
+  });
+
+  it('未注册原语（火·燃爆第二波未至）→ 假系大声拒绝（xref，逐字段可定位）', () => {
+    const pack = makeBasePack();
+    pack.elements = [{ id: 'fire', name: '火', signature: { primitive: 'burn', value: 0.2, duration: 5000 } }];
+    expectError(validateContentPack(pack), '/elements/0/signature/primitive', 'xref');
+  });
+
+  it('机械原语缺 value / duration → 语义校验 shape（schema 只钉边界形态）', () => {
+    const pack = makeBasePack();
+    pack.elements = [{ id: 'metal', name: '金', signature: { primitive: 'defenseBreak' } }];
+    const result = validateContentPack(pack);
+    expectError(result, '/elements/0/signature/value', 'shape');
+    expectError(result, '/elements/0/signature/duration', 'shape');
+  });
+
+  it('value 越界（0,1 之外）→ schema exclusiveMaximum/exclusiveMinimum', () => {
+    const pack = makeBasePack();
+    pack.elements = [{ id: 'metal', name: '金', signature: { primitive: 'defenseBreak', value: 1.5, duration: 8000 } }];
+    expectError(validateContentPack(pack), '/elements/0/signature/value', 'exclusiveMaximum');
+    pack.elements = [{ id: 'metal', name: '金', signature: { primitive: 'slow', value: 0, duration: 8000 } }];
+    expectError(validateContentPack(pack), '/elements/0/signature/value', 'exclusiveMinimum');
+  });
+
+  it('signature 携带未知字段 → additionalProperties 拒绝', () => {
+    const pack = makeBasePack();
+    pack.elements = [
+      { id: 'metal', name: '金', signature: { primitive: 'defenseBreak', value: 0.4, duration: 8000, chance: 0.5 } },
+    ];
+    expectError(validateContentPack(pack), '/elements/0/signature/chance', 'additionalProperties');
+  });
+});
+
+describe('#15 · 武器 element 与 elementFlavor 引用面', () => {
+  it('equip 武器配已注册系别 → 放行；未注册 → 逐字段 xref', () => {
+    const pack = makeBasePack();
+    pack.elements = SEVEN;
+    // 武器槽物品须在 combatText.moves 注册招式名（既有校验关卡，#14 起器胚同律）。
+    pack.combatText.moves.sword_w = ['雷动九天'];
+    pack.items.push({ id: 'sword_w', name: '雷纹剑', icon: '剑', type: 'equip', sell: 30, slot: 'weapon', bonuses: { atk: 6 }, element: 'thunder' });
+    expect(validateContentPack(pack).ok).toBe(true);
+    pack.items[2].element = 'light';
+    expectError(validateContentPack(pack), '/items/2/element', 'xref');
+  });
+
+  it('mat 分支不收 element（oneOf additionalProperties 拒绝）', () => {
+    const pack = makeBasePack();
+    pack.elements = SEVEN;
+    pack.items[0].element = 'fire';
+    expectError(validateContentPack(pack), '/items/0/element', 'additionalProperties');
+  });
+
+  it('elementFlavor 键 = 注册系别；未注册键 → xref', () => {
+    const pack = makeBasePack();
+    pack.elements = SEVEN;
+    pack.combatText.elementFlavor = {
+      thunder: { crits: ['霆爆！紫雷落在{defender}周身！'] },
+    };
+    expect(validateContentPack(pack).ok).toBe(true);
+    pack.combatText.elementFlavor.light = { attacks: ['光'] };
+    expectError(validateContentPack(pack), '/combatText/elementFlavor/light', 'xref');
+  });
+
+  it('elementFlavor 条目空池（minProperties）与未知池键 → schema 拒', () => {
+    const pack = makeBasePack();
+    pack.elements = SEVEN;
+    pack.combatText.elementFlavor = { thunder: {} };
+    expectError(validateContentPack(pack), '/combatText/elementFlavor/thunder', 'minProperties');
+    pack.combatText.elementFlavor = { thunder: { openers: ['起手'] } };
+    expectError(validateContentPack(pack), '/combatText/elementFlavor/thunder/openers', 'additionalProperties');
+  });
+});
