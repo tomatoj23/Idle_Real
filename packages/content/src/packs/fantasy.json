@@ -606,7 +606,9 @@
           "enemyStats": "HP {hp} · AT {atk} · DF {def} · EXP {exp}",
           "enemyGold": "Gold {min}~{max}",
           "dropsSuffix": " Also drops: {drops}",
-          "fightBtn": "Challenge"
+          "fightBtn": "Challenge",
+          "expSub": "XP {into}/{need} · {left} to next level",
+          "engagedBadge": "In battle"
         },
         "bag": {
           "title": "Bag",

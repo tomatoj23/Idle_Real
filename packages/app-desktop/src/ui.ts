@@ -684,8 +684,10 @@ export function buildUi(
     const actPct = act && actDef ? Math.min(100, (act.progress / actDef.interval) * 100) : 0;
 
     const chips = content.skills
+      .filter((s) => s.kind !== 'craft')
       .map((s) => {
-        // #5 起 craft 技能 chip 可选（修为/层数在炼制页消费），仅 combat 锁定。
+        // 修炼页只放 gather 技能（+combat 修为参照）：craft 技能导航归炼制页
+        // 专属（UX 调整）——craft 在本页无活动卡无开工入口，纯 chip 属重复导航。
         const locked = s.kind === 'combat';
         const selected = s.id === skill.id;
         const lv = levelFromXp(st.skills[s.id]?.xp ?? 0, prog);
@@ -1216,6 +1218,46 @@ export function buildUi(
         </section>`;
     }
 
+    /** 敌人卡列表：列表视图与战斗中信息面共用。engagedId = 当前目标——徽标化且
+     *  不渲染挑战按钮（换敌 = 引擎 combat:start 幂等替换语义，点其他怪即切换，
+     *  战斗不中断；点当前怪引擎幂等拒绝，UI 直接收掉入口）。 */
+    const enemyCardsHtml = (st: GameState, engagedId?: string): string =>
+      content.enemies
+      .map((enemy) => {
+        // 开战门控走引擎 enemyGateOf（N1 收敛，#020）：锁定判定与 UI 锁定态
+        // 共用 enemyGateOf 同一实现，UI 零公式复算。
+        const levelGate = enemyGateOf(content, st.skills, enemy.id);
+        // 道韵解锁门槛（#6）：开战判定与 UI 锁定态同源 rebirthGateOf（N1 同款收敛）。
+        const yunGate = rebirthGateOf(content, st.daoYunEarned, { enemyId: enemy.id });
+        const locked = levelGate.locked || yunGate.locked;
+        const lockMsg = yunGate.locked
+          ? T('common.needDaoYun', { daoYun: yunGate.requiredDaoYun })
+          : T('common.needLevel', { level: levelGate.requiredLevel });
+        const gold = enemy.gold ?? { min: 0, max: 0 };
+        const drops = (enemy.drops ?? [])
+          .map((drop) => itemById.get(drop.item)?.name ?? drop.item)
+          .slice(0, 3)
+          .join(sep);
+        return `<article class="enemy-card${locked ? ' locked' : ''}${enemy.id === engagedId ? ' running' : ''}">
+          <div class="enemy-face"><span class="sigil sigil-big">${esc(enemy.icon)}</span></div>
+          <div class="enemy-main">
+            <div class="enemy-head"><b>${esc(enemy.name)}</b><span class="enemy-lv">${esc(T('units.level', { v: enemy.level }))}</span></div>
+            <div class="enemy-sub">${esc(T('pages.combat.enemyStats', { hp: enemy.hp, atk: enemy.atk, def: enemy.def, exp: enemy.exp }))}</div>
+            <div class="enemy-sub">${esc(T('pages.combat.enemyGold', { min: gold.min, max: gold.max }))}${drops ? esc(T('pages.combat.dropsSuffix', { drops })) : ''}</div>
+          </div>
+          <div class="enemy-ops">
+            ${
+              enemy.id === engagedId
+                ? `<em class="act-badge">${esc(T('pages.combat.engagedBadge'))}</em>`
+                : locked
+                ? `<span class="act-lockmsg">${esc(lockMsg)}</span>`
+                : `<button class="btn" data-act="fight" data-enemy="${enemy.id}">${esc(T('pages.combat.fightBtn'))}</button>`
+            }
+          </div>
+        </article>`;
+      })
+      .join('');
+
     const toggles = `
       <div class="combat-toggles">
         <button class="btn btn-ghost${st.autoFight ? ' on' : ''}" data-act="toggle-auto">${esc(T(st.autoFight ? 'pages.combat.autoFightOn' : 'pages.combat.autoFightOff'))}</button>
@@ -1230,6 +1272,11 @@ export function buildUi(
       const ehpPct = Math.max(0, Math.min(100, (combat.ehp / enemy.hp) * 100));
       const resting = combat.respT > 0;
       const hpPct = Math.max(0, Math.min(100, (st.hp / (snap.stats?.maxHp ?? enemy.hp)) * 100));
+      // 斗法修为条（战斗中信息面）：读数与修炼页同式同源（expToNext/expBase）。
+      const cxp = st.skills[combatSkillId]?.xp ?? 0;
+      const cneed = expToNext(clv, prog);
+      const cinto = cxp - expBase(clv, prog);
+      const cexpPct = Number.isFinite(cneed) ? Math.min(100, (cinto / cneed) * 100) : 100;
       return `
         <section class="page">
           <h2 class="page-title">${esc(T('pages.combat.title'))}</h2>
@@ -1246,45 +1293,21 @@ export function buildUi(
               <button class="btn btn-ghost" data-act="flee">${esc(T('pages.combat.fleeBtn'))}</button>
             </div>
           </article>
+          <div class="combat-exp">
+            <div class="act-now"><span>${esc(T('pages.combat.subtitle', { level: clv }))}</span></div>
+            <div class="bar bar-thin"><i style="width:${cexpPct}%"></i></div>
+            ${
+              Number.isFinite(cneed)
+                ? `<div class="status-sub">${esc(T('pages.combat.expSub', { into: cinto, need: cneed, left: Math.max(0, Math.ceil(cneed - cinto)) }))}</div>`
+                : ''
+            }
+          </div>
           ${toggles}
           ${consumables ? `<div class="consumable-bar">${consumables}</div>` : `<p class="page-sub">${esc(T('pages.combat.noConsumables'))}</p>`}
+          <div class="enemy-grid">${enemyCardsHtml(st, combat.enemyId)}</div>
           <div class="flog" id="flog"></div>
         </section>`;
     }
-
-    const cards = content.enemies
-      .map((enemy) => {
-        // 开战门控走引擎 enemyGateOf（N1 收敛，#020）：锁定判定与需层数展示
-        // 与引擎 combat:start 判定同源，UI 零公式复算。
-        const levelGate = enemyGateOf(content, st.skills, enemy.id);
-        // 道韵解锁门槛（#6）：rebirthGateOf 与引擎判定同源。
-        const yunGate = rebirthGateOf(content, st.daoYunEarned, { enemyId: enemy.id });
-        const locked = levelGate.locked || yunGate.locked;
-        const lockMsg = yunGate.locked
-          ? T('common.needDaoYun', { daoYun: yunGate.requiredDaoYun })
-          : T('common.needLevel', { level: levelGate.requiredLevel });
-        const gold = enemy.gold ?? { min: 0, max: 0 };
-        const drops = (enemy.drops ?? [])
-          .map((drop) => itemById.get(drop.item)?.name ?? drop.item)
-          .slice(0, 3)
-          .join(sep);
-        return `<article class="enemy-card${locked ? ' locked' : ''}">
-          <div class="enemy-face"><span class="sigil sigil-big">${esc(enemy.icon)}</span></div>
-          <div class="enemy-main">
-            <div class="enemy-head"><b>${esc(enemy.name)}</b><span class="enemy-lv">${esc(T('units.level', { v: enemy.level }))}</span></div>
-            <div class="enemy-sub">${esc(T('pages.combat.enemyStats', { hp: enemy.hp, atk: enemy.atk, def: enemy.def, exp: enemy.exp }))}</div>
-            <div class="enemy-sub">${esc(T('pages.combat.enemyGold', { min: gold.min, max: gold.max }))}${drops ? esc(T('pages.combat.dropsSuffix', { drops })) : ''}</div>
-          </div>
-          <div class="enemy-ops">
-            ${
-              locked
-                ? `<span class="act-lockmsg">${esc(lockMsg)}</span>`
-                : `<button class="btn" data-act="fight" data-enemy="${enemy.id}">${esc(T('pages.combat.fightBtn'))}</button>`
-            }
-          </div>
-        </article>`;
-      })
-      .join('');
 
     // 秘境入口（#7，票面：入口在斗法页）：入门即切到秘境页；锁定句复用 dungeonLockMsgOf。
     const lockMsgOf = dungeonLockMsgOf(st);
@@ -1311,7 +1334,7 @@ export function buildUi(
         <h2 class="page-title">${esc(T('pages.combat.title'))}</h2>
         <p class="page-sub">${esc(T('pages.combat.subtitle', { level: clv }))}</p>
         ${dungeonEntries}
-        <div class="enemy-grid">${cards}</div>
+        <div class="enemy-grid">${enemyCardsHtml(st)}</div>
         <div class="consumable-bar">${consumables || ''}</div>
       </section>`;
   }

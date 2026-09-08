@@ -288,7 +288,7 @@
             },
             "combat": {
               "type": "object",
-              "required": ["title", "subtitle", "enemyMissing", "resting", "enemyHp", "selfStats", "fleeBtn", "autoFightOn", "autoFightOff", "autoEatOn", "autoEatOff", "noConsumables", "enemyStats", "enemyGold", "dropsSuffix", "fightBtn"],
+              "required": ["title", "subtitle", "enemyMissing", "resting", "enemyHp", "selfStats", "fleeBtn", "autoFightOn", "autoFightOff", "autoEatOn", "autoEatOff", "noConsumables", "enemyStats", "enemyGold", "dropsSuffix", "fightBtn", "expSub", "engagedBadge"],
               "additionalProperties": false,
               "properties": {
                 "title": { "$ref": "#/definitions/line" },
@@ -306,7 +306,9 @@
                 "enemyStats": { "$ref": "#/definitions/template", "description": "敌人卡属性行；槽位 {hp}/{atk}/{def}/{exp}" },
                 "enemyGold": { "$ref": "#/definitions/template", "description": "敌人卡灵石行；槽位 {min}/{max}" },
                 "dropsSuffix": { "$ref": "#/definitions/template", "description": "敌人卡掉落后缀；槽位 {drops}" },
-                "fightBtn": { "$ref": "#/definitions/template", "description": "挑战按钮（无槽位）" }
+                "fightBtn": { "$ref": "#/definitions/template", "description": "挑战按钮（无槽位）" },
+                "expSub": { "$ref": "#/definitions/template", "description": "斗法修为进度副行（战斗中信息面）；槽位 {into}/{need}/{left}" },
+                "engagedBadge": { "$ref": "#/definitions/template", "description": "战斗中敌人列表·当前目标徽标（无槽位）" }
               }
             },
             "bag": {

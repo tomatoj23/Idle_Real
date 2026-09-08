@@ -346,6 +346,15 @@ body {
   user-select: text;
 }
 
+/* ---------- 斗法页·战斗中修为条（战斗中信息面） ---------- */
+
+.combat-exp {
+  margin: 12px 0;
+  display: grid;
+  gap: 6px;
+}
+
+
 .toast {
   background: var(--panel2);
   border: 1px solid var(--border-gold);

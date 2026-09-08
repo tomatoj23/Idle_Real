@@ -611,6 +611,10 @@ export interface ShellPageCombat {
   readonly enemyGold: string;
   readonly dropsSuffix: string;
   readonly fightBtn: string;
+  /** 斗法修为进度副行（战斗中信息面）；槽位 {into}/{need}/{left}。 */
+  readonly expSub: string;
+  /** 战斗中敌人列表·当前目标徽标（战斗不打断，换敌走 combat:start 替换语义）。 */
+  readonly engagedBadge: string;
 }
 
 /** 乾坤袋页文案。 */

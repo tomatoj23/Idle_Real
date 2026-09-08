@@ -693,7 +693,9 @@
           "enemyStats": "气血 {hp} · 攻 {atk} · 防 {def} · 修为 +{exp}",
           "enemyGold": "灵石 {min}~{max}",
           "dropsSuffix": " · 掉落 {drops}",
-          "fightBtn": "挑战"
+          "fightBtn": "挑战",
+        "expSub": "修为 {into}/{need} · 距下一层还需 {left}",
+        "engagedBadge": "交战中"
         },
         "bag": {
           "title": "乾坤袋",

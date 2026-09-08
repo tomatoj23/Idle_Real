@@ -6,3 +6,4 @@ dist-electron/
 release/
 *.tsbuildinfo
 .scratch/
+.playwright-cli/

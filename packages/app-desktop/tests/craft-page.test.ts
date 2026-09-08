@@ -4,7 +4,7 @@
  * - craft 页配方卡：材料着色（足/缺，判定走引擎 craftMissingOf）+ 成功率展示
  *   （数值走引擎 craftSuccessRateOf，文案走 texts.shell.pages.craft）；
  * - 开炉 → 进行中徽标/进度条 → 缺料停炉（craft-halt → toast/修行录）；
- * - skills 页 craft 技能 chip 解锁（仅 combat 锁定）。
+ * - skills 页不渲染 craft 技能 chips（炼制页专属导航，UX 调整）。
  */
 import { describe, expect, it } from 'vitest';
 import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
@@ -83,11 +83,12 @@ describe('#5 · 炼制页（craft 页）渲染', () => {
     expect(sword2Card.querySelector('.act-lockmsg')).not.toBeNull();
   });
 
-  it('skills 页 craft 技能 chip 解锁（仅 combat 锁定）', () => {
+  it('skills 页不渲染 craft 技能 chips（炼制页专属导航，仅保留 gather+combat）', () => {
     const { root } = mount();
-    expect(root.querySelector('.chip[data-skill="alchemy"]')?.classList.contains('locked')).toBe(false);
-    expect(root.querySelector('.chip[data-skill="smith"]')?.classList.contains('locked')).toBe(false);
+    expect(root.querySelector('.chip[data-skill="alchemy"]')).toBeNull();
+    expect(root.querySelector('.chip[data-skill="smith"]')).toBeNull();
     expect(root.querySelector('.chip[data-skill="combat"]')?.classList.contains('locked')).toBe(true);
+    expect(root.querySelector('.chip[data-skill="herb"]')).not.toBeNull();
   });
 });
 
