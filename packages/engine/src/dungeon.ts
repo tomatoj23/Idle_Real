@@ -16,6 +16,7 @@
 
 import type { GameContent } from './types.js';
 import { findEnemy, type EnemyView } from './contentView.js';
+import { weightedPick } from './rng.js';
 
 /* ---------- 内容视图（按形状读取，缺节/缺字段安全兜底） ---------- */
 
@@ -128,8 +129,9 @@ export function dungeonFloorEnemyOf(
 }
 
 /**
- * 层敌人加权抽取（随机一律走注入 RNG，ADR-013）：权重行按占比归一化掷点；
- * 权重全非法/敌人全缺失 → undefined（调用方安全离境，绝不抛错）。
+ * 层敌人加权抽取（随机一律走注入 RNG，ADR-013）：权重行按占比归一化掷点
+ * （weightedPick 单一来源，#30 召唤抽签同式）；权重全非法/敌人全缺失
+ * → undefined（调用方安全离境，绝不抛错）。
  */
 export function pickDungeonEnemyOf(
   content: GameContent,
@@ -138,21 +140,12 @@ export function pickDungeonEnemyOf(
   random: () => number,
 ): EnemyView | undefined {
   const layer = dungeonLayerOf(dungeon, floor);
-  const valid: Array<{ enemy: EnemyView; weight: number }> = [];
+  const pool: Array<{ enemy: EnemyView; weight: number }> = [];
   for (const entry of layer?.enemies ?? []) {
-    const weight = entry?.weight;
-    if (typeof weight !== 'number' || !Number.isFinite(weight) || weight <= 0) continue;
-    const enemy = findEnemy(content, entry.enemy);
-    if (enemy) valid.push({ enemy, weight });
+    const enemy = findEnemy(content, entry?.enemy ?? '');
+    if (enemy) pool.push({ enemy, weight: entry.weight });
   }
-  if (valid.length === 0) return undefined;
-  const total = valid.reduce((sum, entry) => sum + entry.weight, 0);
-  let roll = random() * total;
-  for (const entry of valid) {
-    roll -= entry.weight;
-    if (roll < 0) return entry.enemy;
-  }
-  return valid[valid.length - 1]!.enemy; // 浮点末端兜底：取最后一项
+  return weightedPick(pool, (row) => row.weight, random)?.enemy;
 }
 
 /* ---------- 进入门控（判定侧单一来源，N1/N4 收敛先例） ---------- */

@@ -249,6 +249,31 @@ describe('#30 · AC2 召唤脚本 100% content（换包换召唤行为）', () =
     expect(combatOf(game).summons).toHaveLength(0);
   });
 
+  it('秘境层内召唤：入场血量吃层倍率（先层倍率后召唤 mult，入场即实战视图）', () => {
+    const pack = {
+      ...makeSummonPack(),
+      dungeons: [
+        {
+          id: 'crypt',
+          name: '妖窟',
+          icon: '窟',
+          floors: 1,
+          layers: [
+            { floor: { min: 1, max: 1 }, enemies: [{ enemy: 'e1', weight: 1 }], mult: { hp: 1.2, atk: 1.1 } },
+          ],
+        },
+      ],
+    } as GameContent;
+    const game = createGame({ content: pack, clock: new ManualClock(), save: midSave(), seed: 7 });
+    const cap = capture();
+    wire(game, cap);
+    game.dispatch({ type: 'dungeon:enter', payload: { dungeonId: 'crypt' } });
+    for (let i = 0; i < 60 && cap.summons.length === 0; i++) game.tick(1000);
+    expect(cap.summons).toHaveLength(1);
+    // e3 hp 90 × 层倍率 1.2 = 108 × 召唤 mult 0.5 = 54（与 minionViewOf 同一组合面）。
+    expect(combatOf(game).summons.map((m) => m.hp)).toEqual([54, 54]);
+  });
+
   it('普通敌人零扰动：无 bosses 节 → 无召唤槽位活动', () => {
     const game = createGame({ content: makeCombatPack(), clock: new ManualClock(), save: midSave(), seed: 7 });
     const cap = capture();

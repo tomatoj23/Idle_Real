@@ -727,7 +727,8 @@ export function createGame(options: CreateGameOptions): Game {
    * 召唤入场（#30，阶段进入时消费）：逐槽从脚本池按权重抽签（dungeon 加权
    * 抽敌同式），召唤物以缩放投影的满血入场（集火序 = 入场序）；池行全缺失
    * = 该槽跳过（防御路径，绝不崩）。入场播 boss:summon 事件 + 叙事池抽句
-   * （池缺省 = 不播报，不造句）。
+   * （池缺省 = 不播报，不造句）。投影走 minionViewOf 同一组合面（秘境层
+   * 倍率在前、召唤 mult 在后）——入场即实战视图，禁第二份缩放组合。
    */
   function spawnSummons(boss: BossView, bossEnemy: EnemyView, phaseIndex: number, c: CombatState): void {
     const pool = summonPoolOf(boss, phaseIndex);
@@ -736,9 +737,11 @@ export function createGame(options: CreateGameOptions): Game {
     for (let i = 0; i < count; i++) {
       const entry = pickSummonEntry(content, pool, random);
       if (!entry) break;
-      const view = summonMinionOf(content, boss, phaseIndex, entry.enemy);
+      const slot: CombatSummonState = { enemyId: entry.enemy, phase: phaseIndex, hp: 0, et: 0 };
+      const view = minionViewOf(slot);
       if (!view) continue;
-      c.summons.push({ enemyId: entry.enemy, phase: phaseIndex, hp: view.hp, et: 0 });
+      slot.hp = view.hp;
+      c.summons.push(slot);
       spawned += 1;
     }
     if (spawned === 0) return;

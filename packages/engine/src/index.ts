@@ -15,7 +15,7 @@ export {
 export type { ProgressionParams } from './progression.js';
 
 // 随机源（ADR-013）
-export { createRng } from './rng.js';
+export { createRng, weightedPick } from './rng.js';
 export type { SeededRng } from './rng.js';
 
 // 存档适配层（issue #3）

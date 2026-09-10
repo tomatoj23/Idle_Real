@@ -26,3 +26,28 @@ export function createRng(seed: number): SeededRng {
     },
   };
 }
+
+/**
+ * 加权抽签（权重占比归一化，#7 秘境抽敌 / #30 召唤抽签共用的单一来源）：
+ * weightOf 返回非有限/非正数的行视作无效剔除，有效池空 = undefined；
+ * 浮点末端兜底取最后一行（roll 恰好耗尽时不落空）。
+ */
+export function weightedPick<T>(
+  rows: readonly T[],
+  weightOf: (row: T) => number,
+  random: () => number,
+): T | undefined {
+  const weights = rows.map((row) => {
+    const w = weightOf(row);
+    return typeof w === 'number' && Number.isFinite(w) && w > 0 ? w : 0;
+  });
+  const total = weights.reduce((sum, w) => sum + w, 0);
+  if (!(total > 0)) return undefined;
+  let roll = random() * total;
+  for (let i = 0; i < rows.length; i++) {
+    roll -= weights[i]!;
+    if (roll < 0) return rows[i];
+  }
+  const last = rows[rows.length - 1];
+  return last;
+}

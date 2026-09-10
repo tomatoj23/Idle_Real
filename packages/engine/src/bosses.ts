@@ -23,6 +23,12 @@
 
 import type { GameContent } from './types.js';
 import { findEnemy, type EnemyDropView, type EnemyView } from './contentView.js';
+import { weightedPick } from './rng.js';
+
+/** 乘区投影（阶段修正/召唤缩放共用单一来源）：非法乘数原值回落，round 取整钳下限。 */
+function applyMult(value: number, m: number | undefined, min: number): number {
+  return m !== undefined && Number.isFinite(m) && m > 0 ? Math.max(min, Math.round(value * m)) : value;
+}
 
 /* ---------- 内容视图（按形状读取，缺节/缺字段安全兜底） ---------- */
 
@@ -107,14 +113,12 @@ export function bossEnemyOf(
   const source = base ?? findEnemy(content, enemyId);
   if (!source) return undefined;
   const mods = boss.phases[phaseIndex]?.mods ?? {};
-  const apply = (value: number, m: number | undefined, min: number): number =>
-    m !== undefined && Number.isFinite(m) && m > 0 ? Math.max(min, Math.round(value * m)) : value;
   return {
     ...source,
-    atk: apply(source.atk, mods.atk, 1),
-    def: apply(source.def, mods.def, 0),
+    atk: applyMult(source.atk, mods.atk, 1),
+    def: applyMult(source.def, mods.def, 0),
     ...(source.attackInterval !== undefined
-      ? { attackInterval: apply(source.attackInterval, mods.attackInterval, 1) }
+      ? { attackInterval: applyMult(source.attackInterval, mods.attackInterval, 1) }
       : {}),
   };
 }
@@ -148,38 +152,24 @@ export function summonMinionOf(
   const source = base ?? findEnemy(content, enemyId);
   if (!source) return undefined;
   const mult = entry.mult ?? {};
-  const apply = (value: number, m: number | undefined, min: number): number =>
-    m !== undefined && Number.isFinite(m) && m > 0 ? Math.max(min, Math.round(value * m)) : value;
   return {
     ...source,
-    hp: apply(source.hp, mult.hp, 1),
-    atk: apply(source.atk, mult.atk, 1),
-    def: apply(source.def, mult.def, 0),
+    hp: applyMult(source.hp, mult.hp, 1),
+    atk: applyMult(source.atk, mult.atk, 1),
+    def: applyMult(source.def, mult.def, 0),
   };
 }
 
 /**
- * 召唤池加权抽签（#30，dungeon 加权抽敌同式）：weight 非法/敌不存在的行
- * 剔出有效池，按占比归一化掷点；全缺 = undefined（本槽跳过，不崩）。
+ * 召唤池加权抽签（#30，与 dungeon 加权抽敌同一来源 weightedPick）：
+ * weight 非法/敌不存在的行剔出有效池，按占比归一化掷点；全缺 = undefined
+ * （本槽跳过，不崩）。
  */
 export function pickSummonEntry(
   content: GameContent,
   pool: readonly BossSummonEntryView[],
   random: () => number,
 ): BossSummonEntryView | undefined {
-  const valid = pool.filter((row) => {
-    const weight = row?.weight;
-    return (
-      findEnemy(content, row?.enemy ?? '') !== undefined &&
-      (weight === undefined || (typeof weight === 'number' && Number.isFinite(weight) && weight > 0))
-    );
-  });
-  if (valid.length === 0) return undefined;
-  const total = valid.reduce((sum, row) => sum + (row.weight ?? 1), 0);
-  let roll = random() * total;
-  for (const row of valid) {
-    roll -= row.weight ?? 1;
-    if (roll < 0) return row;
-  }
-  return valid[valid.length - 1]!; // 浮点末端兜底：取最后一行
+  const valid = pool.filter((row) => findEnemy(content, row?.enemy ?? '') !== undefined);
+  return weightedPick(valid, (row) => row.weight ?? 1, random);
 }
