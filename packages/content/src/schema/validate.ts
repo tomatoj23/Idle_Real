@@ -10,6 +10,10 @@
 
 /** 本校验器支持的 JSON Schema 关键字子集。 */
 export interface JsonSchema {
+  /** 节/字段展示名（校验器不消费；编辑器表单标签来源，#11）。 */
+  readonly title?: string;
+  /** 输入提示（校验器不消费；编辑器字段 tooltip，#11）。 */
+  readonly description?: string;
   readonly type?: string | readonly string[];
   readonly properties?: Readonly<Record<string, JsonSchema>>;
   readonly required?: readonly string[];

@@ -9,12 +9,14 @@ export {
   validateContent,
   validateContentPack,
   formatContentErrors,
+  sectionSchemas,
 } from './schema/index.js';
 export type {
   ContentError,
   ValidationResult,
   JsonSchema,
   PackValidationResult,
+  SectionSchemas,
 } from './schema/index.js';
 
 // 下面的类型清单与 src/schema/index.ts 保持一致（新增类型两处同步）：

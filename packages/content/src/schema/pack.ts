@@ -123,6 +123,13 @@ const SECTION_SCHEMAS = {
   achievements: achievementsSchema,
 } as const;
 
+/**
+ * 节 schema 注册表（#11）：编辑器表单生成与节级校验的数据源——
+ * 与 validateContentPack 内部用同一份 schema 对象，零拷贝零漂移。
+ */
+export type SectionSchemas = typeof SECTION_SCHEMAS;
+export const sectionSchemas: SectionSchemas = SECTION_SCHEMAS;
+
 type SectionName = keyof typeof SECTION_SCHEMAS;
 
 const SECTION_NAMES = Object.keys(SECTION_SCHEMAS) as readonly SectionName[];

@@ -10,8 +10,8 @@
 export { validateContent } from './validate.js';
 export type { ContentError, ValidationResult, JsonSchema } from './validate.js';
 
-export { validateContentPack, formatContentErrors } from './pack.js';
-export type { PackValidationResult } from './pack.js';
+export { validateContentPack, formatContentErrors, sectionSchemas } from './pack.js';
+export type { PackValidationResult, SectionSchemas } from './pack.js';
 
 export type {
   AchievementCondition,
