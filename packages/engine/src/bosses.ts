@@ -9,7 +9,13 @@
  * - 机制归引擎：阈值判定与阶段推进（跳级逐级补发事件/叙事）、阶段属性
  *   修正投影、bossPhase 随战斗态持久（再战重置归位）；
  * - 参数归 content：阶段数组（阈值/阶段名/属性修正/变招 moveKey/阶段叙事）、
- *   专属掉落表。召唤原语需多敌战斗状态机，本票不实施（裁决见票评）。
+ *   专属掉落表、召唤脚本（#30：池/数量/权重/属性缩放/叙事）。
+ *
+ * 召唤原语（#30）：阶段脚本 `summons` 声明召唤池（enemy xref + weight 权重 +
+ * mult hp/atk/def 乘区）与数量 count；入场时按权重逐槽抽签（dungeon 加权抽敌
+ * 同式），属性缩放投影走 summonMinionOf（bossEnemyOf 同式，禁第二份缩放式）。
+ * 召唤物是战斗过程实体：无掉落/修为/击杀统计（Boss 本体收益已覆盖本场），
+ * 死亡只清槽位；集火/清场语义归战斗状态机（game.ts）。
  *
  * 复合语义：Boss 阶段修正与秘境层倍率**叠乘**（先层倍率后阶段修正，
  * game.resolveEnemy 单点组合）——秘境深层插 Boss（#7/#8 联动）零特判。
@@ -35,6 +41,31 @@ export interface BossPhaseView {
   /** 变招：阶段内出招名注册键（combatText.moves 引用，包校验 xref）。 */
   readonly moveKey?: string;
   /** 阶段叙事池（进入该阶段时抽取一条播报，{enemy}/{phase} 槽）。 */
+  readonly narration?: readonly string[];
+  /** 召唤脚本（#30，可选）：进入该阶段时按池掷 count 个召唤物入场。 */
+  readonly summons?: BossSummonsView;
+}
+
+/** 召唤池行（#30）：enemy 引用包内 enemies 节；weight 缺省 1；mult 属性乘区。 */
+export interface BossSummonEntryView {
+  readonly enemy: string;
+  /** 抽签权重（正数；按占比归一化，缺省/非法 = 剔出有效池）。 */
+  readonly weight?: number;
+  /** 召唤物属性缩放（乘区；键域 hp/atk/def，缺省字段 = 敌人定义原值）。 */
+  readonly mult?: {
+    readonly hp?: number;
+    readonly atk?: number;
+    readonly def?: number;
+  };
+}
+
+/** 阶段召唤脚本（#30）：入场时逐槽从 enemies 池按权重抽签召唤 count 个。 */
+export interface BossSummonsView {
+  /** 召唤数量（≥1；入场一次性召唤，本阶段不重复触发）。 */
+  readonly count?: number;
+  /** 召唤池（≥1 行；行内 enemy 重复由包校验拒绝）。 */
+  readonly enemies?: readonly BossSummonEntryView[];
+  /** 召唤转场叙事池（{enemy}/{phase} 槽，召唤入场时抽取一条播报）。 */
   readonly narration?: readonly string[];
 }
 
@@ -86,4 +117,69 @@ export function bossEnemyOf(
       ? { attackInterval: apply(source.attackInterval, mods.attackInterval, 1) }
       : {}),
   };
+}
+
+/** 该阶段召唤脚本的池行（形状非法/未声明 = 空池，召唤静默降级为零召唤）。 */
+export function summonPoolOf(boss: BossView, phaseIndex: number): readonly BossSummonEntryView[] {
+  const script = boss.phases[phaseIndex]?.summons;
+  const pool = script?.enemies;
+  return Array.isArray(pool) ? (pool as BossSummonEntryView[]) : [];
+}
+
+/**
+ * 召唤物属性投影（#30，引擎单一来源，战斗结算与壳展示同调）：池行 mult
+ * 乘区叠到 base 视图（缺省 = 敌人定义原值；round 取整，atk 下限 1）。
+ * 投影按「召唤阶段 + 敌 id」现读 content（存档只存 {enemyId, phase, hp, et}，
+ * 改包即生效，无第二份缓存）；阶段越界/池行缺失 = undefined（调用方清槽，
+ * 绝不崩）。不投影 gold/exp/drops：召唤物无收益（Boss 本体战利品已覆盖本场）。
+ */
+export function summonMinionOf(
+  content: GameContent,
+  boss: BossView,
+  phaseIndex: number,
+  enemyId: string,
+  base?: EnemyView,
+): EnemyView | undefined {
+  if (!Number.isInteger(phaseIndex) || phaseIndex < 0 || phaseIndex >= boss.phases.length) {
+    return undefined;
+  }
+  const entry = summonPoolOf(boss, phaseIndex).find((row) => row?.enemy === enemyId);
+  if (!entry) return undefined;
+  const source = base ?? findEnemy(content, enemyId);
+  if (!source) return undefined;
+  const mult = entry.mult ?? {};
+  const apply = (value: number, m: number | undefined, min: number): number =>
+    m !== undefined && Number.isFinite(m) && m > 0 ? Math.max(min, Math.round(value * m)) : value;
+  return {
+    ...source,
+    hp: apply(source.hp, mult.hp, 1),
+    atk: apply(source.atk, mult.atk, 1),
+    def: apply(source.def, mult.def, 0),
+  };
+}
+
+/**
+ * 召唤池加权抽签（#30，dungeon 加权抽敌同式）：weight 非法/敌不存在的行
+ * 剔出有效池，按占比归一化掷点；全缺 = undefined（本槽跳过，不崩）。
+ */
+export function pickSummonEntry(
+  content: GameContent,
+  pool: readonly BossSummonEntryView[],
+  random: () => number,
+): BossSummonEntryView | undefined {
+  const valid = pool.filter((row) => {
+    const weight = row?.weight;
+    return (
+      findEnemy(content, row?.enemy ?? '') !== undefined &&
+      (weight === undefined || (typeof weight === 'number' && Number.isFinite(weight) && weight > 0))
+    );
+  });
+  if (valid.length === 0) return undefined;
+  const total = valid.reduce((sum, row) => sum + (row.weight ?? 1), 0);
+  let roll = random() * total;
+  for (const row of valid) {
+    roll -= row.weight ?? 1;
+    if (roll < 0) return row;
+  }
+  return valid[valid.length - 1]!; // 浮点末端兜底：取最后一行
 }

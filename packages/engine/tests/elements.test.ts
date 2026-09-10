@@ -418,7 +418,7 @@ describe('#15 · 抗性/临时态不进存档新字段', () => {
     game.tick(5000); // 首击已上破防（duration 8000 仍在效）
     const combat = (game.snapshot().state as unknown as GameState).combat;
     expect(combat).not.toBeNull();
-    expect(Object.keys(combat!).sort()).toEqual(['bossPhase', 'crits', 'ehp', 'enemyId', 'et', 'pt', 'respT', 'rounds', 'tiers']);
+    expect(Object.keys(combat!).sort()).toEqual(['bossPhase', 'crits', 'ehp', 'enemyId', 'et', 'pt', 'respT', 'rounds', 'summons', 'tiers']); // summons = #30 召唤槽位（有档形态，非临时态）
 
     // 存档恢复（新实例）：临时态闭包不随档 → 破防散尽，次击回凡伤。
     const save = game.snapshot();

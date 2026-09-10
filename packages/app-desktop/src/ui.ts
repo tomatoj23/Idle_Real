@@ -44,7 +44,9 @@ import {
   rebirthPreviewOf,
   realmOf,
   shopAffordOf,
+  summonMinionOf,
   talentGateOf,
+  type CombatSummonState,
   type EnemyView,
   type GameAction,
   type GameState,
@@ -566,7 +568,15 @@ export function buildUi(
       Object.entries(st.items).sort(),
       Object.entries(st.skills).map(([id, p]) => [id, p.xp]).sort(),
       st.activity ? [st.activity.skillId, st.activity.index] : null,
-      st.combat ? [st.combat.enemyId, Math.floor(st.combat.ehp), st.combat.respT > 0] : null,
+      st.combat
+        ? [
+            st.combat.enemyId,
+            Math.floor(st.combat.ehp),
+            st.combat.respT > 0,
+            // 召唤物槽位（#30）：入场/击杀/掉血随签名重绘。
+            st.combat.summons.map((m) => [m.enemyId, Math.floor(m.hp)]),
+          ]
+        : null,
       Object.entries(st.equips),
       st.gear.length,
       st.gearSeq,
@@ -1073,6 +1083,51 @@ export function buildUi(
     return { badge, ticks };
   };
 
+  /* ---------- 召唤物呈现（#30）：血条行 + 集火徽标 ---------- */
+
+  /**
+   * 战斗中的召唤物生效视图（槽位态 × 引擎投影）：秘境层倍率在前、召唤
+   * mult 在后（与主敌人 combatEnemyView 同一组合式）；包变更缩表的槽位
+   * 投影失效 → 该行不渲染（与引擎 minionViewOf 防御兜底同律）。
+   */
+  const combatMinionViews = (
+    st: GameState,
+  ): Array<{ readonly minion: CombatSummonState; readonly view: EnemyView }> => {
+    const combat = st.combat;
+    if (!combat || combat.summons.length === 0) return [];
+    const boss = findBossOf(content, combat.enemyId);
+    if (!boss) return [];
+    const out: Array<{ minion: CombatSummonState; view: EnemyView }> = [];
+    for (const minion of combat.summons) {
+      const scaled = st.dungeon
+        ? dungeonFloorEnemyOf(content, st.dungeon.dungeonId, st.dungeon.floor, minion.enemyId)
+        : undefined;
+      const base = scaled ?? content.enemies.find((entry) => entry.id === minion.enemyId);
+      if (!base) continue;
+      const view = summonMinionOf(content, boss, minion.phase, minion.enemyId, base) ?? base;
+      out.push({ minion, view });
+    }
+    return out;
+  };
+
+  /**
+   * 召唤物行（斗法页/秘境页共用）：首槽 = 集火目标（engagedBadge 徽标复用，
+   * 集火序 = 引擎先入先出，壳零排序复算）；血量走 enemyHp 同一模板。
+   */
+  const minionsHtml = (st: GameState): string =>
+    combatMinionViews(st)
+      .map(({ minion, view }, index) => {
+        const pct = Math.max(0, Math.min(100, (minion.hp / (view.hp || 1)) * 100));
+        return `<div class="minion-row${index === 0 ? ' focus' : ''}">
+              <span class="sigil sigil-sm">${esc(view.icon)}</span>
+              <b>${esc(view.name)}</b>
+              ${index === 0 ? `<em class="act-badge">${esc(T('pages.combat.engagedBadge'))}</em>` : ''}
+              <span class="minion-hp">${esc(T('pages.combat.enemyHp', { ehp: Math.max(0, Math.ceil(minion.hp)), hp: view.hp }))}</span>
+              <div class="bar bar-red bar-thin minion-bar"><i data-bar="minion" style="width:${pct}%"></i></div>
+            </div>`;
+      })
+      .join('');
+
   /* ---------- 秘境页（#7）：层进度 + 当前层战斗 + 撤退；未在攻略 = 秘境列表 ---------- */
 
   /** 锁定句归因（#7）：锁因走引擎 gate.daoYunLocked 单一来源；道韵复用 common.needDaoYun，钥匙用 entryKey。 */
@@ -1117,6 +1172,7 @@ export function buildUi(
               <div class="enemy-head"><b>${esc(enemy?.name ?? '')}</b><span class="enemy-lv">${esc(T('units.level', { v: enemy?.level ?? 0 }))}</span>${deco.badge}</div>
               <div class="bar bar-red">${deco.ticks}<i data-bar="enemy" style="width:${ehpPct}%"></i></div>
               <div class="enemy-sub">${esc(T('pages.combat.enemyHp', { ehp: st.combat ? Math.max(0, Math.ceil(st.combat.ehp)) : 0, hp: enemy?.hp ?? 0 }))}</div>
+              <div class="minion-rows">${minionsHtml(st)}</div>
               <div class="bar bar-jade"><i style="width:${hpPct}%"></i></div>
               <div class="enemy-sub">${esc(T('pages.combat.selfStats', { hp: Math.floor(st.hp), max: snap.stats?.maxHp ?? '—', atk: statValueText('atk', snap.stats?.atk ?? '—'), def: statValueText('def', snap.stats?.def ?? '—'), crit: statValueText('crit', snap.stats?.crit ?? '—') }))}</div>
             </div>
@@ -1286,6 +1342,7 @@ export function buildUi(
               <div class="enemy-head"><b>${esc(enemy.name)}</b><span class="enemy-lv">${esc(T('units.level', { v: enemy.level }))}</span>${resting ? `<em class="act-badge">${esc(T('pages.combat.resting'))}</em>` : ''}${deco.badge}</div>
               <div class="bar bar-red">${deco.ticks}<i data-bar="enemy" style="width:${ehpPct}%"></i></div>
               <div class="enemy-sub">${esc(T('pages.combat.enemyHp', { ehp: Math.max(0, Math.ceil(combat.ehp)), hp: enemy.hp }))}</div>
+              <div class="minion-rows">${minionsHtml(st)}</div>
               <div class="bar bar-jade"><i style="width:${hpPct}%"></i></div>
               <div class="enemy-sub">${esc(T('pages.combat.selfStats', { hp: Math.floor(st.hp), max: snap.stats?.maxHp ?? '—', atk: statValueText('atk', snap.stats?.atk ?? '—'), def: statValueText('def', snap.stats?.def ?? '—'), crit: statValueText('crit', snap.stats?.crit ?? '—') }))}</div>
             </div>

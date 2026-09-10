@@ -58,6 +58,22 @@ export interface CombatState extends RoundTally {
    * 自动再战重置归位（Boss 重生从头演阶段）；普通敌人恒 -1。
    */
   bossPhase: number;
+  /**
+   * 召唤物槽位（#30）：Boss 阶段脚本召唤的存活召唤物（先入先出 = 集火序）。
+   * 数值不落盘（血量除外）——攻防按 {enemyId, phase} 现读 content 投影
+   * （summonMinionOf）；Boss 死亡/再战/撤退一律清场。
+   */
+  summons: CombatSummonState[];
+}
+
+/** 召唤物槽位态（#30）：phase = 召唤它的阶段下标（投影定位），hp 随战斗演进。 */
+export interface CombatSummonState {
+  readonly enemyId: string;
+  phase: number;
+  /** 召唤物当前气血（投影上限随 content 现读，不落盘）。 */
+  hp: number;
+  /** 召唤物攻击计时器（毫秒）。 */
+  et: number;
 }
 
 /**
@@ -436,6 +452,34 @@ function restoreCombatState(
       typeof rawPhase === 'number' && Number.isFinite(rawPhase) && rawPhase >= -1
         ? Math.floor(rawPhase)
         : -1;
+    const isBoss = findBossOf(content, c.enemyId) !== undefined;
+    // 召唤物槽位（#30）：敌须存在、召唤阶段须仍在 Boss 脚本范围内（包变更缩表
+    // → 槽位弃置）、血量须为正（死亡槽位不收编）；Boss 定义已移除 → 一并清场。
+    const summons: CombatSummonState[] = [];
+    if (isBoss && Array.isArray(c.summons)) {
+      const bossDef = findBossOf(content, c.enemyId)!;
+      for (const entry of c.summons) {
+        if (!isObj(entry)) continue;
+        if (typeof entry.enemyId !== 'string' || findEnemy(content, entry.enemyId) === undefined) {
+          continue;
+        }
+        if (
+          typeof entry.phase !== 'number' ||
+          !Number.isInteger(entry.phase) ||
+          entry.phase < 0 ||
+          entry.phase >= bossDef.phases.length
+        ) {
+          continue;
+        }
+        if (typeof entry.hp !== 'number' || !Number.isFinite(entry.hp) || entry.hp <= 0) continue;
+        summons.push({
+          enemyId: entry.enemyId,
+          phase: entry.phase,
+          hp: entry.hp,
+          et: Math.max(0, safeNumber(entry.et, 0)),
+        });
+      }
+    }
     state.combat = {
       enemyId: c.enemyId,
       ehp: c.ehp,
@@ -450,7 +494,8 @@ function restoreCombatState(
         heavy: isObj(tiers) ? tierOf(tiers.heavy) : 0,
         deadly: isObj(tiers) ? tierOf(tiers.deadly) : 0,
       },
-      bossPhase: findBossOf(content, c.enemyId) !== undefined ? restoredPhase : -1,
+      bossPhase: isBoss ? restoredPhase : -1,
+      summons,
     };
   }
 
@@ -498,7 +543,13 @@ export function cloneState(state: GameState): GameState {
     })),
     equips: { ...state.equips },
     buffs: { ...state.buffs },
-    combat: state.combat ? { ...state.combat, tiers: { ...state.combat.tiers } } : null,
+    combat: state.combat
+      ? {
+          ...state.combat,
+          tiers: { ...state.combat.tiers },
+          summons: state.combat.summons.map((minion) => ({ ...minion })),
+        }
+      : null,
     lastEncounter: Object.fromEntries(
       Object.entries(state.lastEncounter).map(([id, rec]) => [id, { ...rec }]),
     ),

@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "BossesSection",
-  "description": "content 包 bosses 节（#8，可选节）：Boss 战阶段脚本。每条指向 enemies 节的一个敌人 id；phases 为递进脚本（血量比例 ≤ threshold 进入该阶段，全数组严格递减由语义校验保证）；moveKey 变招引用 combatText.moves 注册键（xref + 注册表放行）；narration 为阶段转场叙事池（{enemy}/{phase} 槽）；drops 为专属掉落表（叠于 enemy.drops 之上）。",
+  "description": "content 包 bosses 节（#8，可选节；#30 扩召唤）：Boss 战阶段脚本。每条指向 enemies 节的一个敌人 id；phases 为递进脚本（血量比例 ≤ threshold 进入该阶段，全数组严格递减由语义校验保证）；moveKey 变招引用 combatText.moves 注册键（xref + 注册表放行）；narration 为阶段转场叙事池（{enemy}/{phase} 槽）；summons 为阶段召唤脚本（入场时按池权重掷 count 个召唤物，enemy xref enemies，行内 enemy 去重由语义校验保证）；drops 为专属掉落表（叠于 enemy.drops 之上）。",
   "type": "array",
   "items": { "$ref": "#/definitions/boss" },
   "definitions": {
@@ -65,6 +65,32 @@
           "minItems": 1,
           "items": { "type": "string", "minLength": 1, "maxLength": 80 },
           "description": "阶段转场叙事池（{enemy}/{phase} 槽，进入该阶段时由引擎抽取一条播报 combat-note）"
+        },
+        "summons": {
+          "type": "object",
+          "required": ["count", "enemies"],
+          "additionalProperties": false,
+          "description": "阶段召唤脚本（#30，可选）：进入该阶段时逐槽从 enemies 池按权重抽签召唤 count 个（多敌战斗状态机；集火/清场语义归引擎）",
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 24,
+              "description": "召唤数量（入场一次性召唤，本阶段不重复触发）"
+            },
+            "enemies": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/definitions/summonEntry" },
+              "description": "召唤池（≥1 行；行内 enemy 重复由语义校验拒绝——投影按敌 id 定位，重复即歧义）"
+            },
+            "narration": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1, "maxLength": 80 },
+              "description": "召唤转场叙事池（{enemy}/{phase} 槽，召唤入场时由引擎抽取一条播报 combat-note；缺省 = 不播报）"
+            }
+          }
         }
       }
     },
@@ -75,6 +101,34 @@
       "properties": {
         "item": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "description": "物品 id（语义校验 xref items）" },
         "chance": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "summonEntry": {
+      "type": "object",
+      "required": ["enemy"],
+      "additionalProperties": false,
+      "properties": {
+        "enemy": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "召唤物敌人 id（语义校验 xref enemies；行内去重同上）"
+        },
+        "weight": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "抽签权重（正数；按占比归一化，缺省 = 1）"
+        },
+        "mult": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "description": "召唤物属性缩放（乘区；键钉 hp/atk/def——召唤物是战斗过程实体，gold/exp/drops 不投影，无收益结算）",
+          "properties": {
+            "hp": { "type": "number", "exclusiveMinimum": 0 },
+            "atk": { "type": "number", "exclusiveMinimum": 0 },
+            "def": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        }
       }
     }
   }

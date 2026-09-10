@@ -1080,7 +1080,8 @@ function checkDungeons(
  *   降序保证阶段推进无歧义）；
  * - 阶段 moveKey（变招）须在 combatText.moves 注册（xref），注册键集随之
  *   放行给 checkMoveRegistry（悬空招式键检查不受影响）；
- * - 专属掉落表 items xref。
+ * - 阶段 summons（#30）：召唤池行 enemy xref enemies + 行内去重（投影按
+ *   敌 id 定位，重复即歧义）；专属掉落表 items xref。
  * 返回 Boss 变招注册键集合（供招式注册表检查扩展合法键域）。
  */
 function checkBosses(
@@ -1131,6 +1132,27 @@ function checkBosses(
           });
         }
       }
+      // 召唤脚本（#30）：池行 enemy xref enemies + 行内去重（投影定位无歧义）。
+      const seenSummons = new Map<string, number>();
+      (phase.summons?.enemies ?? []).forEach((entry, k) => {
+        if (!enemies.has(entry.enemy)) {
+          errors.push({
+            path: phaseAt(`summons/enemies/${k}/enemy`),
+            keyword: 'xref',
+            message: `召唤物敌人 "${entry.enemy}" 不存在于 enemies`,
+          });
+        }
+        const seenAt = seenSummons.get(entry.enemy);
+        if (seenAt !== undefined) {
+          errors.push({
+            path: phaseAt(`summons/enemies/${k}/enemy`),
+            keyword: 'duplicate',
+            message: `召唤池 enemy "${entry.enemy}" 与第 ${seenAt} 行重复（投影按敌 id 定位，重复即歧义）`,
+          });
+        } else {
+          seenSummons.set(entry.enemy, k);
+        }
+      });
     });
     for (const [k, drop] of (boss.drops ?? []).entries()) {
       if (!items.has(drop.item)) {

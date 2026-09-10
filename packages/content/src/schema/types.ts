@@ -949,6 +949,34 @@ export interface DungeonDef {
 /* ---------- Boss 战（#8：阶段脚本） ---------- */
 
 /**
+ * 召唤池行（#30）：enemy 引用 enemies 节（语义校验 xref，行内去重）；
+ * weight 抽签权重（正数，缺省 1）；mult 属性乘区（缺省字段 = 敌人定义原值）。
+ */
+export interface BossSummonEntry {
+  readonly enemy: string;
+  readonly weight?: number;
+  /** 键域钉 hp/atk/def——召唤物无收益结算（gold/exp/drops 不投影）。 */
+  readonly mult?: {
+    readonly hp?: number;
+    readonly atk?: number;
+    readonly def?: number;
+  };
+}
+
+/**
+ * 阶段召唤脚本（#30，可选）：进入该阶段时逐槽从 enemies 池按权重抽签
+ * 召唤 count 个（多敌战斗状态机；集火/清场语义归引擎，机制不进内容）。
+ */
+export interface BossSummons {
+  /** 召唤数量（≥1；入场一次性召唤，本阶段不重复触发）。 */
+  readonly count: number;
+  /** 召唤池（≥1 行）。 */
+  readonly enemies: readonly BossSummonEntry[];
+  /** 召唤转场叙事池（{enemy}/{phase} 槽；缺省 = 不播报）。 */
+  readonly narration?: readonly string[];
+}
+
+/**
  * Boss 单个阶段（脚本行）：敌人血量比例 ≤ threshold 时进入；
  * 全数组 threshold 须严格递减（递进顺序，语义校验）。
  */
@@ -966,6 +994,8 @@ export interface BossPhase {
   readonly moveKey?: string;
   /** 阶段转场叙事池（{enemy}/{phase} 槽）。 */
   readonly narration?: readonly string[];
+  /** 召唤脚本（#30，可选）：进入该阶段时召唤物入场。 */
+  readonly summons?: BossSummons;
 }
 
 /**

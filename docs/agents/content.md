@@ -25,7 +25,7 @@ content 包的字段级约定。**schema 变更三处同步纪律（ADR-015）**
 | `config` | **否** | config.schema.json | 全局配置：槽位（#16）+ 玩法参数四子节 combat/progression/affix（#020，缺省=引擎基线）+ crafting（#5） |
 | `rebirth` | **否** | rebirth.schema.json | 转生系统（#6）：重置/保留清单 + 道韵公式 + 天赋树 + 解锁表 + 境界词表；省略 = 无转生玩法（引擎零降级路径，壳不渲染转生页签） |
 | `dungeons` | **否** | dungeon.schema.json | 秘境分层爬塔（#7）：秘境定义 + 层表（敌人权重/层数倍率/层奖励/推荐战力软提示）+ 进入条件（道韵/钥匙）；省略 = 无秘境玩法（引擎零降级路径，壳不渲染秘境页签） |
-| `bosses` | **否** | boss.schema.json | Boss 战阶段脚本（#8）：敌人条目 + 阶段数组（阈值/阶段名/属性修正/变招/叙事）+ 专属掉落表；省略 = 无 Boss 玩法（全部敌人按普通敌人战斗，零降级路径） |
+| `bosses` | **否** | boss.schema.json | Boss 战阶段脚本（#8）：敌人条目 + 阶段数组（阈值/阶段名/属性修正/变招/叙事/**召唤脚本**）+ 专属掉落表；省略 = 无 Boss 玩法（全部敌人按普通敌人战斗，零降级路径） |
 | `achievements` | **否** | achievements.schema.json | 成就表（#9）：条件（阈值型/布尔型/反向阈值）+ 奖励（gold/daoYun/items）+ 隐藏；判定只读引擎统计 snapshot；省略 = 无成就玩法（壳不渲染成就页签） |
 
 ## items 五形态（#16 起 oneOf 分流，判别式 = `type`）
@@ -481,7 +481,14 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
         "narration": [ "饕餮血目暴睁，凶性大发！" ]
       },
       { "threshold": 0.35, "name": "吞天之相", "mods": { "atk": 1.6 }, "moveKey": "e8_devour", "narration": ["…"] },
-      { "threshold": 0.15, "name": "饕餮真身", "mods": { "atk": 2, "attackInterval": 0.6 }, "narration": ["…"] }
+      {
+        "threshold": 0.15, "name": "饕餮真身", "mods": { "atk": 2, "attackInterval": 0.6 }, "narration": ["…"],
+        "summons": {
+          "count": 2,
+          "enemies": [ { "enemy": "e2", "weight": 1, "mult": { "hp": 0.35, "atk": 0.6, "def": 0.5 } } ],
+          "narration": [ "饕餮真身显化——煞气凝成凶物护法！" ]
+        }
+      }
     ]
   }
 ]
@@ -491,7 +498,7 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 
 | 归 content | 归引擎 |
 |---|---|
-| 阶段数组（阈值/阶段名/属性修正/变招 moveKey/叙事池）、专属掉落表 | 阈值判定与阶段推进（跳级逐级补发事件/叙事）、阶段属性修正投影、bossPhase 随战斗态持久（自动再战重置归位） |
+| 阶段数组（阈值/阶段名/属性修正/变招 moveKey/叙事池）、专属掉落表、召唤脚本（池/数量/权重/属性缩放/转场叙事，#30） | 阈值判定与阶段推进（跳级逐级补发事件/叙事/召唤入场）、阶段属性修正投影、召唤物抽签入场与多敌战斗状态机（集火/清场）、bossPhase 与召唤槽位随战斗态持久（自动再战重置归位） |
 
 ### 字段约定
 
@@ -501,33 +508,47 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 | `phases[].threshold` | number（0 < t < 1） | 血量比例阈值（≤ 即进入该阶段）；全数组**严格递减**（递进顺序，语义校验 shape） |
 | `phases[].name` | string（1~12 字） | 阶段名（boss:phase 事件载荷 / 壳徽标展示，content 数据直出） |
 | `phases[].mods` | `{atk?, def?, attackInterval?}`（乘区 > 0） | 阶段属性修正；键域 schema 钉死（additionalProperties）——阶段是战斗过程修正，**hp/gold/exp 不随阶段投影**（阈值分母恒定的前提） |
-| `phases[].moveKey` | string（`^[a-z][a-z0-9_]*$`，可选） | 变招：该阶段敌方出招名注册键（xref combatText.moves + 招式注册表随之放行）；未声明回退敌人 id 键 |
+| `phases[].moveKey` | string（`^[a-z][a-z0-9_]*$`，可选） | 变招：该阶段敌方出招名注册键（xref combatText.moves + 招式注册表随之放行）；未声明回退敌人 id 键。**只作用于主敌人**（召唤物恒用自身敌 id 键） |
 | `phases[].narration` | string[]（1~80 字/条，可选） | 阶段转场叙事池（{enemy}/{phase} 槽）：per-boss-per-phase 脚本数据归 bosses 节本地（talents.description 先例），不进 combatText 共享词库 |
+| `phases[].summons` | object（可选，#30） | 阶段召唤脚本：`count`（1~24，入场一次性召唤）/ `enemies` 池（≥1 行：`enemy` xref enemies + **行内去重**、`weight` 正数缺省 1、`mult` hp/atk/def 乘区缺省原值）/ `narration` 转场叙事池（{enemy}/{phase} 槽，缺省不播报） |
 | `drops[]` | `{item, chance}`（可选） | 专属掉落表：victory 与 enemy.drops 同机制叠加掷点（items xref） |
 
 - **阈值语义**：敌人血量比例 ≤ `threshold` 进入该阶段；全数组须**严格递减**
   （递进顺序，语义校验 shape）；单击跨多阈值逐级补发（每级一次
-  `boss:phase` 事件 + 叙事 combat-note，`{enemy}/{phase}` 槽）。
+  `boss:phase` 事件 + 叙事 combat-note + 召唤入场，`{enemy}/{phase}` 槽）。
+  胜负判定先于阶段推进：击杀的一击不触发该阶段（死亡之主不召唤）。
 - **阶段修正**：`mods` 乘区键钉 `atk/def/attackInterval`（schema
   additionalProperties 钉死——阶段是战斗过程修正，hp/gold/exp 不随阶段
   投影）；投影单一来源 = 引擎 `bossEnemyOf`（与战斗结算、壳生效视图同调，
   禁壳内复制缩放式）。
 - **变招**：`moveKey` 覆盖该阶段敌方出招名注册键（须在 combatText.moves
   注册，xref + 招式注册表随之放行该键；未声明回退敌人 id 键）。
+- **召唤（#30）**：进入阶段时逐槽按 `weight` 占比归一化抽签（dungeon 加权
+  抽敌同式）召唤 `count` 个，以 `mult` 投影的满血入场（投影单一来源 =
+  引擎 `summonMinionOf`）。**多敌语义归引擎**：玩家集火最老召唤物（先入
+  先出），清场后回到主目标；召唤物各自独立出招（出招键 = 自身敌 id，不
+  继承阶段变招）；**召唤物无收益结算**（不掉落/无修为/不进击杀统计——
+  mult 键域据此钉 hp/atk/def）；Boss 死亡/再战/撤退一律清场。
 - **专属掉落**：`drops` 与 `enemy.drops` 同机制在 victory 叠加掷点（items xref）。
 - **复合语义**：Boss 阶段修正与秘境层倍率**叠乘**（先层倍率后阶段修正，
   resolveEnemy 单点组合）——秘境每 10 层插 Boss（#7/#8 联动）零特判；
-  修仙包妖窟顶 层 / 鬼庙第 10 层即饕餮三阶段 Boss。
-- **持久/重置**：`bossPhase` 存 CombatState 随档（中途存档续演）；自动再战
-  重置归位（Boss 重生从头演阶段）；普通敌人（未注册 Boss）恒 -1 零扰动。
-- **召唤原语不实施**：需多敌战斗状态机，另开票（裁决见 #8 票评）；
-  本票阶段脚本词表 = 变招 / 狂暴（属性修正）/ 专属掉落。
+  修仙包妖窟顶 层 / 鬼庙第 10 层即饕餮三阶段 Boss；召唤物同样吃所在秘境
+  层倍率（先层倍率后召唤 mult）。
+- **持久/重置**：`bossPhase` 与召唤槽位（`{enemyId, phase, hp, et}`，攻防
+  数值不落盘按内容现投影）存 CombatState 随档（中途存档续战不重播召唤）；
+  自动再战重置归位（Boss 重生从头演阶段、空槽开局）；普通敌人（未注册
+  Boss）恒空槽零扰动；包变更（Boss/阶段/召唤敌缩表）恢复侧防御弃置。
+- **非 Boss 战多敌**：召唤原语只服务 Boss 阶段脚本；野外群战类多敌遭遇
+  不在本语义内（#30 Out of Scope，另行评估）。
 
 ### 引擎事件与协议
 
-- 事件：`boss:phase`（`{enemyId, enemyName, phase: 1 起序号, name: 阶段名}`）；
+- 事件：`boss:phase`（`{enemyId, enemyName, phase: 1 起序号, name: 阶段名}`）、
+  `boss:summon`（#30：`{enemyId, enemyName, phase, count: 实召数量}`；
+  战报行由召唤叙事池承载，池缺省不播报——零兜底文案）；
 - UI 呈现：阶段徽标（阶段名 content 直出）+ 血条分段刻度（刻度位置 =
-  阈值），生效数值走 `combatEnemyView` 组合投影（秘境 × Boss 单点组合）。
+  阈值），生效数值走 `combatEnemyView` 组合投影（秘境 × Boss 单点组合）；
+  召唤物行 = 首槽集火徽标（engagedBadge 复用）+ 投影血条（enemyHp 同模板）。
 
 ## achievements 成就节（#9：统计 snapshot 驱动）
 

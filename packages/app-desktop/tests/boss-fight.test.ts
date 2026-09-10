@@ -25,6 +25,11 @@ function makePack(): ContentPack {
         hp: 60, atk: 9, def: 2, attackInterval: 2800, exp: 16,
         gold: { min: 4, max: 10 }, drops: [],
       },
+      {
+        id: 'e2', name: '赤尾妖蝎', icon: '蝎', level: 8, kind: 'claw',
+        hp: 24, atk: 3, def: 1, attackInterval: 1000000, exp: 8,
+        gold: { min: 1, max: 2 }, drops: [],
+      },
     ],
     gearDrops: [],
     elements: [],
@@ -35,7 +40,7 @@ function makePack(): ContentPack {
         basic: [{ v: '击', limbs: ['面门'] }],
         claw: [{ v: '抓', limbs: ['肩头'] }],
       },
-      moves: { basic: ['搏兔一击'], e1: ['饿虎扑食'], e1_rage: ['狂暴撕咬'] },
+      moves: { basic: ['搏兔一击'], e1: ['饿虎扑食'], e1_rage: ['狂暴撕咬'], e2: ['毒尾横扫'] },
       openings: ['你足尖一点'],
       critIntro: ['你气机鼓荡'],
       cons: {
@@ -101,6 +106,7 @@ function makePack(): ContentPack {
             enemyHp: '敌 {ehp}/{hp}', selfStats: '{hp}/{max}', fleeBtn: '撤',
             autoFightOn: '自动·开', autoFightOff: '自动·关', autoEatOn: '嗑·开', autoEatOff: '嗑·关',
             noConsumables: '无丹', enemyStats: '{hp}', enemyGold: '{min}~{max}', dropsSuffix: '', fightBtn: '战',
+            engagedBadge: '集火',
           },
         },
       },
@@ -111,7 +117,11 @@ function makePack(): ContentPack {
         enemy: 'e1',
         phases: [
           { threshold: 0.6, name: '血目暴睁', mods: { atk: 2 }, narration: ['【{enemy}】血目暴睁！'] },
-          { threshold: 0.3, name: '狂暴', mods: { attackInterval: 0.5 }, moveKey: 'e1_rage', narration: ['【{enemy}】狂暴！'] },
+          {
+            threshold: 0.3, name: '狂暴', mods: { attackInterval: 0.5 }, moveKey: 'e1_rage',
+            narration: ['【{enemy}】狂暴！'],
+            summons: { count: 1, enemies: [{ enemy: 'e2', weight: 1 }] },
+          },
         ],
       },
     ],
@@ -165,5 +175,38 @@ describe('#8 · Boss 战壳呈现', () => {
     expect(root.querySelector('.boss-phase')?.textContent).toBe('血目暴睁');
     expect(root.querySelector('.toast')?.textContent).toContain('血目暴睁');
     expect(root.querySelector('#log')?.textContent).toContain('显露「血目暴睁」之相');
+  });
+});
+
+/**
+ * #30 验收：召唤物壳呈现——召唤物血条行 + 集火徽标（首槽 = 引擎集火序）；
+ * 生效数值走引擎投影（summonMinionOf 组合面），壳零缩放公式；清场后行消失。
+ * 无文本节点元素（血条）以 querySelector 存在性断言（innerText 盲区教训）。
+ */
+describe('#30 · 召唤物壳呈现', () => {
+  it('跨召唤阈值：召唤物行出现（集火徽标 + 血条元素 + 投影数值），清场后消失', () => {
+    const { root, ui, game } = mount();
+    const seen: GameEvent[] = [];
+    game.events.subscribe((event) => seen.push(event));
+    root.querySelector<HTMLButtonElement>('.tab[data-tab="combat"]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-act="fight"][data-enemy="e1"]')!.click();
+    for (let i = 0; i < 60 && !seen.some((e) => e.type === 'boss:summon'); i++) {
+      game.tick(1000);
+      ui.render();
+    }
+    expect(seen.some((e) => e.type === 'boss:summon')).toBe(true);
+    // 召唤物行：e2 缩影（无 mult = 投影原值 hp 24），集火徽标随首槽渲染。
+    expect(root.querySelectorAll('.minion-row')).toHaveLength(1);
+    expect(root.querySelector('.minion-row.focus')).not.toBeNull();
+    expect(root.querySelector('.minion-row .act-badge')?.textContent).toBe('集火');
+    expect(root.querySelector('.minion-row [data-bar="minion"]')).not.toBeNull();
+    expect(root.querySelector('.minion-row')?.textContent).toContain('敌 24/24');
+    // 清场：召唤物被击杀后行消失（战斗不中断）。
+    for (let i = 0; i < 60 && root.querySelector('.minion-row'); i++) {
+      game.tick(1000);
+      ui.render();
+    }
+    expect(root.querySelectorAll('.minion-row')).toHaveLength(0);
+    expect(root.querySelector('[data-act="flee"]')).not.toBeNull(); // 战斗仍在（回主目标）
   });
 });

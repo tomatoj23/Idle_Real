@@ -134,6 +134,77 @@ describe('validateContentPack · bosses Boss 节（#8）', () => {
   });
 });
 
+/**
+ * #30 验收：阶段召唤脚本（summons）——
+ * - schema 关卡：count/enemies 必填、边界、池行形态、mult 键域；
+ * - 语义关卡：召唤池行 enemy xref enemies + 行内去重（投影按敌 id 定位）。
+ * 可选字段：省略 = 该阶段零召唤（零降级路径）。
+ */
+describe('validateContentPack · bosses 阶段召唤脚本（#30）', () => {
+  /** 基准包第二阶段（狂暴）挂召唤脚本：2 只 e2 缩影 + 叙事池。 */
+  function baseWithSummons(): Record<string, any> {
+    const pack = makePack();
+    pack.bosses[0].phases[1].summons = {
+      count: 2,
+      enemies: [{ enemy: 'e2', weight: 1, mult: { hp: 0.5, atk: 0.6, def: 1 } }],
+      narration: ['【{enemy}】召来护法！'],
+    };
+    return pack;
+  }
+
+  it('合法召唤脚本通过（count/池/权重/mult/叙事全字段）', () => {
+    expect(validateContentPack(baseWithSummons()).ok).toBe(true);
+  });
+
+  it('缺 count / 缺 enemies → schema required', () => {
+    const pack = baseWithSummons();
+    delete pack.bosses[0].phases[1].summons.count;
+    expectError(validateContentPack(pack), '/bosses/0/phases/1/summons/count', 'required');
+
+    const pack2 = baseWithSummons();
+    delete pack2.bosses[0].phases[1].summons.enemies;
+    expectError(validateContentPack(pack2), '/bosses/0/phases/1/summons/enemies', 'required');
+  });
+
+  it('count 越界（0 / 25）→ schema minimum/maximum', () => {
+    const pack = baseWithSummons();
+    pack.bosses[0].phases[1].summons.count = 0;
+    expectError(validateContentPack(pack), '/bosses/0/phases/1/summons/count', 'minimum');
+
+    const pack2 = baseWithSummons();
+    pack2.bosses[0].phases[1].summons.count = 25;
+    expectError(validateContentPack(pack2), '/bosses/0/phases/1/summons/count', 'maximum');
+  });
+
+  it('召唤物敌人不存在 → 字段级 xref', () => {
+    const pack = baseWithSummons();
+    pack.bosses[0].phases[1].summons.enemies[0].enemy = 'e99';
+    expectError(validateContentPack(pack), '/bosses/0/phases/1/summons/enemies/0/enemy', 'xref');
+  });
+
+  it('召唤池行内 enemy 重复 → duplicate（投影按敌 id 定位，重复即歧义）', () => {
+    const pack = baseWithSummons();
+    pack.bosses[0].phases[1].summons.enemies.push({ enemy: 'e2', weight: 3 });
+    expectError(validateContentPack(pack), '/bosses/0/phases/1/summons/enemies/1/enemy', 'duplicate');
+  });
+
+  it('mult 携带未钉键（gold）→ schema additionalProperties（召唤物无收益投影）', () => {
+    const pack = baseWithSummons();
+    pack.bosses[0].phases[1].summons.enemies[0].mult.gold = 2;
+    expectError(
+      validateContentPack(pack),
+      '/bosses/0/phases/1/summons/enemies/0/mult/gold',
+      'additionalProperties',
+    );
+  });
+
+  it('weight ≤ 0 → schema exclusiveMinimum（无效权重不在语义层静默剔除作者意图）', () => {
+    const pack = baseWithSummons();
+    pack.bosses[0].phases[1].summons.enemies[0].weight = 0;
+    expectError(validateContentPack(pack), '/bosses/0/phases/1/summons/enemies/0/weight', 'exclusiveMinimum');
+  });
+});
+
 describe('题材包 Boss 样张（#8 换包换行为）', () => {
   it('修仙包：饕餮三阶段（阈值严格递减 + 变招键注册 + 专属掉落）', () => {
     const result = validateContentPack(xiuxianPackJson);
@@ -149,6 +220,11 @@ describe('题材包 Boss 样张（#8 换包换行为）', () => {
     expect(boss.phases[1]!.moveKey).toBe('e8_devour');
     expect(pack.combatText.moves.e8_devour?.length).toBeGreaterThan(0);
     expect(boss.drops?.length).toBeGreaterThan(0);
+    // #30 召唤脚本：真身阶段召唤 2 只 e2 缩影（换包换召唤行为的官方包样张）。
+    const finalPhase = boss.phases.at(-1)!;
+    expect(finalPhase.summons?.count).toBe(2);
+    expect(finalPhase.summons?.enemies.map((entry) => entry.enemy)).toEqual(['e2']);
+    expect(finalPhase.summons?.narration?.length).toBeGreaterThan(0);
     // 秘境每 10 层插 Boss（#7/#8 联动内容面）：妖窟顶 层 = 饕餮。
     const yaoku = pack.dungeons![0]!;
     expect(yaoku.layers.at(-1)?.enemies.map((e) => e.enemy)).toEqual(['e8']);

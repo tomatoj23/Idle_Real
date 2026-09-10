@@ -64,6 +64,7 @@ import {
   restoreState,
   type ActivityState,
   type CombatState,
+  type CombatSummonState,
   type GameState,
 } from './state.js';
 import type { Clock, GameAction, GameContent, PlayerStatsView, SaveData } from './types.js';
@@ -93,7 +94,14 @@ import {
   pickDungeonEnemyOf,
   type DungeonView,
 } from './dungeon.js';
-import { bossEnemyOf, findBossOf } from './bosses.js';
+import {
+  bossEnemyOf,
+  findBossOf,
+  pickSummonEntry,
+  summonMinionOf,
+  summonPoolOf,
+  type BossView,
+} from './bosses.js';
 import { applyStatsEvent } from './stats.js';
 import { achievementConditionMet, achievementsOf } from './achievements.js';
 
@@ -700,8 +708,55 @@ export function createGame(options: CreateGameOptions): Game {
   }
 
   /**
+   * 召唤物投影（#30）：秘境层倍率在前（与主 Boss 同律）、召唤 mult 乘区在后；
+   * 池行缺失/包变更（阶段缩表）= undefined（调用方清槽，绝不崩）。
+   */
+  function minionViewOf(minion: CombatSummonState): EnemyView | undefined {
+    const c = state.combat;
+    if (!c) return undefined;
+    const boss = findBossOf(content, c.enemyId);
+    if (!boss) return undefined;
+    const run = state.dungeon;
+    const scaled = run ? dungeonFloorEnemyOf(content, run.dungeonId, run.floor, minion.enemyId) : undefined;
+    const base = scaled ?? findEnemy(content, minion.enemyId);
+    if (!base) return undefined;
+    return summonMinionOf(content, boss, minion.phase, minion.enemyId, base) ?? base;
+  }
+
+  /**
+   * 召唤入场（#30，阶段进入时消费）：逐槽从脚本池按权重抽签（dungeon 加权
+   * 抽敌同式），召唤物以缩放投影的满血入场（集火序 = 入场序）；池行全缺失
+   * = 该槽跳过（防御路径，绝不崩）。入场播 boss:summon 事件 + 叙事池抽句
+   * （池缺省 = 不播报，不造句）。
+   */
+  function spawnSummons(boss: BossView, bossEnemy: EnemyView, phaseIndex: number, c: CombatState): void {
+    const pool = summonPoolOf(boss, phaseIndex);
+    const count = Math.max(0, Math.floor(boss.phases[phaseIndex]?.summons?.count ?? 0));
+    let spawned = 0;
+    for (let i = 0; i < count; i++) {
+      const entry = pickSummonEntry(content, pool, random);
+      if (!entry) break;
+      const view = summonMinionOf(content, boss, phaseIndex, entry.enemy);
+      if (!view) continue;
+      c.summons.push({ enemyId: entry.enemy, phase: phaseIndex, hp: view.hp, et: 0 });
+      spawned += 1;
+    }
+    if (spawned === 0) return;
+    const name = typeof boss.phases[phaseIndex]?.name === 'string' ? boss.phases[phaseIndex]!.name : '';
+    events.emit({
+      type: 'boss:summon',
+      time,
+      data: { enemyId: boss.enemy, enemyName: bossEnemy.name, phase: phaseIndex + 1, count: spawned },
+    });
+    const narration = pickText(boss.phases[phaseIndex]?.summons?.narration, random);
+    if (narration !== undefined) {
+      emitNote(fillTemplate(narration, { enemy: bossEnemy.name, phase: name }), boss.enemy);
+    }
+  }
+
+  /**
    * Boss 阶段推进（#8，玩家一击落点后消费）：血量比例 ≤ 阈值即进入该阶段；
-   * 单击跨多阈值逐级补发（每级一次 boss:phase 事件 + 阶段叙事）。
+   * 单击跨多阈值逐级补发（每级一次 boss:phase 事件 + 阶段叙事 + 召唤入场）。
    * 阶段修正经 resolveEnemy 在后续轮次解算生效（bossPhase 随战斗态持久，
    * 自动再战重置归位）；普通敌人（未注册 Boss）恒跳过。
    */
@@ -725,6 +780,7 @@ export function createGame(options: CreateGameOptions): Game {
       if (narration !== undefined) {
         emitNote(fillTemplate(narration, { enemy: enemy.name, phase: name }), enemy.id);
       }
+      spawnSummons(boss, enemy, c.bossPhase, c); // 召唤原语（#30）：阶段声明的召唤入场
     }
   }
 
@@ -744,6 +800,7 @@ export function createGame(options: CreateGameOptions): Game {
       crits: 0,
       tiers: { light: 0, mid: 0, heavy: 0, deadly: 0 },
       bossPhase: -1,
+      summons: [],
     };
     emitNote(noteFrom('start', { enemy: scaled.name }), scaled.id);
     return true;
@@ -806,46 +863,58 @@ export function createGame(options: CreateGameOptions): Game {
     leaveDungeon(); // 秘境攻略随战团散去（#7：撤退/退避/转赴修行一律离境）
   }
 
-  /** 玩家一击：系别签名（破防/亲和/风味）→ 暴击 roll → 伤害 → 伤害档累计 →
-   * 文案 → 胜负判定。伤害链：减伤解算（可含金·破防）→ 亲和乘区 → 暴击乘区；
-   * 伤害档对**未破防**期望判档——破防/克制的可观测签名 = 档位跃迁（ADR-012）。 */
+  /**
+   * 玩家一击（#30 多敌目标选择）：召唤物在场时集火最老召唤物（先入先出），
+   * 清场后回到主目标（reengage 叙事复用）。伤害链：系别签名（破防/亲和/风味）
+   * → 暴击 roll → 减伤解算（可含金·破防）→ 亲和乘区 → 暴击乘区；伤害档对
+   * **未破防**期望判档——破防/克制的可观测签名 = 档位跃迁（ADR-012）。
+   * 召唤物死亡只清槽位（无收益结算）；主目标死亡才走 victory。
+   */
   function playerAttackRound(enemy: EnemyView, c: CombatState): void {
+    // 集火目标：召唤物槽首（投影失效的槽位防御性清弃，回落主目标）。
+    const focus = c.summons.length > 0 ? c.summons[0] : undefined;
+    const focusView = focus !== undefined ? minionViewOf(focus) : undefined;
+    if (focus !== undefined && focusView === undefined) c.summons.shift();
+    const target = focusView ?? enemy;
+    const onMinion = focusView !== undefined;
+
     const moveKey = weaponMoveKey();
     const weapon = wornWeapon();
     const element = weaponElement();
-    const { atk, crit: critChance } = combatStats(enemy);
+    const { atk, crit: critChance } = combatStats(target);
     // 金·破防（临时态在效）：受击者 def 临时降低 → 减伤解算按破防后 def。
     const signature = attackSignature();
     const breakValue = activeSignatureValue('defenseBreak', elemExpiry.defenseBreak, signature);
-    const defEff = enemy.def * (1 - breakValue);
+    const defEff = target.def * (1 - breakValue);
     const dmgBase = calcDmg(atk, defEff, random, cparams);
     // 亲和乘区（#25 预留 affinities 的引擎消费面）：受击者对该系的易伤/抗性。
-    const affinity = element !== undefined ? enemy.affinities?.[element] : undefined;
+    const affinity = element !== undefined ? target.affinities?.[element] : undefined;
     let dmg = Math.max(1, Math.round(dmgBase * affinityMultiplier(affinity)));
     const crit = rollCrit(critChance, random);
     if (crit) dmg = Math.round(dmg * cparams.critMultiplier);
-    c.ehp -= dmg;
+    if (onMinion && focus) focus.hp -= dmg;
+    else c.ehp -= dmg;
     c.rounds += 1;
     if (crit) c.crits += 1;
     // 系别命中：机械签名临时态即时生效（命中即续，时长归 content）。
     applyElementProc(element);
     // 伤害档对未破防/未亲和的期望判档：破防/克制读高档、被克读轻档（签名可见）。
-    const tier = hitTierOf(dmg, atk, enemy.def, cparams);
+    const tier = hitTierOf(dmg, atk, target.def, cparams);
     c.tiers[tier] += 1;
     const text = makeAttackText(
       combatText,
       {
         side: 'player',
-        enemyName: enemy.name,
+        enemyName: target.name,
         moveKey,
         verbStyle: playerVerbStyle(),
         weaponName: weapon ? weapon.item.name : basicName,
         dmg,
         crit,
         atk,
-        defenderDef: enemy.def,
-        defenderHp: Math.max(0, c.ehp),
-        defenderMaxHp: enemy.hp,
+        defenderDef: target.def,
+        defenderHp: Math.max(0, onMinion && focus ? focus.hp : c.ehp),
+        defenderMaxHp: target.hp,
         ...(element !== undefined ? { element } : {}),
         ...(affinity !== undefined ? { affinity } : {}),
       },
@@ -857,8 +926,8 @@ export function createGame(options: CreateGameOptions): Game {
       time,
       data: {
         side: 'player',
-        enemyId: enemy.id,
-        enemyName: enemy.name,
+        enemyId: target.id,
+        enemyName: target.name,
         text,
         dmg,
         crit,
@@ -866,6 +935,16 @@ export function createGame(options: CreateGameOptions): Game {
         ...(element !== undefined ? { element } : {}),
       },
     });
+    if (onMinion && focus) {
+      if (focus.hp <= 0) {
+        c.summons.shift();
+        if (c.summons.length === 0) {
+          // 清场回到主目标（#30 验收语义；叙事复用 reengage 池，零新词库键）。
+          emitNote(noteFrom('reengage', { enemy: enemy.name }), enemy.id);
+        }
+      }
+      return;
+    }
     if (c.ehp <= 0) {
       victory(enemy, c);
       return;
@@ -873,16 +952,25 @@ export function createGame(options: CreateGameOptions): Game {
     checkBossPhase(enemy, c); // Boss 阶段阈值推进（#8；普通敌人空转）
   }
 
-  /** 敌人一击：减伤解算 → 文案 → 玩家倒下判定。 */
-  function enemyAttackRound(enemy: EnemyView, c: CombatState): void {
+  /**
+   * 敌方一击：减伤解算 → 文案 → 玩家倒下判定。moveKeyOverride = 召唤物出招键
+   * （#30：召唤物以自身敌 id 注册招式，不继承 Boss 阶段变招；缺省 = 主敌人
+   * Boss 阶段变招语义不变）。
+   */
+  function enemyAttackRound(enemy: EnemyView, c: CombatState, moveKeyOverride?: string): void {
     const { def, maxHp } = combatStats(enemy);
     const dmg = calcDmg(enemy.atk, def, random, cparams);
     state.hp -= dmg;
     const tier = hitTierOf(dmg, enemy.atk, def, cparams);
     // 变招（#8）：Boss 当前阶段声明的出招注册键覆盖敌人 id 键（未声明回退）。
-    const boss = findBossOf(content, enemy.id);
-    const phaseMoveKey = boss && c.bossPhase >= 0 ? boss.phases[c.bossPhase]?.moveKey : undefined;
-    const moveKey = typeof phaseMoveKey === 'string' && phaseMoveKey.length > 0 ? phaseMoveKey : enemy.id;
+    let moveKey: string;
+    if (typeof moveKeyOverride === 'string' && moveKeyOverride.length > 0) {
+      moveKey = moveKeyOverride;
+    } else {
+      const boss = findBossOf(content, enemy.id);
+      const phaseMoveKey = boss && c.bossPhase >= 0 ? boss.phases[c.bossPhase]?.moveKey : undefined;
+      moveKey = typeof phaseMoveKey === 'string' && phaseMoveKey.length > 0 ? phaseMoveKey : enemy.id;
+    }
     const text = makeAttackText(
       combatText,
       {
@@ -984,6 +1072,7 @@ export function createGame(options: CreateGameOptions): Game {
     const compare = compareEncounterText(prev, c.rounds, combatText, random);
     state.lastEncounter[enemy.id] = { rounds: c.rounds, won: true, at: time };
     c.respT = cparams.victoryRestMs; // 战斗态保留（ehp ≤ 0），休整后按 autoFight 决定去留
+    c.summons = []; // Boss 死亡清场（#30）：残存召唤物随主敌溃散，不参与结算
 
     events.emit({
       type: 'victory',
@@ -1104,6 +1193,7 @@ export function createGame(options: CreateGameOptions): Game {
             c.crits = 0;
             c.tiers = { light: 0, mid: 0, heavy: 0, deadly: 0 };
             c.bossPhase = -1; // Boss 重生从头演阶段（#8：阶段随再战重置归位）
+            c.summons = []; // 召唤物随再战清场（#30：Boss 重生不带残阵）
             resetElemExpiry(); // 系别临时态随再战归零（Boss 重生不带残效，#15）
             emitNote(noteFrom('reengage', { enemy: enemy.name }), enemy.id);
           } else {
@@ -1123,7 +1213,7 @@ export function createGame(options: CreateGameOptions): Game {
         if (healConsumable) eatConsumable(healConsumable, true);
       }
       if (!state.combat) return;
-      // 推进到下一个事件点（玩家出招 / 敌人出招 / dt 消化完）
+      // 推进到下一个事件点（玩家出招 / 主敌人出招 / 召唤物出招 / dt 消化完）
       // 有效间隔 = 基础间隔 ×（1 ∓ 系别速率修正，#15）：风·迅疾缩短玩家间隔、
       // 水·滞缓延长敌方间隔（临时态在效时；系数现读 content 签名）。
       // 敌人缺省攻击间隔 = 玩家间隔（config.combat.playerAttackInterval，#020）。
@@ -1139,11 +1229,26 @@ export function createGame(options: CreateGameOptions): Game {
         1,
         Math.round(enemyBase * (1 + activeSignatureValue('slow', elemExpiry.slow, signature))),
       );
-      const pWait = pInterval - c.pt;
-      const eWait = eInterval - c.et;
-      const step = Math.max(0, Math.min(remaining, pWait, eWait));
+      // 投影失效的召唤槽位防御性清弃（包变更缩表/敌移除，恢复侧同律过滤）。
+      if (c.summons.length > 0) {
+        c.summons = c.summons.filter((minion) => minionViewOf(minion) !== undefined);
+      }
+      // 召唤物有效间隔（#30）：攻击间隔随内容定义（缺省 = 玩家间隔），不受
+      // 水·滞缓影响（滞缓签名作用于主敌人；召唤物威胁量归 summon mult 调参）。
+      const minionIntervals = c.summons.map((minion) => {
+        const view = minionViewOf(minion)!;
+        return Math.max(1, view.attackInterval ?? cparams.playerAttackInterval);
+      });
+      let step = Math.min(remaining, pInterval - c.pt, eInterval - c.et);
+      c.summons.forEach((minion, i) => {
+        step = Math.min(step, minionIntervals[i]! - minion.et);
+      });
+      step = Math.max(0, step);
       c.pt += step;
       c.et += step;
+      c.summons.forEach((minion) => {
+        minion.et += step;
+      });
       remaining -= step;
       if (c.pt >= pInterval) {
         c.pt -= pInterval;
@@ -1154,6 +1259,19 @@ export function createGame(options: CreateGameOptions): Game {
         c.et -= eInterval;
         enemyAttackRound(enemy, c);
         if (!state.combat) return;
+      }
+      // 召唤物各自出招（#30）：出招键 = 自身敌 id（不继承 Boss 阶段变招）。
+      // 间隔现取（玩家一击可能清槽，预计算的 intervals 不再对位）；迭代中
+      // 召唤物不会被移除（召唤物攻击只可能击倒玩家 → defeat 早退）。
+      for (const minion of [...c.summons]) {
+        const view = minionViewOf(minion);
+        if (!view) continue;
+        const mInterval = Math.max(1, view.attackInterval ?? cparams.playerAttackInterval);
+        if (minion.et >= mInterval) {
+          minion.et -= mInterval;
+          enemyAttackRound(view, c, minion.enemyId);
+          if (!state.combat) return;
+        }
       }
     }
   }
@@ -1661,6 +1779,7 @@ export function createGame(options: CreateGameOptions): Game {
             crits: 0,
             tiers: { light: 0, mid: 0, heavy: 0, deadly: 0 },
             bossPhase: -1,
+            summons: [],
           };
           resetElemExpiry(); // 开新战：系别临时态归零（不跨战团，#15）
           emitNote(noteFrom('start', { enemy: enemy.name }), enemy.id);

@@ -469,6 +469,26 @@ body {
 }
 .boss-phase { border-color: var(--border-gold); color: var(--gold); }
 
+/* 召唤物行（#30）：血条 + 集火徽标（首槽 = 引擎集火序，先入先出） */
+.minion-rows { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
+.minion-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  grid-template-areas:
+    'sigil name badge hp'
+    'bar bar bar bar';
+  align-items: center;
+  column-gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.minion-row .sigil-sm { grid-area: sigil; }
+.minion-row b { grid-area: name; color: var(--ink); font-family: var(--serif); font-weight: 600; }
+.minion-row .act-badge { grid-area: badge; justify-self: start; }
+.minion-row .minion-hp { grid-area: hp; }
+.minion-row .minion-bar { grid-area: bar; height: 5px; }
+.minion-row.focus .minion-bar { box-shadow: 0 0 6px rgba(224, 200, 143, 0.35); }
+
 .combat-toggles { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
 .btn.on { border-color: var(--border-gold); color: var(--gold); }
 

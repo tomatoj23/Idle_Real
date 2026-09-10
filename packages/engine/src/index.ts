@@ -94,7 +94,14 @@ export type {
   StackView,
 } from './contentView.js';
 export { cloneState, initialState, restoreState } from './state.js';
-export type { ActivityState, CombatState, DungeonState, GameState, SkillProgress } from './state.js';
+export type {
+  ActivityState,
+  CombatState,
+  CombatSummonState,
+  DungeonState,
+  GameState,
+  SkillProgress,
+} from './state.js';
 
 export type {
   Clock,
@@ -223,9 +230,16 @@ export type {
   DungeonView,
 } from './dungeon.js';
 
-// Boss 战框架（#8：阶段脚本/阈值推进/阶段修正投影）
-export { bossEnemyOf, bossesOf, findBossOf } from './bosses.js';
-export type { BossPhaseView, BossView } from './bosses.js';
+// Boss 战框架（#8：阶段脚本/阈值推进/阶段修正投影；#30：召唤原语）
+export {
+  bossEnemyOf,
+  bossesOf,
+  findBossOf,
+  pickSummonEntry,
+  summonMinionOf,
+  summonPoolOf,
+} from './bosses.js';
+export type { BossPhaseView, BossSummonEntryView, BossSummonsView, BossView } from './bosses.js';
 
 // 统计聚合器与成就判定器（#9：事件流累积 snapshot / 条件判定 / 进度投影）
 export { STAT_KEYS, applyStatsEvent, restoreStats } from './stats.js';

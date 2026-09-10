@@ -29,6 +29,8 @@ export type {
   Bonuses,
   BossDef,
   BossPhase,
+  BossSummonEntry,
+  BossSummons,
   Byproduct,
   CombatText,
   Config,
