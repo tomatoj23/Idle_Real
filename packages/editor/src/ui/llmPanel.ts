@@ -8,6 +8,7 @@ import { createFetchClient, type LlmClient } from '../llm/client.js';
 import { applyCandidates, generateCandidates, type Candidate } from '../llm/pipeline.js';
 import { loadLlmConfig, saveLlmConfig, type LlmConfig } from '../llm/config.js';
 import type { EditorStore } from '../core/state.js';
+import { optionEl } from './render.js';
 
 export interface LlmPanel {
   /** 数据变更后刷新入包按钮可用态（候选相对当前包可能失效）。 */
@@ -65,8 +66,7 @@ export function createLlmPanel(
   kindSelect.className = 'input';
   for (const entry of GEN_KINDS) {
     kindSelect.append(optionEl(entry.kind, entry.label));
-  }
-  const countInput = document.createElement('input');
+  }  const countInput = document.createElement('input');
   countInput.type = 'number';
   countInput.className = 'input input-inline';
   countInput.min = '1';
@@ -99,7 +99,10 @@ export function createLlmPanel(
     const result = applyCandidates(store, kind, approved);
     candidates = [];
     repaintCandidates();
-    statusLine.textContent = `已入包 ${result.applied} 条${result.skipped.length > 0 ? `（跳过 ${result.skipped.join('、')}）` : ''}`;
+    statusLine.textContent =
+      `已入包 ${result.applied} 条` +
+      (result.movesRegistered > 0 ? `（${result.movesRegistered} 个新敌人已自动注册缺省招式名，可在战斗文案节润色）` : '') +
+      (result.skipped.length > 0 ? `（跳过 ${result.skipped.join('、')}）` : '');
     opts.onApplied?.();
   });
 
@@ -155,7 +158,7 @@ export function createLlmPanel(
 
   function repaintCandidates(): void {
     candidateBox.replaceChildren();
-    for (const [index, candidate] of candidates.entries()) {
+    for (const candidate of candidates) {
       const row = document.createElement('label');
       row.className = `candidate ${candidate.errors.length === 0 ? 'ok' : 'bad'}`;
       const checkbox = document.createElement('input');
@@ -177,7 +180,6 @@ export function createLlmPanel(
         row.append(errors);
       }
       candidateBox.append(row);
-      void index;
     }
     applyBtn.textContent = `勾选入包（${candidates.filter((candidate) => candidate.approved).length}）`;
     applyBtn.disabled = candidates.every((candidate) => !candidate.approved);
@@ -221,11 +223,4 @@ function button(text: string, className: string): HTMLButtonElement {
   node.className = className;
   node.textContent = text;
   return node;
-}
-
-function optionEl(value: string, text: string): HTMLOptionElement {
-  const option = document.createElement('option');
-  option.value = value;
-  option.textContent = text;
-  return option;
 }

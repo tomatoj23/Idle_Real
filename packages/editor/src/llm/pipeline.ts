@@ -130,49 +130,36 @@ export async function generateCandidates(opts: {
   return { ok: true, candidates };
 }
 
-/**
- * 勾选候选拟入包快照（不落库）：返回将被应用的变更描述，供确认 UI。
- * verbs 撞键（既有风格键或同批重复）的候选跳过并在 skipped 报告。
- */
-export function previewApply(
-  kind: GenKind,
-  approved: readonly Candidate[],
-  pack: Record<string, unknown>,
-): { readonly applied: number; readonly skipped: readonly string[] } {
-  const skipped: string[] = [];
-  let applied = 0;
-  if (kind === 'verbs') {
-    const combatText = pack['combatText'] as { verbs?: Record<string, unknown> } | undefined;
-    const verbs = combatText?.verbs ?? {};
-    const seen = new Set<string>(Object.keys(verbs));
-    for (const candidate of approved) {
-      const key = (candidate.value as { key?: unknown })?.key;
-      if (typeof key !== 'string' || seen.has(key)) {
-        skipped.push(candidate.label);
-        continue;
-      }
-      seen.add(key);
-      applied += 1;
-    }
-    return { applied, skipped };
-  }
-  return { applied: approved.length, skipped };
+export interface ApplyReport {
+  readonly applied: number;
+  /** 撞键/复核未过的候选标签。 */
+  readonly skipped: readonly string[];
+  /** 敌人候选自动补缺省招式注册数（语义闭合辅助，入包可查改）。 */
+  readonly movesRegistered: number;
 }
 
-/** 勾选候选入包（store.update 原地改）。 */
+/**
+ * 勾选候选入包（store.update 原地改）。入包前逐条对**当前包时点**复核
+ * 节级 schema（硬原则 3：过 schema 才能进包——生成时快照可能因包已变更
+ * 而失效）；verbs 撞键（既有风格键或同批重复）跳过。
+ * 敌人候选自动在 combatText.moves 补缺省招式注册（语义关卡 xref 要求，
+ * 以敌人名为初始招式，作者可再润色），数量见 ApplyReport.movesRegistered。
+ */
 export function applyCandidates(
   store: EditorStore,
   kind: GenKind,
   approved: readonly Candidate[],
-): { readonly applied: number; readonly skipped: readonly string[] } {
+): ApplyReport {
   let applied = 0;
+  let movesRegistered = 0;
   const skipped: string[] = [];
+  const schema = candidateSchemaOf(kind);
   store.update((pack) => {
     if (kind === 'verbs') {
       const combatText = pack['combatText'] as { verbs: Record<string, unknown> };
       for (const candidate of approved) {
         const { key, list } = candidate.value as { key?: unknown; list?: unknown };
-        if (typeof key !== 'string' || key in combatText.verbs) {
+        if (typeof key !== 'string' || key in combatText.verbs || !passesSchema(candidate.value, schema)) {
           skipped.push(candidate.label);
           continue;
         }
@@ -190,12 +177,22 @@ export function applyCandidates(
     const section = pack[kind] as unknown[];
     for (const candidate of approved) {
       const entry = JSON.parse(JSON.stringify(candidate.value)) as { id?: unknown; name?: unknown };
+      if (!passesSchema(entry, schema)) {
+        skipped.push(candidate.label);
+        continue;
+      }
       section.push(entry);
       if (moves !== undefined && typeof entry.id === 'string' && !(entry.id in moves)) {
         moves[entry.id] = [typeof entry.name === 'string' && entry.name !== '' ? entry.name : entry.id];
+        movesRegistered += 1;
       }
       applied += 1;
     }
   });
-  return { applied, skipped };
+  return { applied, skipped, movesRegistered };
+}
+
+/** 入包复核：候选对当前包时点的节级 schema 再验一次。 */
+function passesSchema(value: unknown, schema: JsonSchema): boolean {
+  return validateContent(value, schema).ok;
 }

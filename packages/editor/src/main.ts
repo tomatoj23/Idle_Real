@@ -140,7 +140,7 @@ if (app) {
   }
 
   function cssEscape(value: string): string {
-    return value.replace(/"/g, '\\"');
+    return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   }
 
   /* —— 校验调度（输入 debounce，结构性变更立即） —— */
@@ -211,10 +211,18 @@ if (app) {
     }
   }
 
-  /** 坏包字段级错误（验收 3）：包不被应用，错误可见可定位检查。 */
+  /**
+   * 坏包字段级错误（验收 3）：包不被应用，错误可见可定位检查。
+   * 全 DOM API 构建——错误消息回显包内字符串，禁 innerHTML（注入面）。
+   */
   function showRejectedErrors(errors: readonly { path: string; keyword: string; message: string }[]): void {
     const list = document.querySelector('.validate-list');
     if (list === null) return;
+    const status = document.querySelector('.validate-status');
+    if (status !== null) {
+      status.className = 'validate-status invalid';
+      status.textContent = '✗ 上次导入被拒（当前包未被改动）';
+    }
     const banner = document.createElement('div');
     banner.className = 'validate-group rejected';
     const head = document.createElement('div');
@@ -224,7 +232,13 @@ if (app) {
     for (const error of errors.slice(0, 50)) {
       const item = document.createElement('div');
       item.className = 'validate-item static';
-      item.innerHTML = `<span class="validate-path">${error.path || '/'}</span><span class="validate-msg">[${error.keyword}] ${error.message}</span>`;
+      const path = document.createElement('span');
+      path.className = 'validate-path';
+      path.textContent = error.path || '/';
+      const msg = document.createElement('span');
+      msg.className = 'validate-msg';
+      msg.textContent = `[${error.keyword}] ${error.message}`;
+      item.append(path, msg);
       banner.append(item);
     }
     list.prepend(banner);

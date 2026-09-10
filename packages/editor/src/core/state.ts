@@ -60,8 +60,10 @@ export function createStore(initial?: unknown): EditorStore {
       if (!result.ok) {
         return result;
       }
+      // 深拷持有：store 独占编辑副本，外部（测试夹具单例/示例包常量/
+      // 导入解析结果）不受后续编辑影响。
       state = {
-        pack: json as Record<string, unknown>,
+        pack: structuredClone(json) as Record<string, unknown>,
         dirty: false,
         section: state.section,
       };
@@ -70,9 +72,7 @@ export function createStore(initial?: unknown): EditorStore {
     },
     update(fn: (pack: Record<string, unknown>) => void): void {
       fn(state.pack);
-      if (!state.dirty) {
-        state.dirty = true;
-      }
+      state.dirty = true;
       notify('data');
     },
     setSection(section: string | null): void {

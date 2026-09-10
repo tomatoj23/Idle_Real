@@ -46,12 +46,32 @@ function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 /** option 元素（vm 池无全局 Option 构造器，统一走 createElement）。 */
-function optionEl(value: string, text: string, selected = false): HTMLOptionElement {
+export function optionEl(value: string, text: string, selected = false): HTMLOptionElement {
   const option = document.createElement('option');
   option.value = value;
   option.textContent = text;
   option.selected = selected;
   return option;
+}
+
+/**
+ * 给输入框挂跨引用 datalist（focus 时从当前包快照重建候选池）。
+ * datalist 是输入辅助不是硬约束——引用目标可能尚未建条目（先建敌人后建
+ * 掉落物品），自由输入 + 校验面板兜底是有意裁断。
+ */
+function attachXrefDatalist(input: HTMLInputElement, xref: XrefTarget): void {
+  input.classList.add('xref-input');
+  const listId = `dl-${(datalistSeq += 1)}`;
+  input.setAttribute('list', listId);
+  const datalist = document.createElement('datalist');
+  datalist.id = listId;
+  input.append(datalist);
+  input.addEventListener('focus', () => {
+    datalist.replaceChildren();
+    for (const option of currentXrefPool(xref)) {
+      datalist.append(optionEl(option, option));
+    }
+  });
 }
 
 /** 条目列表摘要（id + name）。 */
@@ -437,19 +457,7 @@ function stringControl(
     input.placeholder = `格式 ${node.pattern}`;
   }
   if (node.xref !== undefined) {
-    input.classList.add('xref-input');
-    const listId = `dl-${(datalistSeq += 1)}`;
-    input.setAttribute('list', listId);
-    const datalist = document.createElement('datalist');
-    datalist.id = listId;
-    input.append(datalist);
-    input.addEventListener('focus', () => {
-      datalist.replaceChildren();
-      // 池由渲染时的 pack 快照提供（focus 时经全局注册表取最新）。
-      for (const option of currentXrefPool(node.xref)) {
-        datalist.append(optionEl(option, option));
-      }
-    });
+    attachXrefDatalist(input, node.xref);
   }
   input.addEventListener('input', () => {
     touch(() => {
@@ -621,17 +629,7 @@ function scalarItemInput(node: FormNode, list: unknown[], index: number, touch: 
   input.className = 'input';
   input.value = typeof list[index] === 'string' ? (list[index] as string) : '';
   if (node.xref !== undefined) {
-    const listId = `dl-${(datalistSeq += 1)}`;
-    input.setAttribute('list', listId);
-    const datalist = document.createElement('datalist');
-    datalist.id = listId;
-    input.append(datalist);
-    input.addEventListener('focus', () => {
-      datalist.replaceChildren();
-      for (const option of currentXrefPool(node.xref)) {
-        datalist.append(optionEl(option, option));
-      }
-    });
+    attachXrefDatalist(input, node.xref);
   }
   input.addEventListener('input', () => {
     touch(() => {
@@ -716,17 +714,7 @@ function dictRow(
   keyInput.value = key;
   keyInput.placeholder = dict.keyPattern !== undefined ? `键格式 ${dict.keyPattern}` : '键';
   if (dict.keyXref !== undefined) {
-    const listId = `dl-${(datalistSeq += 1)}`;
-    keyInput.setAttribute('list', listId);
-    const datalist = document.createElement('datalist');
-    datalist.id = listId;
-    keyInput.append(datalist);
-    keyInput.addEventListener('focus', () => {
-      datalist.replaceChildren();
-      for (const option of currentXrefPool(dict.keyXref)) {
-        datalist.append(optionEl(option, option));
-      }
-    });
+    attachXrefDatalist(keyInput, dict.keyXref);
   }
   keyInput.addEventListener('change', () => {
     const next = keyInput.value.trim();

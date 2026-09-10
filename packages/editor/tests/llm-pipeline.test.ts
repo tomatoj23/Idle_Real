@@ -3,7 +3,7 @@ import { validateContentPack } from '@wendao/content';
 import { xiuxianPackJson } from '@wendao/content/packs/xiuxian';
 import { extractJsonArray, type LlmClient } from '../src/llm/client.js';
 import { createFetchClient } from '../src/llm/client.js';
-import { applyCandidates, generateCandidates, packContextOf, previewApply } from '../src/llm/pipeline.js';
+import { applyCandidates, generateCandidates, packContextOf } from '../src/llm/pipeline.js';
 import { createStore } from '../src/core/state.js';
 import type { ChatMessage } from '../src/llm/client.js';
 
@@ -126,17 +126,41 @@ describe('generateCandidates：假 client 批量生成（验收 2）', () => {
     for (const candidate of result.candidates) {
       expect(candidate.errors, candidate.label).toEqual([]);
     }
-    const preview = previewApply('verbs', result.candidates, store.state.pack);
-    expect(preview.applied).toBe(1);
-    expect(preview.skipped).toEqual(['claw']);
-
-    applyCandidates(store, 'verbs', result.candidates);
+    const applied = applyCandidates(store, 'verbs', result.candidates);
+    expect(applied.applied).toBe(1);
+    expect(applied.skipped).toEqual(['claw']);
     const verbs = (store.state.pack['combatText'] as { verbs: Record<string, unknown> }).verbs;
     expect('fan' in verbs).toBe(true);
     expect(verbs['fan']).toEqual([
       { v: '折扇轻摇', limbs: ['手腕'] },
       { v: '扇骨点穴', limbs: ['指尖'] },
     ]);
+    const packCheck = validateContentPack(store.state.pack);
+    expect(packCheck.ok).toBe(true);
+  });
+
+  it('enemies 入包：自动补缺省招式注册并在报告中可见；入包前复核拦截失效候选', async () => {
+    const store = createStore(xiuxianPackJson);
+    const result = await generateCandidates({
+      kind: 'enemies', client: fakeClient(TEN_ENEMIES_REPLY), config: CONFIG, count: 10, hint: '', pack: store.state.pack,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    for (const candidate of result.candidates) {
+      candidate.approved = true;
+    }
+    // 候选入包前被篡改（模拟包变更后失效）：复核兜底拒绝，不入包。
+    const tainted = result.candidates[0]!;
+    result.candidates[0] = {
+      ...tainted,
+      value: { ...(tainted.value as Record<string, unknown>), hp: 'lots' },
+    };
+    const report = applyCandidates(store, 'enemies', result.candidates);
+    expect(report.applied).toBe(9);
+    expect(report.movesRegistered).toBe(9);
+    expect(report.skipped).toEqual(['fake_beast_1']);
+    const moves = (store.state.pack['combatText'] as { moves: Record<string, string[]> }).moves;
+    expect(moves['fake_beast_2']).toEqual(['幻兽2号']);
     const packCheck = validateContentPack(store.state.pack);
     expect(packCheck.ok).toBe(true);
   });

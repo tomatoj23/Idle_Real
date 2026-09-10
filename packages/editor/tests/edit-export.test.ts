@@ -12,6 +12,7 @@ import { exportJsonBytes } from '../src/io/files.js';
  */
 
 function mount(): HTMLElement {
+  document.body.replaceChildren(); // 清掉上一用例的挂载，避免跨用例查询串场。
   const area = document.createElement('main');
   document.body.append(area);
   return area;

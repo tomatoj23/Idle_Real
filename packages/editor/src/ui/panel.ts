@@ -10,9 +10,22 @@ import type { EditorStore } from '../core/state.js';
 export interface ValidatePanel {
   /** 重跑整包校验并重绘（数据变更 / 换包后调用）。 */
   refresh(): void;
-  /** 最近一次校验结果（nav 徽标复用）。 */
+  /** 最近一次校验的错误按节分组（nav 徽标复用）。 */
   errorsBySection(): ReadonlyMap<string, readonly ContentError[]>;
-  isValid(): boolean;
+}
+
+/** 错误按首段节名分组（面板分组与 nav 徽标共用一份分法）。 */
+export function groupErrorsBySection(
+  errors: readonly ContentError[],
+): Map<string, ContentError[]> {
+  const bySection = new Map<string, ContentError[]>();
+  for (const error of errors) {
+    const section = error.path.split('/')[1] ?? '(包)';
+    const bucket = bySection.get(section) ?? [];
+    bucket.push(error);
+    bySection.set(section, bucket);
+  }
+  return bySection;
 }
 
 export function createValidatePanel(
@@ -51,17 +64,7 @@ export function createValidatePanel(
       list.replaceChildren(...errorGroups(result.errors, opts.onGoto));
     },
     errorsBySection() {
-      const bySection = new Map<string, ContentError[]>();
-      for (const error of lastErrors) {
-        const section = error.path.split('/')[1] ?? '(包)';
-        const bucket = bySection.get(section) ?? [];
-        bucket.push(error);
-        bySection.set(section, bucket);
-      }
-      return bySection;
-    },
-    isValid() {
-      return lastErrors.length === 0;
+      return groupErrorsBySection(lastErrors);
     },
   };
   panel.refresh();
@@ -72,15 +75,8 @@ function errorGroups(
   errors: readonly ContentError[],
   onGoto: (path: string) => void,
 ): HTMLElement[] {
-  const bySection = new Map<string, ContentError[]>();
-  for (const error of errors) {
-    const section = error.path.split('/')[1] ?? '(包)';
-    const bucket = bySection.get(section) ?? [];
-    bucket.push(error);
-    bySection.set(section, bucket);
-  }
   const groups: HTMLElement[] = [];
-  for (const [section, sectionErrors] of bySection) {
+  for (const [section, sectionErrors] of groupErrorsBySection(errors)) {
     const block = document.createElement('div');
     block.className = 'validate-group';
     const head = document.createElement('div');
