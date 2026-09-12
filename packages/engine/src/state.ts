@@ -244,12 +244,13 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
     def: (env) => playerMaxHp(env.content, env.partial.skills, env.contributions),
     clone: (value) => value,
     restore: (raw, state, env) => {
-      // —— 气血钳制（#41）：必须在 skills 收编之后——cap 按恢复后的修为推算；
-      // 先钳后收编会把高修为存档压回零修为基线（hp 恒 ≤112 的掩盖性 bug）。
-      // 未写/非法 hp 缺省 = 按当前 cap 满血；佩戴/增益/天赋的投影上限由
-      // game.ts 恢复后补钳兜底。
+      // —— 气血收编（#41）：skills 收编之后取缺省 cap——未写/非法 hp = 按
+      // 收编修为满血。已写 hp 只做有限/非负校验、原值收编，**上限钳制不在此**
+      //（声明序在 gear 前，装备/增益/天赋投影不可见）：createGame 恢复后按
+      // 完整属性投影统一钳制（唯一上限钳点）——#41 残边界（纯装备抬升的
+      // hp 头寸恢复瞬间被修为基线钳掉）由此根治。
       const cap = playerMaxHp(env.content, state.skills, env.contributions);
-      state.hp = Math.min(cap, Math.max(0, safeNumber(raw.hp, cap)));
+      state.hp = Math.max(0, safeNumber(raw.hp, cap));
     },
     // 瞬态：兵解回满 = 按重算上限置满（需 game.ts 的完整属性投影，字段表外执行）。
     rebirth: 'transient',

@@ -197,9 +197,10 @@ export function createGame(options: CreateGameOptions): Game {
   const xpOf = (skillId: string): number => state.skills[skillId]?.xp ?? 0;
   const levelOf = (skillId: string): number => levelFromXp(xpOf(skillId), pparams);
   if (options.save) {
-    // 恢复后按完整属性投影重 clamp 气血（#41）：state.ts 已按收编后的修为钳过
-    // 基线，此处兜佩戴/增益/天赋投影出的上限差（投影上限低于存档 hp 时压回，
-    // 如负向贡献或旧档跨包越顶）；只降不升，回满属回血/settleOffline 语义。
+    // 恢复后按完整属性投影钳气血（#41，唯一上限钳点）：state.ts 只做收编校验
+    //（hp 行声明序在 gear 前、投影不可见），佩戴/增益/天赋投影出的上限在此
+    // 统一生效——存档超顶（含装备抬升头寸）压回当前真实上限；只降不升，
+    // 回满属回血/settleOffline 语义。
     state.hp = Math.min(state.hp, Math.max(1, playerStats({ moveId: weaponMoveKey() }).maxHp));
   }
 
@@ -484,9 +485,12 @@ export function createGame(options: CreateGameOptions): Game {
       if (foldDecisionOf(source, itemId) === 'sell') {
         const gained = Math.max(0, item.sell) * count;
         state.gold += gained;
-        // 成对事件（D10）：被折叠物品标记（count=0/value=0 会计不计）+ 折得灵石。
+        // 成对事件（D10）：被折叠物品标记（count=0/value=0 会计不计）+ 折得灵石
+        //——0 卖价物品折得为 0：不发零额 proceeds（与 ledgerGold「0 变化不入账」同律）。
         emitLedger({ ...ledgerBase(source, meta), kind: 'item', id: itemId, count: 0, value: 0, auto: 'sell' });
-        emitLedger({ ...ledgerBase(source, meta), kind: 'currency', id: 'gold', count: gained, value: 1, auto: 'sell' });
+        if (gained > 0) {
+          emitLedger({ ...ledgerBase(source, meta), kind: 'currency', id: 'gold', count: gained, value: 1, auto: 'sell' });
+        }
         return false;
       }
       // 判 'smelt' 的普通物品无熔炼产出语义（器屑按稀有度档位，需装备实例）：

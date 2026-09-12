@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ManualClock } from '../src/clock.js';
 import {
-  attachAutoSave,
   createGame,
+  attachAutoSave,
   localStorageSaveAdapter,
   memorySaveAdapter,
   playerMaxHp,
   restoreState,
+  type GameContent,
   type SaveData,
 } from '../src/index.js';
 import { makeCombatPack, makePack } from './fixtures.js';
@@ -99,14 +100,16 @@ describe('restoreState 气血钳制顺序（#41）', () => {
     expect(state.hp).toBe(capOf());
   });
 
-  it('超顶 hp 仍钳回当前 cap（上限防御不因顺序调整而失效）', () => {
+  it('超顶 hp 收编原值（state.ts 只查有限/非负），createGame 按完整投影钳回', () => {
     const save = {
       version: 1 as const,
       time: 0,
       state: { skills: highXp, hp: 99999 },
     } as unknown as SaveData;
     const state = restoreState(makeCombatPack(), save, 1);
-    expect(state.hp).toBe(capOf());
+    expect(state.hp).toBe(99999); // 上限钳制不在字段表：hp 行恢复序在 gear 前、投影不可见
+    const game = createGame({ content: makeCombatPack(), clock: new ManualClock(), save });
+    expect(game.snapshot().state.hp).toBe(capOf()); // 唯一上限钳点 = 完整投影
   });
 
   it('createGame 全路径同样不压顶：恢复后补钳按完整投影，只降不升', () => {
@@ -117,5 +120,34 @@ describe('restoreState 气血钳制顺序（#41）', () => {
     } as unknown as SaveData;
     const game = createGame({ content: makeCombatPack(), clock: new ManualClock(), save });
     expect(game.snapshot().state.hp).toBe(capOf());
+  });
+
+  it('装备抬升的 hp 头寸恢复后存活，不再被修为基线钳掉（#41 残边界根治）', () => {
+    // clv4 基线 cap 148；佩戴 hp+60 护甲 → 完整投影 cap 208，存档满血 208。
+    const pack = {
+      ...makeCombatPack(),
+      items: [
+        ...makeCombatPack().items,
+        { id: 'lifePlate', name: '血玉护心镜', icon: '镜', type: 'equip', slot: 'armor', sell: 10, bonuses: { hp: 60 } },
+      ],
+    } as GameContent;
+    const save = {
+      version: 1 as const,
+      time: 0,
+      state: {
+        skills: { fight: { xp: 300 } },
+        hp: 208,
+        gear: [{ uid: 2, itemId: 'lifePlate', rarity: 'common', affixes: [] }],
+        equips: { armor: 2 },
+      },
+    } as unknown as SaveData;
+    const state = restoreState(pack, save, 1);
+    expect(state.hp).toBe(208); // 收编原值，基线不再截断
+    const game = createGame({ content: pack, clock: new ManualClock(), save });
+    expect(game.snapshot().state.hp).toBe(208); // 完整投影钳制：头寸存活
+
+    // 包变更（护甲被移除）：实例被收编守卫弃置、投影回落基线 148 → 超顶压回。
+    const gameAfter = createGame({ content: makeCombatPack(), clock: new ManualClock(), save });
+    expect(gameAfter.snapshot().state.hp).toBe(148);
   });
 });

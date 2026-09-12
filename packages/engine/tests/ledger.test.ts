@@ -391,6 +391,54 @@ describe('#39 · 自动折叠挂点（D3/D10：缺省 no-op，规则形状归 #3
     expect(st.gear).toHaveLength(0); // 实例未进乾坤袋
     expect(st.items.shard).toBe(1);
   });
+
+  it('0 卖价物品折 sell：只发标记、不发零额折得物（与「0 变化不入账」同律）', () => {
+    const pack = {
+      skills: [{ id: 'smith', name: '炼器', icon: '器', kind: 'craft' }],
+      items: [
+        { id: 'herb1', name: '青灵草', icon: '青', type: 'mat', sell: 4 },
+        { id: 'ash', name: '尘灰', icon: '尘', type: 'mat', sell: 0 },
+      ],
+      recipes: [
+        {
+          name: '炼尘灰',
+          skill: 'smith',
+          unlockLevel: 1,
+          output: { item: 'ash', count: 1 },
+          materials: { herb1: 1 },
+          successRate: 1,
+          interval: 2000,
+          exp: 1,
+        },
+      ],
+    } as GameContent;
+    const clock = new ManualClock();
+    const game = createGame({
+      content: pack,
+      clock,
+      rng: () => 0.5,
+      autoFold: (c) => (c.itemId === 'ash' ? 'sell' : undefined),
+      save: {
+        version: 1,
+        time: 0,
+        state: {
+          gold: 0,
+          hp: 50,
+          items: { herb1: 5 },
+          skills: { smith: { xp: 0 } },
+          activity: { skillId: 'smith', index: 0, name: '炼尘灰', progress: 0 },
+        },
+      },
+    });
+    clock.advance(2000);
+    game.tick(2000);
+    expect(ledgerEntries(game.events.drain())).toEqual([
+      { kind: 'item', source: 'craft', origin: 'idle', id: 'herb1', count: -1, value: 4 },
+      { kind: 'item', source: 'craft', origin: 'idle', id: 'ash', count: 0, value: 0, auto: 'sell' },
+      { kind: 'exp', source: 'craft', origin: 'idle', id: 'smith', count: 1, value: 0 },
+    ]);
+    expect(stateOf(game.snapshot()).gold).toBe(0);
+  });
 });
 
 describe('#39 · 道韵账本与访问段信号', () => {
