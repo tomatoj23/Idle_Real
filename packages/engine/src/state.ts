@@ -409,11 +409,12 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
     clone: (value) => ({ ...value }),
     restore: (raw, state, env) => {
       // —— 消耗品 buff：consumable 须存在且有持续增益；已过期的不收编。
-      if (!isObj(raw.buffs)) return;
+      // 存档缺 time（契约外畸形档）时与字段表前语义一致：一律不收编。
+      if (!isObj(raw.buffs) || env.save === null) return;
       for (const [consumableId, until] of Object.entries(raw.buffs)) {
         const item = findItem(env.content, consumableId);
         if (!item || item.type !== 'consumable' || item.effect === undefined) continue;
-        if (typeof until === 'number' && Number.isFinite(until) && until > (env.save?.time ?? 0)) {
+        if (typeof until === 'number' && Number.isFinite(until) && until > env.save.time) {
           state.buffs[consumableId] = until;
         }
       }

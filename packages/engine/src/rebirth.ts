@@ -276,11 +276,33 @@ export function realmOf(content: GameContent, combatLevel: number): string | und
  * 兵解结算的状态清洗（rebirth:perform 消费）：按 content 声明的重置集逐键
  * 清零（动作经字段表解释），保留集（及未登记键）原样保留；活动/战斗/气血
  * 等瞬态由调用方统一清空回满（非资产，不进清单——clearRebirthTransient）。
+ * 重置动作只触碰 reset 登记键，窄结构入参（index barrel 既有公共面）经
+ * 重载保持兼容（#42 复审收口）。
  */
-export function applyRebirthReset(section: RebirthSectionView, state: GameState): void {
+export function applyRebirthReset(section: RebirthSectionView, state: GameState): void;
+export function applyRebirthReset(
+  section: RebirthSectionView,
+  state: {
+    gold: number;
+    items: Record<string, number>;
+    skills: Record<string, { xp: number }>;
+    buffs: Record<string, number>;
+    lastEncounter: Record<string, unknown>;
+  },
+): void;
+export function applyRebirthReset(
+  section: RebirthSectionView,
+  state: {
+    gold: number;
+    items: Record<string, number>;
+    skills: Record<string, { xp: number }>;
+    buffs: Record<string, number>;
+    lastEncounter: Record<string, unknown>;
+  },
+): void {
   const reset = new Set(section.reset ?? []);
   for (const [key, resetField] of Object.entries(REBIRTH_RESET_ACTIONS)) {
-    if (reset.has(key)) resetField(state);
+    if (reset.has(key)) resetField(state as GameState); // 动作只触碰登记键，窄入参处安全
   }
   // keep 清单由引擎绑定保留语义（gear 保留 = 实例/佩戴表/序列器原样）；
   // 保留集键域 KEEP_KEYS 由字段表 rebirth='keep' 行派生，此处无动作。

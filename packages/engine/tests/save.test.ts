@@ -63,6 +63,20 @@ describe('SaveAdapter（issue #3）', () => {
   });
 });
 
+describe('restoreState 恢复守卫契约（#42 字段表复审收口）', () => {
+  it('畸形档缺 time：buffs 一律不收编（与字段表前 NaN 比较语义一致）', () => {
+    const save = { version: 1 as const, state: { buffs: { consumable_atk: 5000 } } } as unknown as SaveData;
+    const state = restoreState(makeCombatPack(), save, 1);
+    expect(state.buffs).toEqual({});
+  });
+
+  it('畸形档缺 time：其余字段不受影响（gold 按守卫缺省收编）', () => {
+    const save = { version: 1 as const, state: { gold: 33.7, buffs: {} } } as unknown as SaveData;
+    const state = restoreState(makeCombatPack(), save, 1);
+    expect(state.gold).toBe(33);
+  });
+});
+
 describe('restoreState 气血钳制顺序（#41）', () => {
   /** 高斗法修为存档：xp 20000 → clv21，cap = 352（引擎基线曲线）远超 clv1 的 112。 */
   const highXp = { fight: { xp: 20000 } };
