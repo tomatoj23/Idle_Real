@@ -202,6 +202,44 @@ describe('#39 · 入账咽喉：统一账本事件（与旧形状并行发射）
     expect(offline.st.skills).toEqual(online.st.skills);
   });
 
+  it('卡5 对拍：非整乘数下在线逐循环累计 == 离线批量（每循环舍入口径）', () => {
+    // exp=10 × gatherXp 1.05：每循环 round(10.5)=11 → 在线 3 轮 = 33；
+    // 旧离线整批口径 round(31.5)=32 分叉，裁决后同式累加 = 33。
+    const pack = {
+      skills: [
+        {
+          id: 'herb',
+          name: '采药',
+          icon: '药',
+          kind: 'gather',
+          activities: [{ name: '采灵砂', unlockLevel: 1, interval: 3000, exp: 10, output: { item: 'ore', count: 1 } }],
+        },
+      ],
+      items: [{ id: 'ore', name: '灵砂', icon: '砂', type: 'mat', sell: 2 }],
+    } as GameContent;
+    const contributions = [
+      {
+        modifier: { stat: 'gatherXp', zone: 'mult', value: 1.05 },
+        source: { id: 'paragon', kind: 'test', name: '对拍' },
+      },
+    ];
+    const run = (offline: boolean) => {
+      const clock = new ManualClock();
+      const game = createGame({ content: pack, clock, rng: () => 0.9, contributions });
+      game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
+      game.events.drain();
+      if (offline) game.settleOffline(9000);
+      else
+        for (let i = 0; i < 3; i++) {
+          clock.advance(3000);
+          game.tick(3000);
+        }
+      return stateOf(game.snapshot()).skills.herb?.xp ?? 0;
+    };
+    expect(run(false)).toBe(33);
+    expect(run(true)).toBe(run(false));
+  });
+
   it('离线装备产出必发账本事件（在线/离线不对称硬伤补齐）', () => {
     const clock = new ManualClock();
     const game = createGame({

@@ -625,6 +625,26 @@ export function createGame(options: CreateGameOptions): Game {
     return granted;
   }
 
+  /**
+   * 采集修为（二轮评审卡5 裁决）：口径 = 每循环舍入——先按 gatherXp 特化
+   * 乘数求单轮修为（round），在线 cycles=1 逐次调、离线 cycles=N 一次调，
+   * 恒定乘数下逐循环累加 ≡ 单轮值 × N，天然对拍（非整乘数不再 33/32 分叉）。
+   * 全经验倍率 xpMult 仍由 grantExp 单点消费（gatherXp 先行叠乘，两路同序）；
+   * 入账走咽喉管线（ledger exp 事件，离线 offline 标注）。
+   */
+  function grantGatherExp(
+    skill: SkillView,
+    activity: ActivityView,
+    cycles: number,
+    quiet: boolean,
+    ledger: { source: LedgerSource; meta: LedgerMeta },
+  ): number {
+    const gatherMult =
+      aggregateStats({ gatherXp: 1 }, playerContributions(), {}).gatherXp?.value ?? 1;
+    const perCycle = Math.round(activity.exp * gatherMult);
+    return grantExp(skill, perCycle * cycles, quiet, ledger);
+  }
+
   /** 拒绝事件：展示文案由 texts 节按 action+reason 解析（#019），协议 code 保留。 */
   function reject(actionType: string, reason: string, vars?: Readonly<Record<string, string>>): void {
     events.emit({
@@ -682,8 +702,7 @@ export function createGame(options: CreateGameOptions): Game {
         emitLoot(activity.byproduct.item, 1, 'byproduct');
       }
     }
-    const xpMult = aggregateStats({ gatherXp: 1 }, playerContributions(), {}).gatherXp?.value ?? 1;
-    grantExp(skill, Math.round(activity.exp * xpMult), false, { source: 'gather', meta: META_IDLE });
+    grantGatherExp(skill, activity, 1, false, { source: 'gather', meta: META_IDLE });
     events.emit({
       type: 'activity-complete',
       time,
@@ -1570,13 +1589,13 @@ export function createGame(options: CreateGameOptions): Game {
       }
     }
 
-    // 采集修为乘数（gatherXp 消费点）先行叠乘，xpMult 由 grantExp 单点消费
-    // ——离线/在线语义对称（在线 completeActivityOnce 同式）。
-    const gatherMult =
-      aggregateStats({ gatherXp: 1 }, playerContributions(), {}).gatherXp?.value ?? 1;
-    const expBase = Math.round(activity.exp * cycles * gatherMult);
+    // 采集修为走 grantGatherExp 单点（每循环舍入口径，与在线逐轮对拍，
+    // 二轮评审卡5）；xpMult 由 grantExp 单点消费——离线/在线语义对称。
     const before = levelFromXp(xpOf(skill.id));
-    const expTotal = grantExp(skill, expBase, true, { source: 'gather', meta: META_OFFLINE });
+    const expTotal = grantGatherExp(skill, activity, cycles, true, {
+      source: 'gather',
+      meta: META_OFFLINE,
+    });
     const after = levelFromXp(xpOf(skill.id));
     const levels =
       after > before
