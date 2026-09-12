@@ -245,12 +245,20 @@ export function buildUi(
     const el = (ev.target as HTMLElement).closest<HTMLElement>('[data-act]');
     if (!el || !handler) return;
     switch (el.dataset.act) {
-      case 'tab':
-        activeTab = (el.dataset.tab ?? 'skills') as TabId;
+      case 'tab': {
+        const next = (el.dataset.tab ?? 'skills') as TabId;
+        // 访问段信号（#39 D9）：坊市页切进/切出转发 visit 事件（引擎纯转发，
+        // 段开闭配对由壳层负责；非法载荷被引擎 reject，无副作用）。
+        if (activeTab !== next) {
+          if (activeTab === 'shop') handler({ type: 'visit:end', payload: { page: 'shop' } });
+          if (next === 'shop') handler({ type: 'visit:begin', payload: { page: 'shop' } });
+        }
+        activeTab = next;
         rebirthArmed = false; // 换页即撤防（兵解确认不跨页存续）
         lastSig = '';
         render();
         break;
+      }
       case 'skill':
         if (el.dataset.disabled === 'y') break;
         selectedSkillId = el.dataset.skill ?? selectedSkillId;

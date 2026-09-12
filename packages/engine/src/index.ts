@@ -245,6 +245,20 @@ export type { BossPhaseView, BossSummonEntryView, BossSummonsView, BossView } fr
 // 统计聚合器与成就判定器（#9：事件流累积 snapshot / 条件判定 / 进度投影）
 export { STAT_KEYS, applyStatsEvent, restoreStats } from './stats.js';
 export type { StatKey, StatSnapshot } from './stats.js';
+
+// 入账咽喉协议（#39：来源闭集/kind 判别/自动折叠挂点形状；咽喉本体在 game.ts）
+export { LEDGER_CURRENCIES, LEDGER_SOURCES } from './ledger.js';
+export type {
+  AutoFoldCandidate,
+  AutoFoldDecision,
+  AutoFoldRule,
+  LedgerAuto,
+  LedgerCurrency,
+  LedgerData,
+  LedgerKind,
+  LedgerOrigin,
+  LedgerSource,
+} from './ledger.js';
 export {
   achievementConditionMet,
   achievementProgressOf,

@@ -106,6 +106,13 @@ import {
 } from './bosses.js';
 import { applyStatsEvent } from './stats.js';
 import { achievementConditionMet, achievementsOf } from './achievements.js';
+import type {
+  AutoFoldRule,
+  LedgerAuto,
+  LedgerData,
+  LedgerOrigin,
+  LedgerSource,
+} from './ledger.js';
 
 export interface CreateGameOptions {
   /** 由 content 包校验过的内容包；引擎零内容感知，仅透明持有。 */
@@ -124,6 +131,12 @@ export interface CreateGameOptions {
    * 装备/丹药 buff 等实体产出方由后续票在引擎内部从状态派生，不走此参数。
    */
   readonly contributions?: readonly Contribution[];
+  /**
+   * 自动售卖/熔炼规则挂点（#39 D3）：入账即折——炼制产出/战斗掉落在入账
+   * 前过此规则，命中则物品不进乾坤袋直接折灵石/器屑并发成对账本事件。
+   * 缺省 no-op（零行为差异）；规则本体（阈值表/互斥/UI）归 #35/#36。
+   */
+  readonly autoFold?: AutoFoldRule;
 }
 
 export interface Game {
@@ -419,8 +432,166 @@ export function createGame(options: CreateGameOptions): Game {
     return true;
   }
 
-  /** 发放修为：返回实发值（倍率后取整）——离线事件载荷与实际入账同源。 */
-  function grantExp(skill: SkillView, amount: number, quiet: boolean): number {
+  /* ---------- 入账咽喉（#39，C1）：资产变更唯一收口——改态 + 发统一账本事件 ---------- */
+
+  /** 归属上下文标注（origin 必带；offline 只在离线结算管线携带）。 */
+  interface LedgerMeta {
+    readonly origin: LedgerOrigin;
+    readonly offline?: true;
+  }
+
+  const autoFold = options.autoFold; // 缺省 undefined = no-op 挂点（零行为差异）
+  const META_IDLE: LedgerMeta = { origin: 'idle' };
+  const META_USER: LedgerMeta = { origin: 'user' };
+  const META_OFFLINE: LedgerMeta = { origin: 'idle', offline: true }; // 离线 = 挂机归段
+
+  function emitLedger(data: LedgerData): void {
+    events.emit({ type: 'ledger', time, data });
+  }
+
+  /** 账本事件公共尾：来源 + 归属上下文（来源记真实出处，折叠方式单独标 auto）。 */
+  const ledgerBase = (source: LedgerSource, meta: LedgerMeta) => ({
+    source,
+    origin: meta.origin,
+    ...(meta.offline ? { offline: true as const } : {}),
+  });
+
+  /** 折叠挂点判定（D3）：入账即折在咽喉内部，规则本体归 #35/#36。
+   * 挂点按 CONTEXT「自动售卖/熔炼」收窄为配方（craft 产出）与敌人
+   * （combat 掉落）两类——其余来源（商店/成就/层奖等）不咨询挂点。 */
+  function foldDecisionOf(source: LedgerSource, itemId: string, rarity?: string): LedgerAuto | undefined {
+    if (source !== 'craft' && source !== 'combat') return undefined;
+    return autoFold?.({ source, itemId, ...(rarity !== undefined ? { rarity } : {}) });
+  }
+
+  /** 熔炼产出（器屑数，按稀有度 smelt 字段缺省 1）；无器屑经济 = undefined（不可熔）。 */
+  function smeltYieldOf(rarity: string): { shardItem: string; shards: number } | undefined {
+    const shardItem = gparams.shardItem;
+    if (!shardItem || !findItem(content, shardItem)) return undefined;
+    return { shardItem, shards: Math.max(0, Math.floor(findRarity(content, rarity)?.smelt ?? 1)) };
+  }
+
+  /**
+   * 物品增减入账：正数 = 入袋（先过折叠挂点，命中即「入账即折」不进袋、
+   * 发成对事件）；负数 = 出袋（调用方先验足量）。返回物品是否实际进了
+   * 乾坤袋——并行期旧 loot 事件以此门控（折叠路径静默，D10/验收 4）。
+   */
+  function ledgerItem(itemId: string, count: number, source: LedgerSource, meta: LedgerMeta): boolean {
+    if (count === 0) return false;
+    const item = findItem(content, itemId);
+    if (!item) return false; // 坏包防御：未知键不入账（包校验 xref 已拦，理论不可达）
+    if (count > 0) {
+      if (foldDecisionOf(source, itemId) === 'sell') {
+        const gained = Math.max(0, item.sell) * count;
+        state.gold += gained;
+        // 成对事件（D10）：被折叠物品标记（count=0/value=0 会计不计）+ 折得灵石。
+        emitLedger({ ...ledgerBase(source, meta), kind: 'item', id: itemId, count: 0, value: 0, auto: 'sell' });
+        emitLedger({ ...ledgerBase(source, meta), kind: 'currency', id: 'gold', count: gained, value: 1, auto: 'sell' });
+        return false;
+      }
+      // 判 'smelt' 的普通物品无熔炼产出语义（器屑按稀有度档位，需装备实例）：
+      // 防御性保持原样入袋（规则形状归 #35，正常不会对无稀有度物品判熔炼）。
+      addItem(itemId, count);
+      emitLedger({ ...ledgerBase(source, meta), kind: 'item', id: itemId, count, value: Math.max(0, item.sell) });
+      return true;
+    }
+    if (!takeItem(itemId, -count)) return false;
+    emitLedger({ ...ledgerBase(source, meta), kind: 'item', id: itemId, count, value: Math.max(0, item.sell) });
+    return false;
+  }
+
+  /**
+   * 装备实例入账：先过折叠挂点（入账即折——实例不进乾坤袋，成对事件 =
+   * 标记 + 折得物），否则入袋。返回实例是否实际进了乾坤袋（旧 loot 门控）。
+   * uid 序号由调用方先行入账（折叠实例亦作「发生过」记录，D10）。
+   */
+  function ledgerGearIncome(gear: GearInstance, source: LedgerSource, meta: LedgerMeta): boolean {
+    const unitValue = gearSell(content, findItem(content, gear.itemId)?.sell ?? 0, gear.rarity);
+    const marker = {
+      ...ledgerBase(source, meta),
+      kind: 'gear' as const,
+      id: gear.itemId,
+      uid: gear.uid,
+      rarity: gear.rarity,
+      count: 0,
+      value: 0,
+    };
+    const auto = foldDecisionOf(source, gear.itemId, gear.rarity);
+    if (auto === 'sell') {
+      state.gold += unitValue;
+      emitLedger({ ...marker, auto });
+      emitLedger({ ...ledgerBase(source, meta), kind: 'currency', id: 'gold', count: unitValue, value: 1, auto });
+      return false;
+    }
+    if (auto === 'smelt') {
+      const smelt = smeltYieldOf(gear.rarity);
+      if (smelt) {
+        addItem(smelt.shardItem, smelt.shards);
+        emitLedger({ ...marker, auto });
+        emitLedger({
+          ...ledgerBase(source, meta),
+          kind: 'item',
+          id: smelt.shardItem,
+          count: smelt.shards,
+          value: Math.max(0, findItem(content, smelt.shardItem)?.sell ?? 0),
+          auto,
+        });
+        return false;
+      }
+      // 无器屑经济（config.gear.shardItem 未配置）：防御性保持原样入袋。
+    }
+    state.gear.push(gear);
+    emitLedger({
+      ...ledgerBase(source, meta),
+      kind: 'gear',
+      id: gear.itemId,
+      uid: gear.uid,
+      rarity: gear.rarity,
+      count: 1,
+      value: unitValue,
+    });
+    return true;
+  }
+
+  /** 装备出袋入账（bag 卖出/熔炼消费；uid 必在袋中，调用方已验）：count=-1。 */
+  function ledgerGearRemoval(gear: GearInstance, source: LedgerSource, meta: LedgerMeta): void {
+    state.gear = state.gear.filter((entry) => entry.uid !== gear.uid);
+    emitLedger({
+      ...ledgerBase(source, meta),
+      kind: 'gear',
+      id: gear.itemId,
+      uid: gear.uid,
+      rarity: gear.rarity,
+      count: -1,
+      value: gearSell(content, findItem(content, gear.itemId)?.sell ?? 0, gear.rarity),
+    });
+  }
+
+  /** 灵石增减入账：value 恒 1（笔净额 = 灵石数本身）；0 变化不入账。 */
+  function ledgerGold(delta: number, source: LedgerSource, meta: LedgerMeta): void {
+    if (delta === 0) return;
+    state.gold += delta;
+    emitLedger({ ...ledgerBase(source, meta), kind: 'currency', id: 'gold', count: delta, value: 1 });
+  }
+
+  /** 道韵增减入账：无灵石等价（value=0，修行录单列）；双键同律——earned 只增不减。 */
+  function ledgerDaoYun(delta: number, source: LedgerSource, meta: LedgerMeta): void {
+    if (delta === 0) return;
+    state.daoYun += delta;
+    if (delta > 0) state.daoYunEarned += delta;
+    emitLedger({ ...ledgerBase(source, meta), kind: 'currency', id: 'daoYun', count: delta, value: 0 });
+  }
+
+  /** 发放修为：返回实发值（倍率后取整）——离线事件载荷与实际入账同源。
+   * ledger 缺省 = 不发账本事件；提供时无论 quiet 与否都发（修为账本事件是
+   * 新协议面：离线结算走同一咽喉管线，offline 标注，#39 D6——quiet 只压旧
+   * 形状 exp/levelup，保「离线单条 offline-settled」旧契约）。 */
+  function grantExp(
+    skill: SkillView,
+    amount: number,
+    quiet: boolean,
+    ledger?: { source: LedgerSource; meta: LedgerMeta },
+  ): number {
     if (!(amount > 0)) return 0;
     // 全经验倍率（xpMult 消费点，#6）：gather/craft/combat/离线同路单点，
     // 与采集特化倍率 gatherXp（调用方先行叠乘）自然组合。
@@ -430,6 +601,10 @@ export function createGame(options: CreateGameOptions): Game {
     const entry = state.skills[skill.id] ?? { xp: 0 };
     entry.xp += granted;
     state.skills[skill.id] = entry;
+    if (ledger) {
+      // 修为不折灵石（D1）：value=0 净额单列；count=实发值（带符号协议恒正入账）。
+      emitLedger({ ...ledgerBase(ledger.source, ledger.meta), kind: 'exp', id: skill.id, count: granted, value: 0 });
+    }
     if (!quiet) {
       events.emit({
         type: 'exp',
@@ -499,14 +674,16 @@ export function createGame(options: CreateGameOptions): Game {
 
   /** 单轮采集完成：产出 → 副产出（掷点）→ 修为（采集类 buff 经管线加成）。 */
   function completeActivityOnce(skill: SkillView, activity: ActivityView): void {
-    addItem(activity.output.item, activity.output.count);
-    emitLoot(activity.output.item, activity.output.count, 'activity');
+    if (ledgerItem(activity.output.item, activity.output.count, 'gather', META_IDLE)) {
+      emitLoot(activity.output.item, activity.output.count, 'activity');
+    }
     if (activity.byproduct && random() < activity.byproduct.chance) {
-      addItem(activity.byproduct.item, 1);
-      emitLoot(activity.byproduct.item, 1, 'byproduct');
+      if (ledgerItem(activity.byproduct.item, 1, 'gather', META_IDLE)) {
+        emitLoot(activity.byproduct.item, 1, 'byproduct');
+      }
     }
     const xpMult = aggregateStats({ gatherXp: 1 }, playerContributions(), {}).gatherXp?.value ?? 1;
-    grantExp(skill, Math.round(activity.exp * xpMult), false);
+    grantExp(skill, Math.round(activity.exp * xpMult), false, { source: 'gather', meta: META_IDLE });
     events.emit({
       type: 'activity-complete',
       time,
@@ -556,14 +733,14 @@ export function createGame(options: CreateGameOptions): Game {
    */
   function completeCraftOnce(skill: SkillView, recipe: RecipeView): void {
     for (const [matId, count] of Object.entries(recipe.materials)) {
-      takeItem(matId, count);
+      ledgerItem(matId, -count, 'craft', META_IDLE);
     }
     if (random() < craftSuccessRateOf(content, state.skills, recipe)) {
       grantCraftOutput(skill, recipe);
-      grantExp(skill, recipe.exp, false);
+      grantExp(skill, recipe.exp, false, { source: 'craft', meta: META_IDLE });
     } else {
       const exp = Math.round(recipe.exp * Math.max(0, crparams.failExpRefund));
-      grantExp(skill, exp, false);
+      grantExp(skill, exp, false, { source: 'craft', meta: META_IDLE });
       events.emit({
         type: 'craft-fail',
         time,
@@ -585,8 +762,9 @@ export function createGame(options: CreateGameOptions): Game {
     const item = findItem(content, recipe.output.item);
     if (!item) return; // 包校验已保证存在；防御路径静默跳过
     if (item.type !== 'equip') {
-      addItem(item.id, recipe.output.count);
-      emitLoot(item.id, recipe.output.count, 'craft');
+      if (ledgerItem(item.id, recipe.output.count, 'craft', META_IDLE)) {
+        emitLoot(item.id, recipe.output.count, 'craft');
+      }
       return;
     }
     const bias = levelOf(skill.id) * crparams.rarityBiasPerLevel;
@@ -597,19 +775,20 @@ export function createGame(options: CreateGameOptions): Game {
         rarity: rollRarity(content, random, bias),
         affix: aparams,
       });
-      state.gear.push(gear);
-      events.emit({
-        type: 'loot',
-        time,
-        data: {
-          item: item.id,
-          itemName: gearName(content, item.name, gear.rarity),
-          count: 1,
-          source: 'craft',
-          rarity: gear.rarity,
-          uid: gear.uid,
-        },
-      });
+      if (ledgerGearIncome(gear, 'craft', META_IDLE)) {
+        events.emit({
+          type: 'loot',
+          time,
+          data: {
+            item: item.id,
+            itemName: gearName(content, item.name, gear.rarity),
+            count: 1,
+            source: 'craft',
+            rarity: gear.rarity,
+            uid: gear.uid,
+          },
+        });
+      }
     }
   }
 
@@ -660,7 +839,7 @@ export function createGame(options: CreateGameOptions): Game {
         if (!silent) reject('consumable:eat', 'full-hp');
         return;
       }
-      takeItem(consumableId, 1);
+      ledgerItem(consumableId, -1, 'eat', silent ? META_IDLE : META_USER);
       const healed = Math.min(cap, state.hp + Math.round(cap * item.heal.percent)) - state.hp;
       state.hp += healed;
       events.emit({
@@ -676,7 +855,7 @@ export function createGame(options: CreateGameOptions): Game {
         });
       }
     } else if (item.effect) {
-      takeItem(consumableId, 1);
+      ledgerItem(consumableId, -1, 'eat', silent ? META_IDLE : META_USER);
       state.buffs[consumableId] = time + item.effect.duration; // 同名消耗品覆盖续时（旧版语义）
       events.emit({
         type: 'consumable:eat',
@@ -1027,23 +1206,25 @@ export function createGame(options: CreateGameOptions): Game {
     const goldGain = goldRange
       ? Math.floor(goldRange.min + random() * (goldRange.max - goldRange.min + 1))
       : 0;
-    state.gold += goldGain;
+    ledgerGold(goldGain, 'combat', META_IDLE);
 
     const drops: string[] = [];
     for (const drop of enemy.drops ?? []) {
       if (drop.item && random() < drop.chance) {
-        addItem(drop.item, 1);
-        emitLoot(drop.item, 1, 'drop');
-        drops.push(drop.item);
+        if (ledgerItem(drop.item, 1, 'combat', META_IDLE)) {
+          emitLoot(drop.item, 1, 'drop');
+          drops.push(drop.item);
+        }
       }
     }
 
     // Boss 专属掉落（#8）：与 enemy.drops 同机制叠加掷点（bosses[].drops）。
     for (const drop of findBossOf(content, enemy.id)?.drops ?? []) {
       if (drop.item && random() < drop.chance) {
-        addItem(drop.item, 1);
-        emitLoot(drop.item, 1, 'drop');
-        drops.push(drop.item);
+        if (ledgerItem(drop.item, 1, 'combat', META_IDLE)) {
+          emitLoot(drop.item, 1, 'drop');
+          drops.push(drop.item);
+        }
       }
     }
 
@@ -1058,25 +1239,26 @@ export function createGame(options: CreateGameOptions): Game {
       });
       if (gear) {
         state.gearSeq = gear.uid;
-        state.gear.push(gear);
-        gearDropName = gearDisplayName(gear);
-        events.emit({
-          type: 'loot',
-          time,
-          data: {
-            item: gear.itemId,
-            itemName: gearDropName,
-            count: 1,
-            source: 'gear',
-            rarity: gear.rarity,
-            uid: gear.uid,
-          },
-        });
+        if (ledgerGearIncome(gear, 'combat', META_IDLE)) {
+          gearDropName = gearDisplayName(gear);
+          events.emit({
+            type: 'loot',
+            time,
+            data: {
+              item: gear.itemId,
+              itemName: gearDropName,
+              count: 1,
+              source: 'gear',
+              rarity: gear.rarity,
+              uid: gear.uid,
+            },
+          });
+        }
       }
     }
 
     const skill = combatSkill();
-    if (skill) grantExp(skill, enemy.exp, false);
+    if (skill) grantExp(skill, enemy.exp, false, { source: 'combat', meta: META_IDLE });
 
     const tally = { rounds: c.rounds, crits: c.crits, tiers: c.tiers };
     const summary = summarizeRounds(tally, combatText, random);
@@ -1113,13 +1295,14 @@ export function createGame(options: CreateGameOptions): Game {
         typeof rewards?.gold === 'number' && Number.isFinite(rewards.gold) && rewards.gold > 0
           ? Math.floor(rewards.gold)
           : 0;
-      if (goldReward > 0) state.gold += goldReward;
+      ledgerGold(goldReward, 'dungeon', META_IDLE);
       const items: Record<string, number> = {};
       for (const stack of rewards?.items ?? []) {
         const count = stack?.count;
         if (typeof stack?.item === 'string' && typeof count === 'number' && Number.isFinite(count) && count > 0) {
-          addItem(stack.item, Math.floor(count));
-          items[stack.item] = (items[stack.item] ?? 0) + Math.floor(count);
+          if (ledgerItem(stack.item, Math.floor(count), 'dungeon', META_IDLE)) {
+            items[stack.item] = (items[stack.item] ?? 0) + Math.floor(count);
+          }
         }
       }
       const rawDaoYun = rewards?.daoYun;
@@ -1127,10 +1310,7 @@ export function createGame(options: CreateGameOptions): Game {
         typeof rawDaoYun === 'number' && Number.isFinite(rawDaoYun) && rawDaoYun > 0
           ? Math.floor(rawDaoYun)
           : 0;
-      if (daoYunReward > 0) {
-        state.daoYun += daoYunReward;
-        state.daoYunEarned += daoYunReward;
-      }
+      ledgerDaoYun(daoYunReward, 'dungeon', META_IDLE);
       events.emit({
         type: 'dungeon:floor',
         time,
@@ -1306,16 +1486,14 @@ export function createGame(options: CreateGameOptions): Game {
       state.achievements.push(def.id);
       const items: Record<string, number> = {};
       if (def.reward) {
-        if (def.reward.gold !== undefined) state.gold += def.reward.gold;
-        if (def.reward.daoYun !== undefined) {
-          state.daoYun += def.reward.daoYun;
-          state.daoYunEarned += def.reward.daoYun; // 道韵双键同律（花掉不回锁）
-        }
+        ledgerGold(def.reward.gold ?? 0, 'achievement', META_IDLE);
+        ledgerDaoYun(def.reward.daoYun ?? 0, 'achievement', META_IDLE);
         for (const stack of def.reward.items ?? []) {
           // 物品须存在（包校验 xref 已保证；引擎对坏包防御：静默跳过不建孤儿键）。
           if (!findItem(content, stack.item)) continue;
-          addItem(stack.item, stack.count);
-          items[stack.item] = (items[stack.item] ?? 0) + stack.count;
+          if (ledgerItem(stack.item, stack.count, 'achievement', META_IDLE)) {
+            items[stack.item] = (items[stack.item] ?? 0) + stack.count;
+          }
         }
       }
       events.emit({
@@ -1376,8 +1554,9 @@ export function createGame(options: CreateGameOptions): Game {
 
     if (cycles <= 0) return;
     const items: Record<string, number> = {};
-    addItem(activity.output.item, activity.output.count * cycles);
-    items[activity.output.item] = activity.output.count * cycles;
+    if (ledgerItem(activity.output.item, activity.output.count * cycles, 'gather', META_OFFLINE)) {
+      items[activity.output.item] = activity.output.count * cycles;
+    }
 
     if (activity.byproduct) {
       const expected = cycles * activity.byproduct.chance;
@@ -1385,8 +1564,9 @@ export function createGame(options: CreateGameOptions): Game {
       let bonus = whole;
       if (whole < cycles && random() < expected - whole) bonus += 1; // 余数无偏掷定
       if (bonus > 0) {
-        addItem(activity.byproduct.item, bonus);
-        items[activity.byproduct.item] = bonus;
+        if (ledgerItem(activity.byproduct.item, bonus, 'gather', META_OFFLINE)) {
+          items[activity.byproduct.item] = bonus;
+        }
       }
     }
 
@@ -1396,7 +1576,7 @@ export function createGame(options: CreateGameOptions): Game {
       aggregateStats({ gatherXp: 1 }, playerContributions(), {}).gatherXp?.value ?? 1;
     const expBase = Math.round(activity.exp * cycles * gatherMult);
     const before = levelFromXp(xpOf(skill.id));
-    const expTotal = grantExp(skill, expBase, true);
+    const expTotal = grantExp(skill, expBase, true, { source: 'gather', meta: META_OFFLINE });
     const after = levelFromXp(xpOf(skill.id));
     const levels =
       after > before
@@ -1456,28 +1636,31 @@ export function createGame(options: CreateGameOptions): Game {
     const failures = attempts - successes;
 
     for (const [matId, need] of Object.entries(recipe.materials)) {
-      takeItem(matId, need * attempts);
+      ledgerItem(matId, -(need * attempts), 'craft', META_OFFLINE);
     }
 
     const items: Record<string, number> = {};
     const item = findItem(content, recipe.output.item);
     if (item && successes > 0) {
       if (item.type !== 'equip') {
-        addItem(item.id, recipe.output.count * successes);
-        items[item.id] = recipe.output.count * successes;
+        if (ledgerItem(item.id, recipe.output.count * successes, 'craft', META_OFFLINE)) {
+          items[item.id] = recipe.output.count * successes;
+        }
       } else {
         const bias = levelOf(skill.id) * crparams.rarityBiasPerLevel;
-        // 装备产出按 output.count 逐件掷定（与在线 grantCraftOutput 同语义）。
+        // 装备产出按 output.count 逐件掷定（与在线 grantCraftOutput 同语义）；
+        // 走同一入账咽喉（在线/离线对称，#39 D6：此前离线装备无任何事件）。
         const instances = successes * recipe.output.count;
+        let kept = 0;
         for (let i = 0; i < instances; i++) {
           state.gearSeq += 1;
           const gear = makeGear(content, item.id, item.bonuses ?? {}, state.gearSeq, random, {
             rarity: rollRarity(content, random, bias),
             affix: aparams,
           });
-          state.gear.push(gear);
+          if (ledgerGearIncome(gear, 'craft', META_OFFLINE)) kept += 1;
         }
-        items[item.id] = instances;
+        if (kept > 0) items[item.id] = kept;
       }
     }
 
@@ -1486,7 +1669,7 @@ export function createGame(options: CreateGameOptions): Game {
     );
     const before = levelFromXp(xpOf(skill.id));
     // xpMult 由 grantExp 单点消费；事件载荷 = 实发值（离线/在线对称）。
-    const expTotal = grantExp(skill, expBase, true);
+    const expTotal = grantExp(skill, expBase, true, { source: 'craft', meta: META_OFFLINE });
     const after = levelFromXp(xpOf(skill.id));
     const levels =
       after > before
@@ -1699,9 +1882,9 @@ export function createGame(options: CreateGameOptions): Game {
             reject(action.type, 'no-item', { item: item.name, owned: String(owned) });
             return;
           }
-          takeItem(itemId, count);
+          ledgerItem(itemId, -count, 'sell', META_USER);
           const gained = item.sell * count;
-          state.gold += gained;
+          ledgerGold(gained, 'sell', META_USER);
           events.emit({
             type: 'sell',
             time,
@@ -1730,8 +1913,8 @@ export function createGame(options: CreateGameOptions): Game {
             reject(action.type, 'no-gold', { cost: String(cost), gold: String(state.gold) });
             return;
           }
-          state.gold -= cost;
-          addItem(itemId, count);
+          ledgerGold(-cost, 'buy', META_USER);
+          ledgerItem(itemId, count, 'buy', META_USER);
           events.emit({
             type: 'buy',
             time,
@@ -1814,6 +1997,20 @@ export function createGame(options: CreateGameOptions): Game {
 
         case 'combat:auto-eat': {
           state.autoEat = !state.autoEat;
+          return;
+        }
+
+        case 'visit:begin':
+        case 'visit:end': {
+          // 访问段信号（#39 D9）：壳层交互页切进/切出时派发，引擎纯转发
+          // EventBus 事件、不持段状态（段开闭与配对归壳层，段状态归 #33）。
+          const payload = action.payload as { page?: unknown } | undefined;
+          const page = payload?.page;
+          if (typeof page !== 'string' || page.length === 0) {
+            reject(action.type, 'bad-payload');
+            return;
+          }
+          events.emit({ type: action.type, time, data: { page } });
           return;
         }
 
@@ -1975,8 +2172,8 @@ export function createGame(options: CreateGameOptions): Game {
           }
           const item = findItem(content, gear.itemId);
           const gained = gearSell(content, item?.sell ?? 0, gear.rarity);
-          state.gear = state.gear.filter((entry) => entry.uid !== uid);
-          state.gold += gained;
+          ledgerGearRemoval(gear, 'sell', META_USER);
+          ledgerGold(gained, 'sell', META_USER);
           events.emit({
             type: 'sell',
             time,
@@ -2009,21 +2206,22 @@ export function createGame(options: CreateGameOptions): Game {
             reject(action.type, 'worn');
             return;
           }
-          const shardItem = gparams.shardItem;
-          if (!shardItem || !findItem(content, shardItem)) {
+          // 熔炼产出公式单一来源（smeltYieldOf，与折叠路径同式）：无器屑经济
+          // = not-available 零降级路径。
+          const smelt = smeltYieldOf(gear.rarity);
+          if (!smelt) {
             reject(action.type, 'not-available');
             return;
           }
-          const shards = Math.max(0, Math.floor(findRarity(content, gear.rarity)?.smelt ?? 1));
-          state.gear = state.gear.filter((entry) => entry.uid !== uid);
-          addItem(shardItem, shards);
+          ledgerGearRemoval(gear, 'smelt', META_USER);
+          ledgerItem(smelt.shardItem, smelt.shards, 'smelt', META_USER);
           events.emit({
             type: 'gear:smelt',
             time,
             data: {
               uid,
-              item: shardItem,
-              shards,
+              item: smelt.shardItem,
+              shards: smelt.shards,
               name: gearDisplayName(gear),
             },
           });
@@ -2069,7 +2267,7 @@ export function createGame(options: CreateGameOptions): Game {
           // 纹阶重随：tierBoundsOf 数据锁死（与实例化掷阶/存档钳制同一来源）。
           const [tierMin, tierMax] = tierBoundsOf(blank);
           const tier = tierMin + Math.floor(random() * (tierMax - tierMin + 1));
-          takeItem(gparams.shardItem, cost);
+          ledgerItem(gparams.shardItem, -cost, 'reforge', META_USER);
           const inscriptions = gear.inscriptions!.map((insc, i) =>
             i === index ? { ...insc, tier } : insc,
           );
@@ -2114,8 +2312,7 @@ export function createGame(options: CreateGameOptions): Game {
           // 瞬态清场走字段表（#42 D2）：活动散置（进度一并弃置）、战斗散去、
           // 秘境攻略作废（dungeonBest 为记录资产 default-keep 长存，#7）。
           clearRebirthTransient(state);
-          state.daoYun += preview.gain;
-          state.daoYunEarned += preview.gain;
+          ledgerDaoYun(preview.gain, 'rebirth', META_USER);
           state.rebirths += 1;
           state.hp = hpCap(); // 新一世气血回满（上限已随重置/天赋重算；投影依赖归 game.ts，字段表外）
           events.emit({
@@ -2155,7 +2352,7 @@ export function createGame(options: CreateGameOptions): Game {
             reject(action.type, 'no-daoyun', { cost: String(node.cost), daoYun: String(state.daoYun) });
             return;
           }
-          state.daoYun -= node.cost;
+          ledgerDaoYun(-node.cost, 'talent', META_USER);
           state.talents.push(nodeId);
           // 气血上限随天赋变化：负向修饰符时 clamp（正向不回血，旧版同策略）。
           state.hp = Math.min(state.hp, hpCap());

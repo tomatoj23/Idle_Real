@@ -150,8 +150,10 @@ describe('挂机采集（issue #3 验收）', () => {
 
     resumed.settleOffline(57000);
     const events = resumed.events.drain();
-    expect(events).toHaveLength(1); // 不逐轮刷 loot/exp
-    const offline = events[0];
+    // 旧契约收窄（#39 并行迁移）：旧形状事件仍只有一条汇总（不逐轮刷 loot/exp）；
+    // 账本事件走同一管线并行发射（离线段 offline 标注，ledger.test.ts 专测）。
+    expect(events.filter((e) => e.type !== 'ledger')).toHaveLength(1);
+    const offline = events.find((e) => e.type === 'offline-settled')!;
     expect(offline.type).toBe('offline-settled');
     expect(offline.data).toMatchObject({
       cycles: 19,

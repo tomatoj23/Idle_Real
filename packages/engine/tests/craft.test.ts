@@ -404,9 +404,10 @@ describe('#5 · 炼制离线补偿（O(1) 统计式，欠账不丢）', () => {
     game.settleOffline(57000); // total = 58000 / 2000 → 29 轮，进度归零
 
     const events = game.events.drain();
-    expect(events).toHaveLength(1);
-    expect(events[0]?.type).toBe('offline-settled');
-    expect(events[0]?.data).toMatchObject({
+    // 旧契约收窄（#39 并行迁移）：旧形状事件仍只此一条汇总；账本事件并行另测。
+    expect(events.filter((e) => e.type !== 'ledger')).toHaveLength(1);
+    const offline = events.find((e) => e.type === 'offline-settled')!;
+    expect(offline.data).toMatchObject({
       cycles: 29,
       exp: 290, // successRate 1 → 全成：29 × 10
       items: { sword1: 29 },
@@ -440,9 +441,9 @@ describe('#5 · 炼制离线补偿（O(1) 统计式，欠账不丢）', () => {
     game.settleOffline(600000); // 200 轮 >> 材料
 
     const events = game.events.drain();
-    expect(events).toHaveLength(1);
+    expect(events.filter((e) => e.type !== 'ledger')).toHaveLength(1); // 旧形状单条（#39）
     // attempts 4 × rate 0.75 = 3.0 → 整 3 成；余数 0 不掷 → 3 成 1 败
-    expect(events[0]?.data).toMatchObject({ cycles: 4, items: { consumable_qi: 3 } });
+    expect(events.find((e) => e.type === 'offline-settled')?.data).toMatchObject({ cycles: 4, items: { consumable_qi: 3 } });
 
     const st = stateOf(game.snapshot());
     expect(st.activity).toBeNull(); // 停炉
@@ -471,8 +472,8 @@ describe('#5 · 炼制离线补偿（O(1) 统计式，欠账不丢）', () => {
     game.settleOffline(100000); // 50 轮 >> 10
 
     const events = game.events.drain();
-    expect(events).toHaveLength(1);
-    expect(events[0]?.data).toMatchObject({ cycles: 10 });
+    expect(events.filter((e) => e.type !== 'ledger')).toHaveLength(1); // 旧形状单条（#39）
+    expect(events.find((e) => e.type === 'offline-settled')?.data).toMatchObject({ cycles: 10 });
 
     const st = stateOf(game.snapshot());
     expect(st.activity).toBeNull();
@@ -504,8 +505,8 @@ describe('#5 · 炼制离线补偿（O(1) 统计式，欠账不丢）', () => {
     game.settleOffline(100000); // 50 轮 >> 2
 
     const events = game.events.drain();
-    expect(events).toHaveLength(1);
-    expect(events[0]?.data).toMatchObject({ cycles: 2, items: { sword1: 4 } });
+    expect(events.filter((e) => e.type !== 'ledger')).toHaveLength(1); // 旧形状单条（#39）
+    expect(events.find((e) => e.type === 'offline-settled')?.data).toMatchObject({ cycles: 2, items: { sword1: 4 } });
 
     const st = stateOf(game.snapshot());
     expect(st.gear).toHaveLength(4); // 2 成功 × count 2
