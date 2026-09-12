@@ -3,7 +3,9 @@ import { ManualClock } from '../src/clock.js';
 import {
   createGame,
   findEnemy,
+  isLiveSummon,
   pickSummonEntry,
+  restoreState,
   summonMinionOf,
   summonPoolOf,
   type BossView,
@@ -335,6 +337,36 @@ describe('#30 · 中途存档往返（召唤物态随战斗态恢复）', () => 
     const plainResumed = createGame({ content: makeCombatPack(), clock: new ManualClock(), save: plainSave, seed: 7 });
     expect(combatOf(plainResumed).summons).toEqual([]);
     expect(combatOf(plainResumed).bossPhase).toBe(-1);
+  });
+
+  it('池外槽 restore 即弃置（#48）：isLiveSummon 单一谓词，恢复侧与运行时同律', () => {
+    // efatal 是包内合法敌人，但不在 e1 阶段 2 的召唤池（池只收 e3）——
+    // #48 前 restore 收下、运行时过滤也放行（minionViewOf 的 base 回退），
+    // #48 后 restore 即弃置、逐轮同律过滤。
+    const pack = makeSummonPack();
+    const game = createGame({ content: pack, clock: new ManualClock(), save: midSave(), seed: 7 });
+    const cap = capture();
+    wire(game, cap);
+    game.dispatch({ type: 'combat:start', payload: { enemyId: 'e1' } });
+    for (let i = 0; i < 60 && cap.summons.length === 0; i++) game.tick(1000);
+    const save = game.snapshot();
+    const raw = save.state as { combat: { summons: Array<Record<string, unknown>> } };
+    raw.combat.summons = [
+      { enemyId: 'efatal', phase: 1, hp: 50, et: 0 }, // 池外槽（敌存在、阶段在界内）
+      { enemyId: 'e3', phase: 1, hp: 45, et: 0 }, // 池内合法槽位
+    ];
+    // restoreState 直证：池外槽不收编，池内槽原样。
+    const restored = restoreState(pack, save, 7);
+    const combat = (restored.combat ?? { summons: [] }).summons;
+    expect(combat).toEqual([{ enemyId: 'e3', phase: 1, hp: 45, et: 0 }]);
+    // 谓词本体：池内槽活、池外槽死（三写收拢的单元面）。
+    expect(isLiveSummon(pack, bossDefOf(pack), { enemyId: 'e3', phase: 1 })).toBe(true);
+    expect(isLiveSummon(pack, bossDefOf(pack), { enemyId: 'efatal', phase: 1 })).toBe(false);
+    // 与运行时一致：同存档走 createGame + tick，池外槽同样不存在（不复活）。
+    const resumed = createGame({ content: pack, clock: new ManualClock(), save, seed: 7 });
+    expect(combatOf(resumed).summons).toEqual([{ enemyId: 'e3', phase: 1, hp: 45, et: 0 }]);
+    resumed.tick(1000);
+    expect(combatOf(resumed).summons.map((m) => m.enemyId)).toEqual(['e3']);
   });
 });
 

@@ -6,6 +6,13 @@ content 包的字段级约定。**schema 变更三处同步纪律（ADR-015）**
 不在三处清单内，随消费票同步**（P2-2 教训：enemy schema 先行预留的 `affinities`
 曾滞后于引擎投影，#15 票已补齐——新预留字段落地时同律）。
 
+**GameState 持久字段登记（#42 字段表）**：引擎侧持久字段的全部存活知识——缺省
+（initialState）/恢复守卫（restoreState）/深拷（cloneState）/透明区排除/兵解处置
+（reset/keep/transient）——收敛在 `packages/engine/src/state.ts` 的 `FIELDS` 描述表
+一处声明；接口加字段 = 表加一行，五处消费全链生效（映射类型钉死键域，漏行即编译
+失败）。本文件只登记 content 侧可见的约定（存档键语义、兵解清单键域），引擎机制
+细节以字段表为准。
+
 ## 节清单
 
 | 节 | 必填 | schema | 说明 |
@@ -360,8 +367,8 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 
 | 清单 | 键域（闭集） | 引擎语义 |
 |---|---|---|
-| `reset` | `skills` / `items` / `gold` / `buffs` / `lastEncounter` | 兵解时逐键清零（键域合法性由语义校验对照注册表收口，schema 只钉字符串形态——#021/#25 先例） |
-| `keep` | `gear` | 装备实例仓库保留（佩戴表 `equips` 与 uid 序列器 `gearSeq` 语义随动） |
+| `reset` | `skills` / `items` / `gold` / `buffs` / `lastEncounter` | 兵解时逐键清零（键域 = state.ts 字段表 `rebirth:'reset'` 行的派生面；schema 语义校验对照同值镜像收口，schema 只钉字符串形态——#021/#25 先例） |
+| `keep` | `gear` | 装备实例仓库保留（佩戴表 `equips` 与 uid 序列器 `gearSeq` 语义随动；键域 = 字段表 `rebirth:'keep'` 行派生面） |
 
 - 两集必须互斥（同一资产不能既重置又保留，语义校验 shape）；
 - **未登记的资产键 default-keep**（兵解不吞资产，未来新键安全）；

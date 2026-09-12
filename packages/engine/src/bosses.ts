@@ -161,6 +161,22 @@ export function summonMinionOf(
 }
 
 /**
+ * 召唤槽位有效性谓词（#48，三写收拢的单一来源）：敌存在 ∧ phase 在 Boss
+ * 脚本界内 ∧ 该阶段召唤池成员——经 summonMinionOf 同一投影面判定（池行
+ * 缺失/包变更缩表/敌移除 = 失效）。restore 收编（state.ts）与运行时清场
+ * （game.ts 攻击轮/逐轮过滤）同调此谓词，恢复侧与运行时行为不再分叉：
+ * 池外槽（改前 restore 收编、运行时过滤经 minionViewOf 的 base 回退也放行）
+ * 收敛为 restore 即弃置、逐轮同律过滤。
+ */
+export function isLiveSummon(
+  content: GameContent,
+  boss: BossView,
+  minion: { readonly enemyId: string; readonly phase: number },
+): boolean {
+  return summonMinionOf(content, boss, minion.phase, minion.enemyId) !== undefined;
+}
+
+/**
  * 召唤池加权抽签（#30，与 dungeon 加权抽敌同一来源 weightedPick）：
  * weight 非法/敌不存在的行剔出有效池，按占比归一化掷点；全缺 = undefined
  * （本槽跳过，不崩）。

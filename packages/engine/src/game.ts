@@ -59,6 +59,7 @@ import {
   type GearInstance,
 } from './gear.js';
 import {
+  clearRebirthTransient,
   cloneState,
   initialState,
   restoreState,
@@ -97,6 +98,7 @@ import {
 import {
   bossEnemyOf,
   findBossOf,
+  isLiveSummon,
   pickSummonEntry,
   summonMinionOf,
   summonPoolOf,
@@ -876,10 +878,15 @@ export function createGame(options: CreateGameOptions): Game {
    * 召唤物死亡只清槽位（无收益结算）；主目标死亡才走 victory。
    */
   function playerAttackRound(enemy: EnemyView, c: CombatState): void {
-    // 集火目标：召唤物槽首（投影失效的槽位防御性清弃，回落主目标）。
-    const focus = c.summons.length > 0 ? c.summons[0] : undefined;
+    // 集火目标：召唤物槽首（失效槽位经 isLiveSummon 同一谓词清弃，#48；
+    // 恢复侧/逐轮过滤同律），回落主目标。
+    const boss = findBossOf(content, c.enemyId);
+    let focus = c.summons[0];
+    if (focus !== undefined && (boss === undefined || !isLiveSummon(content, boss, focus))) {
+      c.summons.shift();
+      focus = undefined;
+    }
     const focusView = focus !== undefined ? minionViewOf(focus) : undefined;
-    if (focus !== undefined && focusView === undefined) c.summons.shift();
     const target = focusView ?? enemy;
     const onMinion = focusView !== undefined;
 
@@ -1234,9 +1241,13 @@ export function createGame(options: CreateGameOptions): Game {
         1,
         Math.round(enemyBase * (1 + activeSignatureValue('slow', elemExpiry.slow, signature))),
       );
-      // 投影失效的召唤槽位防御性清弃（包变更缩表/敌移除，恢复侧同律过滤）。
+      // 投影失效的召唤槽位防御性清弃（isLiveSummon 单一谓词，#48；恢复侧同律——
+      // 池外槽/包变更缩表/敌移除逐轮弃置；Boss 未注册 = 无效槽全清）。
+      const summonBoss = findBossOf(content, c.enemyId);
       if (c.summons.length > 0) {
-        c.summons = c.summons.filter((minion) => minionViewOf(minion) !== undefined);
+        c.summons = summonBoss
+          ? c.summons.filter((minion) => isLiveSummon(content, summonBoss, minion))
+          : [];
       }
       // 召唤物有效间隔（#30）：攻击间隔随内容定义（缺省 = 玩家间隔），不受
       // 水·滞缓影响（滞缓签名作用于主敌人；召唤物威胁量归 summon mult 调参）。
@@ -2100,13 +2111,13 @@ export function createGame(options: CreateGameOptions): Game {
             return;
           }
           applyRebirthReset(section, state);
+          // 瞬态清场走字段表（#42 D2）：活动散置（进度一并弃置）、战斗散去、
+          // 秘境攻略作废（dungeonBest 为记录资产 default-keep 长存，#7）。
+          clearRebirthTransient(state);
           state.daoYun += preview.gain;
           state.daoYunEarned += preview.gain;
           state.rebirths += 1;
-          state.activity = null; // 散功：进度一并弃置（结算事件承载体，不另发 activity-stop）
-          state.combat = null;
-          state.dungeon = null; // 攻略作废（瞬态）；dungeonBest 为记录资产，default-keep 长存（#7）
-          state.hp = hpCap(); // 新一世气血回满（上限已随重置/天赋重算）
+          state.hp = hpCap(); // 新一世气血回满（上限已随重置/天赋重算；投影依赖归 game.ts，字段表外）
           events.emit({
             type: 'rebirth',
             time,

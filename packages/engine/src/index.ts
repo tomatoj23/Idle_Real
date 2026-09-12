@@ -235,6 +235,7 @@ export {
   bossEnemyOf,
   bossesOf,
   findBossOf,
+  isLiveSummon,
   pickSummonEntry,
   summonMinionOf,
   summonPoolOf,

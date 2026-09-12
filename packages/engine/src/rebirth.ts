@@ -18,6 +18,7 @@
  */
 
 import type { GameContent } from './types.js';
+import { REBIRTH_RESET_ACTIONS, type GameState } from './state.js';
 import { aggregateStats, type Contribution, type Modifier } from './modifiers.js';
 
 /* ---------- 内容视图（按形状读取，缺节/缺字段安全兜底） ---------- */
@@ -264,52 +265,25 @@ export function realmOf(content: GameContent, combatLevel: number): string | und
 /* ---------- 兵解结算（清单语义：引擎逐键解释，未知键防御性忽略） ---------- */
 
 /**
- * 重置集键域（引擎注册表闭集）：content 包侧由语义校验对照同值注册表收口
- * （schema 只钉字符串形态，#021/#25 先例）；引擎侧此表为执行面镜像 +
- * applyRebirthReset 的逐键解释依据。未登记键不重置（default-keep，
- * 兵解不吞资产，未来新键安全）。
+ * 兵解清单的键域与逐键动作（#42 D2）由 state.ts 字段表 rebirth 属性派生
+ * （RESET_KEYS/KEEP_KEYS/REBIRTH_RESET_ACTIONS），此处不再持独立注册表——
+ * 加持久字段一处声明，兵解处置全链生效。content 包侧 schema 语义校验仍持
+ * 同值镜像（pack.ts，#021/#25 先例：schema 只钉字符串形态，跨包不引引擎）。
+ * 未登记键不重置（default-keep，兵解不吞资产，未来新键安全）。
  */
-const RESET_KEYS: ReadonlySet<string> = new Set(['skills', 'items', 'gold', 'buffs', 'lastEncounter']);
-
-/**
- * 保留集键域：gear = 装备实例仓库（佩戴表 equips 与 uid 序列器 gearSeq
- * 语义随动保留——实例在，佩戴状态与 uid 唯一性就必须保）。
- */
-const KEEP_KEYS: ReadonlySet<string> = new Set(['gear']);
-
-export { RESET_KEYS, KEEP_KEYS };
 
 /**
  * 兵解结算的状态清洗（rebirth:perform 消费）：按 content 声明的重置集逐键
- * 清零，保留集（及未登记键）原样保留；活动/战斗/气血等瞬态由调用方统一
- * 清空回满（非资产，不进清单）。
+ * 清零（动作经字段表解释），保留集（及未登记键）原样保留；活动/战斗/气血
+ * 等瞬态由调用方统一清空回满（非资产，不进清单——clearRebirthTransient）。
  */
-export function applyRebirthReset(
-  section: RebirthSectionView,
-  state: {
-    gold: number;
-    items: Record<string, number>;
-    skills: Record<string, { xp: number }>;
-    buffs: Record<string, number>;
-    lastEncounter: Record<string, unknown>;
-  },
-): void {
+export function applyRebirthReset(section: RebirthSectionView, state: GameState): void {
   const reset = new Set(section.reset ?? []);
-  if (reset.has('skills')) {
-    for (const progress of Object.values(state.skills)) progress.xp = 0;
-  }
-  if (reset.has('items')) {
-    for (const key of Object.keys(state.items)) delete state.items[key];
-  }
-  if (reset.has('gold')) state.gold = 0;
-  if (reset.has('buffs')) {
-    for (const key of Object.keys(state.buffs)) delete state.buffs[key];
-  }
-  if (reset.has('lastEncounter')) {
-    for (const key of Object.keys(state.lastEncounter)) delete state.lastEncounter[key];
+  for (const [key, resetField] of Object.entries(REBIRTH_RESET_ACTIONS)) {
+    if (reset.has(key)) resetField(state);
   }
   // keep 清单由引擎绑定保留语义（gear 保留 = 实例/佩戴表/序列器原样）；
-  // 此处无动作，KEEP_KEYS 仅作为校验注册表与文档面。
+  // 保留集键域 KEEP_KEYS 由字段表 rebirth='keep' 行派生，此处无动作。
 }
 
 /* ---------- 天赋新增 stat 消费点：采集速度 / 离线上限 ---------- */
