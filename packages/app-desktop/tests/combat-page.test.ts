@@ -17,9 +17,9 @@ import {
 } from '@wendao/engine';
 import { buildUi } from '../src/ui';
 
-/** 高斗法修为存档：clv 8（e2 门控需 ≥6 放行）。恢复侧 hp 按 skills 恢复前的
- *  clv1 曲线钳为 112（#7 教训），故层数须与血线配平：maxHp(8)=196，
- *  112 ≥ 0.3×196，low-hp 门控放行；层数再高会被 low-hp 拒绝开战。 */
+/** 高斗法修为存档：clv 8（e2 门控需 ≥6 放行）。恢复侧 hp 按收编后的修为
+ *  推 cap 满血（#41 正序；注入 hp 9999 超顶钳回 maxHp(8)=196），low-hp
+ *  门控自然放行，层数不再受血线配平约束。 */
 function mountFighting(enemyId: string) {
   const clock = new ManualClock();
   const content = loadXiuxianPack();

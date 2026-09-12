@@ -210,8 +210,6 @@ export function restoreState(
 
   if (isObj(raw)) {
     state.gold = Math.max(0, Math.floor(safeNumber(raw.gold, 0)));
-    const cap = playerMaxHp(content, state.skills, contributions);
-    state.hp = Math.min(cap, Math.max(0, safeNumber(raw.hp, cap)));
 
     if (isObj(raw.items)) {
       for (const [id, count] of Object.entries(raw.items)) {
@@ -231,6 +229,13 @@ export function restoreState(
         }
       }
     }
+
+    // —— 气血钳制（#41）：必须在 skills 收编之后——cap 按恢复后的修为推算；
+    // 先钳后收编会把高修为存档压回零修为基线（hp 恒 ≤112 的掩盖性 bug）。
+    // 未写/非法 hp 缺省 = 按当前 cap 满血；佩戴/增益/天赋的投影上限由
+    // game.ts 恢复后补钳兜底。
+    const cap = playerMaxHp(content, state.skills, contributions);
+    state.hp = Math.min(cap, Math.max(0, safeNumber(raw.hp, cap)));
 
     const act = raw.activity;
     if (

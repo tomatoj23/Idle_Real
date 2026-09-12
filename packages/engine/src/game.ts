@@ -182,7 +182,9 @@ export function createGame(options: CreateGameOptions): Game {
   const xpOf = (skillId: string): number => state.skills[skillId]?.xp ?? 0;
   const levelOf = (skillId: string): number => levelFromXp(xpOf(skillId), pparams);
   if (options.save) {
-    // 恢复后按当前佩戴/增益重 clamp 气血（state.ts 只兜无装备基线上限）。
+    // 恢复后按完整属性投影重 clamp 气血（#41）：state.ts 已按收编后的修为钳过
+    // 基线，此处兜佩戴/增益/天赋投影出的上限差（投影上限低于存档 hp 时压回，
+    // 如负向贡献或旧档跨包越顶）；只降不升，回满属回血/settleOffline 语义。
     state.hp = Math.min(state.hp, Math.max(1, playerStats({ moveId: weaponMoveKey() }).maxHp));
   }
 

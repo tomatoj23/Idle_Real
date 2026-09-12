@@ -100,8 +100,8 @@ function makeKeyedPack(): GameContent {
 
 /**
  * 高斗法修为存档（一击杀 e1，全程免伤——推塔事件序列免受战斗回合数干扰）。
- * xp 取 20000（clv 22）而非更高：存量恢复语义下，缺 hp 的存档气血按
- * 「并档前」零修为曲线钳为 112（clv1 满血），须满足 112 ≥ 30% × cap。
+ * xp 20000 → clv21；未写 hp 的存档恢复即满血（cap 随收编后的修为推算，#41），
+ * 30% low-hp 入境门槛自然满足，层数不再受血线配平约束。
  */
 function strongSave(): SaveData {
   return {

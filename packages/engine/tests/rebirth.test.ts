@@ -43,14 +43,16 @@ function makeRebirthPack(): GameContent {
   } as GameContent;
 }
 
-/** 满配存档：修为/材料/灵石/增益/装备/佩戴/对照齐备（AC1 的重置-保留双面）。 */
+/** 满配存档：修为/材料/灵石/增益/装备/佩戴/对照齐备（AC1 的重置-保留双面）。
+ *  hp = clv4 满血（fight xp 300 → 层 4，cap = 100 + 12×4；#41 后恢复钳制按
+ *  收编修为推 cap，不再回落零修为基线 112）。 */
 function makeRichSave(): SaveData {
   return {
     version: 1,
     time: 0,
     state: {
       gold: 123,
-      hp: 112,
+      hp: 148,
       items: { herb1: 7, silk: 3 },
       skills: { herb: { xp: 5000 }, fight: { xp: 300 } },
       activity: { skillId: 'herb', index: 0, name: '采青灵草', progress: 500 },
@@ -72,6 +74,8 @@ function drain(game: ReturnType<typeof createGame>): GameEvent[] {
 describe('#6 · AC1 兵解结算：重置归零 / 保留不变 / 道韵入账', () => {
   it('兵解后 snapshot：清单内全归零，gear/佩戴保留，道韵 = floor(0.001 × 5300) = 5', () => {
     const game = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save: makeRichSave(), seed: 7 });
+    // 恢复正序（#41）：clv4 满血 148 原样保留，不被零修为基线压回 112。
+    expect(game.snapshot().state.hp).toBe(148);
     game.dispatch({ type: 'rebirth:perform' });
     const events = drain(game);
     const rebirth = events.find((event) => event.type === 'rebirth');

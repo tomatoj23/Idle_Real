@@ -118,7 +118,7 @@ describe('#5 · 配方执行循环（成功率掷点/失败损料/exp 入技能�
       save: {
         version: 1,
         time: 0,
-        state: { gold: 0, hp: 112, items: { ore1: 44, qi1: 55 }, skills: { smith: { xp: 0 } }, activity: null },
+        state: { gold: 0, items: { ore1: 44, qi1: 55 }, skills: { smith: { xp: 0 } }, activity: null },
       },
     });
     game.dispatch({ type: 'activity:start', payload: { skillId: 'smith', index: 1 } });
@@ -157,7 +157,7 @@ describe('#5 · 配方执行循环（成功率掷点/失败损料/exp 入技能�
       save: {
         version: 1,
         time: 0,
-        state: { gold: 0, hp: 112, items: { herb1: 100 }, skills: { smith: { xp: 0 } }, activity: null },
+        state: { gold: 0, items: { herb1: 100 }, skills: { smith: { xp: 0 } }, activity: null },
       },
     });
     runCycles(game, clock, 0, 3);
@@ -184,7 +184,7 @@ describe('#5 · 配方执行循环（成功率掷点/失败损料/exp 入技能�
       save: {
         version: 1,
         time: 0,
-        state: { gold: 0, hp: 112, items: { herb1: 4 }, skills: { smith: { xp: 0 } }, activity: null },
+        state: { gold: 0, items: { herb1: 4 }, skills: { smith: { xp: 0 } }, activity: null },
       },
     });
     game.dispatch({ type: 'activity:start', payload: { skillId: 'smith', index: 0 } });
@@ -209,7 +209,7 @@ describe('#5 · 配方执行循环（成功率掷点/失败损料/exp 入技能�
       save: {
         version: 1,
         time: 0,
-        state: { gold: 0, hp: 112, items: { herb1: 4 }, skills: { smith: { xp: 0 } }, activity: null },
+        state: { gold: 0, items: { herb1: 4 }, skills: { smith: { xp: 0 } }, activity: null },
       },
     });
     runCycles(game, clock, 0, 5);
@@ -229,7 +229,7 @@ describe('#5 · 配方执行循环（成功率掷点/失败损料/exp 入技能�
       save: {
         version: 1,
         time: 0,
-        state: { gold: 0, hp: 112, items: { ore1: 400, qi1: 500 }, skills: { smith: { xp: 0 } }, activity: null },
+        state: { gold: 0, items: { ore1: 400, qi1: 500 }, skills: { smith: { xp: 0 } }, activity: null },
       },
     });
     runCycles(game, clock, 1, 20); // 20 × 10 = 200 exp
@@ -250,7 +250,7 @@ describe('#5 · 配方执行循环（成功率掷点/失败损料/exp 入技能�
       save: {
         version: 1,
         time: 0,
-        state: { gold: 0, hp: 112, items: {}, skills: { smith: { xp: 0 } }, activity: null },
+        state: { gold: 0, items: {}, skills: { smith: { xp: 0 } }, activity: null },
       },
     });
 
@@ -361,7 +361,6 @@ describe('#5 · 炼器等级加权 rollRarity（#14 接缝：不传 = 现行为�
           time: 0,
           state: {
             gold: 0,
-            hp: 112,
             items: { ore1: 9999, qi1: 9999 },
             skills: { smith: { xp: smithXp } },
             activity: null,
@@ -432,7 +431,6 @@ describe('#5 · 炼制离线补偿（O(1) 统计式，欠账不丢）', () => {
         time: 0,
         state: {
           gold: 0,
-          hp: 112,
           items: { herb1: 9 }, // 够 4 轮（余 1）
           skills: { smith: { xp: 0 } },
           activity: { skillId: 'smith', index: 0, name: '炼制聚气丹', progress: 0 },
@@ -464,7 +462,6 @@ describe('#5 · 炼制离线补偿（O(1) 统计式，欠账不丢）', () => {
         time: 0,
         state: {
           gold: 0,
-          hp: 112,
           items: { ore1: 40, qi1: 50 }, // 恰好 10 轮
           skills: { smith: { xp: 0 } },
           activity: { skillId: 'smith', index: 1, name: '锻青锋剑', progress: 0 },
@@ -498,7 +495,6 @@ describe('#5 · 炼制离线补偿（O(1) 统计式，欠账不丢）', () => {
         time: 0,
         state: {
           gold: 0,
-          hp: 112,
           items: { ore1: 8, qi1: 10 }, // 恰好 2 轮
           skills: { smith: { xp: 0 } },
           activity: { skillId: 'smith', index: 1, name: '锻青锋剑', progress: 0 },
@@ -523,7 +519,6 @@ describe('#5 · 存档恢复：craft 活动稳定引用（ADR-015）', () => {
     time: 0,
     state: {
       gold: 0,
-      hp: 112,
       items: { ore1: 40, qi1: 50 },
       skills: { smith: { xp: 0 } },
       activity: { skillId: 'smith', index, name, progress: 700 },
@@ -558,7 +553,6 @@ describe('#5 · 存档恢复：craft 活动稳定引用（ADR-015）', () => {
         time: 0,
         state: {
           gold: 0,
-          hp: 112,
           items: {},
           skills: { herb: { xp: 0 } },
           activity: { skillId: 'herb', index: 0, name: '采青灵草', progress: 100 },
@@ -580,7 +574,6 @@ describe('#5 · 内容包变更安全弃置（防崩回归）', () => {
         time: 0,
         state: {
           gold: 0,
-          hp: 112,
           items: { ore1: 40, qi1: 50 },
           skills: { smith: { xp: 0 } },
           activity: { skillId: 'smith', index: 7, name: '锻不存在的剑', progress: 0 },
@@ -612,7 +605,7 @@ describe('#5 · 增益丹 buff 窗口回归（票面验收；#4 无显式断言�
       save: {
         version: 1,
         time: 0,
-        state: { gold: 0, hp: 112, items: { consumable_atk: 1 }, skills: { fight: { xp: 0 } }, activity: null },
+        state: { gold: 0, items: { consumable_atk: 1 }, skills: { fight: { xp: 0 } }, activity: null },
       },
     });
 
