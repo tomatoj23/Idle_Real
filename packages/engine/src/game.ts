@@ -38,6 +38,7 @@ import {
   affinityMultiplier,
   calcDmg,
   compareEncounterText,
+  emptyTally,
   fillTemplate,
   BASIC_KEY,
   ELEMENT_COMBAT_PRIMITIVES,
@@ -902,6 +903,56 @@ export function createGame(options: CreateGameOptions): Game {
     events.emit({ type: 'combat-note', time, data: enemyId ? { text, enemyId } : { text } });
   }
 
+  /**
+   * 战斗态构造单一来源（#44 D2）：初入开团与再战重置共用一处构造，
+   * rounds/crits/tiers 一律出自 emptyTally（combat.ts 导出面）——引擎内
+   * 手写 CombatState/tally 字面量就此清零（存档恢复逐项钳制除外，state.ts）。
+   */
+  function makeCombatState(enemyId: string, ehp: number): CombatState {
+    return {
+      enemyId,
+      ehp,
+      pt: 0,
+      et: 0,
+      respT: 0,
+      ...emptyTally(),
+      bossPhase: -1,
+      summons: [],
+    };
+  }
+
+  /** low-hp 线（cparams.lowHpFraction × 当前气血上限）：入场门控与再战/进层退避共用一条线（#44）。 */
+  const isLowHp = (): boolean => state.hp < playerStats(hpContext()).maxHp * cparams.lowHpFraction;
+
+  /**
+   * 进入战斗单一序列（#44 D1）：low-hp 退避 → 清活动（战斗/采集互斥，发
+   * activity-stop）→ 建战斗态（makeCombatState）→ 系别临时态归零 → 开战
+   * note。入场不变量唯此一处断言；内容门控（等级/道韵/秘境钥匙）与敌人
+   * 来源（野战直取 / 秘境抽敌按层缩放）为调用侧参数差异。
+   * actionType 给出（dispatch 面）时 low-hp 代发 reject；层推进（tick 面）
+   * 不传——血线已由 settleCombat 退避判定先行担保，此处复查恒过。
+   * 返回 'low-hp' = 未成战（dispatch 面已代发 reject，调用侧直接收尾）。
+   */
+  function enterCombat(enemy: EnemyView, actionType?: string): 'ok' | 'low-hp' {
+    if (isLowHp()) {
+      if (actionType !== undefined) reject(actionType, 'low-hp');
+      return 'low-hp';
+    }
+    if (state.activity) {
+      const act = state.activity;
+      state.activity = null; // 战斗与采集互斥
+      events.emit({
+        type: 'activity-stop',
+        time,
+        data: { skillId: act.skillId, activityName: act.name },
+      });
+    }
+    state.combat = makeCombatState(enemy.id, enemy.hp);
+    resetElemExpiry(); // 开新战：系别临时态归零（不跨战团，#15）
+    emitNote(noteFrom('start', { enemy: enemy.name }), enemy.id);
+    return 'ok';
+  }
+
   /* ---------- 秘境（#7）：层序列战斗复用既有战斗状态机 ---------- */
 
   /**
@@ -1001,26 +1052,20 @@ export function createGame(options: CreateGameOptions): Game {
     }
   }
 
-  /** 进入指定层：加权抽敌 → 以层倍率投影的气血开战（战斗状态机与解算零分叉）。 */
-  function enterDungeonFloor(dungeon: DungeonView, floor: number): boolean {
+  /**
+   * 进入指定层：加权抽敌 → 以层倍率投影的气血 → enterCombat 单序列
+   * （战斗状态机与解算零分叉，#44）。层表空/敌人全缺失 = 'no-layer'
+   * （防御路径，包校验已拦）；low-hp 语义见 enterCombat。
+   */
+  function enterDungeonFloor(
+    dungeon: DungeonView,
+    floor: number,
+    actionType?: string,
+  ): 'ok' | 'no-layer' | 'low-hp' {
     const enemy = pickDungeonEnemyOf(content, dungeon, floor, random);
-    if (!enemy) return false;
+    if (!enemy) return 'no-layer';
     const scaled = dungeonFloorEnemyOf(content, dungeon.id, floor, enemy.id) ?? enemy;
-    resetElemExpiry(); // 系别临时态不跨战团（开新战一律归零，#15）
-    state.combat = {
-      enemyId: scaled.id,
-      ehp: scaled.hp,
-      pt: 0,
-      et: 0,
-      respT: 0,
-      rounds: 0,
-      crits: 0,
-      tiers: { light: 0, mid: 0, heavy: 0, deadly: 0 },
-      bossPhase: -1,
-      summons: [],
-    };
-    emitNote(noteFrom('start', { enemy: scaled.name }), scaled.id);
-    return true;
+    return enterCombat(scaled, actionType);
   }
 
   /** 离境结算（#7）：清攻略 + dungeon:leave 事件（最高层已随进层实时登记）。 */
@@ -1066,7 +1111,9 @@ export function createGame(options: CreateGameOptions): Game {
     }
     run.floor += 1;
     state.dungeonBest[run.dungeonId] = Math.max(state.dungeonBest[run.dungeonId] ?? 0, run.floor);
-    if (!enterDungeonFloor(dungeon, run.floor)) {
+    if (enterDungeonFloor(dungeon, run.floor) !== 'ok') {
+      // 层表空/敌人全缺失：防御离境（包校验已拦，引擎不崩；low-hp 为不可达
+      // 复查位——settleCombat 退避判定先行担保，两支同样就地离境）。
       state.dungeon = null;
       stopCombat();
     }
@@ -1396,7 +1443,7 @@ export function createGame(options: CreateGameOptions): Game {
           if (state.dungeon) {
             // 秘境推进（#7）：残血退避同律（挂机不送死，离境保留最高层），
             // 否则自动进入下一层——层序列与 autoFight 开关无关（爬塔即挂机）。
-            if (state.hp < playerStats(hpContext()).maxHp * cparams.lowHpFraction) {
+            if (isLowHp()) {
               stopCombat(noteFrom('retreatWounded'));
               return;
             }
@@ -1405,18 +1452,14 @@ export function createGame(options: CreateGameOptions): Game {
           }
           if (state.autoFight) {
             // 自动再战前复查气血：残血且无自动补给时退避（挂机不送死）。
-            if (state.hp < playerStats(hpContext()).maxHp * cparams.lowHpFraction) {
+            if (isLowHp()) {
               stopCombat(noteFrom('retreatWounded'));
               return;
             }
-            c.ehp = enemy.hp;
-            c.pt = 0;
-            c.et = 0;
-            c.rounds = 0;
-            c.crits = 0;
-            c.tiers = { light: 0, mid: 0, heavy: 0, deadly: 0 };
-            c.bossPhase = -1; // Boss 重生从头演阶段（#8：阶段随再战重置归位）
-            c.summons = []; // 召唤物随再战清场（#30：Boss 重生不带残阵）
+            // 再战重置 = 同敌按单一构造源整态重置（#44 D2）：敌方气血恢复、
+            // 计时/伤档清零、阶段从头演（#8）、召唤清场（#30）；循环顶重读
+            // state.combat，旧态引用就此弃用。
+            state.combat = makeCombatState(c.enemyId, enemy.hp);
             resetElemExpiry(); // 系别临时态随再战归零（Boss 重生不带残效，#15）
             emitNote(noteFrom('reengage', { enemy: enemy.name }), enemy.id);
           } else {
@@ -2025,33 +2068,8 @@ export function createGame(options: CreateGameOptions): Game {
             return;
           }
           if (state.combat?.enemyId === enemyId) return; // 幂等
-          if (state.hp < playerStats(hpContext()).maxHp * cparams.lowHpFraction) {
-            reject(action.type, 'low-hp');
-            return;
-          }
-          if (state.activity) {
-            const act = state.activity;
-            state.activity = null; // 战斗与采集互斥
-            events.emit({
-              type: 'activity-stop',
-              time,
-              data: { skillId: act.skillId, activityName: act.name },
-            });
-          }
-          state.combat = {
-            enemyId,
-            ehp: enemy.hp,
-            pt: 0,
-            et: 0,
-            respT: 0,
-            rounds: 0,
-            crits: 0,
-            tiers: { light: 0, mid: 0, heavy: 0, deadly: 0 },
-            bossPhase: -1,
-            summons: [],
-          };
-          resetElemExpiry(); // 开新战：系别临时态归零（不跨战团，#15）
-          emitNote(noteFrom('start', { enemy: enemy.name }), enemy.id);
+          // low-hp 退避 → 清活动 → 建战斗态 → 开战 note：入场单序列（#44）。
+          enterCombat(enemy, action.type);
           return;
         }
 
@@ -2086,7 +2104,8 @@ export function createGame(options: CreateGameOptions): Game {
 
         case 'dungeon:enter': {
           // 秘境入门（#7）：定义 → 幂等/互斥 → 门控（道韵/钥匙，判定与 UI 同源
-          // dungeonGateOf）→ 气血门控 → 清活动 → 自第 1 层开战（进层即登记最高层）。
+          // dungeonGateOf）→ 自第 1 层走 enterCombat 入场单序列（low-hp 退避/
+          // 清活动/建战斗态/开战 note，#44）→ 进层即登记最高层 + dungeon:enter。
           const payload = action.payload as { dungeonId?: unknown } | undefined;
           const dungeonId = payload?.dungeonId;
           if (typeof dungeonId !== 'string') {
@@ -2120,27 +2139,15 @@ export function createGame(options: CreateGameOptions): Game {
             }
             return;
           }
-          if (state.hp < playerStats(hpContext()).maxHp * cparams.lowHpFraction) {
-            reject(action.type, 'low-hp');
+          const entered = enterDungeonFloor(dungeon, 1, action.type);
+          if (entered !== 'ok') {
+            // low-hp 已由序列代发 reject；层表空/敌人全缺失 = 防御路径
+            // （包校验已拦，引擎不崩），此处补 no-layer 拒绝。
+            if (entered === 'no-layer') reject(action.type, 'no-layer');
             return;
-          }
-          if (state.activity) {
-            const act = state.activity;
-            state.activity = null; // 秘境与采集互斥（与 combat:start 同律）
-            events.emit({
-              type: 'activity-stop',
-              time,
-              data: { skillId: act.skillId, activityName: act.name },
-            });
           }
           state.dungeon = { dungeonId: dungeon.id, floor: 1 };
           state.dungeonBest[dungeon.id] = Math.max(state.dungeonBest[dungeon.id] ?? 0, 1);
-          if (!enterDungeonFloor(dungeon, 1)) {
-            // 层表空/敌人全缺失：防御离境（包校验已拦，引擎不崩）
-            state.dungeon = null;
-            reject(action.type, 'no-layer');
-            return;
-          }
           events.emit({
             type: 'dungeon:enter',
             time,
