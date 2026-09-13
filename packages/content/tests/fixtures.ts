@@ -1,205 +1,103 @@
 /**
- * 跨测试共享的 texts.shell 夹具（#26）。
+ * 跨测试共享的 texts.shell 夹具（#26 建；#43 D3 改造：键全集由生成器保证）。
  *
- * shell 入 schema required 后，一切"最小合法包"夹具都需要合法 shell 节；
- * 这里提供一份键全集、短文案的完整 shell，包侧用例在其深拷贝上做单点
- * 破坏断言（required/pattern/percent 等负路径）。值刻意极短——语义正确性
- * 由修仙包装配用例（xiuxianPack.test.ts）承载，本夹具只证形态合法。
+ * shell 入 schema required 后，一切"最小合法包"夹具都需要合法 shell 节。
+ * 键全集不再手抄（曾与 schema/xiuxian/fantasy 三份镜像连环红），而是从
+ * texts.schema.json 的 required/properties **机械生长**：
+ * - 值源 = src/schema/textsSample.ts 的 shell 节（#43 D1 双钉样本，全仓唯一
+ *   的手写 shell 值树）：语义约束键（locale pattern、statLabels 键域、负路径
+ *   用例的破坏锚点）在手写侧维护，夹具与双钉样本共用——值漂移在两个消费面
+ *   同时红，不再可能有第二份手抄；
+ * - schema 新增 required 键 → 骨架自动长出机械占位（键名截断到 maxLength），
+ *   夹具保持合法、测试不再连环红；语义值随后补写进 textsSample 即可
+ *   （占位无语义，题材包语义由装配用例承载，见下）；
+ * - schema 删除任一 required 键 → 骨架随之收键，依赖该键的负路径用例
+ *   （delete 后断言 required）即刻红——键集与 schema 恒同形；
+ * - 样本里多出的 schema 外键会原样流出 → validateContent
+ *   additionalProperties 红，手写值映射自身也被钉住。
+ *
+ * 值刻意极短——形态合法性由本夹具承载；语义正确性由修仙/魔幻包装配用例
+ * （xiuxianPack.test.ts / fantasyPack.test.ts）承载。
+ */
+import textsSchemaJson from '../src/schema/texts.schema.json';
+import { textsSample } from '../src/schema/textsSample.js';
+
+/** texts.schema.json 的最小 schema 视图（生长器只消费这几个关键字）。 */
+interface SchemaNode {
+  readonly $ref?: string;
+  readonly type?: string;
+  readonly required?: readonly string[];
+  readonly properties?: Readonly<Record<string, SchemaNode>>;
+  readonly minLength?: number;
+  readonly maxLength?: number;
+}
+
+const TEXTS_SCHEMA = textsSchemaJson as unknown as SchemaNode & {
+  readonly definitions?: Readonly<Record<string, SchemaNode>>;
+};
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** $ref 解析（仅 #/definitions/ 内部引用，与 validate.ts 同约定）。 */
+function resolveNode(node: SchemaNode | undefined): SchemaNode {
+  const ref = node?.$ref;
+  if (ref !== undefined) {
+    const target = TEXTS_SCHEMA.definitions?.[ref.slice('#/definitions/'.length)];
+    if (target !== undefined) {
+      return target;
+    }
+  }
+  return node ?? {};
+}
+
+/** 机械占位：键名截到 maxLength，保证过 schema 边界（pattern/键域类约束仍须手写值）。 */
+function placeholder(node: SchemaNode, key: string): unknown {
+  if (node.type === 'boolean') return true;
+  if (node.type === 'integer' || node.type === 'number') return 1;
+  if (node.type === 'array') return [];
+  const max = node.maxLength;
+  return max !== undefined && key.length > max ? key.slice(0, max) : key;
+}
+
+/**
+ * 骨架生长：以 schema 的 properties/required 为骨架，手写值逐层覆盖合并；
+ * required 而无手写值的键长出机械占位，可选且无手写值不造（最小合法）。
+ * 开放键域节点（properties 为空、靠 patternProperties/additionalProperties
+ * 定形，如 labels/reject）无骨架可长，手写值原样放行。
+ */
+function grow(node: SchemaNode, values: object): Record<string, unknown> {
+  const resolved = resolveNode(node);
+  const props = resolved.properties ?? {};
+  const propKeys = Object.keys(props);
+  const vals: Record<string, unknown> = isObject(values) ? values : {};
+  if (propKeys.length === 0) {
+    return vals;
+  }
+  const required = new Set(resolved.required ?? []);
+  const out: Record<string, unknown> = {};
+  for (const key of new Set([...propKeys, ...Object.keys(vals)])) {
+    const child = resolveNode(props[key]);
+    const value = vals[key];
+    if (isObject(value) && child.type === 'object') {
+      out[key] = grow(child, value);
+    } else if (value !== undefined) {
+      out[key] = value;
+    } else if (required.has(key)) {
+      out[key] = child.type === 'object' ? grow(child, {}) : placeholder(child, key);
+    }
+  }
+  return out;
+}
+
+/**
+ * 键全集由 schema 机械保证的 shell 夹具（每调用产出新对象，用例可安全破坏）。
+ * 值源 = 双钉样本的 shell 节（textsSample）：TextsSection 接口无隐式索引
+ * 签名，object 形参承接、grow 内部经 isObject 收窄。
  */
 export function shellFixture(): Record<string, unknown> {
-  return {
-    brand: { sigil: '道', name: '问道长生', locale: 'zh-CN', bootError: '中止：{message}' },
-    footer: { versionLine: '{name} v{content} · 引擎 v{engine}' },
-    topbar: {
-      statsTitle: '属性',
-      statsSigil: '斗',
-      goldTitle: '灵石',
-      goldSigil: '石',
-      hpTitle: '气血',
-      hpSigil: '血',
-    },
-    tabs: { skills: '修炼', craft: '炼制', combat: '斗法', bag: '乾坤袋', shop: '坊市', rebirth: '转生', talents: '道韵', dungeon: '秘境', achievements: '成就' },
-    side: { title: '修行录' },
-    stats: { labels: { atk: { label: '攻' }, crit: { label: '暴', percent: true } } },
-    units: {
-      level: '{v} 层',
-      seconds: '{v} 秒',
-      minute: '{m} 分',
-      hourMinute: '{h} 时 {m} 分',
-    },
-    icons: { buff: '丹', gear: '器', unknown: '？' },
-    common: { needLevel: '需 {level} 层', needDaoYun: '需 {daoYun} 道韵', compareWrap: '（{compare}）', itemListSep: '、' },
-    events: {
-      lootGear: '妖物遗落【{name}】',
-      lootGearLog: '夺得【{name}】',
-      lootShowcase: '天降异宝！【{name}】',
-      lootByproduct: '偶得 {name}×{count}',
-      lootDrop: '得 {name}×{count}',
-      lootCraft: '炼得 {name}×{count}',
-      victoryFlog: '【{name}】轰然倒地！{summary}{compare}',
-      victoryLog: '击倒【{name}】：{summary}{compare}',
-      defeatFlog: '你不敌【{name}】',
-      defeatToast: '斗法落败',
-      eatHeal: '服下【{name}】，回气 {healed} 点',
-      eatBuffToast: '服下【{name}】',
-      eatBuffLog: '服下【{name}】，药力{minutes}分',
-      equipWearToast: '已佩【{name}】',
-      equipWearLog: '佩上【{name}】',
-      equipRemoveLog: '卸下【{name}】',
-      expCombat: '斗法修为 +{amount}',
-      levelupToast: '升至 {level} 层',
-      levelupLog: '【{name}】升至 {level} 层',
-      sellLog: '卖出 {name}，得 {gained} 灵石',
-      buyLog: '购入 {name}×{count}',
-      rejectFallback: '此路不通',
-      offlineToast: '离线 {away}归来',
-      offlineLog: '离线修行 {away}：{items}{exp}',
-      offlineNoYield: '无所获',
-      offlineExpSuffix: '，修为 +{exp}',
-      craftFail: '「{name}」炼制失败，材料尽失，仅悟得 {exp} 修为',
-      craftHalt: '「{name}」材料告罄，熄炉中止',
-      rebirthToast: '兵解功成，得 {daoYun} 道韵',
-      rebirthLog: '兵解重修：{xp} 修为，{daoYun} 道韵（第 {count} 世）',
-      talentBuyToast: '点亮【{name}】（{cost} 道韵）',
-      talentBuyLog: '点亮【{name}】，余 {daoYun} 道韵',
-      dungeonEnter: '踏入【{name}】第 {floor}/{floors} 层',
-      dungeonFloor: '第 {floor}/{floors} 层已通：+{gold} 灵石 {items}',
-      dungeonDaoYun: '，道韵 +{daoYun}',
-      dungeonClear: '【{name}】已通关（{floors} 层）！',
-      dungeonLeave: '退出【{name}】（第 {floor} 层，最深 {best}）',
-      bossPhase: '【{enemy}】显露「{name}」之相！（阶段 {phase}）',
-      achievementToast: '成就达成【{name}】',
-      achievementLog: '成就达成【{name}】',
-      gearSmelt: '熔炼【{name}】，得 {shard}×{count}',
-      gearReforge: '重铸【{name}】，铭纹升至 T{tier}',
-    },
-    pages: {
-      skills: {
-        empty: '无可修技艺',
-        chipLocked: '未开放',
-        expSub: '修为 {into}/{need}',
-        expMax: '修为已满',
-        actNow: '当前 · {name}',
-        idle: '未修行',
-        stopBtn: '收功',
-        running: '进行中',
-        byproduct: '偶得 {name}',
-        actMeta: '{interval} / 次',
-        startBtn: '开始',
-        realmLine: '境界 · {realm} · {rebirths} 世',
-      },
-      combat: {
-        title: '斗法',
-        subtitle: '当前斗法 {level} 层',
-        enemyMissing: '妖物不知所踪',
-        resting: '休整中',
-        enemyHp: '敌 {ehp}/{hp}',
-        selfStats: '己方 {hp}/{max}',
-        fleeBtn: '撤退',
-        autoFightOn: '自动再战 · 开',
-        autoFightOff: '自动再战 · 关',
-        autoEatOn: '自动嗑丹 · 开',
-        autoEatOff: '自动嗑丹 · 关',
-        noConsumables: '囊中无丹',
-        enemyStats: '气血 {hp}',
-        enemyGold: '灵石 {min}~{max}',
-        dropsSuffix: ' · 掉落 {drops}',
-        fightBtn: '挑战',
-        expSub: '修为 {into}/{need} · 距下一层还需 {left}',
-        engagedBadge: '交战中',
-      },
-      bag: {
-        title: '乾坤袋',
-        matGroup: '材料',
-        consumableGroup: '丹药',
-        priceEach: '每件 {price} 灵石',
-        sellOneBtn: '卖一',
-        sellAllBtn: '全卖',
-        gearWorn: '佩戴中',
-        gearLoose: '囊中',
-        emptyWorn: '未佩戴',
-        emptyLoose: '囊中无物',
-        emptyAll: '空空如也',
-        noAffix: '无属性',
-        wearBtn: '佩戴',
-        takeOffBtn: '卸下',
-        sellBtn: '卖出',
-        smeltBtn: '熔炼',
-        reforgeBtn: '重铸',
-        inscTier: 'T{tier}',
-        inscCondition: '（受{element}）',
-      },
-      craft: {
-        title: '炼制',
-        subtitle: '丹器之道，当前 {level} 层',
-        empty: '无可炼配方',
-        expSub: '修为 {into}/{need}',
-        expMax: '修为已满',
-        actNow: '开炉 · {name}',
-        idle: '未开炉',
-        stopBtn: '熄炉',
-        running: '炼制中',
-        startBtn: '开炉',
-        successRate: '成功率 {rate}%',
-        matRow: '{name} {have}/{need}',
-        recipeMeta: '{interval} / 炉 · 修为 +{exp}',
-      },
-      shop: { title: '坊市', subtitle: '以灵石易物', price: '{price} 灵石', owned: '持有 {count}', buyBtn: '买一' },
-      rebirth: {
-        title: '转生',
-        subtitle: '第 {rebirths} 世',
-        empty: '无兵解之法',
-        xpLine: '总修为 {xp}',
-        gainLine: '可得 {daoYun} 道韵',
-        gateLine: '需 {need} 修为',
-        resetTitle: '将散去',
-        keepTitle: '将长存',
-        performBtn: '兵解',
-        confirmTip: '不可逆',
-        confirmBtn: '确认',
-        cancelBtn: '取消',
-        resetLabels: { skills: '修为', items: '材料', gold: '灵石', buffs: '药力', lastEncounter: '旧账' },
-        keepLabels: { gear: '法宝' },
-      },
-      talents: {
-        title: '道韵天赋',
-        subtitle: '现有 {daoYun} 道韵',
-        empty: '无天赋',
-        costRow: '耗 {cost}',
-        needDaoYun: '道韵不足（需 {cost}）',
-        needPrereq: '前置未成',
-        owned: '已点亮',
-        buyBtn: '点亮',
-      },
-      dungeon: {
-        title: '秘境',
-        subtitle: '层表驱动，逐层推进',
-        empty: '无秘境',
-        floorNow: '当前 · 第 {floor}/{floors} 层',
-        best: '最深 · 第 {best} 层',
-        powerNow: '战力 {power}',
-        powerRec: '推荐 {min}~{max}',
-        enterBtn: '进入',
-        retreatBtn: '撤退',
-        entryKey: '需 {item} ×1',
-        clearBadge: '已通关',
-      },
-      achievements: {
-        title: '成就',
-        subtitle: '已解锁 {unlocked}/{total}',
-        empty: '无成就',
-        statsTitle: '修行统计',
-        statLabels: { kills: '击杀', deaths: '败绩', rebirths: '兵解', cycles: '劳作', dungeonFloorBest: '最深秘境', maxHit: '最大一击', fastestKill: '最快击杀' },
-        hiddenName: '？？？',
-        hiddenDesc: '隐藏成就，达成后揭晓',
-        unlockedBadge: '已达成',
-        progress: '{current}/{target}',
-        rewardGold: '灵石 +{gold}',
-        rewardDaoYun: '道韵 +{daoYun}',
-        rewardItems: '{items}',
-      },
-    },
-  };
+  return grow(resolveNode(TEXTS_SCHEMA.properties?.['shell']), textsSample.shell);
 }
 
 /**

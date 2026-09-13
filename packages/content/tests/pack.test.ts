@@ -577,3 +577,28 @@ describe('texts.shell · footer 版本行（#12 版本策略）', () => {
     expectError(validateContentPack(pack), '/texts/shell/footer/versionLine', 'required');
   });
 });
+
+describe('validateContentPack · 包根白名单（#43 D4，ADR-017 包=纯 content）', () => {
+  it('typo 节名 "achivements" 被拒（曾静默过校验、可导出、editor 不可见）', () => {
+    const pack = makePack();
+    pack['achivements'] = [];
+    expectError(validateContentPack(pack), '/achivements', 'additionalProperties');
+  });
+
+  it('多个未知顶层键逐一独立上报', () => {
+    const pack = makePack();
+    pack['achivements'] = [];
+    pack['elementz'] = [];
+    const result = validateContentPack(pack);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      for (const path of ['/achivements', '/elementz']) {
+        expect(result.errors.find((e) => e.path === path), path).toBeDefined();
+      }
+    }
+  });
+
+  it('真实题材包全 17 键（version + 16 注册节）照常通过（白名单不误伤）', () => {
+    expect(validateContentPack(xiuxianPackJson).ok).toBe(true);
+  });
+});

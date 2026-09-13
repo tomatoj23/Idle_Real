@@ -564,6 +564,16 @@ export interface ShellEvents {
   readonly talentBuyToast: string;
   /** 天赋点亮修行录行（#6；槽位 {name}/{daoYun}）。 */
   readonly talentBuyLog: string;
+  /** 踏入秘境浮提示（#7，dungeon:enter 事件；槽位 {name}/{floor}/{floors}）。 */
+  readonly dungeonEnter: string;
+  /** 层奖励修行录行（#7，dungeon:floor 事件；槽位 {floor}/{floors}/{gold}/{items}）。 */
+  readonly dungeonFloor: string;
+  /** 层奖励道韵修行录行（#7，daoYun > 0 时随层奖励行；槽位 {daoYun}）。 */
+  readonly dungeonDaoYun: string;
+  /** 通关浮提示（#7，dungeon:clear 事件；槽位 {name}/{floors}）。 */
+  readonly dungeonClear: string;
+  /** 离境修行录行（#7，dungeon:leave 事件；槽位 {name}/{floor}/{best}）。 */
+  readonly dungeonLeave: string;
   /** Boss 阶段转场修行录行（#8，boss:phase 事件；槽位 {name}/{phase}）。 */
   readonly bossPhase: string;
   /** 成就达成浮提示（#9，achievement:unlock 事件；槽位 {name}）。 */

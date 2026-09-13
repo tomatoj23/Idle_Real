@@ -7,6 +7,8 @@
  *    oneOf 五形态分流（mat/consumable/equip/blank 器胚/inscription 铭纹），
  *    跨形态字段由分支 additionalProperties:false 直接拒绝。
  * 2. **语义校验**：schema 表达不了的跨引用与形态规则——
+ *    - 包根白名单（#43 D4）：包根只收 version + 16 注册节，未知顶层键
+ *      （typo 节名）加载期拒绝（包=纯 content，ADR-017）；
  *    - id 去重（items / skills / enemies / config.slots）；
  *    - 掉落池 id 必须存在于 items（异宝池还须为 equip 类）；
  *    - 武器 id 与敌人 id 必须在 combatText.moves 注册招式名；
@@ -134,6 +136,12 @@ type SectionName = keyof typeof SECTION_SCHEMAS;
 
 const SECTION_NAMES = Object.keys(SECTION_SCHEMAS) as readonly SectionName[];
 
+/** 包根合法键全集（#43 D4 白名单）：version + 16 注册节；包 = 纯 content（ADR-017）。 */
+const KNOWN_ROOT_KEYS: ReadonlySet<string> = new Set<string>([
+  'version',
+  ...SECTION_NAMES,
+]);
+
 /** 可选内容节：缺省合法（引擎安全兜底），存在则整节强校验。 */
 const OPTIONAL_SECTIONS: ReadonlySet<SectionName> = new Set([
   'config',
@@ -182,6 +190,19 @@ export function validateContentPack(json: unknown): PackValidationResult {
       keyword: 'pattern',
       message: `包版本须为 semver 三段（如 1.2.3），实际：${JSON.stringify(version)}`,
     });
+  }
+
+  // 包根白名单（#43 D4）：未注册顶层键（typo 节名如 "achivements"）加载期
+  // 大声拒绝——曾静默过校验、可导出、editor 不可见。将来确需例外，显式扩
+  // KNOWN_ROOT_KEYS（ADR-017"包=纯 content"，拒绝是对的）。
+  for (const key of Object.keys(pack)) {
+    if (!KNOWN_ROOT_KEYS.has(key)) {
+      errors.push({
+        path: `/${key}`,
+        keyword: 'additionalProperties',
+        message: `未知的包顶层键；合法键 = ${[...KNOWN_ROOT_KEYS].join(' / ')}`,
+      });
+    }
   }
 
   for (const section of SECTION_NAMES) {
