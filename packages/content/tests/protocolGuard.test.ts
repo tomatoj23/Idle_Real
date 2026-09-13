@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { sectionSchemas, validateContent } from '../src/index.js';
 import type { ContentError } from '../src/index.js';
 import { textsSample } from '../src/schema/textsSample.js';
+import { shellFixture } from './fixtures.js';
 
 /**
  * 协议同形守卫（#43，C4 架构评审产物）：ADR-015 三处同步里 types.ts 这条腿
@@ -27,6 +28,21 @@ describe('#43 · texts 双钉样本（types↔schema 同形）', () => {
       result.ok,
       JSON.stringify(result.ok ? [] : result.errors.map((e: ContentError) => `${e.path} [${e.keyword}]`)),
     ).toBe(true);
+  });
+});
+
+describe('#43 · 夹具与样本的自持隔离（复审收口）', () => {
+  it('shellFixture 深处子树（开放键域）不别名样本活对象：就地破坏夹具不得污染 textsSample', () => {
+    const f1 = shellFixture() as Record<string, any>;
+    f1.stats.labels.atk = { label: '破' };
+    f1.pages.rebirth.resetLabels['skills'] = '破';
+    // textsSample 是运行腿的校验载体，被夹具用例污染即顺序敏感假红。
+    expect(textsSample.shell.stats.labels.atk).toEqual({ label: '攻' });
+    expect(textsSample.shell.pages.rebirth.resetLabels['skills']).toBe('修为');
+    // 逐次调用互不串味。
+    const f2 = shellFixture() as Record<string, any>;
+    expect(f2.stats.labels.atk).toEqual({ label: '攻' });
+    expect(f2.pages.rebirth.resetLabels['skills']).toBe('修为');
   });
 });
 
@@ -74,5 +90,15 @@ describe('#43 · 导出面清单一致守卫（src/index.ts ↔ src/schema/index
     // 锚定行首：头注释里字面提及 "export *" 不算违例。
     expect(schemaSurfaceSource).not.toMatch(/^export\s+\*/m);
     expect(mainSurfaceSource).not.toMatch(/^export\s+\*/m);
+  });
+
+  it('入口 export 行全覆盖（逃逸形态网：裸 export const/单行 type alias/export default 不进块抽取，两边同形逃逸会令清单比对静默失明）', () => {
+    for (const src of [schemaSurfaceSource, mainSurfaceSource]) {
+      const residue = src.replace(
+        /export\s+(?:type\s+)?\{[^}]*\}\s*from\s*['"][^'"]+['"];?/g,
+        '',
+      );
+      expect(residue.replace(/^\s+$/gm, '')).not.toMatch(/^export\b/m);
+    }
   });
 });

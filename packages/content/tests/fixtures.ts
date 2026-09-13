@@ -92,12 +92,15 @@ function grow(node: SchemaNode, values: object): Record<string, unknown> {
 }
 
 /**
- * 键全集由 schema 机械保证的 shell 夹具（每调用产出新对象，用例可安全破坏）。
- * 值源 = 双钉样本的 shell 节（textsSample）：TextsSection 接口无隐式索引
- * 签名，object 形参承接、grow 内部经 isObject 收窄。
+ * 键全集由 schema 机械保证的 shell 夹具（每调用产出全新深拷贝，用例可就地
+ * 破坏）。值源 = 双钉样本的 shell 节（textsSample），但必须 **structuredClone
+ * 后入场**：生长器对开放键域子树（labels/reject/resetLabels 等，无骨架可长）
+ * 原样放行引用，不拷贝则这些子树别名样本活对象——夹具用例就地破坏会污染
+ * textsSample（运行腿的校验载体，protocolGuard 有自持隔离回归测）。
+ * TextsSection 接口无隐式索引签名，object 形参承接、grow 内部经 isObject 收窄。
  */
 export function shellFixture(): Record<string, unknown> {
-  return grow(resolveNode(TEXTS_SCHEMA.properties?.['shell']), textsSample.shell);
+  return grow(resolveNode(TEXTS_SCHEMA.properties?.['shell']), structuredClone(textsSample.shell));
 }
 
 /**
