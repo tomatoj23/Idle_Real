@@ -146,7 +146,7 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 | `hp` | 同上（气血曲线基线上叠加） | 词条标尺按 hp÷hpDivider 折算 |
 | `crit` | 同上（钳 `config.combat.critCap`） | 百分点；标尺按 crit×critScale 折算 |
 | `gatherXp` | engine `game.ts` completeActivityOnce / settleOffline（倍率基线 1） | 采集修为加成（离线/在线同式） |
-| `gatherSpeed` | engine `game.ts` settleActivity / settleOffline + snapshot `activityInterval`（#6） | 采集轮间隔缩放：有效间隔 = 基础间隔 ÷ 速度（`effectiveIntervalOf` 单一来源）；速度 ≤ 0 = 采集冻结 |
+| `gatherSpeed` | engine `game.ts` settleActivity / settleOffline + snapshot `activityIntervals`（#40） | 采集轮间隔缩放：有效间隔 = 基础间隔 ÷ 速度（`effectiveIntervalOf` 单一来源）；速度 ≤ 0 = 采集冻结 |
 | `xpMult` | engine `game.ts` grantExp（#6，倍率基线 1） | 全经验倍率：采集/炼制/斗法/离线同路单点，与 gatherXp 叠乘 |
 | `offlineCap` | engine `game.ts` settleOffline（#6，flat 毫秒累计） | 离线结算时长上限：Σ ≤ 0 = 不设限，超限部分不入账 |
 
@@ -411,8 +411,10 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
   （`{nodeId, name, cost, daoYun}`）；
 - 动作：`rebirth:perform`（reject：not-available / in-combat / no-progress）、
   `talent:buy`（reject：not-available / not-found / prereq / no-daoyun，已点亮幂等）；
-- snapshot 展示投影：`stats`（含天赋贡献）+ `activityInterval`（有效采集轮间隔，
-  gatherSpeed 消费点的壳面投影，恢复侧忽略）。
+- snapshot 展示投影（#40，字段恒在、恢复侧忽略）：`stats`（含天赋贡献）+
+  `enemy`/`minions`（战斗生效视图单点组合，无战斗 = null）+
+  `activityIntervals`（全活动有效轮间隔映射 `skillId:index` → 毫秒，
+  gatherSpeed 消费点的壳面投影，取代旧单值 activityInterval）。
 
 ## dungeons 秘境节（#7：分层爬塔 / 层序列战斗）
 
@@ -554,8 +556,9 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
   `boss:summon`（#30：`{enemyId, enemyName, phase, count: 实召数量}`；
   战报行由召唤叙事池承载，池缺省不播报——零兜底文案）；
 - UI 呈现：阶段徽标（阶段名 content 直出）+ 血条分段刻度（刻度位置 =
-  阈值），生效数值走 `combatEnemyView` 组合投影（秘境 × Boss 单点组合）；
-  召唤物行 = 首槽集火徽标（engagedBadge 复用）+ 投影血条（enemyHp 同模板）。
+  阈值），生效数值走 snapshot `enemy`/`minions` 投影（#40：秘境 × Boss
+  单点组合外显，壳零公式复算）；召唤物行 = 首槽集火徽标（engagedBadge
+  复用）+ 投影血条（enemyHp 同模板）。
 
 ## achievements 成就节（#9：统计 snapshot 驱动）
 

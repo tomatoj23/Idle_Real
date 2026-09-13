@@ -160,4 +160,19 @@ describe('#40 · snapshot 战斗/活动视图投影', () => {
     expect(a.enemy).toEqual(b.enemy);
     expect(a.activityIntervals).not.toBe(b.activityIntervals);
   });
+
+  it('召唤物投影行脱离活状态：持有旧快照不随 tick 变更（hp/et 就地变更须隔离）', () => {
+    const game = createGame({ content: makeProjectionPack(), clock: new ManualClock(), save: makeSave() });
+    game.dispatch({ type: 'combat:start', payload: { enemyId: 'e1' } });
+    let snap = game.snapshot();
+    for (let i = 0; i < 60 && (snap.minions?.length ?? 0) === 0; i++) {
+      game.tick(1000);
+      snap = game.snapshot();
+    }
+    const held = snap.minions![0]!;
+    const heldEt = held.minion.et;
+    game.tick(1000);
+    expect(snap.minions![0]!.minion.et).toBe(heldEt); // 旧快照冻结（et 每 tick 就地累加，必有牙）
+    expect(game.snapshot().minions![0]!.minion).not.toBe(held.minion); // 新帧新对象
+  });
 });

@@ -1741,6 +1741,8 @@ export function createGame(options: CreateGameOptions): Game {
   /**
    * 召唤物视图组（minionViewOf 单点组合，槽位序 = 集火序）：无战斗 = null；
    * 投影失效槽位（池行缺失/包变更缩表）剔除——与战斗内清槽同律，绝不崩。
+   * 槽位态浅拷脱离活状态（hp/et 随 tick 就地变更，快照必须自持，与
+   * cloneState 同律）；视图浅拷脱离 content 引用。
    */
   function minionProjections(): CombatMinionProjection[] | null {
     const c = state.combat;
@@ -1748,7 +1750,7 @@ export function createGame(options: CreateGameOptions): Game {
     const rows: CombatMinionProjection[] = [];
     for (const minion of c.summons) {
       const view = minionViewOf(minion);
-      if (view) rows.push({ minion, view: { ...view } });
+      if (view) rows.push({ minion: { ...minion }, view: { ...view } });
     }
     return rows;
   }
