@@ -4,7 +4,7 @@
  * - 阶段徽标（进入脚本阶段后显示阶段名，content 数据直出）；
  * - 血条分段刻度（阈值位置 = content 阶段脚本，非 Boss 无刻度）；
  * - boss:phase 事件 → events.bossPhase 模板入浮提示与修行录；
- * - 生效视图走引擎组合投影（combatEnemyView），壳零缩放公式。
+ * - 生效数值走引擎 snapshot 投影（#40：resolveEnemy/minionViewOf 单点组合外显），壳零缩放公式。
  *
  * 夹具包按 #26 先例内联（壳文案只配被测键，缺键回显键名与生产同码）。
  */

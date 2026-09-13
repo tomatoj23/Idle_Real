@@ -23,6 +23,7 @@ import {
   gearParamsOf,
   playerMaxHp,
   progressionParamsOf,
+  recipesOf,
   signatureOf,
   skillsOf,
   textsOf,
@@ -68,7 +69,14 @@ import {
   type CombatSummonState,
   type GameState,
 } from './state.js';
-import type { Clock, GameAction, GameContent, PlayerStatsView, SaveData } from './types.js';
+import type {
+  Clock,
+  CombatMinionProjection,
+  GameAction,
+  GameContent,
+  PlayerStatsView,
+  SaveData,
+} from './types.js';
 import {
   applyRebirthReset,
   effectiveIntervalOf,
@@ -1717,18 +1725,55 @@ export function createGame(options: CreateGameOptions): Game {
     });
   }
 
-  /** 进行中活动的有效轮间隔（snapshot 展示投影，#6）；无活动 = undefined。 */
-  function runningIntervalOf(): number | undefined {
-    const act = state.activity;
-    if (!act) return undefined;
-    const skill = findSkill(content, act.skillId);
-    if (skill?.kind === 'craft') {
-      const recipe = findRecipe(content, act.index);
-      return recipe && recipe.skill === skill.id ? recipe.interval : undefined;
+  /* ---------- 快照视图投影（#40）：敌方/召唤物/逐活动间隔，壳层零公式复算 ---------- */
+
+  /**
+   * 战斗中敌人生效视图（resolveEnemy 单点组合：秘境层倍率在前、Boss 阶段
+   * 修正在后）：无战斗 = null。浅拷贝脱离 content 引用，快照自持。
+   */
+  function enemyProjection(): EnemyView | null {
+    const c = state.combat;
+    if (!c) return null;
+    const view = resolveEnemy(c.enemyId);
+    return view ? { ...view } : null;
+  }
+
+  /**
+   * 召唤物视图组（minionViewOf 单点组合，槽位序 = 集火序）：无战斗 = null；
+   * 投影失效槽位（池行缺失/包变更缩表）剔除——与战斗内清槽同律，绝不崩。
+   */
+  function minionProjections(): CombatMinionProjection[] | null {
+    const c = state.combat;
+    if (!c) return null;
+    const rows: CombatMinionProjection[] = [];
+    for (const minion of c.summons) {
+      const view = minionViewOf(minion);
+      if (view) rows.push({ minion, view: { ...view } });
     }
-    const found = findActivity(content, act.skillId, act.index);
-    if (!found) return undefined;
-    return effectiveIntervalOf(found.activity.interval, gatherSpeedOf(playerContributions()));
+    return rows;
+  }
+
+  /**
+   * 全活动有效轮间隔映射：键 = `skillId:index`（壳层活动卡寻址同式）。
+   * 采集按 gatherSpeed 缩放（与 settleActivity/settleOffline 同调
+   * effectiveIntervalOf，禁第二份缩放式）；craft 动作是 recipes
+   * （index = 包内下标），为配方原值（与 runningIntervalOf 旧口径一致）。
+   */
+  function activityIntervalsOf(): Record<string, number> {
+    const speed = gatherSpeedOf(playerContributions());
+    const out: Record<string, number> = {};
+    for (const skill of skillsOf(content)) {
+      if (skill.kind === 'craft') {
+        recipesOf(content).forEach((recipe: RecipeView, index: number) => {
+          if (recipe.skill === skill.id) out[`${skill.id}:${index}`] = recipe.interval;
+        });
+        continue;
+      }
+      (skill.activities ?? []).forEach((activity: ActivityView, index: number) => {
+        out[`${skill.id}:${index}`] = effectiveIntervalOf(activity.interval, speed);
+      });
+    }
+    return out;
   }
 
   return {
@@ -2398,7 +2443,6 @@ export function createGame(options: CreateGameOptions): Game {
 
     snapshot(): SaveData {
       // GameState 无索引签名，与 GameContent 同理放宽为透明 Record（#2 先例）。
-      const runningInterval = runningIntervalOf();
       return {
         version: 1,
         time,
@@ -2406,10 +2450,12 @@ export function createGame(options: CreateGameOptions): Game {
         state: cloneState(state) as unknown as Readonly<Record<string, unknown>>,
         // 属性面板（#4 验收：佩戴稀有度武器 → snapshot 反映倍率+词条）。
         stats: playerStats(),
-        // 进行中活动的有效轮间隔（#6 展示投影）：采集按 gatherSpeed 缩放
-        // （与 settleActivity/settleOffline 同调 effectiveIntervalOf），炼制为
-        // 配方原值；进度条零公式复算。非存档必需，恢复侧忽略。
-        ...(runningInterval !== undefined ? { activityInterval: runningInterval } : {}),
+        // 战斗/活动视图投影（#40 D1/D2：字段恒在，壳层零公式复算；一次取值
+        // = 一帧完整视图，无独立 getter 的半新半旧帧问题）。展示投影非存档
+        // 必需，恢复侧忽略。
+        enemy: enemyProjection(),
+        minions: minionProjections(),
+        activityIntervals: activityIntervalsOf(),
       };
     },
   };

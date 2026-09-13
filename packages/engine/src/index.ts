@@ -105,6 +105,7 @@ export type {
 
 export type {
   Clock,
+  CombatMinionProjection,
   GameAction,
   GameContent,
   GameEvent,

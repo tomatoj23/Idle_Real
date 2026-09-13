@@ -5,6 +5,15 @@
  * 不理解任何具体玩法字段。
  */
 
+import type { EnemyView } from './contentView.js';
+import type { CombatSummonState } from './state.js';
+
+/** 召唤物投影行（#40 D4 纯数据）：槽位态（集火序）+ 生效视图，壳层直读零组合。 */
+export interface CombatMinionProjection {
+  readonly minion: CombatSummonState;
+  readonly view: EnemyView;
+}
+
 /** 时钟抽象：注入点，测试用假时钟替代真实时间。 */
 export interface Clock {
   /** 当前时刻，单位毫秒。 */
@@ -49,11 +58,25 @@ export interface SaveData {
   /** 玩家属性面板（#4）：应用层展示用，非存档必需。 */
   readonly stats?: PlayerStatsView;
   /**
-   * 进行中活动的有效轮间隔（毫秒，#6 展示投影）：采集按 gatherSpeed 缩放
-   * （与引擎结算同调 effectiveIntervalOf），炼制为配方原值；无活动时省略。
+   * 战斗中敌人生效视图（#40 展示投影）：秘境层倍率在前、Boss 阶段修正在后
+   * （resolveEnemy 单点组合）；无战斗 = null。运行时恒在（snapshot 必发射，
+   * D2）；类型可选与 stats? 同律——存档夹具/旧档缺字段不破型。
    * 应用层展示用，非存档必需（恢复侧忽略）。
    */
-  readonly activityInterval?: number;
+  readonly enemy?: EnemyView | null;
+  /**
+   * 战斗中召唤物生效视图组（#40 展示投影）：槽位序 = 引擎集火序，投影失效
+   * 槽位（包变更缩表）剔除；无战斗 = null。运行时恒在（D2）。
+   * 应用层展示用，非存档必需。
+   */
+  readonly minions?: readonly CombatMinionProjection[] | null;
+  /**
+   * 全活动有效轮间隔映射（#40 展示投影）：键 = `skillId:index`
+   * （壳层活动卡寻址同式），值为有效毫秒——采集按 gatherSpeed 缩放
+   * （与结算同调 effectiveIntervalOf），炼制为配方原值。运行时恒在（D2）。
+   * 取代旧单值 activityInterval（同一事实单一真相）。非存档必需。
+   */
+  readonly activityIntervals?: Readonly<Record<string, number>>;
 }
 
 /**

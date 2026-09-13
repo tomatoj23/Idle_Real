@@ -18,10 +18,8 @@ import {
   EventBus,
   ENGINE_VERSION,
   achievementProgressOf,
-  bossEnemyOf,
   craftMissingOf,
   craftSuccessRateOf,
-  dungeonFloorEnemyOf,
   dungeonGateOf,
   dungeonLayerOf,
   dungeonsOf,
@@ -44,10 +42,7 @@ import {
   rebirthPreviewOf,
   realmOf,
   shopAffordOf,
-  summonMinionOf,
   talentGateOf,
-  type CombatSummonState,
-  type EnemyView,
   type GameAction,
   type GameState,
   type GearInstance,
@@ -568,6 +563,10 @@ export function buildUi(
 
   /* ---------- 渲染 ---------- */
 
+  /** 活动寻址键（#40）：activityIntervals 映射与活动卡 data-key 共用的单一拼装式。 */
+  const actKeyOf = (act: { readonly skillId: string; readonly index: number }): string =>
+    `${act.skillId}:${act.index}`;
+
   const signature = (st: GameState, snap: SaveData): string =>
     JSON.stringify([
       activeTab,
@@ -601,6 +600,11 @@ export function buildUi(
       Object.entries(st.stats ?? {}).sort(),
       [...(st.achievements ?? [])].sort(),
       snap.stats ?? null,
+      // 引擎视图投影（#40）：投影任何变化（Boss 阶段修正/召唤入场/interval
+      // 缩放）都触发页面重建——漏加 = 签名不变 → 静默 stale render。
+      snap.enemy ?? null,
+      snap.minions ?? null,
+      snap.activityIntervals ?? null,
     ]);
 
   function render(): void {
@@ -631,7 +635,7 @@ export function buildUi(
       renderPage(st, snap);
     }
     updateActivityBars(st, snap);
-    updateEnemyBar(st);
+    updateEnemyBar(st, snap);
     syncFlogScroll();
   }
 
@@ -657,8 +661,8 @@ export function buildUi(
   }
 
   function renderPage(st: GameState, snap: SaveData): void {
-    if (activeTab === 'skills') pageEl.innerHTML = renderSkills(st);
-    else if (activeTab === 'craft') pageEl.innerHTML = renderCraft(st);
+    if (activeTab === 'skills') pageEl.innerHTML = renderSkills(st, snap);
+    else if (activeTab === 'craft') pageEl.innerHTML = renderCraft(st, snap);
     else if (activeTab === 'combat') pageEl.innerHTML = renderCombat(st, snap);
     else if (activeTab === 'dungeon') pageEl.innerHTML = renderDungeon(st, snap);
     else if (activeTab === 'bag') pageEl.innerHTML = renderBag(st);
@@ -677,7 +681,7 @@ export function buildUi(
     }
   }
 
-  function renderSkills(st: GameState): string {
+  function renderSkills(st: GameState, snap: SaveData): string {
     const skill = skillById.get(selectedSkillId) ?? gatherSkills[0];
     if (!skill) return `<section class="page"><p class="empty">${esc(T('pages.skills.empty'))}</p></section>`;
 
@@ -699,7 +703,9 @@ export function buildUi(
     const act = st.activity;
     const actSkill = act ? skillById.get(act.skillId) : undefined;
     const actDef = act ? actSkill?.activities?.[act.index] : undefined;
-    const actPct = act && actDef ? Math.min(100, (act.progress / actDef.interval) * 100) : 0;
+    // 有效间隔单一来源 = 引擎快照映射（#40：gatherSpeed 缩放后与结算同调）。
+    const actInterval = act ? snap.activityIntervals?.[actKeyOf(act)] : undefined;
+    const actPct = act && actInterval ? Math.min(100, (act.progress / actInterval) * 100) : 0;
 
     const chips = content.skills
       .filter((s) => s.kind !== 'craft')
@@ -736,8 +742,8 @@ export function buildUi(
         <div class="status-act">
           ${
             act && actDef
-              ? `<div class="act-now"><span>${esc(T('pages.skills.actNow', { name: actDef.name }))}</span><b data-act-pct data-key="${act.skillId}:${act.index}">${Math.floor(actPct)}%</b></div>
-                 <div class="bar bar-jade"><i data-bar="activity" data-key="${act.skillId}:${act.index}" style="width:${actPct}%"></i></div>
+              ? `<div class="act-now"><span>${esc(T('pages.skills.actNow', { name: actDef.name }))}</span><b data-act-pct data-key="${actKeyOf(act)}">${Math.floor(actPct)}%</b></div>
+                 <div class="bar bar-jade"><i data-bar="activity" data-key="${actKeyOf(act)}" style="width:${actPct}%"></i></div>
                  <button class="btn btn-ghost" data-act="stop">${esc(T('pages.skills.stopBtn'))}</button>`
               : `<div class="act-now idle"><span>${esc(T('pages.skills.idle'))}</span></div>`
           }
@@ -755,7 +761,9 @@ export function buildUi(
         const running = act?.skillId === skill.id && act.index === i;
         const out = itemById.get(a.output.item);
         const bonus = a.byproduct ? itemById.get(a.byproduct.item) : undefined;
-        const pct = running && act ? Math.min(100, (act.progress / a.interval) * 100) : 0;
+        // 卡片进度条同读引擎快照映射（#40：基础 interval 复算清退——天赋点亮后速率同步）。
+        const runInterval = running && act ? snap.activityIntervals?.[actKeyOf(act)] : undefined;
+        const pct = running && act && runInterval ? Math.min(100, (act.progress / runInterval) * 100) : 0;
         return `<article class="act-card${running ? ' running' : ''}${unlocked ? '' : ' locked'}">
           <header><b>${esc(a.name)}</b>${running ? `<em class="act-badge">${esc(T('pages.skills.running'))}</em>` : ''}</header>
           <div class="act-yield">
@@ -785,15 +793,7 @@ export function buildUi(
 
   /* ---------- 炼制页（#5）：配方卡 = 材料着色 + 成功率 + 进度条 ---------- */
 
-  /** 活动槽 interval 解析（craft 动作归 recipes，index = 包内 recipes 下标）。 */
-  const activityIntervalOf = (skillId: string, index: number): number | undefined => {
-    const skill = skillById.get(skillId);
-    if (!skill) return undefined;
-    if (skill.kind === 'craft') return content.recipes[index]?.interval;
-    return skill.activities?.[index]?.interval;
-  };
-
-  function renderCraft(st: GameState): string {
+  function renderCraft(st: GameState, snap: SaveData): string {
     if (craftSkills.length === 0 || content.recipes.length === 0) {
       return `<section class="page"><p class="empty">${esc(T('pages.craft.empty'))}</p></section>`;
     }
@@ -806,7 +806,8 @@ export function buildUi(
 
     const act = st.activity;
     const runningHere = act?.skillId === skill.id;
-    const actInterval = act ? activityIntervalOf(act.skillId, act.index) : undefined;
+    // 有效间隔单一来源 = 引擎快照映射（#40；craft 动作 = 配方原值）。
+    const actInterval = act ? snap.activityIntervals?.[actKeyOf(act)] : undefined;
     const actPct = act && actInterval ? Math.min(100, (act.progress / actInterval) * 100) : 0;
 
     const chips = craftSkills
@@ -838,8 +839,8 @@ export function buildUi(
         <div class="status-act">
           ${
             act && runningHere
-              ? `<div class="act-now"><span>${esc(T('pages.craft.actNow', { name: act.name }))}</span><b data-act-pct data-key="${act.skillId}:${act.index}">${Math.floor(actPct)}%</b></div>
-                 <div class="bar bar-jade"><i data-bar="activity" data-key="${act.skillId}:${act.index}" style="width:${actPct}%"></i></div>
+              ? `<div class="act-now"><span>${esc(T('pages.craft.actNow', { name: act.name }))}</span><b data-act-pct data-key="${actKeyOf(act)}">${Math.floor(actPct)}%</b></div>
+                 <div class="bar bar-jade"><i data-bar="activity" data-key="${actKeyOf(act)}" style="width:${actPct}%"></i></div>
                  <button class="btn btn-ghost" data-act="stop">${esc(T('pages.craft.stopBtn'))}</button>`
               : `<div class="act-now idle"><span>${esc(T('pages.craft.idle'))}</span></div>`
           }
@@ -1060,22 +1061,6 @@ export function buildUi(
 
   /* ---------- Boss 呈现（#8）：阶段徽标 + 血条分段刻度 ---------- */
 
-  /** 战斗中的敌人生效视图（单点组合）：秘境层倍率在前、Boss 阶段修正在后。 */
-  const combatEnemyView = (st: GameState): EnemyView | undefined => {
-    const combat = st.combat;
-    if (!combat) return undefined;
-    let view: EnemyView | undefined;
-    if (st.dungeon) {
-      view = dungeonFloorEnemyOf(content, st.dungeon.dungeonId, st.dungeon.floor, combat.enemyId);
-    } else {
-      view = content.enemies.find((entry) => entry.id === combat.enemyId);
-    }
-    if (view && combat.bossPhase >= 0) {
-      view = bossEnemyOf(content, combat.enemyId, combat.bossPhase, view) ?? view;
-    }
-    return view;
-  };
-
   /** Boss 徽标与血条分段刻度（非 Boss = 空串；刻度位置 = 阶段阈值，content 数据；
    *  阶段下标越界（包变更缩表）时徽标不渲染——与 bossEnemyOf 的 undefined 兜底同律）。 */
   const bossDecoOf = (st: GameState): { badge: string; ticks: string } => {
@@ -1094,36 +1079,13 @@ export function buildUi(
   /* ---------- 召唤物呈现（#30）：血条行 + 集火徽标 ---------- */
 
   /**
-   * 战斗中的召唤物生效视图（槽位态 × 引擎投影）：秘境层倍率在前、召唤
-   * mult 在后（与主敌人 combatEnemyView 同一组合式）；包变更缩表的槽位
-   * 投影失效 → 该行不渲染（与引擎 minionViewOf 防御兜底同律）。
-   */
-  const combatMinionViews = (
-    st: GameState,
-  ): Array<{ readonly minion: CombatSummonState; readonly view: EnemyView }> => {
-    const combat = st.combat;
-    if (!combat || combat.summons.length === 0) return [];
-    const boss = findBossOf(content, combat.enemyId);
-    if (!boss) return [];
-    const out: Array<{ minion: CombatSummonState; view: EnemyView }> = [];
-    for (const minion of combat.summons) {
-      const scaled = st.dungeon
-        ? dungeonFloorEnemyOf(content, st.dungeon.dungeonId, st.dungeon.floor, minion.enemyId)
-        : undefined;
-      const base = scaled ?? content.enemies.find((entry) => entry.id === minion.enemyId);
-      if (!base) continue;
-      const view = summonMinionOf(content, boss, minion.phase, minion.enemyId, base) ?? base;
-      out.push({ minion, view });
-    }
-    return out;
-  };
-
-  /**
    * 召唤物行（斗法页/秘境页共用）：首槽 = 集火目标（engagedBadge 徽标复用，
    * 集火序 = 引擎先入先出，壳零排序复算）；血量走 enemyHp 同一模板。
+   * 槽位视图 = 引擎快照投影组（#40：minionViewOf 单点组合外显，壳零缩放
+   * 公式；投影失效槽位已被引擎剔除 → 该行不渲染）。
    */
-  const minionsHtml = (st: GameState): string =>
-    combatMinionViews(st)
+  const minionsHtml = (snap: SaveData): string =>
+    (snap.minions ?? [])
       .map(({ minion, view }, index) => {
         const pct = Math.max(0, Math.min(100, (minion.hp / (view.hp || 1)) * 100));
         return `<div class="minion-row${index === 0 ? ' focus' : ''}">
@@ -1160,8 +1122,8 @@ export function buildUi(
       if (!dungeon) {
         return `<section class="page"><p class="empty">${esc(T('pages.dungeon.empty'))}</p></section>`;
       }
-      // 当前层敌人走引擎组合投影（秘境层倍率 × Boss 阶段修正，combatEnemyView）。
-      const enemy = combatEnemyView(st);
+      // 当前层敌人 = 引擎快照投影（#40：秘境层倍率 × Boss 阶段修正，零壳层组合）。
+      const enemy = snap.enemy;
       const deco = bossDecoOf(st);
       const ehpPct =
         enemy && st.combat ? Math.max(0, Math.min(100, (st.combat.ehp / enemy.hp) * 100)) : 0;
@@ -1180,7 +1142,7 @@ export function buildUi(
               <div class="enemy-head"><b>${esc(enemy?.name ?? '')}</b><span class="enemy-lv">${esc(T('units.level', { v: enemy?.level ?? 0 }))}</span>${deco.badge}</div>
               <div class="bar bar-red">${deco.ticks}<i data-bar="enemy" style="width:${ehpPct}%"></i></div>
               <div class="enemy-sub">${esc(T('pages.combat.enemyHp', { ehp: st.combat ? Math.max(0, Math.ceil(st.combat.ehp)) : 0, hp: enemy?.hp ?? 0 }))}</div>
-              <div class="minion-rows">${minionsHtml(st)}</div>
+              <div class="minion-rows">${minionsHtml(snap)}</div>
               <div class="bar bar-jade"><i style="width:${hpPct}%"></i></div>
               <div class="enemy-sub">${esc(T('pages.combat.selfStats', { hp: Math.floor(st.hp), max: snap.stats?.maxHp ?? '—', atk: statValueText('atk', snap.stats?.atk ?? '—'), def: statValueText('def', snap.stats?.def ?? '—'), crit: statValueText('crit', snap.stats?.crit ?? '—') }))}</div>
             </div>
@@ -1329,8 +1291,8 @@ export function buildUi(
       </div>`;
 
     if (combat) {
-      // 生效视图走引擎组合投影（Boss 阶段修正在案时随阶段变化，combatEnemyView）。
-      const enemy = combatEnemyView(st);
+      // 生效视图 = 引擎快照投影（#40：Boss 阶段修正在案时随阶段变化，零壳层组合）。
+      const enemy = snap.enemy;
       if (!enemy) return `<section class="page"><p class="empty">${esc(T('pages.combat.enemyMissing'))}</p></section>`;
       const deco = bossDecoOf(st);
       const ehpPct = Math.max(0, Math.min(100, (combat.ehp / enemy.hp) * 100));
@@ -1350,7 +1312,7 @@ export function buildUi(
               <div class="enemy-head"><b>${esc(enemy.name)}</b><span class="enemy-lv">${esc(T('units.level', { v: enemy.level }))}</span>${resting ? `<em class="act-badge">${esc(T('pages.combat.resting'))}</em>` : ''}${deco.badge}</div>
               <div class="bar bar-red">${deco.ticks}<i data-bar="enemy" style="width:${ehpPct}%"></i></div>
               <div class="enemy-sub">${esc(T('pages.combat.enemyHp', { ehp: Math.max(0, Math.ceil(combat.ehp)), hp: enemy.hp }))}</div>
-              <div class="minion-rows">${minionsHtml(st)}</div>
+              <div class="minion-rows">${minionsHtml(snap)}</div>
               <div class="bar bar-jade"><i style="width:${hpPct}%"></i></div>
               <div class="enemy-sub">${esc(T('pages.combat.selfStats', { hp: Math.floor(st.hp), max: snap.stats?.maxHp ?? '—', atk: statValueText('atk', snap.stats?.atk ?? '—'), def: statValueText('def', snap.stats?.def ?? '—'), crit: statValueText('crit', snap.stats?.crit ?? '—') }))}</div>
             </div>
@@ -1525,11 +1487,11 @@ export function buildUi(
     return `<section class="page"><h2 class="page-title">${esc(T('pages.shop.title'))}</h2><p class="page-sub">${esc(T('pages.shop.subtitle'))}</p>${rows}</section>`;
   }
 
-  /** 敌方血条轻量更新（斗法页/秘境页存在时每帧刷新；组合投影与结算同调）。 */
-  function updateEnemyBar(st: GameState): void {
+  /** 敌方血条轻量更新（斗法页/秘境页存在时每帧刷新；读引擎快照投影，#40）。 */
+  function updateEnemyBar(st: GameState, snap: SaveData): void {
     const bar = pageEl.querySelector<HTMLElement>('[data-bar="enemy"]');
     if (!bar || !st.combat) return;
-    const enemy = combatEnemyView(st);
+    const enemy = snap.enemy;
     if (!enemy) return;
     bar.style.width = `${Math.max(0, Math.min(100, (st.combat.ehp / enemy.hp) * 100))}%`;
   }
@@ -1539,12 +1501,10 @@ export function buildUi(
     let key = '';
     let pct = 0;
     if (st.activity) {
-      // 有效间隔单一来源 = 引擎快照投影（#6：gatherSpeed 缩放后与结算同调）；
-      // 快照未带（如 craft 页旧路径）回落内容原值。
-      const interval =
-        snap.activityInterval ?? activityIntervalOf(st.activity.skillId, st.activity.index);
+      // 有效间隔单一来源 = 引擎快照映射（#40：gatherSpeed 缩放后与结算同调）。
+      const interval = snap.activityIntervals?.[actKeyOf(st.activity)];
       if (interval !== undefined && interval > 0) {
-        key = `${st.activity.skillId}:${st.activity.index}`;
+        key = actKeyOf(st.activity);
         pct = Math.min(100, (st.activity.progress / interval) * 100);
       }
     }
