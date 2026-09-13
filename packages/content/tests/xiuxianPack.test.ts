@@ -141,18 +141,26 @@ describe('修仙题材包 · 验收（issue #2）', () => {
 
 describe('content 包分居（#23，#29 守卫补强）', () => {
   it('导出面键全集快照：主入口恒为纯协议，任何新增导出立即红灯', () => {
-    // 值导出键全集（类型导出编译擦除，运行时导出面即此四项）。
+    // 值导出键全集（类型导出编译擦除，运行时导出面即此八项）。
     // 旧防回归键 loadDefaultContent / loadXiuxianPack / xiuxianPackJson 一旦出现
     // 也会令快照多出键而红灯；失败 diff 会点名多出的键名。
     // 题材侧导出只能走 @wendao/content/packs/* 子路径（ADR-017）。
     // sectionSchemas（#11 编辑器）：节 schema 注册表属通用协议数据
     // （ADR-017 协议层 = schema/类型/校验），编辑器表单生成与节级校验同源。
-    expect(Object.keys(contentApi).sort()).toEqual([
-      'formatContentErrors',
-      'sectionSchemas',
-      'validateContent',
-      'validateContentPack',
-    ]);
+    // 关键词矩阵四件套（#53）：界约束子集单点声明 + 判别式单一解析 +
+    // formAttr/skeleton 两列的消费入口，editor 两解释器经此同源。
+    expect(Object.keys(contentApi).sort()).toEqual(
+      [
+        'KEYWORD_MATRIX',
+        'discriminatorOf',
+        'formatContentErrors',
+        'formAttrsOf',
+        'sectionSchemas',
+        'skeletonAttr',
+        'validateContent',
+        'validateContentPack',
+      ].sort(),
+    );
   });
 });
 

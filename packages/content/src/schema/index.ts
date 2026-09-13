@@ -10,6 +10,25 @@
 export { validateContent } from './validate.js';
 export type { ContentError, ValidationResult, JsonSchema } from './validate.js';
 
+// 关键词支持矩阵（#53）：界约束关键词子集单点声明 + oneOf 判别式单一解析。
+export {
+  KEYWORD_MATRIX,
+  discriminatorOf,
+  formAttrsOf,
+  skeletonAttr,
+} from './keywords.js';
+export type {
+  AttrFamily,
+  ArrayFormAttrs,
+  DictFormAttrs,
+  EnforceRule,
+  FormAttrsOf,
+  KeywordRow,
+  NumberFormAttrs,
+  SkeletonPolicy,
+  StringFormAttrs,
+} from './keywords.js';
+
 export { validateContentPack, formatContentErrors, sectionSchemas } from './pack.js';
 export type { PackValidationResult, SectionSchemas } from './pack.js';
 

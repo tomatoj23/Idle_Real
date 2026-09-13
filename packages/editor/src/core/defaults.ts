@@ -7,7 +7,8 @@
  * 字典 requiredKeys（verbs 的 basic 恒需键）。
  */
 
-import type { FormNode, ObjectNode, OneOfNode, StringNode } from './model.js';
+import { skeletonAttr } from '@wendao/content';
+import type { FormNode, NumberNode, ObjectNode, OneOfNode, StringNode } from './model.js';
 
 /** 生成节点对应的骨架值。 */
 export function skeletonOf(node: FormNode): unknown {
@@ -25,7 +26,7 @@ export function skeletonOf(node: FormNode): unknown {
       return objectSkeleton(node);
     case 'array': {
       const items: unknown[] = [];
-      const min = node.minItems ?? 0;
+      const min = skeletonAttr<number>(node, 'itemCount') ?? 0;
       for (let i = 0; i < min; i++) {
         items.push(skeletonOf(node.item));
       }
@@ -37,7 +38,7 @@ export function skeletonOf(node: FormNode): unknown {
         value[key] = skeletonOf(node.valueNode);
       }
       // minProperties 兜底：无 requiredKeys 时给一个占位键（moves 等）。
-      if (Object.keys(value).length === 0 && (node.minProperties ?? 0) > 0) {
+      if (Object.keys(value).length === 0 && (skeletonAttr<number>(node, 'keyPlaceholder') ?? 0) > 0) {
         value['key1'] = skeletonOf(node.valueNode);
       }
       return value;
@@ -50,21 +51,23 @@ export function skeletonOf(node: FormNode): unknown {
 /**
  * 字符串占位：pattern 字段给满足模式的样例（id/kind 等），minLength 约束
  * 用「待填」补足（并尊重 maxLength 截断）——骨架必须能直接过节 schema。
+ * 各关键词的节点属性按矩阵 skeleton 列的策略名读取（#53）。
  */
 const PATTERN_SAMPLES: readonly string[] = ['placeholder', 'abc', 'a', 'key1'];
 
 function sampleString(node: StringNode): string {
-  if (node.pattern !== undefined) {
+  const pattern = skeletonAttr<string>(node, 'patternSample');
+  if (pattern !== undefined) {
     let re: RegExp;
     try {
-      re = new RegExp(node.pattern);
+      re = new RegExp(pattern);
     } catch {
       return 'placeholder';
     }
     return PATTERN_SAMPLES.find((sample) => re.test(sample)) ?? 'placeholder';
   }
-  const min = node.minLength ?? 0;
-  const max = node.maxLength ?? Number.MAX_SAFE_INTEGER;
+  const min = skeletonAttr<number>(node, 'minPad') ?? 0;
+  const max = skeletonAttr<number>(node, 'maxTruncate') ?? Number.MAX_SAFE_INTEGER;
   let sample = min > 0 ? '待填' : '';
   while (sample.length < min) {
     sample += '填';
@@ -74,16 +77,18 @@ function sampleString(node: StringNode): string {
 
 /**
  * 数值缺省：min 优先，exclusiveMinimum（0 极常见，如 attackInterval）给出
- * 其上的最小整数，否则 0。
+ * 其上的最小整数，否则 0；排他上界收敛（概率域 exclusiveMinimum:0 +
+ * exclusiveMaximum:1 时地板+1=1 顶界，取区间中点）。
  */
-function defaultNumber(node: { min?: number; exclMin?: number }): number {
-  if (node.min !== undefined) {
-    return node.min;
+function defaultNumber(node: NumberNode): number {
+  const min = skeletonAttr<number>(node, 'numberFloor');
+  const exclMin = skeletonAttr<number>(node, 'numberFloorExcl');
+  const exclMax = skeletonAttr<number>(node, 'numberFloorCap');
+  let value = min ?? (exclMin !== undefined ? Math.floor(exclMin) + 1 : 0);
+  if (exclMax !== undefined && value >= exclMax) {
+    value = exclMin !== undefined ? (exclMin + exclMax) / 2 : exclMax - 1;
   }
-  if (node.exclMin !== undefined) {
-    return Math.floor(node.exclMin) + 1;
-  }
-  return 0;
+  return value;
 }
 
 function objectSkeleton(node: ObjectNode): Record<string, unknown> {

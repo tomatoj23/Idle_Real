@@ -19,6 +19,25 @@ export type {
   SectionSchemas,
 } from './schema/index.js';
 
+// 关键词支持矩阵（#53）：界约束关键词子集单点声明 + oneOf 判别式单一解析。
+export {
+  KEYWORD_MATRIX,
+  discriminatorOf,
+  formAttrsOf,
+  skeletonAttr,
+} from './schema/index.js';
+export type {
+  AttrFamily,
+  ArrayFormAttrs,
+  DictFormAttrs,
+  EnforceRule,
+  FormAttrsOf,
+  KeywordRow,
+  NumberFormAttrs,
+  SkeletonPolicy,
+  StringFormAttrs,
+} from './schema/index.js';
+
 // 下面的类型清单与 src/schema/index.ts 保持一致（新增类型两处同步）：
 // 主入口刻意不复用 `export *`，以便导出面恒为纯协议、可被测试守卫断言。
 export type {

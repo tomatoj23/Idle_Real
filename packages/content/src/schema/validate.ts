@@ -6,7 +6,13 @@
  * pattern / minProperties / $ref（仅 `#/definitions/...` 内部引用，不做
  * 递归展开）/ oneOf（issue #16，含判别式分流报错——type 枚举恰命中
  * 一个分支时上报该分支的字段级错误）。
+ *
+ * 界约束关键词（minLength…minProperties）的语义在 keywords.ts 关键词
+ * 支持矩阵单点声明（#53）：本校验器只消费 enforce 列；表单/骨架两解释器
+ * （editor model/defaults）消费同表的 formAttr/skeleton 列。
  */
+
+import { KEYWORD_MATRIX, discriminatorOf } from './keywords.js';
 
 /** 本校验器支持的 JSON Schema 关键字子集。 */
 export interface JsonSchema {
@@ -163,7 +169,7 @@ function checkOneOf(json: unknown, branches: readonly JsonSchema[], path: string
 /** 判别式：分支用 properties.type.enum 钉死形态时，检查内容的 type 值是否命中。 */
 function branchDiscriminates(branch: JsonSchema, root: JsonSchema, json: unknown): boolean {
   const resolved = branch.$ref !== undefined ? resolveRef(branch.$ref, root) : branch;
-  const enumValues = resolved?.properties?.type?.enum;
+  const enumValues = discriminatorOf(resolved);
   if (enumValues === undefined) {
     return false;
   }
@@ -238,90 +244,20 @@ function checkEnum(
   }
 }
 
-/** 单条边界关键字的检查规则：命中类型且有声明时才生效。 */
-interface ConstraintRule {
-  readonly keyword: string;
-  readonly pick: (schema: JsonSchema) => number | string | undefined;
-  readonly violated: (value: unknown, bound: number | string) => boolean;
-  readonly message: (bound: number | string) => string;
-}
-
-const CONSTRAINT_RULES: readonly ConstraintRule[] = [
-  {
-    keyword: 'minLength',
-    pick: (s) => s.minLength,
-    violated: (v, b) => (v as string).length < (b as number),
-    message: (b) => `长度不得少于 ${b}`,
-  },
-  {
-    keyword: 'maxLength',
-    pick: (s) => s.maxLength,
-    violated: (v, b) => (v as string).length > (b as number),
-    message: (b) => `长度不得超过 ${b}`,
-  },
-  {
-    keyword: 'pattern',
-    pick: (s) => s.pattern,
-    violated: (v, b) => !new RegExp(b as string).test(v as string),
-    message: (b) => `不匹配模式 ${b}`,
-  },
-  {
-    keyword: 'minimum',
-    pick: (s) => s.minimum,
-    violated: (v, b) => (v as number) < (b as number),
-    message: (b) => `不得小于 ${b}`,
-  },
-  {
-    keyword: 'maximum',
-    pick: (s) => s.maximum,
-    violated: (v, b) => (v as number) > (b as number),
-    message: (b) => `不得大于 ${b}`,
-  },
-  {
-    keyword: 'exclusiveMinimum',
-    pick: (s) => s.exclusiveMinimum,
-    violated: (v, b) => (v as number) <= (b as number),
-    message: (b) => `必须大于 ${b}`,
-  },
-  {
-    keyword: 'exclusiveMaximum',
-    pick: (s) => s.exclusiveMaximum,
-    violated: (v, b) => (v as number) >= (b as number),
-    message: (b) => `必须小于 ${b}`,
-  },
-  {
-    keyword: 'minItems',
-    pick: (s) => s.minItems,
-    violated: (v, b) => (v as unknown[]).length < (b as number),
-    message: (b) => `至少需要 ${b} 项`,
-  },
-  {
-    keyword: 'maxItems',
-    pick: (s) => s.maxItems,
-    violated: (v, b) => (v as unknown[]).length > (b as number),
-    message: (b) => `至多允许 ${b} 项`,
-  },
-  {
-    keyword: 'minProperties',
-    pick: (s) => s.minProperties,
-    violated: (v, b) => isPlainObject(v) && Object.keys(v).length < (b as number),
-    message: (b) => `至少需要 ${b} 个字段`,
-  },
-];
-
 function checkConstraints(
   json: unknown,
   schema: JsonSchema,
   path: string,
   errors: ContentError[],
 ): void {
-  for (const rule of CONSTRAINT_RULES) {
-    const bound = rule.pick(schema);
+  // 界约束规则来自关键词支持矩阵（#53）：键名即报错 keyword，行序即报错序。
+  for (const [keyword, row] of Object.entries(KEYWORD_MATRIX)) {
+    const bound = row.enforce.pick(schema);
     if (bound === undefined) {
       continue;
     }
-    if (rule.violated(json, bound)) {
-      errors.push({ path, keyword: rule.keyword, message: rule.message(bound) });
+    if (row.enforce.violated(json, bound)) {
+      errors.push({ path, keyword, message: row.enforce.message(bound) });
     }
   }
 }

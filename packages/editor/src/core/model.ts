@@ -12,7 +12,14 @@
  * （可选字段是否渲染）是渲染层的事。
  */
 
-import type { JsonSchema } from '@wendao/content';
+import type {
+  ArrayFormAttrs,
+  DictFormAttrs,
+  JsonSchema,
+  NumberFormAttrs,
+  StringFormAttrs,
+} from '@wendao/content';
+import { discriminatorOf, formAttrsOf } from '@wendao/content';
 import { BRANCH_LABELS, fieldLabel } from './labels.js';
 import { xrefForField, type XrefTarget } from './xref.js';
 
@@ -28,19 +35,14 @@ interface CommonNode {
   readonly xref?: XrefTarget;
 }
 
-export interface StringNode extends CommonNode {
+// 界约束属性（pattern/min/max/…）不再本地声明——extends 内容包关键词矩阵
+// 的家族属性表（#53：属性名单点声明，新增关键词 = 矩阵加一行）。
+export interface StringNode extends CommonNode, StringFormAttrs {
   readonly kind: 'string';
-  readonly pattern?: string;
-  readonly minLength?: number;
-  readonly maxLength?: number;
 }
 
-export interface NumberNode extends CommonNode {
+export interface NumberNode extends CommonNode, NumberFormAttrs {
   readonly kind: 'integer' | 'number';
-  readonly min?: number;
-  readonly max?: number;
-  readonly exclMin?: number;
-  readonly exclMax?: number;
 }
 
 export interface BooleanNode extends CommonNode {
@@ -60,21 +62,18 @@ export interface ObjectNode extends CommonNode {
   readonly dict?: DictShape;
 }
 
-export interface ArrayNode extends CommonNode {
+export interface ArrayNode extends CommonNode, ArrayFormAttrs {
   readonly kind: 'array';
   readonly item: FormNode;
-  readonly minItems?: number;
-  readonly maxItems?: number;
 }
 
 /** 开放键值容器（纯 patternProperties / additionalProperties:schema）。 */
-export interface DictNode extends CommonNode {
+export interface DictNode extends CommonNode, DictFormAttrs {
   readonly kind: 'dict';
   readonly keyPattern?: string;
   /** 字典键的引用域标注（materials 键=物品 id 等）。 */
   readonly keyXref?: XrefTarget;
   readonly valueNode: FormNode;
-  readonly minProperties?: number;
   /** schema required 透传（如 verbs 的 basic 恒需）。 */
   readonly requiredKeys: readonly string[];
 }
@@ -161,26 +160,14 @@ export function buildFormNode(
       return buildArray(resolved, root, path, common);
     case 'integer':
     case 'number':
-      return {
-        ...common,
-        kind: resolved.type,
-        min: resolved.minimum,
-        max: resolved.maximum,
-        exclMin: resolved.exclusiveMinimum,
-        exclMax: resolved.exclusiveMaximum,
-      };
+      // 界约束属性由矩阵 formAttr 列投影（min/max/exclMin/exclMax，#53）。
+      return { ...common, kind: resolved.type, ...formAttrsOf(resolved, 'number') };
     case 'boolean':
       return { ...common, kind: 'boolean' };
     case 'string':
     default:
       // 无 type 的残缺节点按自由文本兜底（校验面板兜底合法性）。
-      return {
-        ...common,
-        kind: 'string',
-        pattern: resolved.pattern,
-        minLength: resolved.minLength,
-        maxLength: resolved.maxLength,
-      };
+      return { ...common, kind: 'string', ...formAttrsOf(resolved, 'string') };
   }
 }
 
@@ -191,7 +178,8 @@ function buildOneOf(
 ): OneOfNode {
   const branches = (schema.oneOf ?? []).map((branch, index) => {
     const resolved = resolveRef(branch, root);
-    const enumValues = resolved.properties?.type?.enum;
+    // 判别值解析统一走内容包矩阵模块（#53 D3：properties.type.enum 单点读取）。
+    const enumValues = discriminatorOf(resolved);
     const discriminator =
       enumValues !== undefined && enumValues.length === 1 ? String(enumValues[0]) : String(index);
     return {
@@ -225,7 +213,7 @@ function buildObject(
         keyPattern: patternEntries[0]![0],
         keyXref: xrefForField(common.field),
         valueNode: buildFormNode(valueSchema, root, `${path}/*`, `${common.field}.*`, false),
-        minProperties: schema.minProperties,
+        ...formAttrsOf(schema, 'dict'),
         requiredKeys: schema.required ?? [],
       };
     }
@@ -235,7 +223,7 @@ function buildObject(
         kind: 'dict',
         keyXref: xrefForField(common.field),
         valueNode: buildFormNode(addProps, root, `${path}/*`, `${common.field}.*`, false),
-        minProperties: schema.minProperties,
+        ...formAttrsOf(schema, 'dict'),
         requiredKeys: schema.required ?? [],
       };
     }
@@ -275,8 +263,7 @@ function buildArray(
     ...common,
     kind: 'array',
     item: buildFormNode(itemSchema, root, `${path}/*`, common.field, false),
-    minItems: schema.minItems,
-    maxItems: schema.maxItems,
+    ...formAttrsOf(schema, 'array'),
   };
 }
 
