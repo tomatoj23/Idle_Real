@@ -14,14 +14,12 @@ import {
   findActivity,
   findBlank,
   findEnemy,
-  findGearDrop,
   findItem,
   findRecipe,
   findRarity,
   findShopEntry,
   findSkill,
   gearParamsOf,
-  playerMaxHp,
   progressionParamsOf,
   recipesOf,
   signatureOf,
@@ -35,27 +33,15 @@ import {
   type SkillView,
 } from './contentView.js';
 import {
-  affinityMultiplier,
-  calcDmg,
-  compareEncounterText,
-  emptyTally,
   fillTemplate,
   BASIC_KEY,
-  ELEMENT_COMBAT_PRIMITIVES,
-  hitTierOf,
-  makeAttackText,
   pickText,
-  rollCrit,
-  summarizeRounds,
-  type DamageTier,
-  type ElementCombatPrimitive,
 } from './combat.js';
 import {
   gearContributions,
   gearName,
   gearSell,
   makeGear,
-  rollGear,
   rollRarity,
   tierBoundsOf,
   type GearInstance,
@@ -66,13 +52,10 @@ import {
   initialState,
   restoreState,
   type ActivityState,
-  type CombatState,
-  type CombatSummonState,
   type GameState,
 } from './state.js';
 import type {
   Clock,
-  CombatMinionProjection,
   GameAction,
   GameContent,
   PlayerStatsView,
@@ -99,22 +82,13 @@ import {
 import {
   dungeonFloorEnemyOf,
   dungeonGateOf,
-  dungeonLayerOf,
   findDungeon,
   pickDungeonEnemyOf,
   type DungeonView,
 } from './dungeon.js';
-import {
-  bossEnemyOf,
-  findBossOf,
-  isLiveSummon,
-  pickSummonEntry,
-  summonMinionOf,
-  summonPoolOf,
-  type BossView,
-} from './bosses.js';
 import { applyStatsEvent } from './stats.js';
 import { achievementConditionMet, achievementsOf } from './achievements.js';
+import { createCombatRun, makeCombatState } from './combatRun.js';
 import type {
   AutoFoldRule,
   LedgerAuto,
@@ -306,39 +280,11 @@ export function createGame(options: CreateGameOptions): Game {
   /**
    * 攻击系别的机制签名（系数/时长全读 content，引擎零写死）：签名解析失败
    * （未注册/形状非法）= 纯风味系，机制层静默降级为凡击。
+   * 系别临时态（elemExpiry）随 #51 收编 CombatRun——本处只保留签名解析
+   * 这一面板读取器，过期时刻的存取全走 combatRun 窄门。
    */
   function attackSignature() {
     return signatureOf(content, weaponElement());
-  }
-
-  /**
-   * 系别临时态过期时刻（#15）：金·破防 / 水·滞缓 / 风·迅疾 → 过期游戏内时间。
-   * **只在闭包内，不落盘**（票面约束：抗性/临时态不进存档新字段）——开战/
-   * 再战/离线一律重置，存档恢复即散尽。数值不在此存：每次消费按当前武器
-   * 系别现读 content 签名（改包即生效，无第二份缓存）。
-   */
-  const elemExpiry: Record<ElementCombatPrimitive, number> = { defenseBreak: 0, slow: 0, swift: 0 };
-  const resetElemExpiry = (): void => {
-    for (const primitive of Object.keys(elemExpiry)) {
-      elemExpiry[primitive as ElementCombatPrimitive] = 0;
-    }
-  };
-
-  /** 系别命中：机械原语签名即时生效（过期时间 = 当前时刻 + 时长，命中即续）。 */
-  function applyElementProc(element: string | undefined): void {
-    const signature = element !== undefined ? signatureOf(content, element) : undefined;
-    if (!signature) return;
-    elemExpiry[signature.primitive as ElementCombatPrimitive] = time + signature.duration!;
-  }
-
-  /** 临时态在效时取原语参数（比例钳 [0,1)，防御坏内容；系数现读 content）。 */
-  function activeSignatureValue(
-    primitive: ElementCombatPrimitive,
-    expiry: number,
-    signature: ReturnType<typeof attackSignature>,
-  ): number {
-    if (!signature || signature.primitive !== primitive || expiry <= time) return 0;
-    return Math.min(0.999, Math.max(0, signature.value ?? 0));
   }
 
   /**
@@ -903,23 +849,10 @@ export function createGame(options: CreateGameOptions): Game {
     events.emit({ type: 'combat-note', time, data: enemyId ? { text, enemyId } : { text } });
   }
 
-  /**
-   * 战斗态构造单一来源（#44 D2）：初入开团与再战重置共用一处构造，
-   * rounds/crits/tiers 一律出自 emptyTally（combat.ts 导出面）——引擎内
-   * 手写 CombatState/tally 字面量就此清零（存档恢复逐项钳制除外，state.ts）。
-   */
-  function makeCombatState(enemyId: string, ehp: number): CombatState {
-    return {
-      enemyId,
-      ehp,
-      pt: 0,
-      et: 0,
-      respT: 0,
-      ...emptyTally(),
-      bossPhase: -1,
-      summons: [],
-    };
-  }
+  /* 战斗态构造单一来源（#44 D2，#51 随 CombatRun 迁驻 combatRun.ts 的
+   * makeCombatState）：初入开团与再战重置共用一处构造，rounds/crits/tiers
+   * 一律出自 emptyTally——手写 CombatState/tally 字面量保持清零（存档恢复
+   * 逐项钳制除外，state.ts）。 */
 
   /** low-hp 线（cparams.lowHpFraction × 当前气血上限）：入场门控与再战/进层退避共用一条线（#44）。 */
   const isLowHp = (): boolean => state.hp < playerStats(hpContext()).maxHp * cparams.lowHpFraction;
@@ -948,109 +881,92 @@ export function createGame(options: CreateGameOptions): Game {
       });
     }
     state.combat = makeCombatState(enemy.id, enemy.hp);
-    resetElemExpiry(); // 开新战：系别临时态归零（不跨战团，#15）
+    combatRun.resetProcs(); // 开新战：系别临时态归零（不跨战团，#15）
     emitNote(noteFrom('start', { enemy: enemy.name }), enemy.id);
     return 'ok';
   }
 
+  /* ---------- CombatRun 装配（#51 D2）：deps = 读取器集合 + 咽喉/秘境窄门 ---------- */
+
+  /**
+   * 战斗推进的依赖注入（D2）：面板类读取器每次调用现读（战斗中吃丹/换装备
+   * 即时生效，禁快照值）；咽喉窄面把战斗路径的入账恒定为 idle 归段；秘境与
+   * 停战序列留在 game.ts（DungeonRun 归 #52），此处只递窄门回调。此后
+   * 战斗时序变量（pt/et/respT/ehp/伤档/bossPhase/召唤槽/系别临时态）的
+   * 读写全部收进 combatRun，game.ts 不再直接操作。
+   */
+  const combatRun = createCombatRun({
+    content,
+    cparams,
+    combatText,
+    random,
+    now: () => time,
+    emit: (event) => events.emit(event),
+    note: noteFrom,
+    combat: {
+      get: () => state.combat,
+      set: (next) => {
+        state.combat = next;
+      },
+    },
+    panel: {
+      hp: () => state.hp,
+      setHp: (value) => {
+        state.hp = value;
+      },
+      maxHp: () => hpCap(),
+      lowHp: isLowHp,
+      battleStats: combatStats,
+      moveKey: weaponMoveKey,
+      element: weaponElement,
+      verbStyle: playerVerbStyle,
+      weaponName: () => wornWeapon()?.item.name ?? basicName,
+      signature: attackSignature,
+    },
+    flags: {
+      autoFight: () => state.autoFight,
+      autoEat: () => state.autoEat,
+    },
+    ledger: {
+      gold: (delta, source) => ledgerGold(delta, source, META_IDLE),
+      item: (itemId, count, source) => ledgerItem(itemId, count, source, META_IDLE),
+      gearIncome: (gear, source) => ledgerGearIncome(gear, source, META_IDLE),
+      exp: (skill, amount) => grantExp(skill, amount, false, { source: 'combat', meta: META_IDLE }),
+      daoYun: (delta, source) => ledgerDaoYun(delta, source, META_IDLE),
+    },
+    combatSkill: () => combatSkill(),
+    gearSeq: {
+      next: () => state.gearSeq + 1,
+      commit: (uid) => {
+        state.gearSeq = uid;
+      },
+    },
+    encounter: {
+      prevOf: (enemyId) => state.lastEncounter[enemyId],
+      record: (enemyId, rounds, won) => {
+        state.lastEncounter[enemyId] = { rounds, won, at: time };
+      },
+    },
+    dungeon: {
+      current: () => state.dungeon,
+      advance: advanceDungeonFloor,
+      leave: leaveDungeon,
+    },
+    stopCombat: (note) => stopCombat(note),
+    eatSilent: (itemId) => eatConsumable(itemId, true),
+    findHealConsumable: () =>
+      Object.keys(state.items).find((itemId) => {
+        if (!((state.items[itemId] ?? 0) > 0)) return false;
+        const item = findItem(content, itemId);
+        return item?.type === 'consumable' && item.heal !== undefined;
+      }),
+  });
+
   /* ---------- 秘境（#7）：层序列战斗复用既有战斗状态机 ---------- */
 
-  /**
-   * 战斗中的敌人解析（#7/#8 单点组合）：秘境层倍率投影在前，Boss 阶段
-   * 修正在后（叠乘——秘境深层插 Boss 零特判）；两者皆无 = 敌人定义原值。
-   */
-  function resolveEnemy(enemyId: string): EnemyView | undefined {
-    const run = state.dungeon;
-    let view = run
-      ? dungeonFloorEnemyOf(content, run.dungeonId, run.floor, enemyId)
-      : findEnemy(content, enemyId);
-    if (!view) return undefined;
-    const c = state.combat;
-    if (c !== null && c.bossPhase >= 0) {
-      view = bossEnemyOf(content, enemyId, c.bossPhase, view) ?? view;
-    }
-    return view;
-  }
-
-  /**
-   * 召唤物投影（#30）：秘境层倍率在前（与主 Boss 同律）、召唤 mult 乘区在后；
-   * 池行缺失/包变更（阶段缩表）= undefined（调用方清槽，绝不崩）。
-   */
-  function minionViewOf(minion: CombatSummonState): EnemyView | undefined {
-    const c = state.combat;
-    if (!c) return undefined;
-    const boss = findBossOf(content, c.enemyId);
-    if (!boss) return undefined;
-    const run = state.dungeon;
-    const scaled = run ? dungeonFloorEnemyOf(content, run.dungeonId, run.floor, minion.enemyId) : undefined;
-    const base = scaled ?? findEnemy(content, minion.enemyId);
-    if (!base) return undefined;
-    return summonMinionOf(content, boss, minion.phase, minion.enemyId, base) ?? base;
-  }
-
-  /**
-   * 召唤入场（#30，阶段进入时消费）：逐槽从脚本池按权重抽签（dungeon 加权
-   * 抽敌同式），召唤物以缩放投影的满血入场（集火序 = 入场序）；池行全缺失
-   * = 该槽跳过（防御路径，绝不崩）。入场播 boss:summon 事件 + 叙事池抽句
-   * （池缺省 = 不播报，不造句）。投影走 minionViewOf 同一组合面（秘境层
-   * 倍率在前、召唤 mult 在后）——入场即实战视图，禁第二份缩放组合。
-   */
-  function spawnSummons(boss: BossView, bossEnemy: EnemyView, phaseIndex: number, c: CombatState): void {
-    const pool = summonPoolOf(boss, phaseIndex);
-    const count = Math.max(0, Math.floor(boss.phases[phaseIndex]?.summons?.count ?? 0));
-    let spawned = 0;
-    for (let i = 0; i < count; i++) {
-      const entry = pickSummonEntry(content, pool, random);
-      if (!entry) break;
-      const slot: CombatSummonState = { enemyId: entry.enemy, phase: phaseIndex, hp: 0, et: 0 };
-      const view = minionViewOf(slot);
-      if (!view) continue;
-      slot.hp = view.hp;
-      c.summons.push(slot);
-      spawned += 1;
-    }
-    if (spawned === 0) return;
-    const name = typeof boss.phases[phaseIndex]?.name === 'string' ? boss.phases[phaseIndex]!.name : '';
-    events.emit({
-      type: 'boss:summon',
-      time,
-      data: { enemyId: boss.enemy, enemyName: bossEnemy.name, phase: phaseIndex + 1, count: spawned },
-    });
-    const narration = pickText(boss.phases[phaseIndex]?.summons?.narration, random);
-    if (narration !== undefined) {
-      emitNote(fillTemplate(narration, { enemy: bossEnemy.name, phase: name }), boss.enemy);
-    }
-  }
-
-  /**
-   * Boss 阶段推进（#8，玩家一击落点后消费）：血量比例 ≤ 阈值即进入该阶段；
-   * 单击跨多阈值逐级补发（每级一次 boss:phase 事件 + 阶段叙事 + 召唤入场）。
-   * 阶段修正经 resolveEnemy 在后续轮次解算生效（bossPhase 随战斗态持久，
-   * 自动再战重置归位）；普通敌人（未注册 Boss）恒跳过。
-   */
-  function checkBossPhase(enemy: EnemyView, c: CombatState): void {
-    const boss = findBossOf(content, enemy.id);
-    if (!boss || c.bossPhase >= boss.phases.length - 1) return;
-    const ratio = enemy.hp > 0 ? c.ehp / enemy.hp : 1;
-    while (c.bossPhase + 1 < boss.phases.length) {
-      const next = boss.phases[c.bossPhase + 1]!;
-      const threshold =
-        typeof next.threshold === 'number' && Number.isFinite(next.threshold) ? next.threshold : 0;
-      if (ratio > threshold) break;
-      c.bossPhase += 1;
-      const name = typeof next.name === 'string' && next.name.length > 0 ? next.name : '';
-      events.emit({
-        type: 'boss:phase',
-        time,
-        data: { enemyId: enemy.id, enemyName: enemy.name, phase: c.bossPhase + 1, name },
-      });
-      const narration = pickText(next.narration, random);
-      if (narration !== undefined) {
-        emitNote(fillTemplate(narration, { enemy: enemy.name, phase: name }), enemy.id);
-      }
-      spawnSummons(boss, enemy, c.bossPhase, c); // 召唤原语（#30）：阶段声明的召唤入场
-    }
-  }
+  /* 战斗中的敌人解析（resolveEnemy）与召唤物投影（minionViewOf）随 #51
+   * 内聚进 combatRun——秘境层倍率在前、Boss 阶段修正在后的单点组合，
+   * 战斗推进与快照投影共用一份（禁第二份缩放组合）。 */
 
   /**
    * 进入指定层：加权抽敌 → 以层倍率投影的气血 → enterCombat 单序列
@@ -1127,424 +1043,9 @@ export function createGame(options: CreateGameOptions): Game {
     leaveDungeon(); // 秘境攻略随战团散去（#7：撤退/退避/转赴修行一律离境）
   }
 
-  /**
-   * 玩家一击（#30 多敌目标选择）：召唤物在场时集火最老召唤物（先入先出），
-   * 清场后回到主目标（reengage 叙事复用）。伤害链：系别签名（破防/亲和/风味）
-   * → 暴击 roll → 减伤解算（可含金·破防）→ 亲和乘区 → 暴击乘区；伤害档对
-   * **未破防**期望判档——破防/克制的可观测签名 = 档位跃迁（ADR-012）。
-   * 召唤物死亡只清槽位（无收益结算）；主目标死亡才走 victory。
-   */
-  function playerAttackRound(enemy: EnemyView, c: CombatState): void {
-    // 集火目标：召唤物槽首（失效槽位经 isLiveSummon 同一谓词清弃，#48；
-    // 恢复侧/逐轮过滤同律），回落主目标。
-    const boss = findBossOf(content, c.enemyId);
-    let focus = c.summons[0];
-    if (focus !== undefined && (boss === undefined || !isLiveSummon(content, boss, focus))) {
-      c.summons.shift();
-      focus = undefined;
-    }
-    const focusView = focus !== undefined ? minionViewOf(focus) : undefined;
-    const target = focusView ?? enemy;
-    const onMinion = focusView !== undefined;
-
-    const moveKey = weaponMoveKey();
-    const weapon = wornWeapon();
-    const element = weaponElement();
-    const { atk, crit: critChance } = combatStats(target);
-    // 金·破防（临时态在效）：受击者 def 临时降低 → 减伤解算按破防后 def。
-    const signature = attackSignature();
-    const breakValue = activeSignatureValue('defenseBreak', elemExpiry.defenseBreak, signature);
-    const defEff = target.def * (1 - breakValue);
-    const dmgBase = calcDmg(atk, defEff, random, cparams);
-    // 亲和乘区（#25 预留 affinities 的引擎消费面）：受击者对该系的易伤/抗性。
-    const affinity = element !== undefined ? target.affinities?.[element] : undefined;
-    let dmg = Math.max(1, Math.round(dmgBase * affinityMultiplier(affinity)));
-    const crit = rollCrit(critChance, random);
-    if (crit) dmg = Math.round(dmg * cparams.critMultiplier);
-    if (onMinion && focus) focus.hp -= dmg;
-    else c.ehp -= dmg;
-    c.rounds += 1;
-    if (crit) c.crits += 1;
-    // 系别命中：机械签名临时态即时生效（命中即续，时长归 content）。
-    applyElementProc(element);
-    // 伤害档对未破防/未亲和的期望判档：破防/克制读高档、被克读轻档（签名可见）。
-    const tier = hitTierOf(dmg, atk, target.def, cparams);
-    c.tiers[tier] += 1;
-    const text = makeAttackText(
-      combatText,
-      {
-        side: 'player',
-        enemyName: target.name,
-        moveKey,
-        verbStyle: playerVerbStyle(),
-        weaponName: weapon ? weapon.item.name : basicName,
-        dmg,
-        crit,
-        atk,
-        defenderDef: target.def,
-        defenderHp: Math.max(0, onMinion && focus ? focus.hp : c.ehp),
-        defenderMaxHp: target.hp,
-        ...(element !== undefined ? { element } : {}),
-        ...(affinity !== undefined ? { affinity } : {}),
-      },
-      random,
-      cparams,
-    );
-    events.emit({
-      type: 'attack',
-      time,
-      data: {
-        side: 'player',
-        enemyId: target.id,
-        enemyName: target.name,
-        text,
-        dmg,
-        crit,
-        tier,
-        ...(element !== undefined ? { element } : {}),
-      },
-    });
-    if (onMinion && focus) {
-      if (focus.hp <= 0) {
-        c.summons.shift();
-        if (c.summons.length === 0) {
-          // 清场回到主目标（#30 验收语义；叙事复用 reengage 池，零新词库键）。
-          emitNote(noteFrom('reengage', { enemy: enemy.name }), enemy.id);
-        }
-      }
-      return;
-    }
-    if (c.ehp <= 0) {
-      victory(enemy, c);
-      return;
-    }
-    checkBossPhase(enemy, c); // Boss 阶段阈值推进（#8；普通敌人空转）
-  }
-
-  /**
-   * 敌方一击：减伤解算 → 文案 → 玩家倒下判定。moveKeyOverride = 召唤物出招键
-   * （#30：召唤物以自身敌 id 注册招式，不继承 Boss 阶段变招；缺省 = 主敌人
-   * Boss 阶段变招语义不变）。
-   */
-  function enemyAttackRound(enemy: EnemyView, c: CombatState, moveKeyOverride?: string): void {
-    const { def, maxHp } = combatStats(enemy);
-    const dmg = calcDmg(enemy.atk, def, random, cparams);
-    state.hp -= dmg;
-    const tier = hitTierOf(dmg, enemy.atk, def, cparams);
-    // 变招（#8）：Boss 当前阶段声明的出招注册键覆盖敌人 id 键（未声明回退）。
-    let moveKey: string;
-    if (typeof moveKeyOverride === 'string' && moveKeyOverride.length > 0) {
-      moveKey = moveKeyOverride;
-    } else {
-      const boss = findBossOf(content, enemy.id);
-      const phaseMoveKey = boss && c.bossPhase >= 0 ? boss.phases[c.bossPhase]?.moveKey : undefined;
-      moveKey = typeof phaseMoveKey === 'string' && phaseMoveKey.length > 0 ? phaseMoveKey : enemy.id;
-    }
-    const text = makeAttackText(
-      combatText,
-      {
-        side: 'enemy',
-        enemyName: enemy.name,
-        moveKey,
-        // 动词池键 = 敌人内容声明的 kind（开放键域，#021 批 4）；'claw' 不再是
-        // 引擎缺省词汇，防御路径回落引擎兜底键（未注册由文案层再兜底）。
-        verbStyle: enemy.kind ?? BASIC_KEY,
-        weaponName: '',
-        dmg,
-        crit: false,
-        atk: enemy.atk,
-        defenderDef: def,
-        defenderHp: Math.max(0, state.hp),
-        defenderMaxHp: maxHp,
-        // 敌方系别（#15）：风味句按攻方系别路由；玩家侧无亲和表，语境缺省。
-        ...(enemy.element !== undefined ? { element: enemy.element } : {}),
-      },
-      random,
-      cparams,
-    );
-    events.emit({
-      type: 'attack',
-      time,
-      data: {
-        side: 'enemy',
-        enemyId: enemy.id,
-        enemyName: enemy.name,
-        text,
-        dmg,
-        tier,
-        ...(enemy.element !== undefined ? { element: enemy.element } : {}),
-      },
-    });
-    if (state.hp <= 0) defeat(enemy, c);
-  }
-
-  /** 胜利结算：灵石/材料/异宝掉落 + 斗法修为 + 签名画像与同对手对照。 */
-  function victory(enemy: EnemyView, c: CombatState): void {
-    const goldRange = enemy.gold;
-    const goldGain = goldRange
-      ? Math.floor(goldRange.min + random() * (goldRange.max - goldRange.min + 1))
-      : 0;
-    ledgerGold(goldGain, 'combat', META_IDLE);
-
-    const drops: string[] = [];
-    for (const drop of enemy.drops ?? []) {
-      if (drop.item && random() < drop.chance) {
-        if (ledgerItem(drop.item, 1, 'combat', META_IDLE)) {
-          emitLoot(drop.item, 1, 'drop');
-          drops.push(drop.item);
-        }
-      }
-    }
-
-    // Boss 专属掉落（#8）：与 enemy.drops 同机制叠加掷点（bosses[].drops）。
-    for (const drop of findBossOf(content, enemy.id)?.drops ?? []) {
-      if (drop.item && random() < drop.chance) {
-        if (ledgerItem(drop.item, 1, 'combat', META_IDLE)) {
-          emitLoot(drop.item, 1, 'drop');
-          drops.push(drop.item);
-        }
-      }
-    }
-
-    let gearDropName: string | undefined;
-    const gearDrop = findGearDrop(content, enemy.id);
-    if (gearDrop) {
-      // 掉落管线（#14 补全 ①②③⑦）：①掉不掉 → ②按秘境层数筛器胚池 → ③选底材
-      // → ④~⑦实例化（equip 走词条池旧管线；器胚走铭纹管线）。稀有度掷点不传
-      // 偏置（#5 接缝：掉落侧与旧签名逐点同分布）；uid 只在实得时入账（不空烧序号）。
-      const gear = rollGear(content, gearDrop, state.gearSeq + 1, random, {
-        floor: state.dungeon?.floor,
-      });
-      if (gear) {
-        state.gearSeq = gear.uid;
-        if (ledgerGearIncome(gear, 'combat', META_IDLE)) {
-          gearDropName = gearDisplayName(gear);
-          events.emit({
-            type: 'loot',
-            time,
-            data: {
-              item: gear.itemId,
-              itemName: gearDropName,
-              count: 1,
-              source: 'gear',
-              rarity: gear.rarity,
-              uid: gear.uid,
-            },
-          });
-        }
-      }
-    }
-
-    const skill = combatSkill();
-    if (skill) grantExp(skill, enemy.exp, false, { source: 'combat', meta: META_IDLE });
-
-    const tally = { rounds: c.rounds, crits: c.crits, tiers: c.tiers };
-    const summary = summarizeRounds(tally, combatText, random);
-    const prev = state.lastEncounter[enemy.id];
-    const compare = compareEncounterText(prev, c.rounds, combatText, random);
-    state.lastEncounter[enemy.id] = { rounds: c.rounds, won: true, at: time };
-    c.respT = cparams.victoryRestMs; // 战斗态保留（ehp ≤ 0），休整后按 autoFight 决定去留
-    c.summons = []; // Boss 死亡清场（#30）：残存召唤物随主敌溃散，不参与结算
-
-    events.emit({
-      type: 'victory',
-      time,
-      data: {
-        enemyId: enemy.id,
-        enemyName: enemy.name,
-        gold: goldGain,
-        rounds: c.rounds,
-        exp: skill ? enemy.exp : 0,
-        summary,
-        drops,
-        ...(gearDropName !== undefined ? { gearDropName } : {}),
-        ...(prev !== undefined ? { prevEncounter: prev } : {}),
-        ...(compare !== undefined ? { compare } : {}),
-      },
-    });
-
-    // 秘境层奖励（#7）：层表 rewards 逐项入账 + dungeon:floor 事件；
-    // 道韵双键同律（daoYunEarned 只增不减——花掉不回锁，深层秘境供养兵解）。
-    if (state.dungeon) {
-      const run = state.dungeon;
-      const dungeon = findDungeon(content, run.dungeonId);
-      const rewards = dungeon ? dungeonLayerOf(dungeon, run.floor)?.rewards : undefined;
-      const goldReward =
-        typeof rewards?.gold === 'number' && Number.isFinite(rewards.gold) && rewards.gold > 0
-          ? Math.floor(rewards.gold)
-          : 0;
-      ledgerGold(goldReward, 'dungeon', META_IDLE);
-      const items: Record<string, number> = {};
-      for (const stack of rewards?.items ?? []) {
-        const count = stack?.count;
-        if (typeof stack?.item === 'string' && typeof count === 'number' && Number.isFinite(count) && count > 0) {
-          if (ledgerItem(stack.item, Math.floor(count), 'dungeon', META_IDLE)) {
-            items[stack.item] = (items[stack.item] ?? 0) + Math.floor(count);
-          }
-        }
-      }
-      const rawDaoYun = rewards?.daoYun;
-      const daoYunReward =
-        typeof rawDaoYun === 'number' && Number.isFinite(rawDaoYun) && rawDaoYun > 0
-          ? Math.floor(rawDaoYun)
-          : 0;
-      ledgerDaoYun(daoYunReward, 'dungeon', META_IDLE);
-      events.emit({
-        type: 'dungeon:floor',
-        time,
-        data: {
-          dungeonId: run.dungeonId,
-          dungeonName: dungeon?.name ?? run.dungeonId,
-          floor: run.floor,
-          floors: dungeon?.floors ?? 0,
-          gold: goldReward,
-          daoYun: daoYunReward,
-          items,
-        },
-      });
-    }
-  }
-
-  /** 落败：残血被救回，对照记录 won=false（「前番不敌」的基准）。 */
-  function defeat(enemy: EnemyView, c: CombatState): void {
-    const maxHp = combatStats(enemy).maxHp;
-    state.hp = Math.max(1, Math.round(maxHp * cparams.lowHpFraction));
-    state.combat = null;
-    state.lastEncounter[enemy.id] = { rounds: c.rounds, won: false, at: time };
-    leaveDungeon(); // 秘境败退：攻略作废，最高层记录保留（#7）
-    events.emit({
-      type: 'defeat',
-      time,
-      data: { enemyId: enemy.id, enemyName: enemy.name },
-    });
-  }
-
-  /**
-   * 战斗大步长结算：按「下一次出招」逐事件推进，dt 消化完或战斗结束为止
-   * （与 settleActivity 同语义：假时钟全速模拟一次 tick 可补多轮）。
-   * 休整期（respT）内不回血不接战，到期按 autoFight 决定再战或离场。
-   */
-  function settleCombat(dt: number): void {
-    let remaining = dt;
-    let guard = 0;
-    while (remaining > 0 && state.combat && guard++ < 1_000_000) {
-      const c = state.combat;
-      const enemy = resolveEnemy(c.enemyId);
-      if (!enemy) {
-        state.combat = null; // 内容包已变更：安全弃置
-        leaveDungeon(); // 秘境层敌失引用：连攻略一并自愈（防孤儿锁死 enter/combat:start）
-        return;
-      }
-      if (c.respT > 0) {
-        const step = Math.min(remaining, c.respT);
-        c.respT -= step;
-        remaining -= step;
-        if (c.respT <= 0) {
-          if (state.dungeon) {
-            // 秘境推进（#7）：残血退避同律（挂机不送死，离境保留最高层），
-            // 否则自动进入下一层——层序列与 autoFight 开关无关（爬塔即挂机）。
-            if (isLowHp()) {
-              stopCombat(noteFrom('retreatWounded'));
-              return;
-            }
-            advanceDungeonFloor();
-            continue;
-          }
-          if (state.autoFight) {
-            // 自动再战前复查气血：残血且无自动补给时退避（挂机不送死）。
-            if (isLowHp()) {
-              stopCombat(noteFrom('retreatWounded'));
-              return;
-            }
-            // 再战重置 = 同敌按单一构造源整态重置（#44 D2）：敌方气血恢复、
-            // 计时/伤档清零、阶段从头演（#8）、召唤清场（#30）；循环顶重读
-            // state.combat，旧态引用就此弃用。
-            state.combat = makeCombatState(c.enemyId, enemy.hp);
-            resetElemExpiry(); // 系别临时态随再战归零（Boss 重生不带残效，#15）
-            emitNote(noteFrom('reengage', { enemy: enemy.name }), enemy.id);
-          } else {
-            stopCombat(noteFrom('retreatVictory'));
-            return;
-          }
-        }
-        continue;
-      }
-      // 自动服药（血线触发；目标为背包中首个 heal 类消耗品，引擎零内容感知）
-      if (state.autoEat && state.hp < playerStats(hpContext()).maxHp * cparams.autoEatHpFraction) {
-        const healConsumable = Object.keys(state.items).find((itemId) => {
-          if (!((state.items[itemId] ?? 0) > 0)) return false;
-          const item = findItem(content, itemId);
-          return item?.type === 'consumable' && item.heal !== undefined;
-        });
-        if (healConsumable) eatConsumable(healConsumable, true);
-      }
-      if (!state.combat) return;
-      // 推进到下一个事件点（玩家出招 / 主敌人出招 / 召唤物出招 / dt 消化完）
-      // 有效间隔 = 基础间隔 ×（1 ∓ 系别速率修正，#15）：风·迅疾缩短玩家间隔、
-      // 水·滞缓延长敌方间隔（临时态在效时；系数现读 content 签名）。
-      // 敌人缺省攻击间隔 = 玩家间隔（config.combat.playerAttackInterval，#020）。
-      const signature = attackSignature();
-      const pInterval = Math.max(
-        1,
-        Math.round(
-          cparams.playerAttackInterval * (1 - activeSignatureValue('swift', elemExpiry.swift, signature)),
-        ),
-      );
-      const enemyBase = Math.max(1, enemy.attackInterval ?? cparams.playerAttackInterval);
-      const eInterval = Math.max(
-        1,
-        Math.round(enemyBase * (1 + activeSignatureValue('slow', elemExpiry.slow, signature))),
-      );
-      // 投影失效的召唤槽位防御性清弃（isLiveSummon 单一谓词，#48；恢复侧同律——
-      // 池外槽/包变更缩表/敌移除逐轮弃置；Boss 未注册 = 无效槽全清）。
-      const summonBoss = findBossOf(content, c.enemyId);
-      if (c.summons.length > 0) {
-        c.summons = summonBoss
-          ? c.summons.filter((minion) => isLiveSummon(content, summonBoss, minion))
-          : [];
-      }
-      // 召唤物有效间隔（#30）：攻击间隔随内容定义（缺省 = 玩家间隔），不受
-      // 水·滞缓影响（滞缓签名作用于主敌人；召唤物威胁量归 summon mult 调参）。
-      const minionIntervals = c.summons.map((minion) => {
-        const view = minionViewOf(minion)!;
-        return Math.max(1, view.attackInterval ?? cparams.playerAttackInterval);
-      });
-      let step = Math.min(remaining, pInterval - c.pt, eInterval - c.et);
-      c.summons.forEach((minion, i) => {
-        step = Math.min(step, minionIntervals[i]! - minion.et);
-      });
-      step = Math.max(0, step);
-      c.pt += step;
-      c.et += step;
-      c.summons.forEach((minion) => {
-        minion.et += step;
-      });
-      remaining -= step;
-      if (c.pt >= pInterval) {
-        c.pt -= pInterval;
-        playerAttackRound(enemy, c);
-        if (!state.combat) return;
-      }
-      if (c.et >= eInterval) {
-        c.et -= eInterval;
-        enemyAttackRound(enemy, c);
-        if (!state.combat) return;
-      }
-      // 召唤物各自出招（#30）：出招键 = 自身敌 id（不继承 Boss 阶段变招）。
-      // 间隔现取（玩家一击可能清槽，预计算的 intervals 不再对位）；迭代中
-      // 召唤物不会被移除（召唤物攻击只可能击倒玩家 → defeat 早退）。
-      for (const minion of [...c.summons]) {
-        const view = minionViewOf(minion);
-        if (!view) continue;
-        const mInterval = Math.max(1, view.attackInterval ?? cparams.playerAttackInterval);
-        if (minion.et >= mInterval) {
-          minion.et -= mInterval;
-          enemyAttackRound(view, c, minion.enemyId);
-          if (!state.combat) return;
-        }
-      }
-    }
-  }
+  /* 玩家一击（集火选靶）/ 敌方一击 / victory / defeat / settleCombat 逐轮
+   * 循环已随 #51 整体迁驻 combatRun.ts（CombatRun.step 窄门）——game.ts
+   * 对战斗时序变量的直接引用就此清零（验收 1）。 */
 
   /**
    * 成就评估（#9）：按 content 包成就表对照统计 snapshot 判定。
@@ -1593,7 +1094,7 @@ export function createGame(options: CreateGameOptions): Game {
     if (elapsedMs <= 0) return;
     if (state.combat) {
       state.combat = null; // 离线不可战斗：视作离场休整，回满血由下方统一处理
-      resetElemExpiry(); // 系别临时态不落盘，离线离场即散（#15）
+      combatRun.resetProcs(); // 系别临时态不落盘，离线离场即散（#15）
     }
     if (state.dungeon) state.dungeon = null; // 秘境不可离线续跑：就地离境（最高层已随进层登记，#7）
     // 离线上限（offlineCap 消费点，#6）：Σflat 毫秒，≤ 0 = 不设限（基线行为
@@ -1770,33 +1271,9 @@ export function createGame(options: CreateGameOptions): Game {
 
   /* ---------- 快照视图投影（#40）：敌方/召唤物/逐活动间隔，壳层零公式复算 ---------- */
 
-  /**
-   * 战斗中敌人生效视图（resolveEnemy 单点组合：秘境层倍率在前、Boss 阶段
-   * 修正在后）：无战斗 = null。浅拷贝脱离 content 引用，快照自持。
-   */
-  function enemyProjection(): EnemyView | null {
-    const c = state.combat;
-    if (!c) return null;
-    const view = resolveEnemy(c.enemyId);
-    return view ? { ...view } : null;
-  }
-
-  /**
-   * 召唤物视图组（minionViewOf 单点组合，槽位序 = 集火序）：无战斗 = null；
-   * 投影失效槽位（池行缺失/包变更缩表）剔除——与战斗内清槽同律，绝不崩。
-   * 槽位态浅拷脱离活状态（hp/et 随 tick 就地变更，快照必须自持，与
-   * cloneState 同律）；视图浅拷脱离 content 引用。
-   */
-  function minionProjections(): CombatMinionProjection[] | null {
-    const c = state.combat;
-    if (!c) return null;
-    const rows: CombatMinionProjection[] = [];
-    for (const minion of c.summons) {
-      const view = minionViewOf(minion);
-      if (view) rows.push({ minion: { ...minion }, view: { ...view } });
-    }
-    return rows;
-  }
+  /* 敌方投影（enemyProjection）与召唤物视图组（minionProjections）随 #51
+   * 迁驻 combatRun（resolveEnemy/minionViewOf 内聚后的同一扇投影门）：
+   * 浅拷语义不变——槽位态/视图脱离活状态与 content 引用，快照自持。 */
 
   /**
    * 全活动有效轮间隔映射：键 = `skillId:index`（壳层活动卡寻址同式）。
@@ -1835,8 +1312,9 @@ export function createGame(options: CreateGameOptions): Game {
       }
       time += dt;
       if (state.combat) {
-        // 战斗中：不回血不采药，由战斗循环推进（#4 接管战斗语义）。
-        settleCombat(dt);
+        // 战斗中：不回血不采药，由战斗循环推进（#4 接管战斗语义；#51 起经
+        // CombatRun.step 窄门驱动，战斗时序变量归 combatRun 所有）。
+        combatRun.step(dt);
       } else {
         // 脱战回血。
         const cap = hpCap();
@@ -2462,8 +1940,8 @@ export function createGame(options: CreateGameOptions): Game {
         // 战斗/活动视图投影（#40 D1/D2：字段恒在，壳层零公式复算；一次取值
         // = 一帧完整视图，无独立 getter 的半新半旧帧问题）。展示投影非存档
         // 必需，恢复侧忽略。
-        enemy: enemyProjection(),
-        minions: minionProjections(),
+        enemy: combatRun.enemyProjection(),
+        minions: combatRun.minionProjections(),
         activityIntervals: activityIntervalsOf(),
       };
     },
