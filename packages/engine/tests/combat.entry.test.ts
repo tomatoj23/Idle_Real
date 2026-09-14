@@ -72,6 +72,20 @@ describe('#44 · combat:start 门（清活动 + low-hp 退避 + 战斗态构造�
     expect(st.activity).not.toBeNull();
     expect(st.combat).toBeNull();
   });
+
+  it('同敌再派发幂等：零事件、战斗态原样（不重开团、不重置战况累计）', () => {
+    const game = createGame({ content: makeCombatPack(), clock: new ManualClock(), seed: 7 });
+    game.dispatch({ type: 'combat:start', payload: { enemyId: 'e1' } });
+    game.events.drain();
+    game.tick(4000); // 推进数合：ehp 已扣、rounds 已计——重开团即回满，钉子才有牙
+    game.events.drain();
+    const before = game.snapshot().state.combat;
+    expect(before).toMatchObject({ enemyId: 'e1' });
+    expect((before as { ehp: number }).ehp).toBeLessThan(60);
+    game.dispatch({ type: 'combat:start', payload: { enemyId: 'e1' } });
+    expect(game.events.drain()).toEqual([]);
+    expect(game.snapshot().state.combat).toEqual(before);
+  });
 });
 
 describe('#44 · dungeon:enter 门（同一序列，秘境侧参数差异）', () => {
@@ -92,6 +106,35 @@ describe('#44 · dungeon:enter 门（同一序列，秘境侧参数差异）', (
     expect(st.activity).not.toBeNull();
     expect(st.dungeon).toBeNull();
     expect(st.combat).toBeNull();
+  });
+
+  it('层敌全缺失（防御路径）：reject no-layer，活动保全、攻略/战斗/层记录均未建', () => {
+    const pack = {
+      ...makeCombatPack(),
+      dungeons: [
+        {
+          id: 'ruin', name: '废墟', icon: '废', floors: 1,
+          layers: [{ floor: { min: 1, max: 1 }, enemies: [{ enemy: 'ghost', weight: 1 }] }],
+        },
+      ],
+    } as GameContent;
+    const game = createGame({
+      content: pack,
+      clock: new ManualClock(),
+      save: { version: 1, time: 0, state: { items: {} } } as unknown as SaveData,
+      seed: 7,
+    });
+    game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
+    game.events.drain();
+    game.dispatch({ type: 'dungeon:enter', payload: { dungeonId: 'ruin' } });
+    const events = game.events.drain();
+    expect(reasonsOf(events)).toEqual(['no-layer']);
+    expect(events.some((event) => event.type === 'activity-stop')).toBe(false);
+    const st = game.snapshot().state;
+    expect(st.activity).not.toBeNull();
+    expect(st.dungeon).toBeNull();
+    expect(st.combat).toBeNull();
+    expect(st.dungeonBest).toEqual({});
   });
 
   it('采集进行中入门：活动清空 + activity-stop，开战 note 先于 dungeon:enter 事件', () => {
