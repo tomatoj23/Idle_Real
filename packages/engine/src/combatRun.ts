@@ -275,6 +275,34 @@ export function createCombatRun(deps: CombatRunDeps): CombatRun {
   const gearDisplayName = (gear: GearInstance): string =>
     gearName(content, findItem(content, gear.itemId)?.name ?? gear.itemId, gear.rarity);
 
+  /** 掉落 loot 事件（与 game.ts 旧 emitLoot 同形载荷；物品名缺省回显键，#019）。 */
+  function emitLoot(item: string, count: number, source: string): void {
+    const def = findItem(content, item);
+    emit({
+      type: 'loot',
+      time: now(),
+      data: { item, itemName: def?.name ?? item, count, source },
+    });
+  }
+
+  /**
+   * 材料掉落掷定（victory 消费；enemy.drops 与 bosses[].drops 两池同式叠加，
+   * 命中才入账 + 播报 + 计入事件载荷 drops 表；掷点次序与旧两段循环一致）。
+   */
+  function rollDrops(
+    entries: readonly { item?: string; chance: number }[] | undefined,
+    drops: string[],
+  ): void {
+    for (const drop of entries ?? []) {
+      if (drop.item && random() < drop.chance) {
+        if (deps.ledger.item(drop.item, 1, 'combat')) {
+          emitLoot(drop.item, 1, 'drop');
+          drops.push(drop.item);
+        }
+      }
+    }
+  }
+
   /**
    * 召唤入场（#30，阶段进入时消费）：逐槽从脚本池按权重抽签（dungeon 加权
    * 抽敌同式），召唤物以缩放投影的满血入场（集火序 = 入场序）；池行全缺失
@@ -498,34 +526,10 @@ export function createCombatRun(deps: CombatRunDeps): CombatRun {
     deps.ledger.gold(goldGain, 'combat');
 
     const drops: string[] = [];
-    for (const drop of enemy.drops ?? []) {
-      if (drop.item && random() < drop.chance) {
-        if (deps.ledger.item(drop.item, 1, 'combat')) {
-          const def = findItem(content, drop.item);
-          emit({
-            type: 'loot',
-            time: now(),
-            data: { item: drop.item, itemName: def?.name ?? drop.item, count: 1, source: 'drop' },
-          });
-          drops.push(drop.item);
-        }
-      }
-    }
+    rollDrops(enemy.drops, drops);
 
     // Boss 专属掉落（#8）：与 enemy.drops 同机制叠加掷点（bosses[].drops）。
-    for (const drop of findBossOf(content, enemy.id)?.drops ?? []) {
-      if (drop.item && random() < drop.chance) {
-        if (deps.ledger.item(drop.item, 1, 'combat')) {
-          const def = findItem(content, drop.item);
-          emit({
-            type: 'loot',
-            time: now(),
-            data: { item: drop.item, itemName: def?.name ?? drop.item, count: 1, source: 'drop' },
-          });
-          drops.push(drop.item);
-        }
-      }
-    }
+    rollDrops(findBossOf(content, enemy.id)?.drops, drops);
 
     let gearDropName: string | undefined;
     const gearDrop = findGearDrop(content, enemy.id);

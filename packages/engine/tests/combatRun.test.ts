@@ -14,7 +14,7 @@ import { makeCombatPack } from './fixtures.js';
  * 确定性纪律：断言只钉不随 rng 波动翻转的量（事件计数/目标 id/阈值次序/
  * 整态重置），伤害值域先验算留足窗口（calcDmg 波动 ±10%，mitigation 曲线
  * def/(def+120)）：
- * - atk 30 vs def 4 → 26~32（召唤物 hp 45 恰两击）；vs def 2 → 26~32（e1 hp 60 不死）
+ * - atk 30 vs def 4 → 26~32（召唤物 hp 45 恰两击）；vs def 2 → 27~32（e1 hp 60 不死）
  * - atk 500 vs def 0 → 450~550（ehuge hp 1000 打 960 → 410~510，跨四阈值且必不致死）
  * - atk 500 vs efatal hp 50 → 首击必杀
  */

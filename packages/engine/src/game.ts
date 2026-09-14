@@ -863,7 +863,7 @@ export function createGame(options: CreateGameOptions): Game {
    * note。入场不变量唯此一处断言；内容门控（等级/道韵/秘境钥匙）与敌人
    * 来源（野战直取 / 秘境抽敌按层缩放）为调用侧参数差异。
    * actionType 给出（dispatch 面）时 low-hp 代发 reject；层推进（tick 面）
-   * 不传——血线已由 settleCombat 退避判定先行担保，此处复查恒过。
+   * 不传——血线已由 combatRun.step 的退避判定先行担保，此处复查恒过。
    * 返回 'low-hp' = 未成战（dispatch 面已代发 reject，调用侧直接收尾）。
    */
   function enterCombat(enemy: EnemyView, actionType?: string): 'ok' | 'low-hp' {
@@ -1029,7 +1029,7 @@ export function createGame(options: CreateGameOptions): Game {
     state.dungeonBest[run.dungeonId] = Math.max(state.dungeonBest[run.dungeonId] ?? 0, run.floor);
     if (enterDungeonFloor(dungeon, run.floor) !== 'ok') {
       // 层表空/敌人全缺失：防御离境（包校验已拦，引擎不崩；low-hp 为不可达
-      // 复查位——settleCombat 退避判定先行担保，两支同样就地离境）。
+      // 复查位——combatRun.step 的退避判定先行担保，两支同样就地离境）。
       state.dungeon = null;
       stopCombat();
     }
