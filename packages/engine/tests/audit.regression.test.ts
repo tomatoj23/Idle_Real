@@ -308,30 +308,21 @@ describe('自查 · 离线上限钳制双报（awaySeconds/capped）', () => {
     items: [{ id: 'ore', name: '灵砂', icon: '砂', type: 'mat', sell: 2 }],
   } as unknown as GameContent;
 
-  it('离开 21s、上限 9s：capped=true、awaySeconds=21、seconds=9，收益只按上限 3 轮', () => {
-    const game = createGame({
-      content: pack,
-      clock: new ManualClock(),
-      rng: () => 0.9,
-      contributions: [
-        {
-          modifier: { stat: 'offlineCap', zone: 'flat', value: 9000 },
-          source: { id: 'guixi', kind: 'test', name: '龟息' },
-        },
-      ],
-    });
+  it('离开 24h+21s、基线上限 24h：capped=true、awaySeconds=86421、seconds=86400，收益只按基线结算', () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const game = createGame({ content: pack, clock: new ManualClock(), rng: () => 0.9 });
     game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
     game.events.drain();
-    game.settleOffline(21000);
+    game.settleOffline(DAY + 21000);
     const settled = game.events
       .drain()
       .find((e) => e.type === 'offline-settled')
       ?.data as Record<string, unknown>;
     expect(settled.capped).toBe(true);
-    expect(settled.awaySeconds).toBe(21);
-    expect(settled.seconds).toBe(9);
-    expect(settled.cycles).toBe(3); // 收益按钳后结算时长计，超出部分不入账
-    expect(stateOf(game.snapshot()).skills.herb?.xp ?? 0).toBe(30); // 3×round(10)
+    expect(settled.awaySeconds).toBe(DAY / 1000 + 21);
+    expect(settled.seconds).toBe(DAY / 1000);
+    expect(settled.cycles).toBe(DAY / 3000); // 收益按钳后结算时长计，超出部分不入账
+    expect(stateOf(game.snapshot()).skills.herb?.xp ?? 0).toBe((DAY / 3000) * 10);
   });
 
   it('未触上限：capped=false，awaySeconds=seconds（无钳制信息时壳层回落单时长口径）', () => {

@@ -15,28 +15,18 @@ describe('离线上限钳制文案', () => {
     const root = document.createElement('div');
     document.body.appendChild(root);
 
-    const cappedGame = createGame({
-      content,
-      clock: new ManualClock(),
-      seed: 11,
-      contributions: [
-        {
-          modifier: { stat: 'offlineCap', zone: 'flat', value: 6000 },
-          source: { id: 'guixi', kind: 'test', name: '龟息' },
-        },
-      ],
-    });
+    const cappedGame = createGame({ content, clock: new ManualClock(), seed: 11 });
     const ui = buildUi(root, content, () => cappedGame.snapshot(), cappedGame.events);
     ui.bindActions((action: GameAction) => cappedGame.dispatch(action));
     ui.render();
     cappedGame.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
-    cappedGame.settleOffline(60000); // 离开 60s，上限 6s
+    cappedGame.settleOffline(25 * 60 * 60 * 1000); // 离开 25h，基线上限 24h
     cappedGame.events.drain();
     ui.render();
     const text = root.textContent ?? '';
     expect(text).toContain('上限'); // offlineCappedLog 模板词
     expect(text).toContain('离线修行'); // 模板主语保留
-    expect(text).not.toContain('离线修行 6'); // 不再拿结算时长冒充离开时长（60s→"1 时 0 分"）
+    expect(text).not.toContain('离线修行 24'); // 不再拿结算时长冒充离开时长（25h→"25 时 0 分"）
 
     // 未钳制路径回归：无 contributions 时维持 offlineLog 单时长口径
     const plainGame = createGame({ content, clock: new ManualClock(), seed: 11 });

@@ -1132,10 +1132,11 @@ export function createGame(options: CreateGameOptions): Game {
     // 休整回满血统一在此一次（战斗中离线时 activity 必为 null——开战已清采集，
     // 不回满则残血横穿整个离线期，与"气血按脱战回满"契约相悖）。
     state.hp = hpCap();
-    // 离线上限（offlineCap 消费点，#6）：Σflat 毫秒，≤ 0 = 不设限（基线行为
-    // 完全一致）；超限部分不入账（上限的语义本体）。真实离开时长在钳制前
-    // 留档——事件双报（awaySeconds=离开 / seconds=结算），钳制发生时壳层
-    // 区分展示，防结算时长冒充离开时长误导（挂机 20h 只显示"离线 1 时"事故）。
+    // 离线上限（offlineCap 消费点，#6/#59）：基线 24h（BASE_OFFLINE_CAP_MS，
+    // 恢复旧版原型丢失的 8h 上限语义，用户裁决 24h）+ Σflat 毫秒；超出上限
+    // 的部分不入账（上限的语义本体）。真实离开时长在钳制前留档——事件双报
+    //（awaySeconds=离开 / seconds=结算），钳制发生时壳层区分展示，防结算
+    // 时长冒充离开时长误导（挂机 20h 只显示"离线 1 时"事故）。
     const cap = offlineCapOf(playerContributions());
     const awayMs = elapsedMs;
     const capped = cap > 0 && elapsedMs > cap;

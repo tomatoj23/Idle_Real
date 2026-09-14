@@ -303,27 +303,39 @@ describe('#6 · 解锁表：累计道韵门槛（只增不减）', () => {
 });
 
 describe('#6 · 新 stat 消费点（round3 E3 注册表收口）', () => {
-  it('offlineCap：离线结算钳在 Σflat 毫秒内；基线（无天赋）不设限', () => {
+  it('offlineCap：基线 24h + Σflat 叠加——短离线不误伤，长离线钳在上限（#59 基线恢复）', () => {
+    const DAY = 24 * 60 * 60 * 1000;
     const activity = { skillId: 'herb', index: 0, name: '采青灵草', progress: 0 };
-    const capped = {
+    const saveWithTalent = {
       version: 1,
       time: 0,
-      state: { activity, items: {}, talents: ['t_off'] },
+      state: { activity: { ...activity }, items: {}, talents: ['t_off'] },
     } as unknown as SaveData;
-    const game = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save: capped, seed: 7 });
-    game.settleOffline(120000); // 上限 60000 → 20 轮（而非 40）
-    const event = game.events.drain().find((e) => e.type === 'offline-settled');
-    expect(event?.data?.cycles).toBe(20);
-    expect(event?.data?.seconds).toBe(60);
+    // 短离线（2 分钟）远小于基线：不钳（天赋在基线之上叠加，不再反向缩限）
+    const game = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save: saveWithTalent, seed: 7 });
+    game.settleOffline(120000);
+    const shortEvent = game.events.drain().find((e) => e.type === 'offline-settled');
+    expect(shortEvent?.data?.capped).toBe(false);
+    expect(shortEvent?.data?.cycles).toBe(40);
 
+    // 长离线（24h+120s）带 +60s 天赋：钳在 24h+60s = 28820 轮（interval 3000）
+    const game2 = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save: saveWithTalent, seed: 7 });
+    game2.settleOffline(DAY + 120000);
+    const cappedEvent = game2.events.drain().find((e) => e.type === 'offline-settled');
+    expect(cappedEvent?.data?.capped).toBe(true);
+    expect(cappedEvent?.data?.cycles).toBe((DAY + 60000) / 3000);
+
+    // 长离线无天赋：基线 24h 本身生效 = 28800 轮（旧版 8h 上限语义的现代化恢复）
     const plain = {
       version: 1,
       time: 0,
       state: { activity: { ...activity }, items: {} },
     } as unknown as SaveData;
-    const game2 = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save: plain, seed: 7 });
-    game2.settleOffline(120000);
-    expect(game2.events.drain().find((e) => e.type === 'offline-settled')?.data?.cycles).toBe(40);
+    const game3 = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save: plain, seed: 7 });
+    game3.settleOffline(DAY + 120000);
+    const plainEvent = game3.events.drain().find((e) => e.type === 'offline-settled');
+    expect(plainEvent?.data?.capped).toBe(true);
+    expect(plainEvent?.data?.cycles).toBe(DAY / 3000);
   });
 
   it('offlineCap 条件感知：带 condition 的贡献在无语境时不命中（与 gatherSpeedOf/xpMultOf 同律）', () => {

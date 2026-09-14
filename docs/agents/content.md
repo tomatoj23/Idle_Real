@@ -148,7 +148,7 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 | `gatherXp` | engine `game.ts` completeActivityOnce / settleOffline（倍率基线 1） | 采集修为加成（离线/在线同式） |
 | `gatherSpeed` | engine `game.ts` settleActivity / settleOffline + snapshot `activityIntervals`（#40） | 采集轮间隔缩放：有效间隔 = 基础间隔 ÷ 速度（`effectiveIntervalOf` 单一来源）；速度 ≤ 0 = 采集冻结 |
 | `xpMult` | engine `game.ts` grantExp（#6，倍率基线 1） | 全经验倍率：采集/炼制/斗法/离线同路单点，与 gatherXp 叠乘 |
-| `offlineCap` | engine `game.ts` settleOffline（#6，flat 毫秒累计） | 离线结算时长上限：Σ ≤ 0 = 不设限，超限部分不入账 |
+| `offlineCap` | engine `rebirth.ts` offlineCapOf → `game.ts` settleOffline（#6/#59，flat 毫秒累计） | 离线结算时长上限：基线 24h + Σflat，超限部分不入账 |
 
 - 全新 stat（如"幸运"）：bonuses/multipliers/affixPool **纯 JSON 写入即被投影**
   （引擎零拦截，词条可掷、贡献入管线），但**面板生效须引擎新增消费点**（改码）
