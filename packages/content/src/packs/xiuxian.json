@@ -887,7 +887,7 @@
       { "id": "t_hunyuan", "name": "浑元诀", "icon": "浑", "description": "浑元一气充盈——气血永久 +30。", "cost": 2, "effects": [{ "stat": "hp", "zone": "flat", "value": 30 }] },
       { "id": "t_guangfeng", "name": "罡风步", "icon": "风", "description": "踏罡步斗，手脚麻利——采集轮次提速 15%。", "cost": 3, "effects": [{ "stat": "gatherSpeed", "zone": "mult", "value": 1.15 }] },
       { "id": "t_tongming", "name": "通明诀", "icon": "明", "description": "心若通明，一击破绽立现——会心 +3%。", "cost": 4, "requires": ["t_ruijin"], "effects": [{ "stat": "crit", "zone": "flat", "value": 3 }] },
-      { "id": "t_guixi", "name": "龟息功", "icon": "龟", "description": "闭关龟息，离线修行上限 +1 时辰。", "cost": 6, "effects": [{ "stat": "offlineCap", "zone": "flat", "value": 3600000 }] },
+      { "id": "t_guixi", "name": "龟息功", "icon": "龟", "description": "闭关龟息，离线修行上限 +1 时辰。", "cost": 6, "effects": [{ "stat": "offlineCap", "zone": "flat", "value": 7200000 }] },
       { "id": "t_wudao", "name": "悟道通玄", "icon": "悟", "description": "万法殊途同归——全部修为获取 +15%。", "cost": 8, "requires": ["t_xueting"], "effects": [{ "stat": "xpMult", "zone": "mult", "value": 1.15 }] },
       { "id": "t_yufeng", "name": "御风诀", "icon": "御", "description": "御风而行，采撷如飞——采集轮次再提速 20%。", "cost": 10, "requires": ["t_guangfeng"], "effects": [{ "stat": "gatherSpeed", "zone": "mult", "value": 1.2 }] },
       { "id": "t_posha", "name": "破煞诀", "icon": "破", "description": "一往无前，破煞斩邪——攻击永久 +10%。", "cost": 12, "requires": ["t_ruijin", "t_tongming"], "effects": [{ "stat": "atk", "zone": "addPct", "value": 10 }] }
