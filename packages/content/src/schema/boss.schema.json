@@ -100,7 +100,7 @@
       "additionalProperties": false,
       "properties": {
         "item": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "description": "物品 id（语义校验 xref items）" },
-        "chance": { "type": "number", "minimum": 0, "maximum": 1 }
+        "chance": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "description": "专属掉落掷定概率，(0,1]；0 = 死掉落，schema 关卡拒绝（审计修复⑤）" }
       }
     },
     "summonEntry": {

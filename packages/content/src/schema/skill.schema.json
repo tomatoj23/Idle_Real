@@ -88,7 +88,7 @@
           "description": "副产出：以 chance 概率额外获得（如采药得灵蚕丝）",
           "properties": {
             "item": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
-            "chance": { "type": "number", "minimum": 0, "maximum": 1 }
+            "chance": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "description": "副产出掷定概率，(0,1]；0 = 死副产出，schema 关卡拒绝（审计修复⑤）" }
           }
         }
       }

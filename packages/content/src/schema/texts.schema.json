@@ -31,12 +31,15 @@
     "reasonMap": {
       "type": "object",
       "minProperties": 1,
-      "additionalProperties": {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 60
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-zA-Z0-9_:-]*$": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        }
       },
-      "description": "理由 code → 展示文案（code 键域开放：引擎协议 code 演进不破本节；typo 键静默回退键名回显，诊断可见）"
+      "description": "理由 code → 展示文案（code 键域按形态开放：小写起头的 code 演进不破本节，typo 键静默回退键名回显，诊断可见；键形态与 stats.labels 同构——patternProperties + additionalProperties:false 组合，本校验方言无 propertyNames，大写/空格/符号键在 schema 关卡拒绝）"
     },
     "glyph": {
       "type": "string",

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateContentPack } from '../src/index.js';
 import type { ContentError } from '../src/index.js';
+import { fantasyPackJson } from '../src/packs/fantasy.js';
 import { xiuxianPackJson } from '../src/packs/xiuxian.js';
 import { shellFixture } from './fixtures.js';
 
@@ -600,5 +601,146 @@ describe('validateContentPack · 包根白名单（#43 D4，ADR-017 包=纯 cont
 
   it('真实题材包全 17 键（version + 16 注册节）照常通过（白名单不误伤）', () => {
     expect(validateContentPack(xiuxianPackJson).ok).toBe(true);
+  });
+});
+
+describe('validateContentPack · texts.reject 理由 code 键域形态（审计修复③）', () => {
+  it('坏键形态（大写开头）→ additionalProperties 拦截（patternProperties + additionalProperties:false 组合，与 stats.labels 同构）', () => {
+    const pack = makePack();
+    pack.texts.reject['*']['Bad-Payload'] = '坏指令';
+    expectError(validateContentPack(pack), '/texts/reject/*/Bad-Payload', 'additionalProperties');
+  });
+
+  it('键形态合规的新 code 放行（code 键域按形态开放：小写起头 + 中缀 -/:/_）', () => {
+    const pack = makePack();
+    pack.texts.reject['*'] = {
+      'bad-payload': '指令无效',
+      'unknown-action': '未知指令',
+      'new-code:variant_2': '引擎协议 code 演进不破本节',
+    };
+    expect(validateContentPack(pack).ok).toBe(true);
+  });
+
+  it('两题材包现有 reasonMap 键全部合规（边界收紧不误伤现包）', () => {
+    for (const raw of [xiuxianPackJson, fantasyPackJson]) {
+      expect(validateContentPack(raw).ok, `${String(raw['version'])} 全包校验`).toBe(true);
+    }
+  });
+});
+
+describe('validateContentPack · 铭纹条件 moveId 引用检查（审计修复④）', () => {
+  /** 三阶条件铭纹底座：T3 条件修饰符定向于某招式（引擎按战斗语境 moveKey 精确比对）。 */
+  function packWithMoveCondition(moveId: string): Record<string, any> {
+    const pack = makePack();
+    pack.items.push({
+      id: 'rune_parry',
+      name: '格挡铭',
+      icon: '铭',
+      type: 'inscription',
+      sell: 0,
+      tiers: [
+        [{ stat: 'def', zone: 'flat', value: 2 }],
+        [{ stat: 'def', zone: 'flat', value: 4 }],
+        [{ stat: 'def', zone: 'addPct', value: 8, condition: { moveId } }],
+      ],
+    });
+    return pack;
+  }
+
+  it('moveId 悬空（不在招式注册键集）→ 字段级 xref（永不命中的死条件，加载期拒绝）', () => {
+    // 'ghostmove' 过 schema 键形态（^[a-z][a-z0-9_]*$）但未注册——死条件由语义关卡拦截。
+    expectError(
+      validateContentPack(packWithMoveCondition('ghostmove')),
+      '/items/5/tiers/2/0/condition/moveId',
+      'xref',
+    );
+  });
+
+  it('合法 moveId 放行：敌人 id / 武器 id / basic 兜底（注册键集 = checkMoveRegistry 同源）', () => {
+    expect(validateContentPack(packWithMoveCondition('e1')).ok).toBe(true);
+    expect(validateContentPack(packWithMoveCondition('sword1')).ok).toBe(true);
+    expect(validateContentPack(packWithMoveCondition('basic')).ok).toBe(true);
+  });
+});
+
+describe('validateContentPack · 掉落/副产出 chance 掷定域（审计修复⑤）', () => {
+  /** 带两阶段 Boss 的底座（专属掉落挂在 Boss 上，形态循 boss.test 夹具）。 */
+  function packWithBoss(): Record<string, any> {
+    const pack = makePack();
+    pack.combatText.moves.e1_rage = ['狂暴撕咬'];
+    pack.bosses = [
+      {
+        enemy: 'e1',
+        drops: [{ item: 'herb1', chance: 1 }],
+        phases: [
+          { threshold: 0.6, name: '血目暴睁', mods: { atk: 2 }, narration: ['【{enemy}】血目暴睁——{phase}！'] },
+          { threshold: 0.3, name: '狂暴', mods: { attackInterval: 0.5 }, moveKey: 'e1_rage', narration: ['【{enemy}】彻底狂暴！'] },
+        ],
+      },
+    ];
+    return pack;
+  }
+
+  it('enemy 常规掉落 chance = 0 → exclusiveMinimum（死掉落 schema 关卡拒绝）', () => {
+    const pack = makePack();
+    pack.enemies[0].drops[0].chance = 0;
+    expectError(validateContentPack(pack), '/enemies/0/drops/0/chance', 'exclusiveMinimum');
+  });
+
+  it('gearDrops 装备掉率 chance = 0 → exclusiveMinimum', () => {
+    const pack = makePack();
+    pack.gearDrops[0].chance = 0;
+    expectError(validateContentPack(pack), '/gearDrops/0/chance', 'exclusiveMinimum');
+  });
+
+  it('activity 副产出 chance = 0 → exclusiveMinimum（死副产出同律）', () => {
+    const pack = makePack();
+    pack.skills[0].activities[0].byproduct.chance = 0;
+    expectError(validateContentPack(pack), '/skills/0/activities/0/byproduct/chance', 'exclusiveMinimum');
+  });
+
+  it('boss 专属掉落 chance = 0 → exclusiveMinimum', () => {
+    const pack = packWithBoss();
+    pack.bosses[0].drops[0].chance = 0;
+    expectError(validateContentPack(pack), '/bosses/0/drops/0/chance', 'exclusiveMinimum');
+  });
+
+  it('chance = 1（必掉）与开区间内取值照常放行（只关 0 号死掉落门）', () => {
+    const pack = packWithBoss();
+    pack.bosses[0].drops[0].chance = 1;
+    expect(validateContentPack(pack).ok).toBe(true);
+  });
+
+  it('两题材包现有掷定 chance 全在 (0,1]（边界收紧不误伤现包）', () => {
+    const chancesOf = (raw: unknown): number[] => {
+      const pack = raw as {
+        enemies?: { drops?: { chance: number }[] }[];
+        gearDrops?: { chance: number }[];
+        bosses?: { drops?: { chance: number }[] }[];
+        skills?: { activities?: { byproduct?: { chance: number } }[] }[];
+      };
+      const out: number[] = [];
+      for (const enemy of pack.enemies ?? []) {
+        for (const drop of enemy.drops ?? []) out.push(drop.chance);
+      }
+      for (const gearDrop of pack.gearDrops ?? []) out.push(gearDrop.chance);
+      for (const boss of pack.bosses ?? []) {
+        for (const drop of boss.drops ?? []) out.push(drop.chance);
+      }
+      for (const skill of pack.skills ?? []) {
+        for (const activity of skill.activities ?? []) {
+          if (activity.byproduct !== undefined) out.push(activity.byproduct.chance);
+        }
+      }
+      return out;
+    };
+    for (const raw of [xiuxianPackJson, fantasyPackJson]) {
+      const chances = chancesOf(raw);
+      expect(chances.length, '题材包应实际覆盖掷定域，扫描器不可空转').toBeGreaterThan(0);
+      for (const chance of chances) {
+        expect(chance, `chance ${chance} 应在 (0,1]`).toBeGreaterThan(0);
+        expect(chance, `chance ${chance} 应在 (0,1]`).toBeLessThanOrEqual(1);
+      }
+    }
   });
 });

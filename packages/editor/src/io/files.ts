@@ -12,7 +12,46 @@ export interface PackFileInfo {
 }
 
 /**
+ * 原型污染防御键集（审计修复②）：内容包文件来自外部，JSON.parse 会把
+ * "__proto__" 造成 own 数据属性（CreateDataProperty 语义，不走 setter、
+ * 不触发防写），随后深拷贝/合并路径可能被污染；constructor/prototype
+ * 同列剔除。
+ */
+const PROTOTYPE_POLLUTION_KEYS: ReadonlySet<string> = new Set([
+  '__proto__',
+  'constructor',
+  'prototype',
+]);
+
+/**
+ * 深度净化 JSON.parse 产物：递归数组与普通对象，剔除危险自有键后重建
+ * 容器。只读 own enumerable 键（Object.entries 语义，不触原型链），
+ * 键名带冒号等形态不受影响；剔除键的子树一并丢弃。
+ */
+function sanitizeParsed(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeParsed(item));
+  }
+  if (value !== null && typeof value === 'object') {
+    const clean: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      if (!PROTOTYPE_POLLUTION_KEYS.has(key)) {
+        clean[key] = sanitizeParsed(item);
+      }
+    }
+    return clean;
+  }
+  return value;
+}
+
+/** 解析内容包 JSON 文本：解析失败原样抛错；成功先净化（剔除原型污染键）。 */
+function parsePackJson(text: string): unknown {
+  return sanitizeParsed(JSON.parse(text));
+}
+
+/**
  * 读取内容包文件：.json 直接解析；.zip 解包取首个 .json 条目。
+ * 解析产物先经 sanitizeParsed 净化（原型污染键剔除，审计修复②）。
  * 解析失败抛错（调用方呈现给用户；包数据不受影响）。
  */
 export async function readPackFile(file: File): Promise<PackFileInfo> {
@@ -24,10 +63,10 @@ export async function readPackFile(file: File): Promise<PackFileInfo> {
     if (jsonEntry === undefined) {
       throw new Error('zip 包内未找到 .json 内容文件');
     }
-    return { json: JSON.parse(strFromU8(entries[jsonEntry]!)), sourceName: file.name };
+    return { json: parsePackJson(strFromU8(entries[jsonEntry]!)), sourceName: file.name };
   }
   if (name.endsWith('.json')) {
-    return { json: JSON.parse(strFromU8(bytes)), sourceName: file.name };
+    return { json: parsePackJson(strFromU8(bytes)), sourceName: file.name };
   }
   throw new Error('仅支持 .json / .zip 内容包文件');
 }

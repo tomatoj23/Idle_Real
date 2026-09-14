@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
-import { strFromU8, unzipSync } from 'fflate';
+import { strFromU8, unzipSync, zipSync } from 'fflate';
 import { validateContentPack } from '@wendao/content';
 import { xiuxianPackJson } from '@wendao/content/packs/xiuxian';
 import {
@@ -37,6 +37,26 @@ describe('io/files：导入导出往返', () => {
     await expect(readPackFile(jsonFile('{oops'))).rejects.toThrow();
     const emptyZip = new File([exportZipBytes({ version: '0.1.0' }).slice(0, 0) as BlobPart], 'x.zip');
     await expect(readPackFile(emptyZip)).rejects.toThrow();
+  });
+
+  it('原型污染键防御：__proto__/constructor/prototype 自有键被剔除且解析不炸（审计修复②）', async () => {
+    // 原始文本携带污染键（JSON.parse 会把 __proto__ 造成 own 数据属性，
+    // JS 对象字面量写不出这个形态，须以字符串原文构造）。
+    const raw =
+      '{"version":"0.1.0","__proto__":{"injected":1},' +
+      '"nested":{"constructor":{"x":2},"keep":"ok"},' +
+      '"list":[{"prototype":{"y":3},"name":"盾"}]}';
+    // .json 路径：危险键全深度剔除，其余数据完好。
+    const info = await readPackFile(jsonFile(raw));
+    const json = info.json as Record<string, unknown>;
+    expect(Object.getOwnPropertyNames(json)).toEqual(['version', 'nested', 'list']);
+    expect(json['version']).toBe('0.1.0');
+    expect(json['nested']).toEqual({ keep: 'ok' });
+    expect(json['list']).toEqual([{ name: '盾' }]);
+    // .zip 路径：同一净化语义（解包后的 JSON 文本同 parsePackJson 入口）。
+    const zip = zipSync({ 'pack.json': new TextEncoder().encode(raw) });
+    const zipInfo = await readPackFile(new File([zip as BlobPart], 'pack.zip'));
+    expect(Object.getOwnPropertyNames(zipInfo.json as object)).toEqual(['version', 'nested', 'list']);
   });
 
   it('JSON 导出字节 ↔ 原包一致（2 空格缩进）', () => {

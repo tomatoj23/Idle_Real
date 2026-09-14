@@ -17,9 +17,9 @@
         },
         "chance": {
           "type": "number",
-          "minimum": 0,
+          "exclusiveMinimum": 0,
           "maximum": 1,
-          "description": "装备掉率"
+          "description": "装备掉率，(0,1]；0 = 死掉落，schema 关卡拒绝（审计修复⑤）"
         },
         "pool": {
           "type": "array",

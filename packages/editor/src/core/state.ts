@@ -38,6 +38,29 @@ export interface EditorStore {
   hasPack(): boolean;
 }
 
+/**
+ * 脏包载入确认文案（审计修复①）：loadPack 是整树替换，dirty 包被新包
+ * 覆盖即丢改动，替换动作必须先经用户确认。
+ */
+export const DIRTY_LOAD_MESSAGE = '当前包有未导出的修改，载入将丢弃，确认？';
+
+/**
+ * 载入新包前的脏确认守卫（数据丢失防护，审计修复①）：包干净（或尚无包）
+ * 直接放行；有未导出改动时经 confirmFn 询问，用户取消则返回 false——
+ * 调用点必须就此 return，不得调用 loadPack。
+ * confirmFn 由调用方注入：浏览器侧传 window.confirm 的方法包裹（直接解构
+ * 原生方法存函数值会 Illegal invocation，工程红线），测试侧传 stub。
+ */
+export function confirmDirtyLoad(
+  store: EditorStore,
+  confirmFn: (message: string) => boolean,
+): boolean {
+  if (!store.state.dirty) {
+    return true;
+  }
+  return confirmFn(DIRTY_LOAD_MESSAGE);
+}
+
 export function createStore(initial?: unknown): EditorStore {
   let state: EditorState = {
     pack: {},

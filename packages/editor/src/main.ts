@@ -7,7 +7,7 @@ import './style.css';
 import { sectionSchemas } from '@wendao/content';
 import { xiuxianPackJson } from '@wendao/content/packs/xiuxian';
 import { SECTION_LABELS } from './core/labels.js';
-import { createStore } from './core/state.js';
+import { confirmDirtyLoad, createStore } from './core/state.js';
 import { exportJsonDownload, exportZipDownload, readPackFile } from './io/files.js';
 import { exportToGame } from './io/gameBridge.js';
 import { createValidatePanel } from './ui/panel.js';
@@ -173,8 +173,18 @@ if (app) {
   refreshAll();
   repaintForm();
 
+  /* —— 关窗脏提醒（审计修复①）：有未导出改动时浏览器弹原生留页确认。 —— */
+  window.addEventListener('beforeunload', (event) => {
+    if (store.state.dirty) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  });
+
   /* —— 顶栏动作 —— */
   document.querySelector('#btn-sample')?.addEventListener('click', () => {
+    // 脏包守卫（审计修复①）：示例包载入是整树替换，未导出改动先确认。
+    if (!confirmDirtyLoad(store, (message) => window.confirm(message))) return;
     const result = store.loadPack(JSON.parse(JSON.stringify(xiuxianPackJson)));
     showToast(result.ok ? '示例包（修仙）已载入' : `示例包校验失败：${result.errors.length} 错`);
     refreshAll();
@@ -194,6 +204,12 @@ if (app) {
   async function importFile(file: File): Promise<void> {
     try {
       const info = await readPackFile(file);
+      // 脏包守卫（审计修复①）：坏包不会应用（loadPack 校验关卡），
+      // 但合法包会整树替换——有未导出改动时先确认再载入。
+      if (!confirmDirtyLoad(store, (message) => window.confirm(message))) {
+        showToast('已取消导入：当前包的未导出修改已保留');
+        return;
+      }
       const result = store.loadPack(info.json);
       if (result.ok) {
         refreshAll();

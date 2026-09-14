@@ -288,7 +288,10 @@ function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
 
   // 系别存在性（#25 键域开放）：注册表构建一次，三处引用面统一对照。
   const elementIds = new Set(pack.elements.map((entry) => entry.id));
-  checkElementRefs(pack, elementIds, errors);
+  // 招式注册键集（审计修复④）：与 checkMoveRegistry 同源同律（basic 兜底 +
+  // 武器 + 敌人 + Boss 变招），供铭纹条件 moveId 引用检查复用，零第二份键集逻辑。
+  const moveKeys = new Set<string>(['basic', ...weaponIds, ...enemyIndex.keys(), ...bossMoveKeys]);
+  checkElementRefs(pack, elementIds, moveKeys, errors);
   // 系别机制签名（#15，ADR-012）：原语闭集镜像 + 机械原语参数必填。
   checkElementSignatures(pack.elements, errors);
 
@@ -872,17 +875,20 @@ function checkVerbStyles(
 }
 
 /**
- * 系别存在性（#25 键域开放的存在性关卡，循 #21 动词风格先例）：
+ * 系别/招式引用存在性（#25 键域开放的存在性关卡，循 #21 动词风格先例）：
  * schema 只钉键形态不钉取值，引用合法性在此收口——敌人 element、
  * affinities 键、铭纹条件 element（胚纹/三阶表/feature 三落点）、武器
  * element（equip/blank，#15）、elementFlavor 池键（#15）引用的系别键都
- * 必须命中 elements 节注册表（坏包加载期拒绝，逐字段可定位）。
+ * 必须命中 elements 节注册表；铭纹条件 moveId（审计修复④）必须命中
+ * 招式注册键集（basic/武器/敌人/Boss 变招，与 checkMoveRegistry 同源）。
+ * 坏引用加载期大声拒绝，逐字段可定位。
  * 缺省/兜底约定：敌人/武器不填 element = 凡击；聚合语境无 element 维度时
  * 条件修饰符不生效（引擎 conditionMatches 语义不变）。
  */
 function checkElementRefs(
   pack: ContentPack,
   registered: ReadonlySet<string>,
+  moveKeys: ReadonlySet<string>,
   errors: ContentError[],
 ): void {
   const message = (id: string): string => `系别 "${id}" 未在包 elements 节注册`;
@@ -916,19 +922,28 @@ function checkElementRefs(
     }
     const checkCondition = (condition: ModifierCondition | undefined, path: string): void => {
       if (condition?.element !== undefined && !registered.has(condition.element)) {
-        errors.push({ path, keyword: 'xref', message: message(condition.element) });
+        errors.push({ path: `${path}/element`, keyword: 'xref', message: message(condition.element) });
+      }
+      // 条件招式定向（审计修复④）：moveId 悬空 = 永不命中的死条件
+      // （引擎 conditionMatches 按战斗语境 moveKey 精确比对），加载期拒绝。
+      if (condition?.moveId !== undefined && !moveKeys.has(condition.moveId)) {
+        errors.push({
+          path: `${path}/moveId`,
+          keyword: 'xref',
+          message: `招式 "${condition.moveId}" 未在招式注册键集（basic/武器/敌人/Boss 变招）中注册`,
+        });
       }
     };
     (item.inherentModifiers ?? []).forEach((mod, j) => {
-      checkCondition(mod.condition, `/items/${i}/inherentModifiers/${j}/condition/element`);
+      checkCondition(mod.condition, `/items/${i}/inherentModifiers/${j}/condition`);
     });
     (item.tiers ?? []).forEach((tier, t) => {
       tier.forEach((mod, j) => {
-        checkCondition(mod.condition, `/items/${i}/tiers/${t}/${j}/condition/element`);
+        checkCondition(mod.condition, `/items/${i}/tiers/${t}/${j}/condition`);
       });
     });
     if (item.feature !== undefined) {
-      checkCondition(item.feature.condition, `/items/${i}/feature/condition/element`);
+      checkCondition(item.feature.condition, `/items/${i}/feature/condition`);
     }
   });
   // 系别风味句池键（#15）：combatText.elementFlavor 键 = elements 注册系别。
