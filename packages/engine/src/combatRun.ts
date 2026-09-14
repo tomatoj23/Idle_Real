@@ -561,7 +561,9 @@ export function createCombatRun(deps: CombatRunDeps): CombatRun {
     }
 
     const skill = deps.combatSkill();
-    if (skill) deps.ledger.exp(skill, enemy.exp);
+    // 载荷记实发值（xpMult 后，ledger.exp 返回值），与修行录账本同源；
+    // 名义值口径曾致带 xpMult 天赋时战斗日志与账本对不上。
+    const gained = skill ? deps.ledger.exp(skill, enemy.exp) : 0;
 
     const tally = { rounds: c.rounds, crits: c.crits, tiers: c.tiers };
     const summary = summarizeRounds(tally, combatText, random);
@@ -579,7 +581,7 @@ export function createCombatRun(deps: CombatRunDeps): CombatRun {
         enemyName: enemy.name,
         gold: goldGain,
         rounds: c.rounds,
-        exp: skill ? enemy.exp : 0,
+        exp: gained,
         summary,
         drops,
         ...(gearDropName !== undefined ? { gearDropName } : {}),

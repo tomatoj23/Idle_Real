@@ -163,7 +163,12 @@ export function createGame(options: CreateGameOptions): Game {
   const state: GameState = options.save
     ? restoreState(content, options.save, options.seed ?? 1, contributions)
     : initialState(content, options.seed ?? 1, contributions);
-  let time = options.save?.time ?? 0;
+  // 顶层 time 与 state 内层同律（坏档 = 新开局兜底）：非有限值拒收，防字符串
+  // 档把 time += dt 变拼接、污染 buff 到期与 encounter.at 全部时间语义。
+  let time =
+    typeof options.save?.time === 'number' && Number.isFinite(options.save.time)
+      ? options.save.time
+      : 0;
 
   const injectedRng = options.rng;
   let rng = createRng(state.rngSeed);
@@ -541,10 +546,9 @@ export function createGame(options: CreateGameOptions): Game {
     emitLedger({ ...ledgerBase(source, meta), kind: 'currency', id: 'daoYun', count: delta, value: 0 });
   }
 
-  /** 发放修为：返回实发值（倍率后取整）——离线事件载荷与实际入账同源。
-   * ledger 缺省 = 不发账本事件；提供时无论 quiet 与否都发（修为账本事件是
-   * 新协议面：离线结算走同一咽喉管线，offline 标注，#39 D6——quiet 只压旧
-   * 形状 exp/levelup，保「离线单条 offline-settled」旧契约）。 */
+  /** 发放修为（名义额）：经全经验倍率（xpMult 消费点，#6）取整后入账，与
+   * 采集特化倍率 gatherXp（调用方先行叠乘）自然组合。craft/combat/离线单发
+   * 路径由此单点消费 xpMult。 */
   function grantExp(
     skill: SkillView,
     amount: number,
@@ -552,9 +556,23 @@ export function createGame(options: CreateGameOptions): Game {
     ledger?: { source: LedgerSource; meta: LedgerMeta },
   ): number {
     if (!(amount > 0)) return 0;
-    // 全经验倍率（xpMult 消费点，#6）：gather/craft/combat/离线同路单点，
-    // 与采集特化倍率 gatherXp（调用方先行叠乘）自然组合。
     const granted = Math.round(amount * xpMultOf(playerContributions()));
+    return grantExpExact(skill, granted, quiet, ledger);
+  }
+
+  /** 发放修为（精确额，不乘 xpMult）：每循环舍入口径的调用方（grantGatherExp/
+   * settleCraftOffline）已在单轮粒度消费过倍率，整批传入防二次舍入——否则
+   * 离线 round(N×单轮×xpMult) ≠ 在线 N×round(单轮×xpMult)，非整乘数分叉复活。
+   * 返回实发值（倍率后取整）——离线事件载荷与实际入账同源。
+   * ledger 缺省 = 不发账本事件；提供时无论 quiet 与否都发（修为账本事件是
+   * 新协议面：离线结算走同一咽喉管线，offline 标注，#39 D6——quiet 只压旧
+   * 形状 exp/levelup，保「离线单条 offline-settled」旧契约）。 */
+  function grantExpExact(
+    skill: SkillView,
+    granted: number,
+    quiet: boolean,
+    ledger?: { source: LedgerSource; meta: LedgerMeta },
+  ): number {
     if (!(granted > 0)) return 0;
     const before = levelFromXp(xpOf(skill.id), pparams);
     const entry = state.skills[skill.id] ?? { xp: 0 };
@@ -585,10 +603,9 @@ export function createGame(options: CreateGameOptions): Game {
   }
 
   /**
-   * 采集修为（二轮评审卡5 裁决）：口径 = 每循环舍入——先按 gatherXp 特化
-   * 乘数求单轮修为（round），在线 cycles=1 逐次调、离线 cycles=N 一次调，
-   * 恒定乘数下逐循环累加 ≡ 单轮值 × N，天然对拍（非整乘数不再 33/32 分叉）。
-   * 全经验倍率 xpMult 仍由 grantExp 单点消费（gatherXp 先行叠乘，两路同序）；
+   * 采集修为（二轮评审卡5 裁决）：口径 = 每循环舍入——gatherXp 特化乘数与
+   * 全经验倍率 xpMult 都在单轮粒度消费（各自 round），恒定乘数下在线逐循环
+   * 累加 ≡ 单轮实发 × N（离线 cycles=N 一次调），非整乘数不再 33/32 分叉；
    * 入账走咽喉管线（ledger exp 事件，离线 offline 标注）。
    */
   function grantGatherExp(
@@ -598,10 +615,11 @@ export function createGame(options: CreateGameOptions): Game {
     quiet: boolean,
     ledger: { source: LedgerSource; meta: LedgerMeta },
   ): number {
+    const contribs = playerContributions();
     const gatherMult =
-      aggregateStats({ gatherXp: 1 }, playerContributions(), {}).gatherXp?.value ?? 1;
-    const perCycle = Math.round(activity.exp * gatherMult);
-    return grantExp(skill, perCycle * cycles, quiet, ledger);
+      aggregateStats({ gatherXp: 1 }, contribs, {}).gatherXp?.value ?? 1;
+    const perCycle = Math.round(Math.round(activity.exp * gatherMult) * xpMultOf(contribs));
+    return grantExpExact(skill, perCycle * cycles, quiet, ledger);
   }
 
   /** 拒绝事件：展示文案由 texts 节按 action+reason 解析（#019），协议 code 保留。 */
@@ -818,7 +836,12 @@ export function createGame(options: CreateGameOptions): Game {
         return;
       }
       ledgerItem(consumableId, -1, 'eat', silent ? META_IDLE : META_USER);
-      const healed = Math.min(cap, state.hp + Math.round(cap * item.heal.percent)) - state.hp;
+      // 运行时兜底与 modifiers 侧 isUsable 同律：坏包负值/超界 percent 不致
+      // 「吃丹掉血」或越顶回复（包校验是第一道关，此处只降伤害不修正数据）。
+      const pct = Number.isFinite(item.heal.percent)
+        ? Math.min(1, Math.max(0, item.heal.percent))
+        : 0;
+      const healed = Math.min(cap, state.hp + Math.round(cap * pct)) - state.hp;
       state.hp += healed;
       events.emit({
         type: 'consumable:eat',
@@ -969,15 +992,21 @@ export function createGame(options: CreateGameOptions): Game {
    * 战斗推进与快照投影共用一份（禁第二份缩放组合）。 */
 
   /**
-   * 进入指定层：加权抽敌 → 以层倍率投影的气血 → enterCombat 单序列
-   * （战斗状态机与解算零分叉，#44）。层表空/敌人全缺失 = 'no-layer'
-   * （防御路径，包校验已拦）；low-hp 语义见 enterCombat。
+   * 进入指定层：low-hp 复查 → 加权抽敌 → 以层倍率投影的气血 → enterCombat
+   * 单序列（战斗状态机与解算零分叉，#44）。层表空/敌人全缺失 = 'no-layer'
+   * （防御路径，包校验已拦）。low-hp 复查先于抽敌（isLowHp 同一谓词，非第
+   * 二份血线式）：拒绝路径不得有可观察副作用——先抽敌会烧一次 RNG（种子随
+   * 档持久，ADR-013），被拒动作无声改变后续随机流，破坏同种子回放确定性。
    */
   function enterDungeonFloor(
     dungeon: DungeonView,
     floor: number,
     actionType?: string,
   ): 'ok' | 'no-layer' | 'low-hp' {
+    if (isLowHp()) {
+      if (actionType !== undefined) reject(actionType, 'low-hp');
+      return 'low-hp';
+    }
     const enemy = pickDungeonEnemyOf(content, dungeon, floor, random);
     if (!enemy) return 'no-layer';
     const scaled = dungeonFloorEnemyOf(content, dungeon.id, floor, enemy.id) ?? enemy;
@@ -1091,12 +1120,18 @@ export function createGame(options: CreateGameOptions): Game {
    * 不逐轮回放。气血按脱战回满。只产出一条 offline-settled 汇总事件。
    */
   function settleOfflineInner(elapsedMs: number): void {
-    if (elapsedMs <= 0) return;
+    // 与 tick 同律（Number.isFinite 门）：NaN/Infinity 不设防会沿 total→cycles
+    // 污染 active.progress（活动永久卡死）与物品计数（NaN 落盘序列化为 null，
+    // 恢复侧丢弃 = 物品凭空消失）。
+    if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return;
     if (state.combat) {
-      state.combat = null; // 离线不可战斗：视作离场休整，回满血由下方统一处理
+      state.combat = null; // 离线不可战斗：视作离场休整
       combatRun.resetProcs(); // 系别临时态不落盘，离线离场即散（#15）
     }
     if (state.dungeon) state.dungeon = null; // 秘境不可离线续跑：就地离境（最高层已随进层登记，#7）
+    // 休整回满血统一在此一次（战斗中离线时 activity 必为 null——开战已清采集，
+    // 不回满则残血横穿整个离线期，与"气血按脱战回满"契约相悖）。
+    state.hp = hpCap();
     // 离线上限（offlineCap 消费点，#6）：Σflat 毫秒，≤ 0 = 不设限（基线行为
     // 完全一致）；超限部分不入账（上限的语义本体）。
     const cap = offlineCapOf(playerContributions());
@@ -1124,8 +1159,6 @@ export function createGame(options: CreateGameOptions): Game {
     const total = active.progress + elapsedMs;
     const cycles = Math.floor(total / interval);
     active.progress = total - cycles * interval;
-
-    state.hp = hpCap(); // 离线全程脱战
 
     if (cycles <= 0) return;
     const items: Record<string, number> = {};
@@ -1190,8 +1223,6 @@ export function createGame(options: CreateGameOptions): Game {
     const cycles = Math.floor(total / recipe.interval);
     active.progress = total % recipe.interval;
 
-    state.hp = hpCap(); // 离线全程脱战
-
     if (cycles <= 0) return;
     let attempts = cycles;
     for (const [matId, need] of Object.entries(recipe.materials)) {
@@ -1239,12 +1270,15 @@ export function createGame(options: CreateGameOptions): Game {
       }
     }
 
-    const expBase = Math.round(
-      successes * recipe.exp + failures * recipe.exp * Math.max(0, crparams.failExpRefund),
-    );
+    // 每循环舍入口径（与在线逐轮恒等对拍）：xpMult 与失败返还都在单轮粒度
+    // round 后按轮数聚合（grantExpExact 收整批，防总额二次舍入分叉）。
+    const xpMult = xpMultOf(playerContributions());
+    const failPerRound = Math.round(recipe.exp * Math.max(0, crparams.failExpRefund));
+    const expBase =
+      successes * Math.round(recipe.exp * xpMult) + failures * Math.round(failPerRound * xpMult);
     const before = levelFromXp(xpOf(skill.id));
-    // xpMult 由 grantExp 单点消费；事件载荷 = 实发值（离线/在线对称）。
-    const expTotal = grantExp(skill, expBase, true, { source: 'craft', meta: META_OFFLINE });
+    // 事件载荷 = 实发值（离线/在线对称）。
+    const expTotal = grantExpExact(skill, expBase, true, { source: 'craft', meta: META_OFFLINE });
     const after = levelFromXp(xpOf(skill.id));
     const levels =
       after > before
@@ -1318,7 +1352,11 @@ export function createGame(options: CreateGameOptions): Game {
       } else {
         // 脱战回血。
         const cap = hpCap();
-        if (state.hp < cap) {
+        if (state.hp > cap) {
+          // 上限收缩压回（maxHp 修饰 buff 到期发生在属性投影读时，无伴随钳点；
+          // regen 每 tick 必到，是自然的自愈位——否则超顶滞留至下次穿卸/重置）。
+          state.hp = cap;
+        } else if (state.hp < cap) {
           state.hp = Math.min(cap, state.hp + cap * pparams.hpRegenPerSec * (dt / 1000));
         }
         settleActivity(dt);

@@ -249,6 +249,9 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
       //（声明序在 gear 前，装备/增益/天赋投影不可见）：createGame 恢复后按
       // 完整属性投影统一钳制（唯一上限钳点）——#41 残边界（纯装备抬升的
       // hp 头寸恢复瞬间被修为基线钳掉）由此根治。
+      // 契约（导出面）：restoreState 单独调用产出的 hp 未钳顶，只供
+      // createGame 消费；框架消费者不得以 restoreState 产物直接作为运行态
+      //（此处补钳会因投影不全而错误压低合法 hp，两害相权取不钳）。
       const cap = playerMaxHp(env.content, state.skills, env.contributions);
       state.hp = Math.max(0, safeNumber(raw.hp, cap));
     },
