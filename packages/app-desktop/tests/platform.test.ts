@@ -105,6 +105,55 @@ describe('#10 · 模式裁决 resolvePlatform', () => {
       }).mode,
     ).toBe('steam');
   });
+
+  it('Steam 客户端注入的驼峰 SteamAppId/SteamGameId → steam；非数字同律回 mock', () => {
+    const logs: string[] = [];
+    // 正式渠道线索：Steam 客户端启动注入的是驼峰键（depot 无 steam_appid.txt）。
+    expect(
+      resolvePlatform({
+        env: { SteamAppId: '480' },
+        userDataDir: tempRoot(),
+        log: (m) => logs.push(m),
+        requireSteam: () => fakeSteam(logs),
+      }).mode,
+    ).toBe('steam');
+    expect(
+      resolvePlatform({
+        env: { SteamGameId: '42690' },
+        userDataDir: tempRoot(),
+        log: (m) => logs.push(m),
+        requireSteam: () => fakeSteam(logs),
+      }).mode,
+    ).toBe('steam');
+    expect(
+      resolvePlatform({
+        env: { SteamAppId: 'abc' },
+        userDataDir: tempRoot(),
+        log: (m) => logs.push(m),
+        requireSteam: () => fakeSteam(logs),
+      }).mode,
+    ).toBe('mock');
+  });
+
+  it('init 不抛错但返回形状漂移（缺 cloud）→ 与 init 失败同律回 mock', () => {
+    const logs: string[] = [];
+    const root = tempRoot();
+    const platform = resolvePlatform({
+      env: { STEAM_APPID: '480' },
+      userDataDir: root,
+      log: (m) => logs.push(m),
+      // 形状漂移样本：achievement 在而 cloud 缺（云存档将静默永久失败的形态）。
+      requireSteam: () => ({ achievement: { activate: () => true } }) as unknown as SteamClient,
+    });
+    expect(platform.mode).toBe('mock');
+    // 回落的 mock 必须功能完整：文件槽位可写读（非半残 steam 面）。
+    expect(platform.loadSlot('wendao_changsheng_v3')).toBeNull();
+    platform.writeSlot('wendao_changsheng_v3', '{"version":1}');
+    expect(platform.loadSlot('wendao_changsheng_v3')).toBe('{"version":1}');
+    expect(logs.join('\n')).toContain('adapter=mock');
+    expect(logs.join('\n')).toContain('malformed client');
+    rmSync(root, { recursive: true, force: true });
+  });
 });
 
 describe('#10 · mock 平台（文件槽位 + 成就本地记账）', () => {

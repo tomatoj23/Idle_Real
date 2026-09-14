@@ -177,6 +177,8 @@ export function buildUi(
   let rebirthArmed = false;
   let handler: ((action: GameAction) => void) | null = null;
   let lastSig = '';
+  /** 增益条键签名（renderBuffbar 重建判据；null = 尚未建）。 */
+  let lastBuffSig: string | null = null;
   let rafId = 0;
 
   root.innerHTML = `
@@ -639,10 +641,14 @@ export function buildUi(
     syncFlogScroll();
   }
 
-  /** 顶栏增益条：剩余时长轻量刷新（每帧），结构变化由 signature 驱动。 */
+  /** 顶栏增益条：剩余时长轻量刷新（每帧），结构变化由键签名驱动。 */
   function renderBuffbar(st: GameState, now: number): void {
     const entries = Object.entries(st.buffs);
-    if (buffbarEl.childElementCount !== entries.length) {
+    // 同数量换 buff（A 到期 + B 服下）childElementCount 不变，按数量判重建会
+    // 旧 chip 永挂——改比键签名（signature() 同策略）。
+    const sig = entries.map(([id]) => id).sort().join(',');
+    if (sig !== lastBuffSig) {
+      lastBuffSig = sig;
       buffbarEl.innerHTML = entries
         .map(([id]) => {
           const item = itemById.get(id);

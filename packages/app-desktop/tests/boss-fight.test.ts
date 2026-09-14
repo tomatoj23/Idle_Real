@@ -156,6 +156,8 @@ describe('#8 · Boss 战壳呈现', () => {
     game.events.drain();
     ui.render(); // happy-dom 无 rAF，事件驱动的合并重绘需手动触发
     expect(root.querySelectorAll('.bar > i.tick')).toHaveLength(2);
+    // 敌方血条 fill 存在性（无文本节点元素，innerText 断言盲区教训）
+    expect(root.querySelector('[data-bar="enemy"]')).not.toBeNull();
     const lefts = Array.from(root.querySelectorAll<HTMLElement>('.bar > i.tick')).map((el) => el.style.left);
     expect(lefts).toEqual(['60%', '30%']);
     expect(root.querySelector('.boss-phase')).toBeNull(); // 未入脚本阶段

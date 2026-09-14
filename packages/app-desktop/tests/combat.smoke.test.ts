@@ -33,6 +33,8 @@ describe('UI 烟测（issue #4 战斗切片）', () => {
     expect(root.querySelector('.enemy-card.fighting')).not.toBeNull();
     expect(root.querySelector('#flog')).not.toBeNull();
     expect(root.querySelector('[data-act="flee"]')).not.toBeNull();
+    // 增益条容器常驻顶栏（无文本节点元素以存在性断言，innerText 盲区教训）
+    expect(root.querySelector('#buffbar')).not.toBeNull();
 
     // 挂机至首场胜利（假时钟大步长；胜利即停，避免后续连场败北离场）
     let won = false;
@@ -134,6 +136,34 @@ describe('UI 烟测（issue #4 战斗切片）', () => {
     ui.render();
     // 回气丹恢复 30% 上限：50 + 34 = 84
     expect(root.querySelector('#res-hp-text')!.textContent).toContain('84/');
+    // 血条 fill 元素存在性（进度条被删后 innerText 断言仍绿的历史教训）
+    expect(root.querySelector('#res-hp')).not.toBeNull();
     expect(game.snapshot().state.items['consumable_heal']).toBeUndefined();
+  });
+
+  it('增益条：同数量换 buff（A 到期 + B 服下）chip 跟随换新', () => {
+    const clock = new ManualClock();
+    const content = loadXiuxianPack();
+    const game = createGame({ content, clock, seed: 3 });
+    const base = game.snapshot();
+    const save = {
+      ...base,
+      state: {
+        ...(base.state as Record<string, unknown>),
+        buffs: { consumable_atk: 600000 } as Record<string, number>,
+      },
+    } as SaveData;
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const ui = buildUi(root, content, () => save, game.events);
+    ui.render();
+
+    // 先有 buff A
+    expect(root.querySelector('.buff-chip[data-buff="consumable_atk"]')).not.toBeNull();
+    // 同数量换 buff：A 到期 + B 服下——childElementCount 判据对此失明，chip 必须换新
+    (save.state as { buffs: Record<string, number> }).buffs = { consumable_def: 600000 };
+    ui.render();
+    expect(root.querySelector('.buff-chip[data-buff="consumable_atk"]')).toBeNull();
+    expect(root.querySelector('.buff-chip[data-buff="consumable_def"]')).not.toBeNull();
   });
 });

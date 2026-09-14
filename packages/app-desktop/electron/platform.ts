@@ -6,7 +6,7 @@
  * 注入 renderer（src/desktop.ts 组装为 engine 的 SaveAdapter 形状）。
  *
  * 模式裁决（票面「mock adapter 优先」）：
- * - 无 AppID 环境变量（STEAM_APPID / STEAMAPPID 别名）→ mock：
+ * - 无 AppID 环境变量（STEAM_APPID / STEAMAPPID / SteamAppId / SteamGameId）→ mock：
  *   存档 = userData/saves/<key>.json 文件槽位；成就 = achievements.json 本地记账；
  * - 有 AppID → 尝试 steamworks.js init（需 Steam 客户端在运行）：
  *   失败（客户端未开/原生模块缺失）静默回落 mock，绝不崩壳；
@@ -156,11 +156,32 @@ export function createSteamPlatform(client: SteamClient, log: Logger = () => {})
 
 /* ---------- 模式裁决 ---------- */
 
-/** 从环境解析 AppID（STEAM_APPID，兼容 Steamworks SDK 惯用的 STEAMAPPID）。 */
+/**
+ * 从环境解析 AppID。SDK 文档惯用的 STEAM_APPID / STEAMAPPID 之外，还须认
+ * Steam 客户端启动游戏时注入的驼峰 SteamAppId / SteamGameId——depot 构建
+ * 排除 steam_appid.txt 后环境变量是正式渠道的唯一线索，漏认 = 恒回 mock。
+ * 读值转数字校验：NaN / 负值一律视为未配置（不喂 init 脏值）。
+ */
 export function appIdFromEnv(env: Readonly<Record<string, string | undefined>>): number | undefined {
-  const raw = env['STEAM_APPID'] ?? env['STEAMAPPID'];
-  if (raw === undefined || !/^\d+$/.test(raw.trim())) return undefined;
-  return Number.parseInt(raw.trim(), 10);
+  const raw =
+    env['STEAM_APPID'] ?? env['STEAMAPPID'] ?? env['SteamAppId'] ?? env['SteamGameId'];
+  const parsed = raw === undefined ? Number.NaN : Number.parseInt(raw.trim(), 10);
+  return Number.isNaN(parsed) || parsed < 0 ? undefined : parsed;
+}
+
+/**
+ * init() 返回值形状校验：steamworks 原生面不抛错也可能形状漂移（版本/平台
+ * 差异），缺 cloud/achievement 接口 = 云存档静默永久失败（loadSlot 恒 null）。
+ * 按 SteamClient 声明面逐一核对函数存在性，不达标与 init 失败同律回 mock。
+ */
+function looksLikeSteamClient(value: unknown): boolean {
+  if (value === null || typeof value !== 'object') return false;
+  const { cloud, achievement } = value as { cloud?: unknown; achievement?: unknown };
+  const hasFns = (obj: unknown, names: readonly string[]): boolean =>
+    typeof obj === 'object' &&
+    obj !== null &&
+    names.every((name) => typeof (obj as Record<string, unknown>)[name] === 'function');
+  return hasFns(cloud, ['readFile', 'writeFile', 'fileExists']) && hasFns(achievement, ['activate']);
 }
 
 function defaultRequireSteam(appId: number): SteamClient {
@@ -192,6 +213,10 @@ export function resolvePlatform(options: ResolvePlatformOptions): Platform {
   }
   try {
     const client = (options.requireSteam ?? defaultRequireSteam)(appId);
+    if (!looksLikeSteamClient(client)) {
+      // 形状漂移按 init 失败同律：走 catch 回 mock，日志可审计。
+      throw new Error('steamworks init returned malformed client (cloud/achievement missing)');
+    }
     log(`[platform] adapter=steam (appid=${appId})`);
     return createSteamPlatform(client, log);
   } catch (err) {

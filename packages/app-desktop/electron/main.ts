@@ -8,7 +8,7 @@
  * - 自动更新占位：见 updater.ts（票面「自动更新占位」，依赖待渠道定版）。
  */
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { errMsg, resolvePlatform, type Platform } from './platform.js';
@@ -20,12 +20,19 @@ const DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL'];
 let platform: Platform | undefined;
 let log: (message: string) => void = () => {};
 
+/** 日志上限：放置游戏长跑防 wendao.log 无界增长吃满磁盘（超限整体截断重写）。 */
+const LOG_MAX_BYTES = 1024 * 1024;
+
 /** 主进程日志：stdout + userData/wendao.log（打包窗口态 stdout 不可见，验收可审计）。 */
 function makeLogger(userDataDir: string): (message: string) => void {
   const logFile = join(userDataDir, 'wendao.log');
   return (message: string) => {
     console.log(message);
     try {
+      // throwIfNoEntry：无日志文件 = 未超限，缺文件不算错误。
+      if ((statSync(logFile, { throwIfNoEntry: false })?.size ?? 0) > LOG_MAX_BYTES) {
+        writeFileSync(logFile, '', 'utf8');
+      }
       appendFileSync(logFile, `${new Date().toISOString()} ${message}\n`, 'utf8');
     } catch {
       // 日志写失败不致命（磁盘满/权限）：游戏继续。
@@ -105,6 +112,14 @@ function createWindow(): void {
       nodeIntegration: false,
       sandbox: true,
     },
+  });
+  // 导航加固（壳为单页应用，无外跳需求）：window.open 一律拒绝；跨文档导航
+  // 仅放行本应用自身 URL（dev = VITE_DEV_SERVER_URL，打包 = file: 协议）。
+  // DevTools 无任何打开接线（无快捷键/菜单面），生产版无从误开，不另设开关。
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  const selfOrigin = DEV_SERVER_URL ?? 'file://';
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith(selfOrigin)) event.preventDefault();
   });
   if (DEV_SERVER_URL) {
     void win.loadURL(DEV_SERVER_URL);
