@@ -48,15 +48,15 @@ describe('自查 · 修为口径：xpMult 每循环舍入（在线/离线恒等�
       const game = createGame({ content: pack, clock, rng: () => 0.9, contributions: xpMultContribs(1.15) });
       game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
       game.events.drain();
-      if (offline) game.settleOffline(9000);
+      if (offline) game.settleOffline(60000);
       else
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 20; i++) {
           clock.advance(3000);
           game.tick(3000);
         }
       return stateOf(game.snapshot()).skills.herb?.xp ?? 0;
     };
-    expect(run(false)).toBe(36);
+    expect(run(false)).toBe(240); // round(11.5)×20
     expect(run(true)).toBe(run(false));
   });
 
@@ -92,15 +92,15 @@ describe('自查 · 修为口径：xpMult 每循环舍入（在线/离线恒等�
       });
       game.dispatch({ type: 'activity:start', payload: { skillId: 'smith', index: 0 } });
       game.events.drain();
-      if (offline) game.settleOffline(9000);
+      if (offline) game.settleOffline(60000);
       else
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 20; i++) {
           clock.advance(3000);
           game.tick(3000);
         }
       return stateOf(game.snapshot()).skills.smith?.xp ?? 0;
     };
-    expect(run(false)).toBe(36);
+    expect(run(false)).toBe(240); // round(11.5)×20
     expect(run(true)).toBe(run(false));
   });
 
@@ -130,15 +130,15 @@ describe('自查 · 修为口径：xpMult 每循环舍入（在线/离线恒等�
       const game = createGame({ content: pack, clock, rng: () => 0.9, save: materialSave });
       game.dispatch({ type: 'activity:start', payload: { skillId: 'smith', index: 0 } });
       game.events.drain();
-      if (offline) game.settleOffline(9000);
+      if (offline) game.settleOffline(60000);
       else
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 20; i++) {
           clock.advance(3000);
           game.tick(3000);
         }
       return stateOf(game.snapshot()).skills.smith?.xp ?? 0;
     };
-    expect(run(false)).toBe(9);
+    expect(run(false)).toBe(60); // 每轮失败返还 round(2.5)×xpMult=3 ×20
     expect(run(true)).toBe(run(false));
   });
 });
@@ -329,14 +329,14 @@ describe('自查 · 离线上限钳制双报（awaySeconds/capped）', () => {
     const game = createGame({ content: pack, clock: new ManualClock(), rng: () => 0.9 });
     game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
     game.events.drain();
-    game.settleOffline(9000);
+    game.settleOffline(90000);
     const settled = game.events
       .drain()
       .find((e) => e.type === 'offline-settled')
       ?.data as Record<string, unknown>;
     expect(settled.capped).toBe(false);
-    expect(settled.awaySeconds).toBe(9);
-    expect(settled.seconds).toBe(9);
+    expect(settled.awaySeconds).toBe(90);
+    expect(settled.seconds).toBe(90);
   });
 });
 

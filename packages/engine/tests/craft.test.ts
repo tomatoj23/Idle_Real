@@ -401,23 +401,23 @@ describe('#5 · 炼制离线补偿（O(1) 统计式，欠账不丢）', () => {
     const game = createGame({ content: makeCraftPack(), clock, save, rng: () => 0.5 });
     expect(game.events.drain()).toEqual([]); // 构造期不自动结算
 
-    game.settleOffline(57000); // total = 58000 / 2000 → 29 轮，进度归零
+    game.settleOffline(61000); // total = 62000 / 2000 → 31 轮，进度归零
 
     const events = game.events.drain();
     // 旧契约收窄（#39 并行迁移）：旧形状事件仍只此一条汇总；账本事件并行另测。
     expect(events.filter((e) => e.type !== 'ledger')).toHaveLength(1);
     const offline = events.find((e) => e.type === 'offline-settled')!;
     expect(offline.data).toMatchObject({
-      cycles: 29,
-      exp: 290, // successRate 1 → 全成：29 × 10
-      items: { sword1: 29 },
+      cycles: 31,
+      exp: 310, // successRate 1 → 全成：31 × 10
+      items: { sword1: 31 },
     });
 
     const st = stateOf(game.snapshot());
-    expect(st.items.ore1).toBe(284); // 400 − 29×4
-    expect(st.items.qi1).toBe(355); // 500 − 29×5
-    expect(st.gear).toHaveLength(29);
-    expect(st.skills.smith?.xp).toBe(290);
+    expect(st.items.ore1).toBe(276); // 400 − 31×4
+    expect(st.items.qi1).toBe(345); // 500 − 31×5
+    expect(st.gear).toHaveLength(31);
+    expect(st.skills.smith?.xp).toBe(310);
     expect(st.activity).toMatchObject({ progress: 0 }); // 材料充足：炉未停
   });
 

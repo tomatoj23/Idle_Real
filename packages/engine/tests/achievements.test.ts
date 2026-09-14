@@ -98,9 +98,9 @@ describe('#9 · 统计聚合器：事件流累积', () => {
   it('offline-settled 轮数并入 cycles（在线/离线对称）', () => {
     const game = createGame({ content: makeCombatPack() as GameContent, clock: new ManualClock(), seed: 7 });
     game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
-    game.settleOffline(9500); // interval 3000 → 3 轮余 500ms
+    game.settleOffline(95000); // interval 3000 → 31 轮余 2000ms
     const stats = game.snapshot().state['stats'] as Record<string, number>;
-    expect(stats['cycles']).toBe(3);
+    expect(stats['cycles']).toBe(31);
   });
 
   it('rebirth 事件累积 rebirths 统计', () => {

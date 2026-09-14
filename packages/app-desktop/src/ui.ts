@@ -396,7 +396,22 @@ export function buildUi(
         break;
       case 'victory': {
         const compare = data.compare ? T('common.compareWrap', { compare: String(data.compare) }) : '';
-        const victoryVars = { name: String(data.enemyName ?? ''), summary: String(data.summary ?? ''), compare };
+        // 战利品段（#62 保真收口，旧版"得灵石 X，缴获…"回迁战斗日志）：
+        // 材料 + 器胚/异宝（gearDropName）并列；空缴获回落"无所获"占位。
+        const spoilNames = ((data.drops as readonly string[] | undefined) ?? []).map((id) => nameOf(id));
+        if (typeof data.gearDropName === 'string' && data.gearDropName) {
+          spoilNames.push(`【${data.gearDropName}】`);
+        }
+        const spoil = T('events.victorySpoil', {
+          gold: String(data.gold ?? 0),
+          loot: spoilNames.join(T('common.itemListSep')) || T('events.offlineNoYield'),
+        });
+        const victoryVars = {
+          name: String(data.enemyName ?? ''),
+          summary: String(data.summary ?? ''),
+          compare,
+          spoil,
+        };
         flog(T('events.victoryFlog', victoryVars), 't-gold');
         log(T('events.victoryLog', victoryVars), 't-gold');
         break;

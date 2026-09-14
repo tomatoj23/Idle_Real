@@ -534,6 +534,8 @@ export interface ShellEvents {
   readonly lootCraft: string;
   readonly victoryFlog: string;
   readonly victoryLog: string;
+  /** 胜利战利品段（拼入 victoryFlog 的 {spoil} 槽，#62 保真收口）。 */
+  readonly victorySpoil: string;
   readonly defeatFlog: string;
   readonly defeatToast: string;
   readonly eatHeal: string;

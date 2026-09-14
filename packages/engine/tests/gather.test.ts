@@ -148,7 +148,7 @@ describe('挂机采集（issue #3 验收）', () => {
     const resumed = createGame({ content: makePack(), clock, save, rng: () => 0.4 });
     expect(resumed.events.drain()).toEqual([]); // 构造期不自动结算
 
-    resumed.settleOffline(57000);
+    resumed.settleOffline(60000);
     const events = resumed.events.drain();
     // 旧契约收窄（#39 并行迁移）：旧形状事件仍只有一条汇总（不逐轮刷 loot/exp）；
     // 账本事件走同一管线并行发射（离线段 offline 标注，ledger.test.ts 专测）。
@@ -156,18 +156,18 @@ describe('挂机采集（issue #3 验收）', () => {
     const offline = events.find((e) => e.type === 'offline-settled')!;
     expect(offline.type).toBe('offline-settled');
     expect(offline.data).toMatchObject({
-      cycles: 19,
-      exp: 114,
-      items: { herb1: 19, silk: 10 }, // floor(9.5)=9 + 余数伯努利 1
+      cycles: 20,
+      exp: 120,
+      items: { herb1: 20, silk: 10 }, // floor(20×0.5)=10 整，余数掷定不中
     });
 
     const st = stateOf(resumed.snapshot());
-    expect(st.items.herb1).toBe(20);
+    expect(st.items.herb1).toBe(21);
     expect(st.activity?.progress).toBe(1000); // 余数留在进度条上
 
     clock.advance(2000);
     resumed.tick(2000);
-    expect(stateOf(resumed.snapshot()).items.herb1).toBe(21);
+    expect(stateOf(resumed.snapshot()).items.herb1).toBe(22);
   });
 
   it('后台欠账补偿：超长间隔封顶在线步进 + settleOffline 补齐，不丢轮次', () => {
@@ -176,13 +176,13 @@ describe('挂机采集（issue #3 验收）', () => {
     game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
     game.events.drain();
 
-    // 模拟主循环对 60 秒强节流的处理：tick(5000) + settleOffline(55000)
+    // 模拟主循环对 60 秒强节流的处理：tick(5000) + settleOffline(58000)
     game.tick(5000); // 1 轮 + 2000ms 进度
-    game.settleOffline(55000); // (2000+55000) = 57000 → 19 轮
+    game.settleOffline(60000); // (2000+60000) = 62000 → 20 轮余 2000
 
     const st = stateOf(game.snapshot());
-    expect(st.items.herb1).toBe(20);
-    expect(st.activity?.progress).toBe(0);
+    expect(st.items.herb1).toBe(21);
+    expect(st.activity?.progress).toBe(2000); // 62000 − 20×3000
   });
 
   it('activity:start 对同一活动幂等，不清进度', () => {

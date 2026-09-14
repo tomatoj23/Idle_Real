@@ -203,8 +203,8 @@ describe('#39 · 入账咽喉：统一账本事件（与旧形状并行发射）
   });
 
   it('卡5 对拍：非整乘数下在线逐循环累计 == 离线批量（每循环舍入口径）', () => {
-    // exp=10 × gatherXp 1.05：每循环 round(10.5)=11 → 在线 3 轮 = 33；
-    // 旧离线整批口径 round(31.5)=32 分叉，裁决后同式累加 = 33。
+    // exp=10 × gatherXp 1.05：每循环 round(10.5)=11 → 在线 20 轮 = 220；
+    // 旧离线整批口径 round(210)=210 分叉，裁决后同式累加 = 220。
     const pack = {
       skills: [
         {
@@ -228,15 +228,15 @@ describe('#39 · 入账咽喉：统一账本事件（与旧形状并行发射）
       const game = createGame({ content: pack, clock, rng: () => 0.9, contributions });
       game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
       game.events.drain();
-      if (offline) game.settleOffline(9000);
+      if (offline) game.settleOffline(60000);
       else
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 20; i++) {
           clock.advance(3000);
           game.tick(3000);
         }
       return stateOf(game.snapshot()).skills.herb?.xp ?? 0;
     };
-    expect(run(false)).toBe(33);
+    expect(run(false)).toBe(220);
     expect(run(true)).toBe(run(false));
   });
 
@@ -252,20 +252,20 @@ describe('#39 · 入账咽喉：统一账本事件（与旧形状并行发射）
         state: {
           gold: 0,
           hp: 50,
-          items: { herb1: 40 }, // 10 轮量（每轮 1）
+          items: { herb1: 120 }, // 30 轮量（每轮 1）
           skills: { smith: { xp: 0 } },
           activity: { skillId: 'smith', index: 1, name: '锻青锋剑', progress: 0 },
         },
       },
     });
-    game.settleOffline(20000); // 10 轮
+    game.settleOffline(60000); // 30 轮
     const gear = ledgerEntries(game.events.drain()).filter((e) => e.kind === 'gear');
-    expect(gear).toHaveLength(10);
+    expect(gear).toHaveLength(30);
     for (const e of gear) {
       expect(e).toMatchObject({ source: 'craft', id: 'sword1', count: 1, value: 30, rarity: 'common', offline: true });
       expect(typeof e.uid).toBe('number');
     }
-    expect(stateOf(game.snapshot()).gear).toHaveLength(10);
+    expect(stateOf(game.snapshot()).gear).toHaveLength(30);
   });
 });
 

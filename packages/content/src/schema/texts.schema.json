@@ -186,7 +186,7 @@
           "type": "object",
           "required": [
             "lootGear", "lootGearLog", "lootShowcase", "lootByproduct", "lootDrop", "lootCraft",
-            "victoryFlog", "victoryLog", "defeatFlog", "defeatToast",
+            "victoryFlog", "victoryLog", "victorySpoil", "defeatFlog", "defeatToast",
             "eatHeal", "eatBuffToast", "eatBuffLog",
             "equipWearToast", "equipWearLog", "equipRemoveLog",
             "expCombat", "levelupToast", "levelupLog",
@@ -208,7 +208,8 @@
             "lootByproduct": { "$ref": "#/definitions/template", "description": "副产出修行录行；槽位 {name}/{count}" },
             "lootDrop": { "$ref": "#/definitions/template", "description": "常规掉落修行录行；槽位 {name}/{count}" },
             "lootCraft": { "$ref": "#/definitions/template", "description": "炼制产出修行录行（#5）；槽位 {name}/{count}" },
-            "victoryFlog": { "$ref": "#/definitions/template", "description": "胜利浮战报；槽位 {name}/{summary}/{compare}" },
+            "victoryFlog": { "$ref": "#/definitions/template", "description": "胜利浮战报；槽位 {name}/{spoil}/{summary}/{compare}" },
+            "victorySpoil": { "$ref": "#/definitions/template", "description": "胜利战利品段（拼入 victoryFlog 的 {spoil} 槽，#62）；槽位 {gold}/{loot}" },
             "victoryLog": { "$ref": "#/definitions/template", "description": "胜利修行录行；槽位 {name}/{summary}/{compare}" },
             "defeatFlog": { "$ref": "#/definitions/template", "description": "落败浮战报；槽位 {name}" },
             "defeatToast": { "$ref": "#/definitions/template", "description": "落败浮提示（无槽位）" },

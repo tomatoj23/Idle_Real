@@ -111,7 +111,8 @@ describe('修仙题材包 · 验收（issue #2）', () => {
     expect(pack.texts.shell.stats.labels.crit).toEqual({ label: '暴', percent: true });
     expect(pack.texts.shell.stats.labels.atk).toEqual({ label: '攻' });
     // 事件与页面文案走 {slot} 模板（fillTemplate 同一约定）。
-    expect(pack.texts.shell.events.victoryFlog).toBe('【{name}】轰然倒地！{summary}{compare}');
+    expect(pack.texts.shell.events.victoryFlog).toBe('【{name}】轰然倒地！{spoil}{summary}{compare}');
+    expect(pack.texts.shell.events.victorySpoil).toBe('得灵石 {gold}，缴获 {loot}。');
     expect(pack.texts.shell.pages.shop.price).toBe('{price} 灵石');
     expect(pack.texts.shell.units.level).toBe('{v} 层');
   });

@@ -48,6 +48,8 @@ describe('UI 烟测（issue #4 战斗切片）', () => {
 
     // 胜利叙事 + 摘要画像落日志
     expect(root.textContent).toContain('轰然倒地');
+    // 胜利战利品段（#62 保真收口）：灵石数额与缴获回迁战斗日志
+    expect(root.textContent).toContain('得灵石');
     // 战斗日志容量受控（回归：日志容量受控）
     const flog = root.querySelector<HTMLElement>('#flog')!;
     expect(flog.children.length).toBeGreaterThan(0);

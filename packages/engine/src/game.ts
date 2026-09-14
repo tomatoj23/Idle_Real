@@ -97,6 +97,13 @@ import type {
   LedgerSource,
 } from './ledger.js';
 
+/**
+ * 离线结算最短门槛（旧版 game.js:430 同款 60s，保真收口 #62）：低于此值的
+ * 时间差不算离线（关掉秒开不弹补偿、不触发休整回满，堵"切后台 5s 脱战+
+ * 满血"漏洞）；后台节流的微欠账同样不追（旧版语义，几十秒产出玩家无感）。
+ */
+const OFFLINE_MIN_MS = 60_000;
+
 export interface CreateGameOptions {
   /** 由 content 包校验过的内容包；引擎零内容感知，仅透明持有。 */
   readonly content: GameContent;
@@ -575,6 +582,11 @@ export function createGame(options: CreateGameOptions): Game {
   ): number {
     if (!(granted > 0)) return 0;
     const before = levelFromXp(xpOf(skill.id), pparams);
+    // 升级差额回血（旧版 game.js:212-216 语义，保真收口 #62）：旧上限须在
+    // xp 写入前留档；仅跨级边缘才多算一次投影，高频路径零开销。
+    const crossingLevel =
+      levelFromXp(xpOf(skill.id) + granted, pparams) > before && before < pparams.maxLevel;
+    const oldCap = crossingLevel ? hpCap() : null;
     const entry = state.skills[skill.id] ?? { xp: 0 };
     entry.xp += granted;
     state.skills[skill.id] = entry;
@@ -591,6 +603,9 @@ export function createGame(options: CreateGameOptions): Game {
     }
     const after = levelFromXp(entry.xp, pparams);
     if (after > before && before < pparams.maxLevel) {
+      // 上限涨多少血补多少（旧版保真，#62）：战斗中升级血条即时抬升，不再
+      // 反跌；完整投影差额含装备/天赋恒定贡献（相消后恰为曲线差额）。
+      if (oldCap !== null) state.hp += Math.max(0, hpCap() - oldCap);
       if (!quiet) {
         events.emit({
           type: 'levelup',
@@ -1123,7 +1138,10 @@ export function createGame(options: CreateGameOptions): Game {
     // 与 tick 同律（Number.isFinite 门）：NaN/Infinity 不设防会沿 total→cycles
     // 污染 active.progress（活动永久卡死）与物品计数（NaN 落盘序列化为 null，
     // 恢复侧丢弃 = 物品凭空消失）。
-    if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return;
+    // 60s 最短结算门槛（旧版 game.js:430 同款，保真收口 #62）：关掉秒开不弹
+    // "离线归来"、不触发休整回满（否则"打不过就切后台 5s"= 脱战+满血漏洞）。
+    // 后台节流欠账 < 60s 不追亦同旧版语义（几十秒产出，玩家无感）。
+    if (!Number.isFinite(elapsedMs) || elapsedMs < OFFLINE_MIN_MS) return;
     if (state.combat) {
       state.combat = null; // 离线不可战斗：视作离场休整
       combatRun.resetProcs(); // 系别临时态不落盘，离线离场即散（#15）
