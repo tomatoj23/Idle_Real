@@ -1133,9 +1133,13 @@ export function createGame(options: CreateGameOptions): Game {
     // 不回满则残血横穿整个离线期，与"气血按脱战回满"契约相悖）。
     state.hp = hpCap();
     // 离线上限（offlineCap 消费点，#6）：Σflat 毫秒，≤ 0 = 不设限（基线行为
-    // 完全一致）；超限部分不入账（上限的语义本体）。
+    // 完全一致）；超限部分不入账（上限的语义本体）。真实离开时长在钳制前
+    // 留档——事件双报（awaySeconds=离开 / seconds=结算），钳制发生时壳层
+    // 区分展示，防结算时长冒充离开时长误导（挂机 20h 只显示"离线 1 时"事故）。
     const cap = offlineCapOf(playerContributions());
-    if (cap > 0 && elapsedMs > cap) elapsedMs = cap;
+    const awayMs = elapsedMs;
+    const capped = cap > 0 && elapsedMs > cap;
+    if (capped) elapsedMs = cap;
     const active = state.activity;
     if (!active) return;
     const skill = findSkill(content, active.skillId);
@@ -1144,7 +1148,10 @@ export function createGame(options: CreateGameOptions): Game {
       return;
     }
     if (skill.kind === 'craft') {
-      settleCraftOffline(active, skill, elapsedMs);
+      settleCraftOffline(active, skill, elapsedMs, {
+        awaySeconds: Math.round(awayMs / 1000),
+        capped,
+      });
       return;
     }
     const found = findActivity(content, active.skillId, active.index);
@@ -1196,6 +1203,8 @@ export function createGame(options: CreateGameOptions): Game {
       time,
       data: {
         seconds: Math.round(elapsedMs / 1000),
+        awaySeconds: Math.round(awayMs / 1000),
+        capped,
         skillId: skill.id,
         skillName: skill.name,
         activityName: activity.name,
@@ -1213,7 +1222,12 @@ export function createGame(options: CreateGameOptions): Game {
    * 修为，与在线语义一致）；材料只够部分轮数 → 炼完即停炉（活动清空）。
    * 装备产出为离散唯一实体，逐件掷定稀有度与词条（有界：attempts ≤ 时长/interval）。
    */
-  function settleCraftOffline(active: ActivityState, skill: SkillView, elapsedMs: number): void {
+  function settleCraftOffline(
+    active: ActivityState,
+    skill: SkillView,
+    elapsedMs: number,
+    away: { awaySeconds: number; capped: boolean },
+  ): void {
     const recipe = findRecipe(content, active.index);
     if (!recipe || recipe.skill !== skill.id) {
       state.activity = null;
@@ -1292,6 +1306,8 @@ export function createGame(options: CreateGameOptions): Game {
       time,
       data: {
         seconds: Math.round(elapsedMs / 1000),
+        awaySeconds: away.awaySeconds,
+        capped: away.capped,
         skillId: skill.id,
         skillName: skill.name,
         activityName: recipe.name,

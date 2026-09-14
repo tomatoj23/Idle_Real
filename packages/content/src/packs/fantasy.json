@@ -541,6 +541,8 @@
         "rejectFallback": "That action is not allowed.",
         "offlineToast": "Away {away}: {activity} ran {cycles} times.",
         "offlineLog": "Away {away}: gained {items}. {exp}",
+        "offlineCappedToast": "Away {away} (capped at {settled}): {activity} ran {cycles} times.",
+        "offlineCappedLog": "Away {away}, settled at cap {settled}: gained {items}. {exp}",
         "offlineNoYield": "nothing",
         "offlineExpSuffix": "+{exp} exp",
         "craftFail": "{name} failed — materials lost, {exp} exp gleaned.",

@@ -537,26 +537,54 @@ export function buildUi(
         break;
       case 'offline-settled': {
         const seconds = Math.max(0, Math.floor(Number(data.seconds) || 0));
-        const h = Math.floor(seconds / 3600);
-        const m = Math.floor((seconds % 3600) / 60);
-        const away =
-          h > 0
+        // 离线上限钳制时引擎双报（awaySeconds=真实离开 / seconds=实际结算）：
+        // 切 offlineCapped* 模板区分展示，防结算时长冒充离开时长（挂机 20h
+        // 只显示"离线修行 1 时"事故）；旧形状（无 capped）回落单时长口径。
+        const capped = data.capped === true;
+        const awaySeconds = Math.max(0, Math.floor(Number(data.awaySeconds) || 0)) || seconds;
+        const fmtDuration = (v: number): string => {
+          const h = Math.floor(v / 3600);
+          const m = Math.floor((v % 3600) / 60);
+          return h > 0
             ? T('units.hourMinute', { h, m })
             : m > 0
               ? T('units.minute', { m })
-              : T('units.seconds', { v: seconds });
+              : T('units.seconds', { v });
+        };
+        const away = fmtDuration(capped ? awaySeconds : seconds);
+        const settled = fmtDuration(seconds);
         const items = Object.entries((data.items ?? {}) as Record<string, number>)
           .map(([id, n]) => `${nameOf(id)}×${n}`)
           .join(T('common.itemListSep'));
-        toast(T('events.offlineToast', { away, activity: String(data.activityName ?? ''), cycles: Number(data.cycles ?? 0) }));
-        log(
-          T('events.offlineLog', {
-            away,
-            items: items || T('events.offlineNoYield'),
-            exp: data.exp ? T('events.offlineExpSuffix', { exp: Number(data.exp) }) : '',
-          }),
-          't-gold',
-        );
+        if (capped) {
+          toast(
+            T('events.offlineCappedToast', {
+              away,
+              settled,
+              activity: String(data.activityName ?? ''),
+              cycles: Number(data.cycles ?? 0),
+            }),
+          );
+          log(
+            T('events.offlineCappedLog', {
+              away,
+              settled,
+              items: items || T('events.offlineNoYield'),
+              exp: data.exp ? T('events.offlineExpSuffix', { exp: Number(data.exp) }) : '',
+            }),
+            't-gold',
+          );
+        } else {
+          toast(T('events.offlineToast', { away, activity: String(data.activityName ?? ''), cycles: Number(data.cycles ?? 0) }));
+          log(
+            T('events.offlineLog', {
+              away,
+              items: items || T('events.offlineNoYield'),
+              exp: data.exp ? T('events.offlineExpSuffix', { exp: Number(data.exp) }) : '',
+            }),
+            't-gold',
+          );
+        }
         break;
       }
     }

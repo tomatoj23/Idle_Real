@@ -550,6 +550,10 @@ export interface ShellEvents {
   readonly rejectFallback: string;
   readonly offlineToast: string;
   readonly offlineLog: string;
+  /** 离线达上限浮提示（offlineCap 钳制时替代 offlineToast；#60）。 */
+  readonly offlineCappedToast: string;
+  /** 离线达上限修行录行；槽位 {away}离开/{settled}结算。 */
+  readonly offlineCappedLog: string;
   readonly offlineNoYield: string;
   readonly offlineExpSuffix: string;
   /** 炼制失败修行录行（#5，craft-fail 事件）。 */

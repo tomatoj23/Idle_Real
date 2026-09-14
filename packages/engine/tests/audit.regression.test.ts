@@ -292,6 +292,63 @@ describe('自查 · 运行时兜底（坏包不致错误行为）', () => {
   });
 });
 
+describe('自查 · 离线上限钳制双报（awaySeconds/capped）', () => {
+  const pack = {
+    skills: [
+      {
+        id: 'herb',
+        name: '采药',
+        icon: '药',
+        kind: 'gather',
+        activities: [
+          { name: '采灵砂', unlockLevel: 1, interval: 3000, exp: 10, output: { item: 'ore', count: 1 } },
+        ],
+      },
+    ],
+    items: [{ id: 'ore', name: '灵砂', icon: '砂', type: 'mat', sell: 2 }],
+  } as unknown as GameContent;
+
+  it('离开 21s、上限 9s：capped=true、awaySeconds=21、seconds=9，收益只按上限 3 轮', () => {
+    const game = createGame({
+      content: pack,
+      clock: new ManualClock(),
+      rng: () => 0.9,
+      contributions: [
+        {
+          modifier: { stat: 'offlineCap', zone: 'flat', value: 9000 },
+          source: { id: 'guixi', kind: 'test', name: '龟息' },
+        },
+      ],
+    });
+    game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
+    game.events.drain();
+    game.settleOffline(21000);
+    const settled = game.events
+      .drain()
+      .find((e) => e.type === 'offline-settled')
+      ?.data as Record<string, unknown>;
+    expect(settled.capped).toBe(true);
+    expect(settled.awaySeconds).toBe(21);
+    expect(settled.seconds).toBe(9);
+    expect(settled.cycles).toBe(3); // 收益按钳后结算时长计，超出部分不入账
+    expect(stateOf(game.snapshot()).skills.herb?.xp ?? 0).toBe(30); // 3×round(10)
+  });
+
+  it('未触上限：capped=false，awaySeconds=seconds（无钳制信息时壳层回落单时长口径）', () => {
+    const game = createGame({ content: pack, clock: new ManualClock(), rng: () => 0.9 });
+    game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
+    game.events.drain();
+    game.settleOffline(9000);
+    const settled = game.events
+      .drain()
+      .find((e) => e.type === 'offline-settled')
+      ?.data as Record<string, unknown>;
+    expect(settled.capped).toBe(false);
+    expect(settled.awaySeconds).toBe(9);
+    expect(settled.seconds).toBe(9);
+  });
+});
+
 describe('自查 · victory 事件载荷实发值', () => {
   it('xpMult=1.15 下 victory.exp = 实发 6（round(5×1.15)），与修为入账同源（旧载荷报名义值 5）', () => {
     const game = createGame({

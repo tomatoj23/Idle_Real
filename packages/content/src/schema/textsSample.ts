@@ -92,6 +92,8 @@ export const textsSample: TextsSection = {
       rejectFallback: '此路不通',
       offlineToast: '离线 {away}归来',
       offlineLog: '离线修行 {away}：{items}{exp}',
+      offlineCappedToast: '离开 {away}，按上限 {settled} 结算',
+      offlineCappedLog: '离线修行 {away}（上限 {settled}）：{items}{exp}',
       offlineNoYield: '无所获',
       offlineExpSuffix: '，修为 +{exp}',
       craftFail: '「{name}」炼制失败，仅悟得 {exp} 修为',

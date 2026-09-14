@@ -638,6 +638,8 @@
         "rejectFallback": "此路不通",
         "offlineToast": "离线 {away}归来：{activity} ×{cycles}",
         "offlineLog": "离线修行 {away}：{items}{exp}",
+        "offlineCappedToast": "离开 {away}，闭关所限、按 {settled} 结算：{activity} ×{cycles}",
+        "offlineCappedLog": "离线修行 {away}（上限 {settled}，超出不入账）：{items}{exp}",
         "offlineNoYield": "无所获",
         "offlineExpSuffix": "，修为 +{exp}",
         "craftFail": "「{name}」炼制失败，材料尽失，仅悟得 {exp} 修为",
