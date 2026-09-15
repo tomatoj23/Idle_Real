@@ -5,11 +5,11 @@
  * 敌血条实况刷新住本页 update（D3）。
  */
 import { dungeonGateOf, dungeonLayerOf, findDungeon, powerOf } from '@wendao/engine';
-import { esc } from '../pageFrame';
 import {
   bossDecoOf,
   consumablesHtml,
   dungeonLockMsgOf,
+  esc,
   fightingEnemyCardHtml,
   minionsHtml,
   pctClamped,

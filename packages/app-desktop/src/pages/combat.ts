@@ -12,11 +12,11 @@ import {
   levelFromXp,
   rebirthGateOf,
 } from '@wendao/engine';
-import { esc } from '../pageFrame';
 import {
   bossDecoOf,
   consumablesHtml,
   dungeonLockMsgOf,
+  esc,
   fightingEnemyCardHtml,
   levelLockMsgOf,
   minionsHtml,
