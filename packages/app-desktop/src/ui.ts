@@ -1,9 +1,13 @@
 /**
- * UI 层（issue #3）：只消费 engine 事件流 + snapshot + content 包视图，不触碰引擎内部。
+ * UI 壳核（issue #3；#46 页面注册表后收敛）：导航/顶栏/signature/事件委托/刷新循环。
  *
- * 结构一次搭建，点击走事件委托；动态区域按状态签名差量重绘，
- * 活动进度条/百分比每帧轻量更新。事件→日志/浮提示/重绘的接线
- * 在此统一完成（烟测走同一套路径）。
+ * 页面本体住 src/pages/<tab>.ts（注册表装配见 pages.ts，同构零件见 pageFrame.ts）；
+ * 本文件只保留壳级职责：顶栏血球/灵石、页签导航（含可用性开关与文案解析）、
+ * 状态签名差量重绘、增益条、战斗日志缓冲、事件→日志/浮提示接线。
+ *
+ * 结构一次搭建，点击走事件委托：导航动作留壳核（D4），本页动作委托给
+ * 注册表当前页 handleAction。动态区域按状态签名差量重绘，实况区
+ * （进度条/血条）由所在页 update 每帧轻量刷新（D3）。
  *
  * #26（ADR-017 裁决 9：壳零题材字符串、零公式复算）：
  * - 全部题材文案来自 content 包 texts.shell 节；缺键回显键名
@@ -17,51 +21,25 @@ import type { ContentPack } from '@wendao/content';
 import {
   EventBus,
   ENGINE_VERSION,
-  achievementProgressOf,
-  craftMissingOf,
-  craftSuccessRateOf,
-  dungeonGateOf,
-  dungeonLayerOf,
   dungeonsOf,
-  enemyGateOf,
-  expBase,
-  expToNext,
   fillTemplate,
-  findBossOf,
-  findDungeon,
-  findInscription,
   findRarity,
-  gearName,
   gearParamsOf,
-  levelFromXp,
-  powerOf,
   progressionParamsOf,
-  projectGearBase,
-  rebirthGateOf,
   rebirthOf,
-  rebirthPreviewOf,
-  realmOf,
-  shopAffordOf,
-  talentGateOf,
   type GameAction,
   type GameState,
-  type GearInstance,
   type Modifier,
   type ProgressionParams,
-  type RecipeView,
   type SaveData,
 } from '@wendao/engine';
+import { esc } from './pageFrame';
+import { createPages, isTabId, TAB_ORDER } from './pages';
+import type { TabId } from './pages/types';
 
-export type TabId =
-  | 'skills'
-  | 'craft'
-  | 'combat'
-  | 'dungeon'
-  | 'bag'
-  | 'shop'
-  | 'rebirth'
-  | 'talents'
-  | 'achievements';
+// 壳核公开面保持不变（main.ts/测试消费 buildUi；esc 主壳引导页消费）。
+export { esc };
+export type { TabId };
 
 export interface Ui {
   bindActions(handler: (action: GameAction) => void): void;
@@ -76,11 +54,6 @@ export interface Ui {
 const MAX_LOG = 40;
 const MAX_FLOG = 60;
 
-export const esc = (text: string): string =>
-  text.replace(/[&<>"']/g, (ch) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch] ?? ch,
-  );
-
 export function buildUi(
   root: HTMLElement,
   content: ContentPack,
@@ -88,7 +61,6 @@ export function buildUi(
   events: EventBus,
 ): Ui {
   const itemById = new Map(content.items.map((item) => [item.id, item]));
-  const skillById = new Map(content.skills.map((skill) => [skill.id, skill]));
   const gatherSkills = content.skills.filter((skill) => skill.kind === 'gather');
   const craftSkills = content.skills.filter((skill) => skill.kind === 'craft');
   const combatSkillId = content.skills.find((skill) => skill.kind === 'combat')?.id ?? '';
@@ -154,7 +126,7 @@ export function buildUi(
     return `${label}+${value}${percent ? '%' : ''}`;
   };
 
-  /* ---------- 装备构筑循环（#14）：熔炼/重铸入口与铭纹展示 ---------- */
+  /* ---------- 装备构筑循环（#14）：铭纹展示词表（页面经 env 消费） ---------- */
 
   // 器屑经济可用性：config.gear.shardItem 未配置 = 该包无熔炼/重铸玩法
   //（引擎 not-available 零降级路径的壳面同款——按钮不渲染）。
@@ -171,10 +143,6 @@ export function buildUi(
   };
 
   let activeTab: TabId = 'skills';
-  let selectedSkillId = gatherSkills[0]?.id ?? '';
-  let selectedCraftSkillId = craftSkills[0]?.id ?? '';
-  /** 兵解两段式确认：先 arm 展示后果预览，再 confirm 发动作（#6）。 */
-  let rebirthArmed = false;
   let handler: ((action: GameAction) => void) | null = null;
   let lastSig = '';
   /** 增益条键签名（renderBuffbar 重建判据；null = 尚未建）。 */
@@ -191,17 +159,7 @@ export function buildUi(
       </div>
     </header>
     <div class="buffbar" id="buffbar"></div>
-    <nav class="tabs" id="tabs">
-      <button class="tab" data-act="tab" data-tab="skills">${esc(T('tabs.skills'))}</button>
-      <button class="tab" data-act="tab" data-tab="craft">${esc(T('tabs.craft'))}</button>
-      <button class="tab" data-act="tab" data-tab="combat">${esc(T('tabs.combat'))}</button>
-      ${hasDungeons ? `<button class="tab" data-act="tab" data-tab="dungeon">${esc(T('tabs.dungeon'))}</button>` : ''}
-      <button class="tab" data-act="tab" data-tab="bag">${esc(T('tabs.bag'))}</button>
-      <button class="tab" data-act="tab" data-tab="shop">${esc(T('tabs.shop'))}</button>
-      ${hasRebirth ? `<button class="tab" data-act="tab" data-tab="rebirth">${esc(T('tabs.rebirth'))}</button>
-      <button class="tab" data-act="tab" data-tab="talents">${esc(T('tabs.talents'))}</button>` : ''}
-      ${hasAchievements ? `<button class="tab" data-act="tab" data-tab="achievements">${esc(T('tabs.achievements'))}</button>` : ''}
-    </nav>
+    <nav class="tabs" id="tabs"></nav>
     <div class="layout">
       <main class="page-root" id="page-root"></main>
       <aside class="side">
@@ -234,127 +192,103 @@ export function buildUi(
   const pageEl = $<HTMLElement>('#page-root');
   const logEl = $<HTMLElement>('#log');
   const toastsEl = $<HTMLElement>('#toasts');
-  const tabButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('#tabs .tab'));
 
   const nameOf = (id: unknown): string => itemById.get(String(id))?.name ?? String(id);
+
+  /* ---------- 页面注册表装配（#46 D6） ---------- */
+
+  const pages = createPages({
+    content,
+    T,
+    shellRaw: shellGet,
+    locale,
+    prog,
+    itemById,
+    nameOf,
+    statValueText,
+    statBonusText,
+    fmtSeconds,
+    elementNameOf,
+    inscModText,
+    rarityClass,
+    gatherSkills,
+    craftSkills,
+    combatSkillId,
+    dungeonList,
+    rebirthSection,
+    canSmelt,
+    pageEl,
+    dispatch: (action) => handler?.(action),
+    // 页面 UI 状态（选中/撤防）变化走强制重绘：等价今天 click 路径的
+    // lastSig='' + render()（签名不含页面自持状态，见 signature 注）。
+    render: () => {
+      lastSig = '';
+      render();
+    },
+    nav: navigate,
+  });
+
+  /** 秒时长读数（units.seconds 模板，{v} 槽）。 */
+  function fmtSeconds(ms: number): string {
+    const s = ms / 1000;
+    return T('units.seconds', { v: Number.isInteger(s) ? String(s) : s.toFixed(1) });
+  }
+
+  function rarityClass(rarity: string): string {
+    const def = rarityDefOf(rarity);
+    return def ? `r-${def.id}` : 'r-none';
+  }
+
+  // 页签导航：注册表顺序 + 内容形态开关（#6/#7/#9 零降级路径同款壳面）。
+  // 文案键存注册表条目（D11），经 texts.shell 解析——文案归 content 义务不变。
+  const tabAvailable = (id: TabId): boolean =>
+    id === 'dungeon'
+      ? hasDungeons
+      : id === 'rebirth' || id === 'talents'
+        ? hasRebirth
+        : id === 'achievements'
+          ? hasAchievements
+          : true;
+  $('#tabs').innerHTML = TAB_ORDER.filter(tabAvailable)
+    .map((id) => `<button class="tab" data-act="tab" data-tab="${id}">${esc(T(pages[id].label))}</button>`)
+    .join('');
+  const tabButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('#tabs .tab'));
+
+  /** 运行时 tab 值校验（D7）：未知串 warn + 回落修炼页（裸 cast 退役）。 */
+  function normalizeTab(raw: string | undefined): TabId {
+    if (raw !== undefined && isTabId(raw)) return raw;
+    console.warn(`[wendao] unknown tab: ${String(raw)}`);
+    return 'skills';
+  }
+
+  function navigate(next: TabId): void {
+    // 访问段信号（#39 D9）：坊市页切进/切出转发 visit 事件（引擎纯转发，
+    // 段开闭配对由壳层负责；非法载荷被引擎 reject，无副作用）。
+    if (activeTab !== next) {
+      if (activeTab === 'shop') handler?.({ type: 'visit:end', payload: { page: 'shop' } });
+      if (next === 'shop') handler?.({ type: 'visit:begin', payload: { page: 'shop' } });
+    }
+    // 换页即撤防（#6 兵解确认不跨页存续）：页面自持 UI 状态经 deactivate 复位。
+    pages[activeTab].deactivate?.();
+    activeTab = next;
+    lastSig = '';
+    render();
+  }
 
   root.addEventListener('click', (ev) => {
     const el = (ev.target as HTMLElement).closest<HTMLElement>('[data-act]');
     if (!el || !handler) return;
-    switch (el.dataset.act) {
-      case 'tab': {
-        const next = (el.dataset.tab ?? 'skills') as TabId;
-        // 访问段信号（#39 D9）：坊市页切进/切出转发 visit 事件（引擎纯转发，
-        // 段开闭配对由壳层负责；非法载荷被引擎 reject，无副作用）。
-        if (activeTab !== next) {
-          if (activeTab === 'shop') handler({ type: 'visit:end', payload: { page: 'shop' } });
-          if (next === 'shop') handler({ type: 'visit:begin', payload: { page: 'shop' } });
-        }
-        activeTab = next;
-        rebirthArmed = false; // 换页即撤防（兵解确认不跨页存续）
-        lastSig = '';
-        render();
-        break;
-      }
-      case 'skill':
-        if (el.dataset.disabled === 'y') break;
-        selectedSkillId = el.dataset.skill ?? selectedSkillId;
-        lastSig = '';
-        render();
-        break;
-      case 'craftskill':
-        selectedCraftSkillId = el.dataset.skill ?? selectedCraftSkillId;
-        lastSig = '';
-        render();
-        break;
-      case 'start':
-        handler({
-          type: 'activity:start',
-          payload: { skillId: el.dataset.skill, index: Number(el.dataset.index) },
-        });
-        break;
-      case 'stop':
-        handler({ type: 'activity:stop' });
-        break;
-      case 'sell':
-        handler({
-          type: 'bag:sell',
-          payload: { item: el.dataset.item, count: Number(el.dataset.count) },
-        });
-        break;
-      case 'buy':
-        handler({ type: 'shop:buy', payload: { item: el.dataset.item } });
-        break;
-      case 'fight':
-        handler({ type: 'combat:start', payload: { enemyId: el.dataset.enemy } });
-        break;
-      case 'dungeon-enter':
-        // 秘境入口（#7，斗法页/秘境页共用）：入门 + 切到秘境页看层进度。
-        handler({ type: 'dungeon:enter', payload: { dungeonId: el.dataset.dungeon } });
-        activeTab = 'dungeon';
-        lastSig = '';
-        render();
-        break;
-      case 'dungeon-leave':
-        handler({ type: 'dungeon:leave' });
-        break;
-      case 'flee':
-        handler({ type: 'combat:stop' });
-        break;
-      case 'toggle-auto':
-        handler({ type: 'combat:auto' });
-        break;
-      case 'toggle-auto-eat':
-        handler({ type: 'combat:auto-eat' });
-        break;
-      case 'eat':
-        handler({ type: 'consumable:eat', payload: { item: el.dataset.item } });
-        break;
-      case 'wear':
-        handler({ type: 'gear:equip', payload: { uid: Number(el.dataset.uid) } });
-        break;
-      case 'take-off':
-        handler({ type: 'gear:unequip', payload: { slot: el.dataset.slot } });
-        break;
-      case 'sell-gear':
-        handler({ type: 'gear:sell', payload: { uid: Number(el.dataset.uid) } });
-        break;
-      case 'smelt-gear':
-        handler({ type: 'gear:smelt', payload: { uid: Number(el.dataset.uid) } });
-        break;
-      case 'reforge':
-        handler({
-          type: 'gear:reforge',
-          payload: { uid: Number(el.dataset.uid), index: Number(el.dataset.index) },
-        });
-        break;
-      case 'rebirth-go':
-        rebirthArmed = true;
-        lastSig = '';
-        render();
-        break;
-      case 'rebirth-cancel':
-        rebirthArmed = false;
-        lastSig = '';
-        render();
-        break;
-      case 'rebirth-confirm':
-        rebirthArmed = false;
-        handler({ type: 'rebirth:perform' });
-        break;
-      case 'talent-buy':
-        handler({ type: 'talent:buy', payload: { nodeId: el.dataset.node } });
-        break;
+    const act = el.dataset.act ?? '';
+    if (act === 'tab') {
+      // 导航动作留壳核（D4）：页内渲染的指向按钮同走此路径。
+      navigate(normalizeTab(el.dataset.tab));
+      return;
     }
+    // 本页动作委托注册表（D1/D4）：巨型 click switch 整体退役。
+    pages[activeTab].handleAction?.(act, el);
   });
 
   /* ---------- 事件流消费：日志 + 浮提示 + 合并重绘 ---------- */
-
-  /** 秒时长读数（units.seconds 模板，{v} 槽）。 */
-  const fmtSeconds = (ms: number): string => {
-    const s = ms / 1000;
-    return T('units.seconds', { v: Number.isInteger(s) ? String(s) : s.toFixed(1) });
-  };
 
   function scheduleRender(): void {
     if (rafId) return;
@@ -606,16 +540,11 @@ export function buildUi(
     scheduleRender();
   });
 
-  /* ---------- 渲染 ---------- */
-
-  /** 活动寻址键（#40）：activityIntervals 映射与活动卡 data-key 共用的单一拼装式。 */
-  const actKeyOf = (act: { readonly skillId: string; readonly index: number }): string =>
-    `${act.skillId}:${act.index}`;
+  /* ---------- 渲染（壳核） ---------- */
 
   const signature = (st: GameState, snap: SaveData): string =>
     JSON.stringify([
       activeTab,
-      selectedSkillId,
       Math.floor(st.gold),
       Object.entries(st.items).sort(),
       Object.entries(st.skills).map(([id, p]) => [id, p.xp]).sort(),
@@ -650,6 +579,8 @@ export function buildUi(
       snap.enemy ?? null,
       snap.minions ?? null,
       snap.activityIntervals ?? null,
+      // 注：页面自持 UI 状态（技能选中/兵解 arm）不进签名——其变化路径
+      // 均经 env.render() 强制重绘（lastSig=''），等价搬迁前行为（#46 D2/D8）。
     ]);
 
   function render(): void {
@@ -677,10 +608,19 @@ export function buildUi(
     const sig = signature(st, snap);
     if (sig !== lastSig) {
       lastSig = sig;
-      renderPage(st, snap);
+      // 页面挂载（D1：注册表查找分发，if/else 与坊市兜底退役）。
+      pageEl.innerHTML = pages[activeTab].render({ st, snap, content, T });
+      // 页面重建会丢滚动位置与日志内容：全量重放战斗日志并恢复到底部
+      //（挂 #flog 的页面自动恢复——斗法/秘境）。
+      const box = pageEl.querySelector<HTMLElement>('#flog');
+      if (box) {
+        box.innerHTML = '';
+        for (const line of flogBuffer) appendFlogLine(box, line.text, line.cls);
+      }
+      syncFlogScroll();
     }
-    updateActivityBars(st, snap);
-    updateEnemyBar(st, snap);
+    // 实况区差量刷新（D3）：进度条/血条归所在页 update（#50 渲染管线的落点）。
+    pages[activeTab].update?.({ st, snap, content, T });
     syncFlogScroll();
   }
 
@@ -709,532 +649,7 @@ export function buildUi(
     }
   }
 
-  function renderPage(st: GameState, snap: SaveData): void {
-    if (activeTab === 'skills') pageEl.innerHTML = renderSkills(st, snap);
-    else if (activeTab === 'craft') pageEl.innerHTML = renderCraft(st, snap);
-    else if (activeTab === 'combat') pageEl.innerHTML = renderCombat(st, snap);
-    else if (activeTab === 'dungeon') pageEl.innerHTML = renderDungeon(st, snap);
-    else if (activeTab === 'bag') pageEl.innerHTML = renderBag(st);
-    else if (activeTab === 'rebirth') pageEl.innerHTML = renderRebirth(st);
-    else if (activeTab === 'talents') pageEl.innerHTML = renderTalents(st);
-    else if (activeTab === 'achievements') pageEl.innerHTML = renderAchievements(st);
-    else pageEl.innerHTML = renderShop(st);
-    if (activeTab === 'combat' || activeTab === 'dungeon') {
-      // 页面重建会丢滚动位置与日志内容：全量重放战斗日志并恢复到底部。
-      const box = pageEl.querySelector<HTMLElement>('#flog');
-      if (box) {
-        box.innerHTML = '';
-        for (const line of flogBuffer) appendFlogLine(box, line.text, line.cls);
-      }
-      syncFlogScroll();
-    }
-  }
-
-  function renderSkills(st: GameState, snap: SaveData): string {
-    const skill = skillById.get(selectedSkillId) ?? gatherSkills[0];
-    if (!skill) return `<section class="page"><p class="empty">${esc(T('pages.skills.empty'))}</p></section>`;
-
-    const xp = st.skills[skill.id]?.xp ?? 0;
-    const level = levelFromXp(xp, prog);
-    const need = expToNext(level, prog);
-    const into = xp - expBase(level, prog);
-    const expPct = Number.isFinite(need) ? Math.min(100, (into / need) * 100) : 100;
-
-    // 主页境界区（#6 + B2 词表收编）：境界词表归 content.rebirth.realms，
-    // 引擎 realmOf 查表单一来源；包无词表时整行不渲染（零降级路径）。
-    const clv = levelFromXp(st.skills[combatSkillId]?.xp ?? 0, prog);
-    const realm = realmOf(content, clv);
-    const realmHtml =
-      realm !== undefined
-        ? `<div class="status-realm">${esc(T('pages.skills.realmLine', { realm, rebirths: st.rebirths }))}</div>`
-        : '';
-
-    const act = st.activity;
-    const actSkill = act ? skillById.get(act.skillId) : undefined;
-    const actDef = act ? actSkill?.activities?.[act.index] : undefined;
-    // 有效间隔单一来源 = 引擎快照映射（#40：gatherSpeed 缩放后与结算同调）。
-    const actInterval = act ? snap.activityIntervals?.[actKeyOf(act)] : undefined;
-    const actPct = act && actInterval ? Math.min(100, (act.progress / actInterval) * 100) : 0;
-
-    const chips = content.skills
-      .filter((s) => s.kind !== 'craft')
-      .map((s) => {
-        // 修炼页只放 gather 技能（+combat 修为参照）：craft 技能导航归炼制页
-        // 专属（UX 调整）——craft 在本页无活动卡无开工入口，纯 chip 属重复导航。
-        const locked = s.kind === 'combat';
-        const selected = s.id === skill.id;
-        const lv = levelFromXp(st.skills[s.id]?.xp ?? 0, prog);
-        return `<button class="chip${selected ? ' selected' : ''}${locked ? ' locked' : ''}"
-          data-act="skill" data-skill="${s.id}"${locked ? ' data-disabled="y"' : ''}>
-          <span class="sigil sigil-sm">${esc(s.icon)}</span><span>${esc(s.name)}</span>
-          ${locked ? `<em class="chip-lock">${esc(T('pages.skills.chipLocked'))}</em>` : `<b class="chip-lv">${esc(T('units.level', { v: lv }))}</b>`}
-        </button>`;
-      })
-      .join('');
-
-    const statusCard = `
-      <section class="status-card">
-        <span class="sigil sigil-big">${esc(skill.icon)}</span>
-        <div class="status-main">
-          <div class="status-head">
-            <b>${esc(skill.name)}</b><span class="status-lv">${esc(T('units.level', { v: level }))}</span>
-            ${skill.description ? `<span class="status-desc">${esc(skill.description)}</span>` : ''}
-          </div>
-          ${realmHtml}
-          <div class="bar"><i style="width:${expPct}%"></i></div>
-          <div class="status-sub">${
-            Number.isFinite(need)
-              ? esc(T('pages.skills.expSub', { into, need, left: Math.max(0, Math.ceil(need - into)) }))
-              : esc(T('pages.skills.expMax'))
-          }</div>
-        </div>
-        <div class="status-act">
-          ${
-            act && actDef
-              ? `<div class="act-now"><span>${esc(T('pages.skills.actNow', { name: actDef.name }))}</span><b data-act-pct data-key="${actKeyOf(act)}">${Math.floor(actPct)}%</b></div>
-                 <div class="bar bar-jade"><i data-bar="activity" data-key="${actKeyOf(act)}" style="width:${actPct}%"></i></div>
-                 <button class="btn btn-ghost" data-act="stop">${esc(T('pages.skills.stopBtn'))}</button>`
-              : `<div class="act-now idle"><span>${esc(T('pages.skills.idle'))}</span></div>`
-          }
-        </div>
-      </section>`;
-
-    const cards = (skill.activities ?? [])
-      .map((a, i) => {
-        // 解锁双重门控（#6）：层数门槛 + 道韵解锁表（rebirthGateOf 同源）。
-        const yunGate = rebirthGateOf(content, st.daoYunEarned, { skillId: skill.id });
-        const unlocked = level >= a.unlockLevel && !yunGate.locked;
-        const lockMsg = yunGate.locked
-          ? T('common.needDaoYun', { daoYun: yunGate.requiredDaoYun })
-          : T('common.needLevel', { level: a.unlockLevel });
-        const running = act?.skillId === skill.id && act.index === i;
-        const out = itemById.get(a.output.item);
-        const bonus = a.byproduct ? itemById.get(a.byproduct.item) : undefined;
-        // 卡片进度条同读引擎快照映射（#40：基础 interval 复算清退——天赋点亮后速率同步）。
-        const runInterval = running && act ? snap.activityIntervals?.[actKeyOf(act)] : undefined;
-        const pct = running && act && runInterval ? Math.min(100, (act.progress / runInterval) * 100) : 0;
-        return `<article class="act-card${running ? ' running' : ''}${unlocked ? '' : ' locked'}">
-          <header><b>${esc(a.name)}</b>${running ? `<em class="act-badge">${esc(T('pages.skills.running'))}</em>` : ''}</header>
-          <div class="act-yield">
-            <span class="sigil sigil-sm">${esc(out?.icon ?? T('icons.unknown'))}</span> ${esc(out?.name ?? a.output.item)} ×${a.output.count}
-            ${a.byproduct ? `<span class="act-bonus">${esc(T('pages.skills.byproduct', { icon: bonus?.icon ?? T('icons.unknown'), name: bonus?.name ?? a.byproduct.item, chance: Math.round(a.byproduct.chance * 100) }))}</span>` : ''}
-          </div>
-          <div class="act-meta">${esc(T('pages.skills.actMeta', { interval: fmtSeconds(a.interval), exp: a.exp, level: a.unlockLevel }))}</div>
-          <div class="bar bar-thin"><i data-bar="activity" data-key="${skill.id}:${i}" style="width:${pct}%"></i></div>
-          ${
-            unlocked
-              ? running
-                ? ''
-                : `<button class="btn" data-act="start" data-skill="${skill.id}" data-index="${i}">${esc(T('pages.skills.startBtn'))}</button>`
-              : `<span class="act-lockmsg">${esc(lockMsg)}</span>`
-          }
-        </article>`;
-      })
-      .join('');
-
-    return `
-      <section class="page">
-        <div class="chips">${chips}</div>
-        ${statusCard}
-        ${cards ? `<div class="act-grid">${cards}</div>` : ''}
-      </section>`;
-  }
-
-  /* ---------- 炼制页（#5）：配方卡 = 材料着色 + 成功率 + 进度条 ---------- */
-
-  function renderCraft(st: GameState, snap: SaveData): string {
-    if (craftSkills.length === 0 || content.recipes.length === 0) {
-      return `<section class="page"><p class="empty">${esc(T('pages.craft.empty'))}</p></section>`;
-    }
-    const skill = craftSkills.find((s) => s.id === selectedCraftSkillId) ?? craftSkills[0]!;
-    const xp = st.skills[skill.id]?.xp ?? 0;
-    const level = levelFromXp(xp, prog);
-    const need = expToNext(level, prog);
-    const into = xp - expBase(level, prog);
-    const expPct = Number.isFinite(need) ? Math.min(100, (into / need) * 100) : 100;
-
-    const act = st.activity;
-    const runningHere = act?.skillId === skill.id;
-    // 有效间隔单一来源 = 引擎快照映射（#40；craft 动作 = 配方原值）。
-    const actInterval = act ? snap.activityIntervals?.[actKeyOf(act)] : undefined;
-    const actPct = act && actInterval ? Math.min(100, (act.progress / actInterval) * 100) : 0;
-
-    const chips = craftSkills
-      .map((s) => {
-        const selected = s.id === skill.id;
-        const lv = levelFromXp(st.skills[s.id]?.xp ?? 0, prog);
-        return `<button class="chip${selected ? ' selected' : ''}" data-act="craftskill" data-skill="${s.id}">
-          <span class="sigil sigil-sm">${esc(s.icon)}</span><span>${esc(s.name)}</span>
-          <b class="chip-lv">${esc(T('units.level', { v: lv }))}</b>
-        </button>`;
-      })
-      .join('');
-
-    const statusCard = `
-      <section class="status-card">
-        <span class="sigil sigil-big">${esc(skill.icon)}</span>
-        <div class="status-main">
-          <div class="status-head">
-            <b>${esc(skill.name)}</b><span class="status-lv">${esc(T('units.level', { v: level }))}</span>
-            ${skill.description ? `<span class="status-desc">${esc(skill.description)}</span>` : ''}
-          </div>
-          <div class="bar"><i style="width:${expPct}%"></i></div>
-          <div class="status-sub">${
-            Number.isFinite(need)
-              ? esc(T('pages.craft.expSub', { into, need, left: Math.max(0, Math.ceil(need - into)) }))
-              : esc(T('pages.craft.expMax'))
-          }</div>
-        </div>
-        <div class="status-act">
-          ${
-            act && runningHere
-              ? `<div class="act-now"><span>${esc(T('pages.craft.actNow', { name: act.name }))}</span><b data-act-pct data-key="${actKeyOf(act)}">${Math.floor(actPct)}%</b></div>
-                 <div class="bar bar-jade"><i data-bar="activity" data-key="${actKeyOf(act)}" style="width:${actPct}%"></i></div>
-                 <button class="btn btn-ghost" data-act="stop">${esc(T('pages.craft.stopBtn'))}</button>`
-              : `<div class="act-now idle"><span>${esc(T('pages.craft.idle'))}</span></div>`
-          }
-        </div>
-      </section>`;
-
-    const cards = content.recipes
-      .map((recipe: RecipeView, index: number) => ({ recipe, index }))
-      .filter(({ recipe }) => recipe.skill === skill.id)
-      .map(({ recipe, index }) => {
-        // 解锁双重门控（#6）：层数门槛 + 道韵解锁表（rebirthGateOf 同源）。
-        const yunGate = rebirthGateOf(content, st.daoYunEarned, { skillId: skill.id });
-        const unlocked = level >= recipe.unlockLevel && !yunGate.locked;
-        const lockMsg = yunGate.locked
-          ? T('common.needDaoYun', { daoYun: yunGate.requiredDaoYun })
-          : T('common.needLevel', { level: recipe.unlockLevel });
-        const running = runningHere && act?.index === index;
-        const out = itemById.get(recipe.output.item);
-        // 成功率/材料缺口走引擎单一来源（craftSuccessRateOf / craftMissingOf），
-        // 壳零公式复算（#5 票评：成功率展示禁二次硬编码，round3 A4）。
-        const rate = craftSuccessRateOf(content, st.skills, recipe);
-        const ratePct = String(Math.round(rate * 1000) / 10);
-        const missing = new Set(craftMissingOf(recipe, st.items));
-        const mats = Object.entries(recipe.materials)
-          .map(([id, matNeed]) => {
-            const mat = itemById.get(id);
-            const have = st.items[id] ?? 0;
-            return `<span class="mat${missing.has(id) ? ' no' : ' ok'}">${esc(mat?.icon ?? T('icons.unknown'))} ${esc(T('pages.craft.matRow', { name: mat?.name ?? id, have, need: matNeed }))}</span>`;
-          })
-          .join('');
-        const pct = running && act ? Math.min(100, (act.progress / recipe.interval) * 100) : 0;
-        return `<article class="act-card${running ? ' running' : ''}${unlocked ? '' : ' locked'}">
-          <header><b>${esc(recipe.name)}</b>${running ? `<em class="act-badge">${esc(T('pages.craft.running'))}</em>` : ''}</header>
-          <div class="act-yield">
-            <span class="sigil sigil-sm">${esc(out?.icon ?? T('icons.unknown'))}</span> ${esc(out?.name ?? recipe.output.item)} ×${recipe.output.count}
-            <span class="act-bonus">${esc(T('pages.craft.successRate', { rate: ratePct }))}</span>
-          </div>
-          <div class="craft-mats">${mats}</div>
-          <div class="act-meta">${esc(T('pages.craft.recipeMeta', { interval: fmtSeconds(recipe.interval), exp: recipe.exp, level: recipe.unlockLevel }))}</div>
-          <div class="bar bar-thin"><i data-bar="activity" data-key="${skill.id}:${index}" style="width:${pct}%"></i></div>
-          ${
-            unlocked
-              ? running
-                ? `<button class="btn btn-ghost" data-act="stop">${esc(T('pages.craft.stopBtn'))}</button>`
-                : `<button class="btn" data-act="start" data-skill="${skill.id}" data-index="${index}">${esc(T('pages.craft.startBtn'))}</button>`
-              : `<span class="act-lockmsg">${esc(lockMsg)}</span>`
-          }
-        </article>`;
-      })
-      .join('');
-
-    return `
-      <section class="page">
-        <h2 class="page-title">${esc(T('pages.craft.title'))}</h2>
-        <p class="page-sub">${esc(T('pages.craft.subtitle', { level }))}</p>
-        <div class="chips">${chips}</div>
-        ${statusCard}
-        <div class="act-grid">${cards || `<p class="empty">${esc(T('pages.craft.empty'))}</p>`}</div>
-      </section>`;
-  }
-
-  /* ---------- 转生页（#6）：兵解预览 + 两段式确认 ---------- */
-
-  function renderRebirth(st: GameState): string {
-    if (!rebirthSection) {
-      return `<section class="page"><p class="empty">${esc(T('pages.rebirth.empty'))}</p></section>`;
-    }
-    // 预览结算走引擎 rebirthPreviewOf（与 rebirth:perform 判定同源，壳零公式）。
-    const preview = rebirthPreviewOf(content, st.skills);
-    const resetChips = (rebirthSection.reset ?? [])
-      .map((key) => T(`pages.rebirth.resetLabels.${key}`))
-      .join(T('common.itemListSep'));
-    const keepChips = (rebirthSection.keep ?? [])
-      .map((key) => T(`pages.rebirth.keepLabels.${key}`))
-      .join(T('common.itemListSep'));
-    const gate = preview.eligible
-      ? ''
-      : `<p class="act-lockmsg">${esc(T('pages.rebirth.gateLine', { need: preview.minProgress }))}</p>`;
-    const ops = !preview.eligible
-      ? ''
-      : rebirthArmed
-        ? `<p class="page-sub rebirth-tip">${esc(T('pages.rebirth.confirmTip'))}</p>
-           <button class="btn btn-danger" data-act="rebirth-confirm">${esc(T('pages.rebirth.confirmBtn'))}</button>
-           <button class="btn btn-ghost" data-act="rebirth-cancel">${esc(T('pages.rebirth.cancelBtn'))}</button>`
-        : `<button class="btn btn-danger" data-act="rebirth-go">${esc(T('pages.rebirth.performBtn'))}</button>`;
-    return `
-      <section class="page">
-        <h2 class="page-title">${esc(T('pages.rebirth.title'))}</h2>
-        <p class="page-sub">${esc(T('pages.rebirth.subtitle', { rebirths: st.rebirths }))}</p>
-        <section class="status-card rebirth-card">
-          <div class="status-main">
-            <div class="status-head"><b>${esc(T('pages.rebirth.xpLine', { xp: preview.totalXp }))}</b></div>
-            <div class="status-head rebirth-gain"><b>${esc(T('pages.rebirth.gainLine', { daoYun: preview.gain }))}</b></div>
-          </div>
-          ${gate}
-        </section>
-        <div class="rebirth-lists">
-          <div class="rebirth-list"><h3 class="group-title">${esc(T('pages.rebirth.resetTitle'))}</h3><p>${esc(resetChips)}</p></div>
-          <div class="rebirth-list"><h3 class="group-title">${esc(T('pages.rebirth.keepTitle'))}</h3><p>${esc(keepChips)}</p></div>
-        </div>
-        <div class="rebirth-ops">${ops}</div>
-      </section>`;
-  }
-
-  /* ---------- 天赋树页（#6）：树数据 100% 来自 rebirth.talents ---------- */
-
-  function renderTalents(st: GameState): string {
-    const talents = rebirthSection?.talents ?? [];
-    if (talents.length === 0) {
-      return `<section class="page"><p class="empty">${esc(T('pages.talents.empty'))}</p></section>`;
-    }
-    const cards = talents
-      .map((node) => {
-        // 购买门控走引擎 talentGateOf（与 talent:buy 判定同式同源，N4 收敛）。
-        const gate = talentGateOf(content, st.daoYun, st.talents, node.id);
-        let op: string;
-        if (gate.owned) op = `<em class="act-badge">${esc(T('pages.talents.owned'))}</em>`;
-        else if (gate.prereqMissing) op = `<span class="act-lockmsg">${esc(T('pages.talents.needPrereq'))}</span>`;
-        else if (!gate.affordable)
-          op = `<span class="act-lockmsg">${esc(T('pages.talents.needDaoYun', { cost: node.cost }))}</span>`;
-        else
-          op = `<button class="btn" data-act="talent-buy" data-node="${node.id}">${esc(T('pages.talents.buyBtn'))}</button>`;
-        return `<article class="act-card talent-card${gate.owned ? ' owned' : ''}${!gate.owned && (gate.prereqMissing || !gate.affordable) ? ' locked' : ''}">
-          <header><b><span class="sigil sigil-sm">${esc(node.icon ?? T('icons.unknown'))}</span> ${esc(node.name)}</b></header>
-          ${node.description ? `<div class="talent-desc">${esc(node.description)}</div>` : ''}
-          <div class="act-meta">${esc(T('pages.talents.costRow', { cost: node.cost }))}</div>
-          ${op}
-        </article>`;
-      })
-      .join('');
-    return `
-      <section class="page">
-        <h2 class="page-title">${esc(T('pages.talents.title'))}</h2>
-        <p class="page-sub">${esc(T('pages.talents.subtitle', { daoYun: st.daoYun }))}</p>
-        <div class="act-grid">${cards}</div>
-      </section>`;
-  }
-
-  /* ---------- 成就页（#9）：统计区（包声明呈现面）+ 成就卡（进度条/奖励） ---------- */
-
-  function renderAchievements(st: GameState): string {
-    const defs = content.achievements ?? [];
-    if (defs.length === 0) {
-      return `<section class="page"><p class="empty">${esc(T('pages.achievements.empty'))}</p></section>`;
-    }
-    // 进度投影走引擎 achievementProgressOf（与解锁判定同式同源，壳零公式复算）。
-    const stats = st.stats ?? {};
-    const views = achievementProgressOf(content, stats, st.achievements ?? []);
-    const unlockedCount = views.filter((view) => view.unlocked).length;
-    const sep = T('common.itemListSep');
-
-    // 统计区：呈现面由包 statLabels 声明（键 = 引擎统计注册表闭集），零记录读 0。
-    const statLabelMap = shellGet('pages.achievements.statLabels');
-    const statRows =
-      statLabelMap !== null && typeof statLabelMap === 'object'
-        ? Object.entries(statLabelMap as Record<string, unknown>)
-            .filter(([, label]) => typeof label === 'string' && label.length > 0)
-            .map(
-              ([key, label]) =>
-                `<div class="stat-box"><b>${Math.floor(stats[key] ?? 0).toLocaleString(locale)}</b><span>${esc(String(label))}</span></div>`,
-            )
-            .join('')
-        : '';
-
-    const cards = views
-      .map((view) => {
-        const { def, unlocked, percent } = view;
-        const concealed = def.hidden && !unlocked;
-        const name = concealed ? T('pages.achievements.hiddenName') : def.name;
-        const desc = concealed
-          ? T('pages.achievements.hiddenDesc')
-          : (def.description ?? '');
-        // 进度条：已解锁不渲染（恒 100 无信息量）；布尔型（无 target）无进度可言。
-        // 数值行另拆：lte 的 {current}/{target} 语义反直觉（「最快击杀」5/3 读作
-        // 反向），只留进度条（真机验收裁决）。
-        const progressBar =
-          !unlocked && view.target !== undefined
-            ? `<div class="bar bar-thin"><i style="width:${percent}%"></i></div>`
-            : '';
-        const progressRow =
-          !unlocked && view.target !== undefined && def.condition.op !== 'lte'
-            ? `<div class="act-meta">${esc(T('pages.achievements.progress', { current: view.current ?? 0, target: view.target }))}</div>`
-            : '';
-        // 奖励行：引擎入账结果的内容面直出（parts 由壳拼装，缺项省略）。
-        const reward = def.reward;
-        const parts: string[] = [];
-        if (!concealed && reward) {
-          if (reward.gold !== undefined) parts.push(T('pages.achievements.rewardGold', { gold: reward.gold }));
-          if (reward.daoYun !== undefined)
-            parts.push(T('pages.achievements.rewardDaoYun', { daoYun: reward.daoYun }));
-          if (reward.items !== undefined && reward.items.length > 0) {
-            parts.push(
-              T('pages.achievements.rewardItems', {
-                items: reward.items.map((stack) => `${nameOf(stack.item)}×${stack.count}`).join(sep),
-              }),
-            );
-          }
-        }
-        return `<article class="act-card ach-card${unlocked ? ' owned' : ''}${concealed ? ' locked' : ''}">
-          <header><b><span class="sigil sigil-sm">${esc(concealed ? T('icons.unknown') : (def.icon ?? T('icons.unknown')))}</span> ${esc(name)}</b>${unlocked ? `<em class="act-badge">${esc(T('pages.achievements.unlockedBadge'))}</em>` : ''}</header>
-          ${desc ? `<div class="talent-desc">${esc(desc)}</div>` : ''}
-          ${progressBar}
-          ${progressRow}
-          ${parts.length > 0 ? `<div class="act-meta ach-reward">${esc(parts.join(sep))}</div>` : ''}
-        </article>`;
-      })
-      .join('');
-
-    return `
-      <section class="page">
-        <h2 class="page-title">${esc(T('pages.achievements.title'))}</h2>
-        <p class="page-sub">${esc(T('pages.achievements.subtitle', { unlocked: unlockedCount, total: views.length }))}</p>
-        <h3 class="group-title">${esc(T('pages.achievements.statsTitle'))}</h3>
-        ${statRows ? `<div class="stat-grid">${statRows}</div>` : ''}
-        <div class="act-grid">${cards}</div>
-      </section>`;
-  }
-
-  /* ---------- Boss 呈现（#8）：阶段徽标 + 血条分段刻度 ---------- */
-
-  /** Boss 徽标与血条分段刻度（非 Boss = 空串；刻度位置 = 阶段阈值，content 数据；
-   *  阶段下标越界（包变更缩表）时徽标不渲染——与 bossEnemyOf 的 undefined 兜底同律）。 */
-  const bossDecoOf = (st: GameState): { badge: string; ticks: string } => {
-    const combat = st.combat;
-    const boss = combat ? findBossOf(content, combat.enemyId) : undefined;
-    if (!boss) return { badge: '', ticks: '' };
-    const idx = combat!.bossPhase;
-    const phase = idx >= 0 ? boss.phases[idx] : undefined;
-    const badge = phase ? `<em class="act-badge boss-phase">${esc(phase.name ?? '')}</em>` : '';
-    const ticks = boss.phases
-      .map((p) => `<i class="tick" style="left:${Math.round((p.threshold ?? 0) * 100)}%"></i>`)
-      .join('');
-    return { badge, ticks };
-  };
-
-  /* ---------- 召唤物呈现（#30）：血条行 + 集火徽标 ---------- */
-
-  /**
-   * 召唤物行（斗法页/秘境页共用）：首槽 = 集火目标（engagedBadge 徽标复用，
-   * 集火序 = 引擎先入先出，壳零排序复算）；血量走 enemyHp 同一模板。
-   * 槽位视图 = 引擎快照投影组（#40：minionViewOf 单点组合外显，壳零缩放
-   * 公式；投影失效槽位已被引擎剔除 → 该行不渲染）。
-   */
-  const minionsHtml = (snap: SaveData): string =>
-    (snap.minions ?? [])
-      .map(({ minion, view }, index) => {
-        const pct = Math.max(0, Math.min(100, (minion.hp / (view.hp || 1)) * 100));
-        return `<div class="minion-row${index === 0 ? ' focus' : ''}">
-              <span class="sigil sigil-sm">${esc(view.icon)}</span>
-              <b>${esc(view.name)}</b>
-              ${index === 0 ? `<em class="act-badge">${esc(T('pages.combat.engagedBadge'))}</em>` : ''}
-              <span class="minion-hp">${esc(T('pages.combat.enemyHp', { ehp: Math.max(0, Math.ceil(minion.hp)), hp: view.hp }))}</span>
-              <div class="bar bar-red bar-thin minion-bar"><i data-bar="minion" style="width:${pct}%"></i></div>
-            </div>`;
-      })
-      .join('');
-
-  /* ---------- 秘境页（#7）：层进度 + 当前层战斗 + 撤退；未在攻略 = 秘境列表 ---------- */
-
-  /** 锁定句归因（#7）：锁因走引擎 gate.daoYunLocked 单一来源；道韵复用 common.needDaoYun，钥匙用 entryKey。 */
-  const dungeonLockMsgOf =
-    (st: GameState) =>
-    (dungeonId: string): string => {
-      const gate = dungeonGateOf(content, dungeonId, { daoYunEarned: st.daoYunEarned, items: st.items });
-      if (gate.daoYunLocked) {
-        return T('common.needDaoYun', { daoYun: gate.requiredDaoYun });
-      }
-      return T('pages.dungeon.entryKey', { item: itemById.get(gate.keyItem ?? '')?.name ?? (gate.keyItem ?? '') });
-    };
-
-  function renderDungeon(st: GameState, snap: SaveData): string {
-    const dungeons = dungeonList;
-    if (dungeons.length === 0) {
-      return `<section class="page"><p class="empty">${esc(T('pages.dungeon.empty'))}</p></section>`;
-    }
-    const run = st.dungeon;
-    if (run) {
-      const dungeon = findDungeon(content, run.dungeonId);
-      if (!dungeon) {
-        return `<section class="page"><p class="empty">${esc(T('pages.dungeon.empty'))}</p></section>`;
-      }
-      // 当前层敌人 = 引擎快照投影（#40：秘境层倍率 × Boss 阶段修正，零壳层组合）。
-      const enemy = snap.enemy;
-      const deco = bossDecoOf(st);
-      const ehpPct =
-        enemy && st.combat ? Math.max(0, Math.min(100, (st.combat.ehp / enemy.hp) * 100)) : 0;
-      const hpPct = Math.max(0, Math.min(100, (st.hp / (snap.stats?.maxHp ?? 1)) * 100));
-      const best = st.dungeonBest[dungeon.id] ?? 0;
-      const rec = dungeonLayerOf(dungeon, run.floor)?.recommendedPower;
-      const power = snap.stats ? powerOf(snap.stats) : 0;
-      const consumables = consumablesHtml(st);
-      return `
-        <section class="page">
-          <h2 class="page-title">${esc(T('pages.dungeon.title'))}</h2>
-          <p class="page-sub">${esc(T('pages.dungeon.floorNow', { floor: run.floor, floors: dungeon.floors }))} · ${esc(T('pages.dungeon.best', { best }))}</p>
-          <article class="enemy-card fighting">
-            <div class="enemy-face"><span class="sigil sigil-big">${esc(enemy?.icon ?? T('icons.unknown'))}</span></div>
-            <div class="enemy-main">
-              <div class="enemy-head"><b>${esc(enemy?.name ?? '')}</b><span class="enemy-lv">${esc(T('units.level', { v: enemy?.level ?? 0 }))}</span>${deco.badge}</div>
-              <div class="bar bar-red">${deco.ticks}<i data-bar="enemy" style="width:${ehpPct}%"></i></div>
-              <div class="enemy-sub">${esc(T('pages.combat.enemyHp', { ehp: st.combat ? Math.max(0, Math.ceil(st.combat.ehp)) : 0, hp: enemy?.hp ?? 0 }))}</div>
-              <div class="minion-rows">${minionsHtml(snap)}</div>
-              <div class="bar bar-jade"><i style="width:${hpPct}%"></i></div>
-              <div class="enemy-sub">${esc(T('pages.combat.selfStats', { hp: Math.floor(st.hp), max: snap.stats?.maxHp ?? '—', atk: statValueText('atk', snap.stats?.atk ?? '—'), def: statValueText('def', snap.stats?.def ?? '—'), crit: statValueText('crit', snap.stats?.crit ?? '—') }))}</div>
-            </div>
-            <div class="enemy-ops">
-              <button class="btn btn-ghost" data-act="dungeon-leave">${esc(T('pages.dungeon.retreatBtn'))}</button>
-            </div>
-          </article>
-          ${rec ? `<p class="page-sub">${esc(T('pages.dungeon.powerNow', { power }))} · ${esc(T('pages.dungeon.powerRec', { min: rec.min, max: rec.max }))}</p>` : ''}
-          ${consumables ? `<div class="consumable-bar">${consumables}</div>` : `<p class="page-sub">${esc(T('pages.combat.noConsumables'))}</p>`}
-          <div class="flog" id="flog"></div>
-        </section>`;
-    }
-    const lockMsgOf = dungeonLockMsgOf(st);
-    const cards = dungeons
-      .map((dungeon) => {
-        const gate = dungeonGateOf(content, dungeon.id, { daoYunEarned: st.daoYunEarned, items: st.items });
-        const best = st.dungeonBest[dungeon.id] ?? 0;
-        const cleared = best >= dungeon.floors;
-        return `<article class="enemy-card${gate.locked ? ' locked' : ''}">
-          <div class="enemy-face"><span class="sigil sigil-big">${esc(dungeon.icon ?? T('icons.unknown'))}</span></div>
-          <div class="enemy-main">
-            <div class="enemy-head"><b>${esc(dungeon.name)}</b><span class="enemy-lv">${esc(T('units.level', { v: dungeon.floors }))}</span>${cleared ? `<em class="act-badge">${esc(T('pages.dungeon.clearBadge'))}</em>` : ''}</div>
-            <div class="enemy-sub">${esc(T('pages.dungeon.best', { best }))}</div>
-          </div>
-          <div class="enemy-ops">
-            ${
-              gate.locked
-                ? `<span class="act-lockmsg">${esc(lockMsgOf(dungeon.id))}</span>`
-                : `<button class="btn" data-act="dungeon-enter" data-dungeon="${dungeon.id}">${esc(T('pages.dungeon.enterBtn'))}</button>`
-            }
-          </div>
-        </article>`;
-      })
-      .join('');
-    return `
-      <section class="page">
-        <h2 class="page-title">${esc(T('pages.dungeon.title'))}</h2>
-        <p class="page-sub">${esc(T('pages.dungeon.subtitle'))}</p>
-        <div class="enemy-grid">${cards}</div>
-      </section>`;
-  }
-
-  /* ---------- 斗法页（issue #4） ---------- */
+  /* ---------- 战斗日志（壳层事件接线；容器由斗法/秘境页渲染） ---------- */
 
   /** 战斗日志内存缓冲：页面未挂载时暂存，进页全量重放（容量受控）。 */
   const flogBuffer: Array<{ text: string; cls: string }> = [];
@@ -1263,309 +678,7 @@ export function buildUi(
     if (el) el.scrollTop = el.scrollHeight;
   }
 
-  /** 背包中可服用的回气类消耗品按钮行（斗法页/秘境页共用）。 */
-  const consumablesHtml = (st: GameState): string =>
-    content.items
-      .filter((item) => item.type === 'consumable' && (st.items[item.id] ?? 0) > 0)
-      .map(
-        (item) =>
-          `<button class="btn btn-consumable" data-act="eat" data-item="${item.id}">${esc(item.icon)} ${esc(item.name)} ×${st.items[item.id]}</button>`,
-      )
-      .join('');
-
-  function renderCombat(st: GameState, snap: SaveData): string {
-    const combat = st.combat;
-    // N2 修复（#018）：斗法修为读数按 combatSkillId 解析，禁硬编码内容 id。
-    const clv = levelFromXp(st.skills[combatSkillId]?.xp ?? 0, prog);
-    const sep = T('common.itemListSep');
-    const consumables = consumablesHtml(st);
-
-    // 秘境进行中（#7）：层序列战斗在身，野战一律拒绝——斗法页改为指向页。
-    if (st.dungeon) {
-      const runDungeon = findDungeon(content, st.dungeon.dungeonId);
-      return `
-        <section class="page">
-          <h2 class="page-title">${esc(T('pages.combat.title'))}</h2>
-          <p class="page-sub">${esc(T('pages.combat.subtitle', { level: clv }))}</p>
-          <p class="page-sub">${esc(T('pages.dungeon.floorNow', { floor: st.dungeon.floor, floors: runDungeon?.floors ?? 0 }))}</p>
-          <button class="btn" data-act="tab" data-tab="dungeon">${esc(T('tabs.dungeon'))}</button>
-          <div class="consumable-bar">${consumables || ''}</div>
-        </section>`;
-    }
-
-    /** 敌人卡列表：列表视图与战斗中信息面共用。engagedId = 当前目标——徽标化且
-     *  不渲染挑战按钮（换敌 = 引擎 combat:start 幂等替换语义，点其他怪即切换，
-     *  战斗不中断；点当前怪引擎幂等拒绝，UI 直接收掉入口）。 */
-    const enemyCardsHtml = (st: GameState, engagedId?: string): string =>
-      content.enemies
-      .map((enemy) => {
-        // 开战门控走引擎 enemyGateOf（N1 收敛，#020）：锁定判定与 UI 锁定态
-        // 共用 enemyGateOf 同一实现，UI 零公式复算。
-        const levelGate = enemyGateOf(content, st.skills, enemy.id);
-        // 道韵解锁门槛（#6）：开战判定与 UI 锁定态同源 rebirthGateOf（N1 同款收敛）。
-        const yunGate = rebirthGateOf(content, st.daoYunEarned, { enemyId: enemy.id });
-        const locked = levelGate.locked || yunGate.locked;
-        const lockMsg = yunGate.locked
-          ? T('common.needDaoYun', { daoYun: yunGate.requiredDaoYun })
-          : T('common.needLevel', { level: levelGate.requiredLevel });
-        const gold = enemy.gold ?? { min: 0, max: 0 };
-        const drops = (enemy.drops ?? [])
-          .map((drop) => itemById.get(drop.item)?.name ?? drop.item)
-          .slice(0, 3)
-          .join(sep);
-        return `<article class="enemy-card${locked ? ' locked' : ''}${enemy.id === engagedId ? ' running' : ''}">
-          <div class="enemy-face"><span class="sigil sigil-big">${esc(enemy.icon)}</span></div>
-          <div class="enemy-main">
-            <div class="enemy-head"><b>${esc(enemy.name)}</b><span class="enemy-lv">${esc(T('units.level', { v: enemy.level }))}</span></div>
-            <div class="enemy-sub">${esc(T('pages.combat.enemyStats', { hp: enemy.hp, atk: enemy.atk, def: enemy.def, exp: enemy.exp }))}</div>
-            <div class="enemy-sub">${esc(T('pages.combat.enemyGold', { min: gold.min, max: gold.max }))}${drops ? esc(T('pages.combat.dropsSuffix', { drops })) : ''}</div>
-          </div>
-          <div class="enemy-ops">
-            ${
-              enemy.id === engagedId
-                ? `<em class="act-badge">${esc(T('pages.combat.engagedBadge'))}</em>`
-                : locked
-                ? `<span class="act-lockmsg">${esc(lockMsg)}</span>`
-                : `<button class="btn" data-act="fight" data-enemy="${enemy.id}">${esc(T('pages.combat.fightBtn'))}</button>`
-            }
-          </div>
-        </article>`;
-      })
-      .join('');
-
-    const toggles = `
-      <div class="combat-toggles">
-        <button class="btn btn-ghost${st.autoFight ? ' on' : ''}" data-act="toggle-auto">${esc(T(st.autoFight ? 'pages.combat.autoFightOn' : 'pages.combat.autoFightOff'))}</button>
-        <button class="btn btn-ghost${st.autoEat ? ' on' : ''}" data-act="toggle-auto-eat">${esc(T(st.autoEat ? 'pages.combat.autoEatOn' : 'pages.combat.autoEatOff'))}</button>
-      </div>`;
-
-    if (combat) {
-      // 生效视图 = 引擎快照投影（#40：Boss 阶段修正在案时随阶段变化，零壳层组合）。
-      const enemy = snap.enemy;
-      if (!enemy) return `<section class="page"><p class="empty">${esc(T('pages.combat.enemyMissing'))}</p></section>`;
-      const deco = bossDecoOf(st);
-      const ehpPct = Math.max(0, Math.min(100, (combat.ehp / enemy.hp) * 100));
-      const resting = combat.respT > 0;
-      const hpPct = Math.max(0, Math.min(100, (st.hp / (snap.stats?.maxHp ?? enemy.hp)) * 100));
-      // 斗法修为条（战斗中信息面）：读数与修炼页同式同源（expToNext/expBase）。
-      const cxp = st.skills[combatSkillId]?.xp ?? 0;
-      const cneed = expToNext(clv, prog);
-      const cinto = cxp - expBase(clv, prog);
-      const cexpPct = Number.isFinite(cneed) ? Math.min(100, (cinto / cneed) * 100) : 100;
-      return `
-        <section class="page">
-          <h2 class="page-title">${esc(T('pages.combat.title'))}</h2>
-          <article class="enemy-card fighting">
-            <div class="enemy-face"><span class="sigil sigil-big">${esc(enemy.icon)}</span></div>
-            <div class="enemy-main">
-              <div class="enemy-head"><b>${esc(enemy.name)}</b><span class="enemy-lv">${esc(T('units.level', { v: enemy.level }))}</span>${resting ? `<em class="act-badge">${esc(T('pages.combat.resting'))}</em>` : ''}${deco.badge}</div>
-              <div class="bar bar-red">${deco.ticks}<i data-bar="enemy" style="width:${ehpPct}%"></i></div>
-              <div class="enemy-sub">${esc(T('pages.combat.enemyHp', { ehp: Math.max(0, Math.ceil(combat.ehp)), hp: enemy.hp }))}</div>
-              <div class="minion-rows">${minionsHtml(snap)}</div>
-              <div class="bar bar-jade"><i style="width:${hpPct}%"></i></div>
-              <div class="enemy-sub">${esc(T('pages.combat.selfStats', { hp: Math.floor(st.hp), max: snap.stats?.maxHp ?? '—', atk: statValueText('atk', snap.stats?.atk ?? '—'), def: statValueText('def', snap.stats?.def ?? '—'), crit: statValueText('crit', snap.stats?.crit ?? '—') }))}</div>
-            </div>
-            <div class="enemy-ops">
-              <button class="btn btn-ghost" data-act="flee">${esc(T('pages.combat.fleeBtn'))}</button>
-            </div>
-          </article>
-          <div class="combat-exp">
-            <div class="act-now"><span>${esc(T('pages.combat.subtitle', { level: clv }))}</span></div>
-            <div class="bar bar-thin"><i style="width:${cexpPct}%"></i></div>
-            ${
-              Number.isFinite(cneed)
-                ? `<div class="status-sub">${esc(T('pages.combat.expSub', { into: cinto, need: cneed, left: Math.max(0, Math.ceil(cneed - cinto)) }))}</div>`
-                : ''
-            }
-          </div>
-          ${toggles}
-          ${consumables ? `<div class="consumable-bar">${consumables}</div>` : `<p class="page-sub">${esc(T('pages.combat.noConsumables'))}</p>`}
-          <div class="enemy-grid">${enemyCardsHtml(st, combat.enemyId)}</div>
-          <div class="flog" id="flog"></div>
-        </section>`;
-    }
-
-    // 秘境入口（#7，票面：入口在斗法页）：入门即切到秘境页；锁定句复用 dungeonLockMsgOf。
-    const lockMsgOf = dungeonLockMsgOf(st);
-    const dungeonEntries = hasDungeons
-      ? dungeonList
-          .map((dungeon) => {
-            const gate = dungeonGateOf(content, dungeon.id, { daoYunEarned: st.daoYunEarned, items: st.items });
-            const best = st.dungeonBest[dungeon.id] ?? 0;
-            return `<div class="bag-row">
-              <span class="sigil sigil-sm">${esc(dungeon.icon ?? T('icons.unknown'))}</span>
-              <span class="bag-name">${esc(dungeon.name)}<small>${esc(T('pages.dungeon.best', { best }))}</small></span>
-              <span class="bag-ops">${
-                gate.locked
-                  ? `<span class="act-lockmsg">${esc(lockMsgOf(dungeon.id))}</span>`
-                  : `<button class="btn" data-act="dungeon-enter" data-dungeon="${dungeon.id}">${esc(T('pages.dungeon.enterBtn'))}</button>`
-              }</span>
-            </div>`;
-          })
-          .join('')
-      : '';
-
-    return `
-      <section class="page">
-        <h2 class="page-title">${esc(T('pages.combat.title'))}</h2>
-        <p class="page-sub">${esc(T('pages.combat.subtitle', { level: clv }))}</p>
-        ${dungeonEntries}
-        <div class="enemy-grid">${enemyCardsHtml(st)}</div>
-        <div class="consumable-bar">${consumables || ''}</div>
-      </section>`;
-  }
-
-  /* ---------- 乾坤袋：装备实例卡 ---------- */
-
-  /** 着色类 = `r-${档位 id}`（def 驱动）；缺档回退第一档；空表 r-none。 */
-  const rarityClass = (rarity: string): string => {
-    const def = rarityDefOf(rarity);
-    return def ? `r-${def.id}` : 'r-none';
-  };
-  const rarityName = (rarity: string): string => rarityDefOf(rarity)?.name ?? '';
-
-  function gearCardHtml(st: GameState, gear: GearInstance): string {
-    const item = itemById.get(gear.itemId);
-    const worn = Object.entries(st.equips).find(([, uid]) => uid === gear.uid);
-    // 倍率投影走引擎 projectGearBase（#26 三处复算债收敛）：round(基础 × 档位倍率)
-    // 与实例化/属性聚合同式同源，UI 零 ×mult 公式；标签/量纲查 statLabels。
-    const baseRows = projectGearBase(content, item?.bonuses ?? {}, gear.rarity)
-      .map(({ stat, value }) => esc(statBonusText(stat, value)));
-    const affixRows = gear.affixes.map(
-      (a) => `<span class="txt-dim">${esc(a.name)}</span> ${esc(statBonusText(a.stat, a.val))}`,
-    );
-    // 铭纹行（#14）：纹阶徽标着色（t1/t2/t3）+ 三阶表数值直读（内容数据，
-    // 壳零公式）+ 行内重铸入口（器屑经济可用才渲染；佩戴中引擎拒绝，按钮同禁）。
-    const inscRows = (gear.inscriptions ?? [])
-      .map((insc, index) => {
-        const def = findInscription(content, insc.id);
-        if (!def) return ''; // 内容已移除：防御跳过（引擎贡献侧同律静默）
-        const tier = Math.max(1, Math.min(3, Math.floor(insc.tier)));
-        const parts = (def.tiers[tier - 1] ?? []).map((mod) => {
-          const cond =
-            mod.condition?.element !== undefined
-              ? esc(T('pages.bag.inscCondition', { element: elementNameOf(mod.condition.element) }))
-              : '';
-          return `${esc(inscModText(mod))}${cond}`;
-        });
-        const reforgeBtn =
-          canSmelt && !worn
-            ? ` <button class="btn btn-mini" data-act="reforge" data-uid="${gear.uid}" data-index="${index}">${esc(T('pages.bag.reforgeBtn'))}</button>`
-            : '';
-        return `<span class="insc insc-t${tier}"><b class="insc-tier">${esc(T('pages.bag.inscTier', { tier }))}</b>${esc(def.name)}</span> ${parts.join(esc(T('common.itemListSep')))}${reforgeBtn}`;
-      })
-      .filter((row) => row !== '');
-    const rows =
-      [...baseRows, ...affixRows, ...inscRows].join(esc(T('common.itemListSep'))) ||
-      esc(T('pages.bag.noAffix'));
-    // 展示名走引擎 gearName（#26：「档名·物品名」拼接单一来源；缺档名省略前缀）。
-    const displayName = gearName(content, item?.name ?? gear.itemId, gear.rarity);
-    return `<div class="gear-card ${rarityClass(gear.rarity)}">
-      <span class="sigil sigil-sm">${esc(item?.icon ?? T('icons.gear'))}</span>
-      <span class="gear-name">${esc(displayName)}<small>${rows}</small></span>
-      <span class="bag-ops">
-        ${worn
-          ? `<button class="btn btn-ghost" data-act="take-off" data-slot="${worn[0]}">${esc(T('pages.bag.takeOffBtn'))}</button>`
-          : `<button class="btn" data-act="wear" data-uid="${gear.uid}">${esc(T('pages.bag.wearBtn'))}</button>`}
-        ${worn ? '' : `<button class="btn btn-ghost" data-act="sell-gear" data-uid="${gear.uid}">${esc(T('pages.bag.sellBtn'))}</button>`}
-        ${worn ? '' : (canSmelt ? `<button class="btn btn-ghost" data-act="smelt-gear" data-uid="${gear.uid}">${esc(T('pages.bag.smeltBtn'))}</button>` : '')}
-      </span>
-    </div>`;
-  }
-
-  function renderBag(st: GameState): string {
-    const owned = content.items.filter((item) => (st.items[item.id] ?? 0) > 0);
-    const groups: Array<{ title: string; types: readonly string[] }> = [
-      { title: T('pages.bag.matGroup'), types: ['mat'] },
-      { title: T('pages.bag.consumableGroup'), types: ['consumable'] },
-    ];
-    const body = groups
-      .map(({ title, types }) => {
-        const rows = owned
-          .filter((item) => types.includes(item.type))
-          .map((item) => {
-            const count = st.items[item.id] ?? 0;
-            return `<div class="bag-row">
-              <span class="sigil sigil-sm">${esc(item.icon)}</span>
-              <span class="bag-name">${esc(item.name)}<small>${esc(item.description ?? '')}</small></span>
-              <b class="bag-count">×${count}</b>
-              <span class="bag-price">${esc(T('pages.bag.priceEach', { price: item.sell }))}</span>
-              <span class="bag-ops">
-                <button class="btn" data-act="sell" data-item="${item.id}" data-count="1">${esc(T('pages.bag.sellOneBtn'))}</button>
-                <button class="btn btn-ghost" data-act="sell" data-item="${item.id}" data-count="${count}">${esc(T('pages.bag.sellAllBtn'))}</button>
-              </span>
-            </div>`;
-          })
-          .join('');
-        return rows ? `<h3 class="group-title">${esc(title)}</h3>${rows}` : '';
-      })
-      .join('');
-    const worn = Object.entries(st.equips)
-      .map(([slot, uid]) => st.gear.find((entry) => entry.uid === uid))
-      .filter((gear): gear is NonNullable<typeof gear> => gear !== undefined)
-      .map((gear) => gearCardHtml(st, gear))
-      .join('');
-    const loose = st.gear
-      .filter((gear) => !Object.values(st.equips).includes(gear.uid))
-      .map((gear) => gearCardHtml(st, gear))
-      .join('');
-    const gearSection =
-      worn || loose
-        ? `<h3 class="group-title">${esc(T('pages.bag.gearWorn'))}</h3>${worn || `<p class="empty">${esc(T('pages.bag.emptyWorn'))}</p>`}
-           <h3 class="group-title">${esc(T('pages.bag.gearLoose'))}</h3>${loose || `<p class="empty">${esc(T('pages.bag.emptyLoose'))}</p>`}`
-        : '';
-    return `<section class="page"><h2 class="page-title">${esc(T('pages.bag.title'))}</h2>${body}${gearSection || `<p class="empty">${esc(T('pages.bag.emptyAll'))}</p>`}</section>`;
-  }
-
-  function renderShop(st: GameState): string {
-    const rows = content.shop
-      .map((entry) => {
-        const item = itemById.get(entry.item);
-        const owned = st.items[entry.item] ?? 0;
-        // 购买力走引擎 shopAffordOf（#26 三处复算债收敛）：与 shop:buy 判定同式同源。
-        const afford = shopAffordOf(content, st.gold, entry.item);
-        return `<div class="bag-row">
-          <span class="sigil sigil-sm">${esc(item?.icon ?? T('icons.unknown'))}</span>
-          <span class="bag-name">${esc(item?.name ?? entry.item)}<small>${esc(item?.description ?? '')}</small></span>
-          <b class="bag-price">${esc(T('pages.shop.price', { price: entry.price }))}</b>
-          <span class="bag-count">${esc(T('pages.shop.owned', { count: owned }))}</span>
-          <span class="bag-ops"><button class="btn${afford ? '' : ' btn-disabled'}" data-act="buy" data-item="${entry.item}">${esc(T('pages.shop.buyBtn'))}</button></span>
-        </div>`;
-      })
-      .join('');
-    return `<section class="page"><h2 class="page-title">${esc(T('pages.shop.title'))}</h2><p class="page-sub">${esc(T('pages.shop.subtitle'))}</p>${rows}</section>`;
-  }
-
-  /** 敌方血条轻量更新（斗法页/秘境页存在时每帧刷新；读引擎快照投影，#40）。 */
-  function updateEnemyBar(st: GameState, snap: SaveData): void {
-    const bar = pageEl.querySelector<HTMLElement>('[data-bar="enemy"]');
-    if (!bar || !st.combat) return;
-    const enemy = snap.enemy;
-    if (!enemy) return;
-    bar.style.width = `${Math.max(0, Math.min(100, (st.combat.ehp / enemy.hp) * 100))}%`;
-  }
-
-  function updateActivityBars(st: GameState, snap: SaveData): void {
-    // 进度条按 活动 键控：只有正在进行的卡片充能，其余归零。
-    let key = '';
-    let pct = 0;
-    if (st.activity) {
-      // 有效间隔单一来源 = 引擎快照映射（#40：gatherSpeed 缩放后与结算同调）。
-      const interval = snap.activityIntervals?.[actKeyOf(st.activity)];
-      if (interval !== undefined && interval > 0) {
-        key = actKeyOf(st.activity);
-        pct = Math.min(100, (st.activity.progress / interval) * 100);
-      }
-    }
-    for (const el of root.querySelectorAll<HTMLElement>('[data-bar="activity"]')) {
-      el.style.width = `${el.dataset.key === key ? pct : 0}%`;
-    }
-    for (const el of root.querySelectorAll<HTMLElement>('[data-act-pct]')) {
-      el.textContent = `${el.dataset.key === key ? Math.floor(pct) : 0}%`;
-    }
-  }
-
-  /* ---------- 日志与浮提示 ---------- */
+  /* ---------- 修行录与浮提示 ---------- */
 
   function log(text: string, cls = ''): void {
     const li = document.createElement('li');
