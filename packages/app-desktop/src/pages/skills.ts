@@ -6,7 +6,6 @@
  * 删除本文件 = 修炼整页消失（含实况刷新与 chip 动作）。
  */
 import { levelFromXp, rebirthGateOf, realmOf } from '@wendao/engine';
-import { esc } from '../pageFrame';
 import {
   actBarHtml,
   actCardHtml,
@@ -15,7 +14,9 @@ import {
   actPctOf,
   actStartBtnHtml,
   actYieldHtml,
+  esc,
   levelLockMsgOf,
+  refreshActivityBars,
   skillChipHtml,
   statusActHtml,
   statusCardHtml,
@@ -138,24 +139,8 @@ export function createSkillsPage(env: PageEnv): PageView {
   };
 
   const update = (ctx: PageCtx): void => {
-    // 进度条按 活动 键控：只有正在进行的卡片充能，其余归零。
-    const { st, snap } = ctx;
-    let key = '';
-    let pct = 0;
-    if (st.activity) {
-      // 有效间隔单一来源 = 引擎快照映射（#40：gatherSpeed 缩放后与结算同调）。
-      const interval = snap.activityIntervals?.[actKeyOf(st.activity)];
-      if (interval !== undefined && interval > 0) {
-        key = actKeyOf(st.activity);
-        pct = Math.min(100, (st.activity.progress / interval) * 100);
-      }
-    }
-    for (const el of env.pageEl.querySelectorAll<HTMLElement>('[data-bar="activity"]')) {
-      el.style.width = `${el.dataset.key === key ? pct : 0}%`;
-    }
-    for (const el of env.pageEl.querySelectorAll<HTMLElement>('[data-act-pct]')) {
-      el.textContent = `${el.dataset.key === key ? Math.floor(pct) : 0}%`;
-    }
+    // 实况刷新 = 页框共用体单一实现（D3；本页拥有 update 入口）。
+    refreshActivityBars(env.pageEl, ctx.st, ctx.snap);
   };
 
   return {

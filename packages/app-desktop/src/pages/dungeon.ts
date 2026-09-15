@@ -12,6 +12,8 @@ import {
   dungeonLockMsgOf,
   fightingEnemyCardHtml,
   minionsHtml,
+  pctClamped,
+  refreshEnemyBar,
   selfStatsTextOf,
 } from '../pageFrame';
 import type { PageCtx, PageEnv, PageView } from './types';
@@ -32,9 +34,8 @@ export function createDungeonPage(env: PageEnv): PageView {
       // 当前层敌人 = 引擎快照投影（#40：秘境层倍率 × Boss 阶段修正，零壳层组合）。
       const enemy = snap.enemy;
       const deco = bossDecoOf(content, st);
-      const ehpPct =
-        enemy && st.combat ? Math.max(0, Math.min(100, (st.combat.ehp / enemy.hp) * 100)) : 0;
-      const hpPct = Math.max(0, Math.min(100, (st.hp / (snap.stats?.maxHp ?? 1)) * 100));
+      const ehpPct = enemy && st.combat ? pctClamped(st.combat.ehp, enemy.hp) : 0;
+      const hpPct = pctClamped(st.hp, snap.stats?.maxHp ?? 1);
       const best = st.dungeonBest[dungeon.id] ?? 0;
       const rec = dungeonLayerOf(dungeon, run.floor)?.recommendedPower;
       const power = snap.stats ? powerOf(snap.stats) : 0;
@@ -92,13 +93,8 @@ export function createDungeonPage(env: PageEnv): PageView {
   };
 
   const update = (ctx: PageCtx): void => {
-    // 敌方血条轻量刷新（读引擎快照投影，#40）。
-    const { st, snap } = ctx;
-    const bar = env.pageEl.querySelector<HTMLElement>('[data-bar="enemy"]');
-    if (!bar || !st.combat) return;
-    const enemy = snap.enemy;
-    if (!enemy) return;
-    bar.style.width = `${Math.max(0, Math.min(100, (st.combat.ehp / enemy.hp) * 100))}%`;
+    // 敌方血条实况刷新 = 页框共用体单一实现（D3；本页拥有 update 入口）。
+    refreshEnemyBar(env.pageEl, ctx.st, ctx.snap);
   };
 
   return {

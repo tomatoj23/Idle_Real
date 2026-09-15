@@ -1,9 +1,10 @@
 /**
  * 页面注册表（#46 架构评审二轮·卡1 D6/D7）：九页 PageView 装配单点。
  *
- * Record<TabId, PageView> 编译期穷尽——加页签 = TabId 加值 + 此表加条目 +
- * 壳核 nav 可用性开关三处，漏一处编译红。运行时未知 tab 串由壳核
- * normalizeTab 拦截（warn + 回落修炼页），不再有裸 cast。
+ * Record<TabId, PageView> 编译期穷尽——TabId 加值而此表漏加条目即编译红，
+ * 分发侧不存在静默兜底。TAB_ORDER 只承载导航顺序与运行时 tab 值校验
+ * （isTabId）：新增页签须同步补一行，否则页签按钮不显示（不报错）；
+ * 运行时未知 tab 串由壳核 normalizeTab 拦截（warn + 回落修炼页），不再有裸 cast。
  */
 import type { PageEnv, PageView, TabId } from './pages/types';
 import { createAchievementsPage } from './pages/achievements';

@@ -33,6 +33,10 @@ export const actKeyOf = (act: { readonly skillId: string; readonly index: number
 export const actPctOf = (progress: number, interval: number | undefined): number =>
   interval !== undefined && interval > 0 ? Math.min(100, (progress / interval) * 100) : 0;
 
+/** 比例读数封顶钳制（血条/经验条共用；total ≤ 0 时按 1 兜底防除零）。 */
+export const pctClamped = (value: number, total: number): number =>
+  Math.max(0, Math.min(100, (value / (total > 0 ? total : 1)) * 100));
+
 /* ---------- 件3 · xp 头 + chips ---------- */
 
 /** xp 读数一次算清：层数/需求/已入/百分比（expToNext/expBase 引擎同源）。 */
@@ -89,7 +93,7 @@ export function statusActHtml(parts: {
   const { label, key, pct, stopLabel } = parts.running;
   return `<div class="act-now"><span>${esc(label)}</span><b data-act-pct data-key="${key}">${Math.floor(pct)}%</b></div>
            <div class="bar bar-jade"><i data-bar="activity" data-key="${key}" style="width:${pct}%"></i></div>
-           <button class="btn btn-ghost" data-act="stop">${esc(stopLabel)}</button>`;
+           ${actStopBtnHtml(stopLabel)}`;
 }
 
 /** 状态卡骨架：境界行/描述行可选；expSub 与 actHtml 由页面组装传入。 */
@@ -210,7 +214,7 @@ export const bossDecoOf = (content: ContentPack, st: GameState): { badge: string
 export const minionsHtml = (T: ShellText, snap: SaveData): string =>
   (snap.minions ?? [])
     .map(({ minion, view }, index) => {
-      const pct = Math.max(0, Math.min(100, (minion.hp / (view.hp || 1)) * 100));
+      const pct = pctClamped(minion.hp, view.hp);
       return `<div class="minion-row${index === 0 ? ' focus' : ''}">
               <span class="sigil sigil-sm">${esc(view.icon)}</span>
               <b>${esc(view.name)}</b>
@@ -280,3 +284,36 @@ export const consumablesHtml = (content: ContentPack, st: GameState): string =>
         `<button class="btn btn-consumable" data-act="eat" data-item="${item.id}">${esc(item.icon)} ${esc(item.name)} ×${st.items[item.id]}</button>`,
     )
     .join('');
+
+/* ---------- 实况刷新共用体（D3：页级 update 的单一实现） ---------- */
+
+/**
+ * 活动进度条每帧刷新（修炼/炼制页 update 委托此实现）：进度条按活动键控，
+ * 只有正在进行的卡片充能，其余归零；有效间隔单一来源 = 引擎快照映射（#40）。
+ */
+export const refreshActivityBars = (pageEl: HTMLElement, st: GameState, snap: SaveData): void => {
+  let key = '';
+  let pct = 0;
+  if (st.activity) {
+    const interval = snap.activityIntervals?.[actKeyOf(st.activity)];
+    if (interval !== undefined && interval > 0) {
+      key = actKeyOf(st.activity);
+      pct = Math.min(100, (st.activity.progress / interval) * 100);
+    }
+  }
+  for (const el of pageEl.querySelectorAll<HTMLElement>('[data-bar="activity"]')) {
+    el.style.width = `${el.dataset.key === key ? pct : 0}%`;
+  }
+  for (const el of pageEl.querySelectorAll<HTMLElement>('[data-act-pct]')) {
+    el.textContent = `${el.dataset.key === key ? Math.floor(pct) : 0}%`;
+  }
+};
+
+/** 敌方血条每帧刷新（斗法/秘境页 update 委托此实现；读引擎快照投影，#40）。 */
+export const refreshEnemyBar = (pageEl: HTMLElement, st: GameState, snap: SaveData): void => {
+  const bar = pageEl.querySelector<HTMLElement>('[data-bar="enemy"]');
+  if (!bar || !st.combat) return;
+  const enemy = snap.enemy;
+  if (!enemy) return;
+  bar.style.width = `${pctClamped(st.combat.ehp, enemy.hp)}%`;
+};

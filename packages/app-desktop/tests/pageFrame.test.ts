@@ -1,9 +1,12 @@
+// @vitest-environment happy-dom
 /**
- * 页框零件直测（#46 D10/AC2/AC5）：六件零件不挂游戏，纯函数进 HTML 串。
- * T 用桩（缺键回显键名同生产策略）；修为曲线用可手算的小参数表。
+ * 页框零件直测（#46 D10/AC2/AC5）：六件零件 + 实况刷新共用体，不挂游戏。
+ * T 用桩（缺键回显键名同生产策略）；修为曲线用可手算的小参数表；
+ * 引擎视图桩（bosses/dungeons/items）按 contentView 形状最小构造。
  */
 import { describe, expect, it } from 'vitest';
-import type { ProgressionParams } from '@wendao/engine';
+import type { ContentPack } from '@wendao/content';
+import type { GameState, ProgressionParams, SaveData } from '@wendao/engine';
 import {
   actBarHtml,
   actCardHtml,
@@ -13,10 +16,19 @@ import {
   actStartBtnHtml,
   actStopBtnHtml,
   actYieldHtml,
+  bossDecoOf,
+  consumablesHtml,
+  dungeonLockMsgOf,
+  fightingEnemyCardHtml,
   levelLockMsgOf,
+  minionsHtml,
+  pctClamped,
+  refreshActivityBars,
+  refreshEnemyBar,
   skillChipHtml,
   statusActHtml,
   statusCardHtml,
+  selfStatsTextOf,
   xpReadOf,
   xpSubTextOf,
 } from '../src/pageFrame';
@@ -172,5 +184,135 @@ describe('#46 · gate+lockMsg（件4）', () => {
   it('道韵门优先于层数门（三处散抄收敛同律）', () => {
     expect(levelLockMsgOf(T, { locked: true, requiredDaoYun: 10 }, 5)).toBe('common.needDaoYun?daoYun=10');
     expect(levelLockMsgOf(T, { locked: false, requiredDaoYun: 0 }, 5)).toBe('common.needLevel?level=5');
+  });
+
+  it('dungeonLockMsgOf：道韵锁优先；余下钥匙句（dungeonGateOf 单一来源，缺门=锁）', () => {
+    const content = {
+      items: [{ id: 'ghost_key', name: '鬼庙钥符', icon: '钥', type: 'mat', sell: 1 }],
+      dungeons: [
+        { id: 'yaoku', name: '妖窟秘境', floors: 10, entry: { daoYun: 10 } },
+        { id: 'guimiao', name: '鬼庙秘境', floors: 15, entry: { key: 'ghost_key' } },
+      ],
+    } as unknown as ContentPack;
+    const st = { daoYunEarned: 0, items: {} } as GameState;
+    expect(dungeonLockMsgOf(T, content, st, 'yaoku')).toBe('common.needDaoYun?daoYun=10');
+    // 钥匙句：无钥匙 → 物品名照出（展示面直出，持有与否归 gate.locked）
+    expect(dungeonLockMsgOf(T, content, st, 'guimiao')).toBe('pages.dungeon.entryKey?item=鬼庙钥符');
+    // 未知 dungeonId → 引擎安全兜底 locked 门（无 keyItem → 落 entryKey 空槽；
+    // 实际不可达：页面只迭代真实 dungeons 列表）
+    expect(dungeonLockMsgOf(T, content, st, 'nope')).toBe('pages.dungeon.entryKey?item=');
+  });
+});
+
+/* ---------- 件5 · 战斗敌卡族（斗法/秘境共用） ---------- */
+
+const statValueText = (stat: string, value: number | string): string =>
+  stat === 'crit' ? `${value}%` : `${value}`;
+
+describe('#46 · 战斗敌卡（件5）', () => {
+  const st = { hp: 87, combat: { enemyId: 'e1', ehp: 38.2, bossPhase: 0, respT: 0 }, buffs: {} } as unknown as GameState;
+  const snap = {
+    stats: { atk: 25, def: 8, crit: 5, maxHp: 146 },
+    minions: [{ minion: { hp: 12.4 }, view: { icon: '仆', name: '石俑', hp: 40 } }],
+  } as unknown as SaveData;
+
+  it('bossDecoOf：非 Boss = 空徽标零刻度；Boss = 阶段徽标 + 阈值刻度', () => {
+    const plain = { enemies: [] } as unknown as ContentPack;
+    expect(bossDecoOf(plain, st)).toEqual({ badge: '', ticks: '' });
+    const bossPack = {
+      enemies: [],
+      bosses: [{ enemy: 'e1', phases: [{ name: '狂化', threshold: 0.5 }] }],
+    } as unknown as ContentPack;
+    const deco = bossDecoOf(bossPack, st);
+    expect(deco.badge).toBe('<em class="act-badge boss-phase">狂化</em>');
+    expect(deco.ticks).toBe('<i class="tick" style="left:50%"></i>');
+  });
+
+  it('minionsHtml：首槽集火徽标 + 血量行（快照投影直出）', () => {
+    const html = minionsHtml(T, snap);
+    expect(html).toContain('minion-row focus');
+    expect(html).toContain('<b>石俑</b>');
+    expect(html).toContain('pages.combat.engagedBadge');
+    expect(html).toContain('data-bar="minion"');
+  });
+
+  it('selfStatsTextOf：hp/max/atk/def/crit 槽齐出（量纲由 statValueText 决定）', () => {
+    expect(selfStatsTextOf(T, statValueText, st, snap)).toBe(
+      'pages.combat.selfStats?hp=87&max=146&atk=25&def=8&crit=5%',
+    );
+  });
+
+  it('fightingEnemyCardHtml：骨架 = 敌血条(data-bar=enemy) + 召唤行 + 自血条 + 操作区', () => {
+    const deco = bossDecoOf({ enemies: [] } as unknown as ContentPack, st);
+    const html = fightingEnemyCardHtml({
+      T,
+      icon: '狼',
+      name: '青鬃狼',
+      level: 1,
+      headBadges: deco.badge,
+      decoTicks: deco.ticks,
+      ehpPct: pctClamped(30, 60),
+      ehpText: T('pages.combat.enemyHp', { ehp: 30, hp: 60 }),
+      minions: minionsHtml(T, snap),
+      hpPct: pctClamped(87, 146),
+      selfStatsText: selfStatsTextOf(T, statValueText, st, snap),
+      opsHtml: '<button data-act="flee">撤</button>',
+    });
+    expect(html).toContain('<article class="enemy-card fighting">');
+    expect(html).toContain('<i data-bar="enemy" style="width:50%"></i>');
+    expect(html).toContain('<div class="minion-rows">');
+    expect(html).toContain('<button data-act="flee">撤</button>');
+  });
+
+  it('consumablesHtml：只列持有消耗品（icon 名 ×数量）', () => {
+    const content = {
+      items: [
+        { id: 'heal1', name: '回气丹', icon: '回', type: 'consumable', sell: 1 },
+        { id: 'herb1', name: '青灵草', icon: '草', type: 'mat', sell: 1 },
+      ],
+    } as unknown as ContentPack;
+    const bag = { items: { heal1: 2 } } as GameState;
+    const html = consumablesHtml(content, bag);
+    expect(html).toContain('回气丹 ×2');
+    expect(html).toContain('data-act="eat" data-item="heal1"');
+    expect(html).not.toContain('青灵草');
+  });
+});
+
+describe('#46 · 实况刷新共用体（update 单一实现，D3）', () => {
+  it('refreshActivityBars：进行中键充能、其余归零（含 data-act-pct 文本）', () => {
+    document.body.innerHTML = `
+      <div id="page">
+        <i data-bar="activity" data-key="qi:0" style="width:9%"></i>
+        <b data-act-pct data-key="qi:0">9%</b>
+        <i data-bar="activity" data-key="herb:0" style="width:9%"></i>
+      </div>`;
+    const pageEl = document.querySelector<HTMLElement>('#page')!;
+    const st = { activity: { skillId: 'qi', index: 0, progress: 500 } } as unknown as GameState;
+    const snap = { activityIntervals: { 'qi:0': 1000 } } as unknown as SaveData;
+    refreshActivityBars(pageEl, st, snap);
+    const running = pageEl.querySelector<HTMLElement>('[data-key="qi:0"][data-bar]');
+    const idle = pageEl.querySelector<HTMLElement>('[data-key="herb:0"]');
+    expect(running?.style.width).toBe('50%');
+    expect(pageEl.querySelector<HTMLElement>('[data-act-pct]')?.textContent).toBe('50%');
+    expect(idle?.style.width).toBe('0%');
+  });
+
+  it('refreshEnemyBar：无战斗/无投影时不动手；有战斗按投影钳宽', () => {
+    document.body.innerHTML = `<div id="page"><i data-bar="enemy" style="width:100%"></i></div>`;
+    const pageEl = document.querySelector<HTMLElement>('#page')!;
+    const idleState = { combat: null } as unknown as GameState;
+    refreshEnemyBar(pageEl, idleState, { enemy: { hp: 60 } } as unknown as SaveData);
+    expect(pageEl.querySelector<HTMLElement>('[data-bar="enemy"]')?.style.width).toBe('100%');
+    const fighting = { combat: { enemyId: 'e1', ehp: 15 } } as unknown as GameState;
+    refreshEnemyBar(pageEl, fighting, { enemy: { hp: 60 } } as unknown as SaveData);
+    expect(pageEl.querySelector<HTMLElement>('[data-bar="enemy"]')?.style.width).toBe('25%');
+  });
+
+  it('pctClamped：封顶 100、负值归 0、total 非正按 1 兜底', () => {
+    expect(pctClamped(15, 60)).toBe(25);
+    expect(pctClamped(70, 60)).toBe(100);
+    expect(pctClamped(-1, 60)).toBe(0);
+    expect(pctClamped(0.5, 0)).toBe(50);
   });
 });

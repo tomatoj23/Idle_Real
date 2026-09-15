@@ -33,7 +33,7 @@ import {
   type ProgressionParams,
   type SaveData,
 } from '@wendao/engine';
-import { esc } from './pageFrame';
+import { esc, pctClamped } from './pageFrame';
 import { createPages, isTabId, TAB_ORDER } from './pages';
 import type { TabId } from './pages/types';
 
@@ -589,7 +589,7 @@ export function buildUi(
 
     goldEl.textContent = Math.floor(st.gold).toLocaleString(locale);
     const cap = snap.stats?.maxHp ?? Math.max(1, Math.floor(st.hp));
-    hpFill.style.width = `${Math.max(0, Math.min(100, (st.hp / cap) * 100))}%`;
+    hpFill.style.width = `${pctClamped(st.hp, cap)}%`;
     hpText.textContent = `${Math.floor(st.hp)}/${cap}`;
     if (snap.stats) {
       // 属性行读引擎快照 + 内容量纲标记（#26 票评：壳零量纲特判）。

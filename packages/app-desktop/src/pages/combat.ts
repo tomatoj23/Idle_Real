@@ -20,6 +20,8 @@ import {
   fightingEnemyCardHtml,
   levelLockMsgOf,
   minionsHtml,
+  pctClamped,
+  refreshEnemyBar,
   selfStatsTextOf,
   xpReadOf,
 } from '../pageFrame';
@@ -96,9 +98,9 @@ export function createCombatPage(env: PageEnv): PageView {
       const enemy = snap.enemy;
       if (!enemy) return `<section class="page"><p class="empty">${esc(T('pages.combat.enemyMissing'))}</p></section>`;
       const deco = bossDecoOf(content, st);
-      const ehpPct = Math.max(0, Math.min(100, (combat.ehp / enemy.hp) * 100));
+      const ehpPct = pctClamped(combat.ehp, enemy.hp);
       const resting = combat.respT > 0;
-      const hpPct = Math.max(0, Math.min(100, (st.hp / (snap.stats?.maxHp ?? enemy.hp)) * 100));
+      const hpPct = pctClamped(st.hp, snap.stats?.maxHp ?? enemy.hp);
       // 斗法修为条（战斗中信息面）：读数与修炼页同式同源（expToNext/expBase）。
       const cread = xpReadOf(st.skills[env.combatSkillId]?.xp ?? 0, env.prog);
       return `
@@ -165,13 +167,8 @@ export function createCombatPage(env: PageEnv): PageView {
   };
 
   const update = (ctx: PageCtx): void => {
-    // 敌方血条轻量刷新（读引擎快照投影，#40）。
-    const { st, snap } = ctx;
-    const bar = env.pageEl.querySelector<HTMLElement>('[data-bar="enemy"]');
-    if (!bar || !st.combat) return;
-    const enemy = snap.enemy;
-    if (!enemy) return;
-    bar.style.width = `${Math.max(0, Math.min(100, (st.combat.ehp / enemy.hp) * 100))}%`;
+    // 敌方血条实况刷新 = 页框共用体单一实现（D3；本页拥有 update 入口）。
+    refreshEnemyBar(env.pageEl, ctx.st, ctx.snap);
   };
 
   return {
