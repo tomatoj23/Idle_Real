@@ -4,7 +4,7 @@
  * 页框零件消费：交战敌卡（件5，与斗法页同框）、门锁句（件4）；
  * 敌血条实况刷新住本页 update（D3）。
  */
-import { dungeonGateOf, dungeonLayerOf, findDungeon, powerOf } from '@wendao/engine';
+import { dungeonGateOf, dungeonLayerOf, findDungeon, powerOf, powerParamsOf } from '@wendao/engine';
 import {
   bossDecoOf,
   consumablesHtml,
@@ -38,7 +38,9 @@ export function createDungeonPage(env: PageEnv): PageView {
       const hpPct = pctClamped(st.hp, snap.stats?.maxHp ?? 1);
       const best = st.dungeonBest[dungeon.id] ?? 0;
       const rec = dungeonLayerOf(dungeon, run.floor)?.recommendedPower;
-      const power = snap.stats ? powerOf(snap.stats) : 0;
+      // 战力 = 引擎单一来源合成（config.power 参数现读内容包，#61 边界收口：
+      // 包改权重 → 壳层读数与层表 recommendedPower 同步换量纲，禁壳内另写公式）。
+      const power = snap.stats ? powerOf(snap.stats, powerParamsOf(content)) : 0;
       const consumables = consumablesHtml(content, st);
       return `
         <section class="page">

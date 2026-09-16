@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ConfigSection",
-  "description": "content 包 config 节：全局配置。槽位数据化起步（issue #16），#13 起槽位列表驱动引擎遍历（加/减槽引擎零改动）；#020 起承载玩法参数三子节（combat/progression/affix，ADR-016 裁决 ① 分策：数值参数引擎内置基线 + config 覆盖，子节与字段全可选，缺省 = 引擎基线）。本节在包级校验中可选：省略 = 无槽位数据且参数走引擎基线。",
+  "description": "content 包 config 节：全局配置。槽位数据化起步（issue #16），#13 起槽位列表驱动引擎遍历（加/减槽引擎零改动）；#020 起承载玩法参数子节（combat/progression/affix/crafting/gear，ADR-016 裁决 ① 分策：数值参数引擎内置基线 + config 覆盖，子节与字段全可选，缺省 = 引擎基线）；#61 边界自查增开 offline/power 两子节（离线门槛/上限基线、战力合成权重）。本节在包级校验中可选：省略 = 无槽位数据且参数走引擎基线。",
   "type": "object",
   "required": ["slots"],
   "additionalProperties": false,
@@ -264,6 +264,50 @@
           "type": "number",
           "minimum": 0,
           "description": "标签加权系数：铭纹抽取权重 = 基础 × (1+匹配数×该值)，匹配数 = 器胚 preferredTags ∩ 铭纹 tags"
+        }
+      }
+    },
+    "offline": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "离线结算参数（#61 边界自查开槽，#020 同款分策）。缺省 = 引擎基线：结算门槛 60000ms（旧版 60s 沿革）、上限基线 86400000ms（24h，#59 用户裁决）",
+      "properties": {
+        "minMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "离线结算最短门槛（毫秒）：低于此值的时间差不算离线——不弹补偿、不触发休整回满"
+        },
+        "capBaseMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "离线结算时长上限基线（毫秒）：0 = 不设限；offlineCap 修饰符（龟息功类天赋）在基线之上 flat 叠加"
+        }
+      }
+    },
+    "power": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "战力读数合成参数（#61 边界自查开槽）。战力 = round(攻×atkWeight + 防×defWeight + 气血上限÷hpDivisor + 暴×critWeight)；秘境层表 recommendedPower 区间照此量纲标定，改权重须同步重标定推荐区间",
+      "properties": {
+        "atkWeight": {
+          "type": "number",
+          "minimum": 0,
+          "description": "攻击力权重"
+        },
+        "defWeight": {
+          "type": "number",
+          "minimum": 0,
+          "description": "防御权重"
+        },
+        "hpDivisor": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "气血上限标尺分母"
+        },
+        "critWeight": {
+          "type": "number",
+          "minimum": 0,
+          "description": "暴击率（百分点）权重"
         }
       }
     }

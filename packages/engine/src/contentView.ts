@@ -396,12 +396,12 @@ export interface BlankView {
   readonly inherentModifiers?: readonly Modifier[];
 }
 
-/** 铭纹视图（items 节 type=inscription 条目）：三阶数值表 + feature + tags。 */
+/** 铭纹视图（items 节 type=inscription 条目）：纹阶数值表 + feature + tags。 */
 export interface InscriptionView {
   readonly id: string;
   readonly name: string;
   readonly icon: string;
-  /** 三阶数值表：下标 0/1/2 = 纹阶 T1/T2/T3。 */
+  /** 纹阶数值表：下标 i = 纹阶 T(i+1)，表长即该铭纹纹阶深度上限（#61 边界收口：引擎数据派生）。 */
   readonly tiers: readonly (readonly Modifier[])[];
   /** 机制型特色表达（原语未注册时引擎忽略，零新增）。 */
   readonly feature?: { readonly primitive: string; readonly condition?: Modifier['condition']; readonly value?: number };
@@ -629,6 +629,37 @@ export function gearParamsOf(content: GameContent): GearParamsView {
   };
 }
 
+/* ---------- 离线结算参数（#62 保真恢复 + #59 裁决的开槽收口，#020 同款分策） ---------- */
+
+/**
+ * 离线结算参数视图（已解析基线）：config.offline 缺省字段逐项回落引擎基线。
+ * 两个数值此前引擎独占（内容不可见不可调），#61 边界自查收口开槽。
+ */
+export interface OfflineParamsView {
+  /**
+   * 离线结算最短门槛（毫秒）：低于此值的时间差不算离线——不弹补偿、不触发
+   * 休整回满（旧版 game.js:430 沿革 60s；堵「切后台 5s 脱战+满血」漏洞）。
+   */
+  readonly minMs: number;
+  /**
+   * 离线结算时长上限基线（毫秒）：0 = 不设限；offlineCap 修饰符（龟息功类
+   * 天赋）在基线之上 flat 叠加，恒为增益（缺省 24h = #59 用户裁决 2026-09-15）。
+   */
+  readonly capBaseMs: number;
+}
+
+/** 引擎基线（旧版 game.js 沿革 60s 门槛 + #59 裁决 24h 基线）；config.offline 缺省回落到此。 */
+export const BASE_OFFLINE_PARAMS: OfflineParamsView = {
+  minMs: 60_000,
+  capBaseMs: 24 * 60 * 60 * 1000,
+};
+
+/** 离线结算参数：config.offline 覆盖基线（可选子节，缺省 = 引擎基线）。 */
+export function offlineParamsOf(content: GameContent): OfflineParamsView {
+  const offline = (content as { config?: { offline?: unknown } }).config?.offline;
+  return resolveParams(offline, BASE_OFFLINE_PARAMS);
+}
+
 /**
  * 炼制成功率（单一来源，#5）：min(cap, 基础 + perLevel × 技艺层)，但**不低于
  * 基础值**——否则 successRate: 1 的「炼器必得」会被上限击穿（票评裁决点：
@@ -728,10 +759,43 @@ export function enemyGateOf(
 /* ---------- 玩家战力读数（软提示对照，#7 推荐战力） ---------- */
 
 /**
- * 玩家战力（#7 软提示读数）：atk + def + maxHp/10 + crit 的确定性合成，
- * 供层表 recommendedPower 推荐战力区间（content 软提示字段）同量纲对照。
- * 引擎单一来源，壳零公式（shopAffordOf 同款收敛）；快照 stats 直接代入。
+ * 战力合成参数视图：config.power 缺省字段逐项回落引擎基线（#61 边界自查开槽）。
+ * 战力 = round(攻×atkWeight + 防×defWeight + 气血上限÷hpDivisor + 暴×critWeight)；
+ * 包内层表 recommendedPower 区间照此量纲标定——改权重须同步重标定推荐区间。
  */
-export function powerOf(stats: PlayerStatsView): number {
-  return Math.round(stats.atk + stats.def + stats.maxHp / 10 + stats.crit);
+export interface PowerParamsView {
+  readonly atkWeight: number;
+  readonly defWeight: number;
+  /** 气血上限标尺分母（>0；非法回落基线，防 Infinity）。 */
+  readonly hpDivisor: number;
+  readonly critWeight: number;
+}
+
+/** 引擎基线：atk + def + maxHp/10 + crit（缺省与历史读数逐位一致）。 */
+export const BASE_POWER_PARAMS: PowerParamsView = {
+  atkWeight: 1,
+  defWeight: 1,
+  hpDivisor: 10,
+  critWeight: 1,
+};
+
+/** 战力合成参数：config.power 覆盖基线（可选子节，缺省 = 引擎基线）。 */
+export function powerParamsOf(content: GameContent): PowerParamsView {
+  const power = (content as { config?: { power?: unknown } }).config?.power;
+  return resolveParams(power, BASE_POWER_PARAMS);
+}
+
+/**
+ * 玩家战力（#7 软提示读数）：确定性合成，供层表 recommendedPower 推荐战力
+ * 区间（content 软提示字段）同量纲对照。引擎单一来源，壳零公式
+ * （shopAffordOf 同款收敛）；快照 stats 直接代入，params 缺省 = 引擎基线。
+ */
+export function powerOf(stats: PlayerStatsView, params: PowerParamsView = BASE_POWER_PARAMS): number {
+  const divisor = params.hpDivisor > 0 ? params.hpDivisor : BASE_POWER_PARAMS.hpDivisor;
+  return Math.round(
+    stats.atk * params.atkWeight +
+      stats.def * params.defWeight +
+      stats.maxHp / divisor +
+      stats.crit * params.critWeight,
+  );
 }

@@ -320,7 +320,8 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
     restore: (raw, state, env) => {
       // —— 装备实例：物品须存在且为 equip/器胚（#14）；稀有度须命中内容档位表，
       // 非法回退第一档（#018，ADR-016：词表零默认，引擎不持默认表）；词条逐条校验；
-      // 铭纹（#14）逐条校验——id 须命中内容铭纹池（内容已移除的不收编），纹阶钳 1~3。
+      // 铭纹（#14）逐条校验——id 须命中内容铭纹池（内容已移除的不收编），纹阶
+      // 按该铭纹 tiers 表长派生的内容域校验（#61 边界收口，无 1~3 硬编码）。
       const rarityTable = raritiesOf(env.content);
       const fallbackRarity: Rarity = rarityTable[0]?.id ?? '';
       if (Array.isArray(raw.gear)) {
@@ -349,18 +350,20 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
             for (const inscription of entry.inscriptions) {
               if (!isObj(inscription)) continue;
               if (typeof inscription.id !== 'string') continue;
+              const def = findInscription(env.content, inscription.id);
+              if (def === undefined) continue; // 稳定引用（ADR-015）
+              // 纹阶域数据派生（#61 边界收口）：域上界 = 该铭纹 tiers 表长，越界不收编。
               if (
                 typeof inscription.tier !== 'number' ||
                 !Number.isInteger(inscription.tier) ||
                 inscription.tier < 1 ||
-                inscription.tier > 3
+                inscription.tier > def.tiers.length
               ) {
                 continue;
               }
-              if (findInscription(env.content, inscription.id) === undefined) continue; // 稳定引用（ADR-015）
               // 纹阶按器胚 tierRange 钳制（天花板数据锁死：内容调窄后旧档超阶回落天花板）。
               const blankDef = findBlank(env.content, itemId);
-              const [tMin, tMax] = blankDef ? tierBoundsOf(blankDef) : [1, 3];
+              const [tMin, tMax] = tierBoundsOf(blankDef, def);
               inscriptions.push({
                 id: inscription.id,
                 tier: Math.min(Math.max(inscription.tier, tMin), tMax),

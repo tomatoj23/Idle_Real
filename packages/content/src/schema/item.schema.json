@@ -95,7 +95,7 @@
       "type": "object",
       "required": ["id", "name", "icon", "type", "sell", "tiers"],
       "additionalProperties": false,
-      "description": "铭纹（装备词缀模板）：三阶数值表 + 可选机制型 feature + tags（供器胚 preferredTags 加权抽取）",
+      "description": "铭纹（装备词缀模板）：纹阶数值表（表长 = 深度上限，引擎数据派生）+ 可选机制型 feature + tags（供器胚 preferredTags 加权抽取）",
       "properties": {
         "id": { "$ref": "#/definitions/id" },
         "name": { "$ref": "#/definitions/name" },
@@ -236,9 +236,8 @@
     },
     "tiers": {
       "type": "array",
-      "minItems": 3,
-      "maxItems": 3,
-      "description": "三阶数值表：下标 0/1/2 对应纹阶 T1/T2/T3，实例化时按器胚 tierRange 掷出",
+      "minItems": 1,
+      "description": "纹阶数值表：下标 i 对应纹阶 T(i+1)，表长即该铭纹的纹阶深度上限（引擎数据派生，#61 边界收口——加深纹阶 = 加行，引擎零改动）；实例化时按器胚 tierRange ∩ 表长掷出",
       "items": {
         "type": "array",
         "minItems": 1,

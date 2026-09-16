@@ -8,6 +8,7 @@ import {
   findDungeon,
   pickDungeonEnemyOf,
   powerOf,
+  powerParamsOf,
   type GameContent,
   type GameEvent,
   type SaveData,
@@ -475,5 +476,21 @@ describe('#7 · 层表/抽敌/战力纯函数视图', () => {
 
   it('powerOf：atk + def + maxHp/10 + crit（软提示对照读数，引擎单一来源）', () => {
     expect(powerOf({ atk: 10, def: 3, crit: 5, maxHp: 112 })).toBe(29);
+  });
+
+  it('powerOf 参数覆盖：config.power 改写量纲（缺省基线读数逐位不变）', () => {
+    const pack = {
+      config: { power: { atkWeight: 2, defWeight: 0, hpDivisor: 4, critWeight: 3 } },
+    } as unknown as GameContent;
+    const params = powerParamsOf(pack);
+    // 10×2 + 3×0 + 112÷4 + 5×3 = 20 + 0 + 28 + 15 = 63
+    expect(powerOf({ atk: 10, def: 3, crit: 5, maxHp: 112 }, params)).toBe(63);
+    // 未写字段回落基线（critWeight 未写 → ×1）
+    const partial = powerParamsOf({ config: { power: { atkWeight: 2 } } } as unknown as GameContent);
+    expect(partial.defWeight).toBe(1);
+    expect(partial.hpDivisor).toBe(10);
+    // 坏分母（≤0，未过包校验的包）防崩回落基线 10，不出 Infinity
+    const broken = powerParamsOf({ config: { power: { hpDivisor: 0 } } } as unknown as GameContent);
+    expect(powerOf({ atk: 1, def: 1, crit: 1, maxHp: 100 }, broken)).toBe(13);
   });
 });

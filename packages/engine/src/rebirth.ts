@@ -326,25 +326,20 @@ export function effectiveIntervalOf(baseInterval: number, speed: number): number
 }
 
 /**
- * 离线结算时长上限基线（#59 用户裁决，2026-09-15）：旧版原型写死 8h
- * （js/game.js `Math.min(dt, 8*3600)`），框架化改造时基线丢失——Σflat 从
- * "8h 上限"误退化为"0 = 不设限"，龟息功类天赋在无上限基线下从增益反转
- * 成削弱（买上限 = 丢失无限挂机）。基线恢复并定为 24h；offlineCap 修饰符
- * 在基线之上 flat 叠加（恒为增益）。
- */
-export const BASE_OFFLINE_CAP_MS = 24 * 60 * 60 * 1000;
-
-/**
  * 离线结算时长上限（offlineCap 消费点，flat 毫秒累计）：走 aggregateStats
  * 统一管线（条件感知：带 condition 的贡献在无语境时不命中——与
- * gatherSpeedOf/xpMultOf 同律），基线 BASE_OFFLINE_CAP_MS + flat 区合计；
- * 超出上限的部分不入账（离线上限的语义本体）。
+ * gatherSpeedOf/xpMultOf 同律），基线 + flat 区合计；超出上限的部分不入账
+ * （离线上限的语义本体）。基线归 config.offline.capBaseMs（contentView
+ * offlineParamsOf，#61 边界自查开槽），0 = 不设限。沿革：旧版原型写死 8h
+ * （js/game.js `Math.min(dt, 8*3600)`），框架化改造时基线丢失——Σflat 从
+ * "8h 上限"误退化为"0 = 不设限"，龟息功类天赋在无上限基线下从增益反转
+ * 成削弱（买上限 = 丢失无限挂机）；#59 用户裁决（2026-09-15）恢复基线并
+ * 定为 24h；offlineCap 修饰符在基线之上 flat 叠加（恒为增益）。
  */
-export function offlineCapOf(contributions: readonly Contribution[]): number {
-  return (
-    BASE_OFFLINE_CAP_MS +
-    (aggregateStats({ offlineCap: 0 }, contributions, {}).offlineCap?.flat ?? 0)
-  );
+export function offlineCapOf(capBaseMs: number, contributions: readonly Contribution[]): number {
+  const base =
+    typeof capBaseMs === 'number' && Number.isFinite(capBaseMs) && capBaseMs > 0 ? capBaseMs : 0;
+  return base + (aggregateStats({ offlineCap: 0 }, contributions, {}).offlineCap?.flat ?? 0);
 }
 
 /**

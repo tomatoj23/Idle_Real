@@ -137,12 +137,11 @@ export interface Feature {
   readonly value?: number;
 }
 
-/** 铭纹三阶数值表：下标 0/1/2 对应纹阶 T1/T2/T3。 */
-export type InscriptionTiers = readonly [
-  readonly Modifier[],
-  readonly Modifier[],
-  readonly Modifier[],
-];
+/**
+ * 铭纹纹阶数值表：下标 i 对应纹阶 T(i+1)，表长即该铭纹纹阶深度上限
+ * （#61 边界收口：不定长——加深纹阶 = 加行，schema minItems 1，引擎数据派生）。
+ */
+export type InscriptionTiers = readonly (readonly Modifier[])[];
 
 /**
  * 装备基础加成（模板字段；稀有度与词条为运行时实例化产物，其档位词表按 ADR-016 归内容包）。
@@ -200,7 +199,7 @@ export interface Item {
   readonly preferredTags?: readonly string[];
   /** blank 类（器胚）：胚纹——固有词条，固定非随机，实例化时直接附加。 */
   readonly inherentModifiers?: readonly Modifier[];
-  /** inscription 类（铭纹）：三阶数值表，下标 0/1/2 = T1/T2/T3。 */
+  /** inscription 类（铭纹）：纹阶数值表，下标 i = T(i+1)，表长 = 深度上限。 */
   readonly tiers?: InscriptionTiers;
   /** inscription 类（铭纹）：机制型特色表达。 */
   readonly feature?: Feature;

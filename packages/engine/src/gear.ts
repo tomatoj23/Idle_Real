@@ -45,7 +45,8 @@ export interface Affix {
 
 /**
  * 已实例化的铭纹（#14）：id 稳定引用内容铭纹条目（ADR-015），tier = 纹阶
- * 1~3；数值不落盘——展示与投影时按 tiers[tier] 从内容表读（内容改表 = 改
+ * （1 起；深度上限 = 该铭纹 tiers 表长，#61 边界收口后数据派生）；
+ * 数值不落盘——展示与投影时按 tiers[tier-1] 从内容表读（内容改表 = 改
  * 全部同纹阶实例，口诀「纹阶是果（质量）」的实例化形态）。
  */
 export interface GearInscription {
@@ -195,21 +196,36 @@ export function makeGear(
 
 /* ---------- 器胚 × 铭纹（#14：掉落管线 ④~⑧ 与重铸的实例化机制） ---------- */
 
-/** 纹阶合法域 1~3（schema 关卡同域；运行时兜底钳制）。 */
-function clampTier(tier: number): number {
-  return Math.max(1, Math.min(3, Math.floor(tier)));
+/**
+ * 纹阶域上界（#61 边界自查收口：深度上限数据派生）：该铭纹 tiers 表长
+ * （下限 1）——包想加深纹阶（T4…）= 铭纹表加行，引擎零改动。
+ */
+function tierDomainMaxOf(inscription: { readonly tiers?: readonly unknown[] }): number {
+  return Array.isArray(inscription.tiers) && inscription.tiers.length > 0
+    ? inscription.tiers.length
+    : 1;
+}
+
+/** 纹阶运行时钳制：钳入 1..域上界（掷阶/重随/存档恢复的坏值防御）。 */
+function clampTier(tier: number, maxTier: number): number {
+  return Math.max(1, Math.min(maxTier, Math.floor(tier)));
 }
 
 /**
- * 器胚纹阶域（#14 单一来源）：tierRange 按合法域 1~3 钳制后的 [min, max]，
- * 方向性兜底（min > max 时收成单点）。实例化掷阶（⑦）、重铸铭纹、存档恢复
- * 钳制三处共用——「天花板由器胚 tierRange 数据锁死」只此一份实现。
+ * 器胚纹阶域（#14 单一来源）：器胚 tierRange 与该铭纹 tiers 表长（域上界，
+ * #61 收口后数据派生）取交后的 [min, max]，方向性兜底（min > max 时收成
+ * 单点）。实例化掷阶（⑦）、重铸铭纹、存档恢复钳制三处共用——「天花板由
+ * 器胚 tierRange 数据锁死」只此一份实现。blank 缺省（存档恢复侧器胚定义
+ * 已丢失）= 全域兜底 [1, 表长]。
  */
-export function tierBoundsOf(blank: {
-  readonly tierRange?: { readonly min: number; readonly max: number };
-}): readonly [number, number] {
-  const min = clampTier(blank.tierRange?.min ?? 1);
-  return [min, Math.max(min, clampTier(blank.tierRange?.max ?? min))];
+export function tierBoundsOf(
+  blank: { readonly tierRange?: { readonly min: number; readonly max: number } } | undefined,
+  inscription: { readonly tiers?: readonly unknown[] },
+): readonly [number, number] {
+  const maxTier = tierDomainMaxOf(inscription);
+  if (!blank) return [1, maxTier];
+  const min = clampTier(blank.tierRange?.min ?? 1, maxTier);
+  return [min, Math.max(min, clampTier(blank.tierRange?.max ?? min, maxTier))];
 }
 
 /**
@@ -227,7 +243,6 @@ function drawInscriptions(
 ): GearInscription[] {
   const pool = inscriptionsOf(content);
   if (count <= 0 || pool.length === 0) return [];
-  const [tierMin, tierMax] = tierBoundsOf(blank);
   const index = buildTagIndex(pool);
   const preferred = blank.preferredTags ?? [];
   const weight = Math.max(0, tagWeightPerMatch);
@@ -254,6 +269,9 @@ function drawInscriptions(
       }
     }
     used.add(picked.id);
+    // 纹阶掷界按该铭纹 tiers 表长钳定（#61 收口：深度上限逐铭纹数据派生，
+    // 混深池也不会掷出投影不出的纹阶）；既有等深包掷点流逐点不变。
+    const [tierMin, tierMax] = tierBoundsOf(blank, picked);
     chosen.push({ id: picked.id, tier: tierMin + Math.floor(random() * (tierMax - tierMin + 1)) });
   }
   return chosen;
@@ -383,7 +401,7 @@ export function projectGearBase(
 /**
  * 装备实例的属性投影来源语境（事件流可回放）；倍率按内容档位表折算。
  * #14 起双路径：equip 走基础加成×倍率 + 随机词条；器胚走胚纹（固有词条，
- * 内容原值）+ 铭纹三阶表（tiers[tier]，含 zone/condition 的完整修饰符）。
+ * 内容原值）+ 铭纹纹阶表（tiers[tier-1]，含 zone/condition 的完整修饰符）。
  * 两路产出都是 Contribution，进 ADR-011 单管线，无第二条直算路径。
  */
 export function gearContributions(
@@ -419,10 +437,14 @@ export function gearContributions(
   for (const modifier of blank?.inherentModifiers ?? []) {
     out.push({ modifier, source: gearSource(gear.itemId, 'equip', displayName) });
   }
-  // 器胚路径：铭纹三阶表（tiers[tier] 完整修饰符；来源 kind=inscription）。
+  // 器胚路径：铭纹纹阶表（tiers[tier-1] 完整修饰符；来源 kind=inscription）。
   for (const inscription of gear.inscriptions ?? []) {
     const def = findInscription(content, inscription.id);
-    const tierRow = def?.tiers[clampTier(inscription.tier) - 1];
+    // 纹阶越内容域（坏档/内容缩表）：贡献静默消失（域界数据派生，#61 收口）。
+    const tierRow =
+      def && inscription.tier >= 1 && inscription.tier <= tierDomainMaxOf(def)
+        ? def.tiers[inscription.tier - 1]
+        : undefined;
     if (!def || !tierRow) continue; // 内容已移除/坏纹阶：贡献静默消失（存档不炸）
     for (const modifier of tierRow) {
       out.push({ modifier, source: gearSource(def.id, 'inscription', def.name) });

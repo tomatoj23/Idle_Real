@@ -245,14 +245,18 @@ describe('#16 · 铭纹 schema 定形', () => {
     expectError(validateContent(items, itemSchema), '/0/tiers', 'required');
   });
 
-  it('tiers 长度 ≠ 3 被拒绝（三阶表定长：少报 minItems，多报 maxItems）', () => {
-    const short = [{ ...INSCRIPTION, tiers: INSCRIPTION.tiers.slice(0, 2) }];
-    expectError(validateContent(short, itemSchema), '/0/tiers', 'minItems');
-
-    const long = [
-      { ...INSCRIPTION, tiers: [...INSCRIPTION.tiers, INSCRIPTION.tiers[0]] },
-    ];
-    expectError(validateContent(long, itemSchema), '/0/tiers', 'maxItems');
+  it('tiers 长度 ≥ 1 任深合法（#61 边界收口：表长 = 深度上限，引擎数据派生）；空表被拒', () => {
+    // 二阶/四阶/五阶均合法——加深纹阶 = 加行，schema 不再定长 3。
+    for (const depth of [2, 4, 5]) {
+      const grown = [
+        {
+          ...INSCRIPTION,
+          tiers: Array.from({ length: depth }, (_, i) => INSCRIPTION.tiers[i % 3]),
+        },
+      ];
+      expect(validateContent(grown, itemSchema)).toEqual({ ok: true });
+    }
+    expectError(validateContent([{ ...INSCRIPTION, tiers: [] }], itemSchema), '/0/tiers', 'minItems');
   });
 
   it('某一阶为空数组被拒绝（每阶至少一条修饰符）', () => {

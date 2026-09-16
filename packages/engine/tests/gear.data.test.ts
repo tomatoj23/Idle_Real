@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { tierBoundsOf } from '../src/gear.js';
 import {
   createRng,
   gearContributions,
@@ -188,5 +189,59 @@ describe('#018 · 存档规范化解引用内容档位表', () => {
     };
     const state = restoreState(pack, save, 1);
     expect(state.gear[0]?.rarity).toBe('');
+  });
+});
+
+describe('#61 边界收口 · 纹阶域数据派生（tiers 表长 = 深度上限，无 1~3 硬编码）', () => {
+  const def4 = { tiers: [[], [], [], []] };
+  const def2 = { tiers: [[], []] };
+
+  it('tierBoundsOf：域上界 = 该铭纹 tiers 表长；畸形表兜底单阶', () => {
+    expect(tierBoundsOf(undefined, def4)).toEqual([1, 4]);
+    expect(tierBoundsOf(undefined, def2)).toEqual([1, 2]);
+    expect(tierBoundsOf(undefined, { tiers: [] })).toEqual([1, 1]);
+  });
+
+  it('tierRange 与表长取交：range 超域截到域顶，range 起点超域收单点', () => {
+    expect(tierBoundsOf({ tierRange: { min: 2, max: 9 } }, def4)).toEqual([2, 4]);
+    expect(tierBoundsOf({ tierRange: { min: 5, max: 9 } }, def4)).toEqual([4, 4]);
+    expect(tierBoundsOf({ tierRange: { min: 1, max: 9 } }, def2)).toEqual([1, 2]);
+  });
+
+  it('restoreState：4 阶铭纹收 tier 4，3 阶铭纹拒 tier 4（域随内容走）', () => {
+    const makePack = (blankMax: number, inscDepth: number): GameContent =>
+      ({
+        items: [
+          {
+            id: 'blank1', name: '剑坯', icon: '坯', type: 'blank', slot: 'weapon', sell: 1,
+            tierRange: { min: 1, max: blankMax },
+          },
+          {
+            id: 'insc1', name: '锋锐', icon: '锐', type: 'inscription', sell: 1,
+            tiers: Array.from({ length: inscDepth }, () => [{ stat: 'atk', zone: 'flat', value: 1 }]),
+          },
+        ],
+        rarities: [{ id: 'rough', name: '粗坯', weight: 1, mult: 1, affix: 0, sell: 1 }],
+      }) as unknown as GameContent;
+    const save = (tier: number) =>
+      ({
+        version: 1 as const,
+        time: 0,
+        state: {
+          gear: [
+            { uid: 1, itemId: 'blank1', rarity: 'rough', affixes: [], inscriptions: [{ id: 'insc1', tier }] },
+          ],
+        },
+      }) as unknown as Parameters<typeof restoreState>[1];
+
+    // 表长 4：tier 4 在域内，原值收编（旧引擎写死 1~3 会丢弃）。
+    const deep = restoreState(makePack(4, 4), save(4), 1);
+    expect(deep.gear[0]?.inscriptions).toEqual([{ id: 'insc1', tier: 4 }]);
+    // 表长 3：tier 4 越域，整条铭纹不收编（与既有越界语义一致；空表不落盘 = undefined）。
+    const shallow = restoreState(makePack(3, 3), save(4), 1);
+    expect(shallow.gear[0]?.inscriptions).toBeUndefined();
+    // 器胚 tierRange 收窄到 2（铭纹仍 3 阶）：域内 tier 3 被钳回天花板 2。
+    const narrowed = restoreState(makePack(2, 3), save(3), 1);
+    expect(narrowed.gear[0]?.inscriptions).toEqual([{ id: 'insc1', tier: 2 }]);
   });
 });

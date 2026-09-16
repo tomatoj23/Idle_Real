@@ -875,6 +875,16 @@
       "shardItem": "gear_shard",
       "reforgeCost": 3,
       "tagWeightPerMatch": 1
+    },
+    "offline": {
+      "minMs": 60000,
+      "capBaseMs": 86400000
+    },
+    "power": {
+      "atkWeight": 1,
+      "defWeight": 1,
+      "hpDivisor": 10,
+      "critWeight": 1
     }
   },
   "rebirth": {

@@ -3,6 +3,8 @@ import { ManualClock } from '../src/clock.js';
 import {
   BASE_AFFIX_PARAMS,
   BASE_COMBAT_PARAMS,
+  BASE_OFFLINE_PARAMS,
+  BASE_POWER_PARAMS,
   BASE_PROGRESSION,
   affixParamsOf,
   combatParamsOf,
@@ -16,6 +18,8 @@ import {
   levelFromXp,
   makeGear,
   maxHpForLevel,
+  offlineParamsOf,
+  powerParamsOf,
   progressionParamsOf,
   shopAffordOf,
   type DamageMechanics,
@@ -39,6 +43,8 @@ describe('#020 · 参数视图（config 覆盖引擎基线）', () => {
     expect(combatParamsOf(pack)).toEqual(BASE_COMBAT_PARAMS);
     expect(progressionParamsOf(pack)).toEqual(BASE_PROGRESSION);
     expect(affixParamsOf(pack)).toEqual(BASE_AFFIX_PARAMS);
+    expect(offlineParamsOf(pack)).toEqual(BASE_OFFLINE_PARAMS);
+    expect(powerParamsOf(pack)).toEqual(BASE_POWER_PARAMS);
   });
 
   it('config 子节同名字段覆盖；非法值逐字段回落基线', () => {
@@ -251,6 +257,73 @@ describe('#020 · createGame 读 config 参数（纯 JSON 改动）', () => {
     const hitsOf = (g: ReturnType<typeof createGame>): number =>
       g.events.drain().filter((event) => event.type === 'attack' && event.data?.side === 'player').length;
     expect(hitsOf(b)).toBeGreaterThan(hitsOf(a));
+  });
+});
+
+describe('#61 边界收口 · 离线参数开槽（config.offline）', () => {
+  const pack = (offline?: unknown) =>
+    ({
+      skills: [
+        {
+          id: 'herb', name: '采药', icon: '药', kind: 'gather',
+          activities: [
+            { name: '采灵砂', unlockLevel: 1, interval: 3000, exp: 10, output: { item: 'ore', count: 1 } },
+          ],
+        },
+      ],
+      items: [{ id: 'ore', name: '灵砂', icon: '砂', type: 'mat', sell: 2 }],
+      ...(offline !== undefined ? { config: { offline } } : {}),
+    }) as unknown as GameContent;
+
+  const settledOf = (game: ReturnType<typeof createGame>) =>
+    game.events.drain().find((event) => event.type === 'offline-settled');
+
+  it('基线门槛 60s：59s 不算离线，60s 结算（#62 恢复语义钉死）', () => {
+    const under = createGame({ content: pack(), clock: new ManualClock() });
+    under.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
+    under.events.drain();
+    under.settleOffline(59000);
+    expect(settledOf(under)).toBeUndefined();
+
+    const at = createGame({ content: pack(), clock: new ManualClock() });
+    at.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
+    at.events.drain();
+    at.settleOffline(60000);
+    expect(settledOf(at)?.data?.cycles).toBe(20);
+  });
+
+  it('minMs 覆盖：门槛 120s 时 61s 不结算、120s 结算（改 JSON 即改行为）', () => {
+    const tuned = pack({ minMs: 120000 });
+    const short = createGame({ content: tuned, clock: new ManualClock() });
+    short.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
+    short.events.drain();
+    short.settleOffline(61000);
+    expect(settledOf(short)).toBeUndefined();
+
+    const exact = createGame({ content: tuned, clock: new ManualClock() });
+    exact.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
+    exact.events.drain();
+    exact.settleOffline(120000);
+    expect(settledOf(exact)?.data?.seconds).toBe(120);
+  });
+
+  it('capBaseMs 覆盖：上限 90s 钳制结算并双报离开时长；0 = 不设限', () => {
+    const capped = createGame({ content: pack({ capBaseMs: 90000 }), clock: new ManualClock() });
+    capped.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
+    capped.events.drain();
+    capped.settleOffline(3600000);
+    const data = settledOf(capped)?.data;
+    expect(data?.seconds).toBe(90); // 按上限结算
+    expect(data?.capped).toBe(true);
+    expect(data?.awaySeconds).toBe(3600); // 真实离开时长双报
+
+    const unlimited = createGame({ content: pack({ capBaseMs: 0 }), clock: new ManualClock() });
+    unlimited.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
+    unlimited.events.drain();
+    unlimited.settleOffline(3600000);
+    const free = settledOf(unlimited)?.data;
+    expect(free?.seconds).toBe(3600);
+    expect(free?.capped).toBe(false);
   });
 });
 

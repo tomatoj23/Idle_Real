@@ -67,14 +67,16 @@ export function createBagPage(env: PageEnv): PageView {
     const affixRows = gear.affixes.map(
       (a) => `<span class="txt-dim">${esc(a.name)}</span> ${esc(env.statBonusText(a.stat, a.val))}`,
     );
-    // 铭纹行（#14）：纹阶徽标着色（t1/t2/t3）+ 三阶表数值直读（内容数据，
-    // 壳零公式）+ 行内重铸入口（器屑经济可用才渲染；佩戴中引擎拒绝，按钮同禁）。
+    // 铭纹行（#14）：纹阶徽标着色（t1 起，深阶复用末档色）+ 纹阶表数值直读
+    //（内容数据，壳零公式；显示钳制随该铭纹 tiers 表长，#61 边界收口）
+    // + 行内重铸入口（器屑经济可用才渲染；佩戴中引擎拒绝，按钮同禁）。
     const inscRows = (gear.inscriptions ?? [])
       .map((insc, index) => {
         const def = findInscription(content, insc.id);
         if (!def) return ''; // 内容已移除：防御跳过（引擎贡献侧同律静默）
-        const tier = Math.max(1, Math.min(3, Math.floor(insc.tier)));
-        const parts = (def.tiers[tier - 1] ?? []).map((mod) => {
+        const inscTier = Math.max(1, Math.min(def.tiers.length, Math.floor(insc.tier)));
+        const toneTier = Math.min(inscTier, 3); // 深阶（T4+）复用 t3 色：样式表只备 t1~t3
+        const parts = (def.tiers[inscTier - 1] ?? []).map((mod) => {
           const cond =
             mod.condition?.element !== undefined
               ? esc(T('pages.bag.inscCondition', { element: env.elementNameOf(mod.condition.element) }))
@@ -85,7 +87,7 @@ export function createBagPage(env: PageEnv): PageView {
           env.canSmelt && !worn
             ? ` <button class="btn btn-mini" data-act="reforge" data-uid="${gear.uid}" data-index="${index}">${esc(T('pages.bag.reforgeBtn'))}</button>`
             : '';
-        return `<span class="insc insc-t${tier}"><b class="insc-tier">${esc(T('pages.bag.inscTier', { tier }))}</b>${esc(def.name)}</span> ${parts.join(esc(T('common.itemListSep')))}${reforgeBtn}`;
+        return `<span class="insc insc-t${toneTier}"><b class="insc-tier">${esc(T('pages.bag.inscTier', { tier: inscTier }))}</b>${esc(def.name)}</span> ${parts.join(esc(T('common.itemListSep')))}${reforgeBtn}`;
       })
       .filter((row) => row !== '');
     const rows =

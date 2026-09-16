@@ -14,12 +14,14 @@ import {
   findActivity,
   findBlank,
   findEnemy,
+  findInscription,
   findItem,
   findRecipe,
   findRarity,
   findShopEntry,
   findSkill,
   gearParamsOf,
+  offlineParamsOf,
   progressionParamsOf,
   recipesOf,
   signatureOf,
@@ -97,13 +99,6 @@ import type {
   LedgerSource,
 } from './ledger.js';
 
-/**
- * 离线结算最短门槛（旧版 game.js:430 同款 60s，保真收口 #62）：低于此值的
- * 时间差不算离线（关掉秒开不弹补偿、不触发休整回满，堵"切后台 5s 脱战+
- * 满血"漏洞）；后台节流的微欠账同样不追（旧版语义，几十秒产出玩家无感）。
- */
-const OFFLINE_MIN_MS = 60_000;
-
 export interface CreateGameOptions {
   /** 由 content 包校验过的内容包；引擎零内容感知，仅透明持有。 */
   readonly content: GameContent;
@@ -165,6 +160,7 @@ export function createGame(options: CreateGameOptions): Game {
   const aparams = affixParamsOf(content);
   const crparams = craftParamsOf(content);
   const gparams = gearParamsOf(content); // 装备构筑循环参数（#14：熔炼/重铸/标签加权）
+  const oparams = offlineParamsOf(content); // 离线结算参数（#62 门槛 + #59 上限基线，#61 边界自查开槽）
 
   const contributions: readonly Contribution[] = options.contributions ?? [];
   const state: GameState = options.save
@@ -1138,10 +1134,11 @@ export function createGame(options: CreateGameOptions): Game {
     // 与 tick 同律（Number.isFinite 门）：NaN/Infinity 不设防会沿 total→cycles
     // 污染 active.progress（活动永久卡死）与物品计数（NaN 落盘序列化为 null，
     // 恢复侧丢弃 = 物品凭空消失）。
-    // 60s 最短结算门槛（旧版 game.js:430 同款，保真收口 #62）：关掉秒开不弹
-    // "离线归来"、不触发休整回满（否则"打不过就切后台 5s"= 脱战+满血漏洞）。
-    // 后台节流欠账 < 60s 不追亦同旧版语义（几十秒产出，玩家无感）。
-    if (!Number.isFinite(elapsedMs) || elapsedMs < OFFLINE_MIN_MS) return;
+    // 最短结算门槛（config.offline.minMs，缺省 60s = 旧版 game.js:430 同款，
+    // 保真收口 #62）：关掉秒开不弹"离线归来"、不触发休整回满（否则"打不过
+    // 就切后台 5s"= 脱战+满血漏洞）；后台节流欠账 < 门槛不追亦同旧版语义
+    //（几十秒产出，玩家无感）。
+    if (!Number.isFinite(elapsedMs) || elapsedMs < oparams.minMs) return;
     if (state.combat) {
       state.combat = null; // 离线不可战斗：视作离场休整
       combatRun.resetProcs(); // 系别临时态不落盘，离线离场即散（#15）
@@ -1150,12 +1147,12 @@ export function createGame(options: CreateGameOptions): Game {
     // 休整回满血统一在此一次（战斗中离线时 activity 必为 null——开战已清采集，
     // 不回满则残血横穿整个离线期，与"气血按脱战回满"契约相悖）。
     state.hp = hpCap();
-    // 离线上限（offlineCap 消费点，#6/#59）：基线 24h（BASE_OFFLINE_CAP_MS，
-    // 恢复旧版原型丢失的 8h 上限语义，用户裁决 24h）+ Σflat 毫秒；超出上限
-    // 的部分不入账（上限的语义本体）。真实离开时长在钳制前留档——事件双报
-    //（awaySeconds=离开 / seconds=结算），钳制发生时壳层区分展示，防结算
-    // 时长冒充离开时长误导（挂机 20h 只显示"离线 1 时"事故）。
-    const cap = offlineCapOf(playerContributions());
+    // 离线上限（offlineCap 消费点，#6/#59）：基线 config.offline.capBaseMs（缺省
+    // 24h，恢复旧版原型丢失的 8h 上限语义，用户裁决 24h；0 = 不设限）+ Σflat
+    // 毫秒；超出上限的部分不入账（上限的语义本体）。真实离开时长在钳制前留档
+    //——事件双报（awaySeconds=离开 / seconds=结算），钳制发生时壳层区分展示，
+    // 防结算时长冒充离开时长误导（挂机 20h 只显示"离线 1 时"事故）。
+    const cap = offlineCapOf(oparams.capBaseMs, playerContributions());
     const awayMs = elapsedMs;
     const capped = cap > 0 && elapsedMs > cap;
     if (capped) elapsedMs = cap;
@@ -1857,9 +1854,9 @@ export function createGame(options: CreateGameOptions): Game {
         }
 
         case 'gear:reforge': {
-          // 重铸铭纹（#14）：消耗器屑重随单条铭纹的纹阶（数值随内容三阶表
-          // tiers[tier] 变化），天花板由器胚 tierRange 数据锁死；仅器胚实例
-          // 可重铸，佩戴中不可（与卖出同律）。
+          // 重铸铭纹（#14）：消耗器屑重随单条铭纹的纹阶（数值随内容纹阶表
+          // tiers[结果阶-1] 变化），天花板由器胚 tierRange 与铭纹表长数据锁死；
+          // 仅器胚实例可重铸，佩戴中不可（与卖出同律）。
           const payload = action.payload as { uid?: unknown; index?: unknown } | undefined;
           const uid = readUidPayload(payload);
           const index = payload?.index;
@@ -1878,7 +1875,10 @@ export function createGame(options: CreateGameOptions): Game {
           }
           const inscription = gear.inscriptions?.[index];
           const blank = inscription ? findBlank(content, gear.itemId) : undefined;
-          if (!inscription || !blank) {
+          const inscriptionDef = inscription ? findInscription(content, inscription.id) : undefined;
+          if (!inscription || !blank || !inscriptionDef) {
+            // 铭纹定义缺失（内容包已移除）同 no-inscription 拒绝：稳定引用纪律下
+            // 不给未知铭纹掷新纹阶（掷了也投影不出贡献）。
             reject(action.type, 'no-inscription');
             return;
           }
@@ -1892,8 +1892,9 @@ export function createGame(options: CreateGameOptions): Game {
             reject(action.type, 'no-shard', { cost: String(cost), owned: String(owned) });
             return;
           }
-          // 纹阶重随：tierBoundsOf 数据锁死（与实例化掷阶/存档钳制同一来源）。
-          const [tierMin, tierMax] = tierBoundsOf(blank);
+          // 纹阶重随：tierBoundsOf 数据锁死（器胚 tierRange ∩ 该铭纹 tiers 表长，
+          // #61 边界收口后深度上限数据派生；与实例化掷阶/存档钳制同一来源）。
+          const [tierMin, tierMax] = tierBoundsOf(blank, inscriptionDef);
           const tier = tierMin + Math.floor(random() * (tierMax - tierMin + 1));
           ledgerItem(gparams.shardItem, -cost, 'reforge', META_USER);
           const inscriptions = gear.inscriptions!.map((insc, i) =>

@@ -877,7 +877,7 @@ function checkVerbStyles(
 /**
  * 系别/招式引用存在性（#25 键域开放的存在性关卡，循 #21 动词风格先例）：
  * schema 只钉键形态不钉取值，引用合法性在此收口——敌人 element、
- * affinities 键、铭纹条件 element（胚纹/三阶表/feature 三落点）、武器
+ * affinities 键、铭纹条件 element（胚纹/纹阶表/feature 三落点）、武器
  * element（equip/blank，#15）、elementFlavor 池键（#15）引用的系别键都
  * 必须命中 elements 节注册表；铭纹条件 moveId（审计修复④）必须命中
  * 招式注册键集（basic/武器/敌人/Boss 变招，与 checkMoveRegistry 同源）。
