@@ -33,6 +33,22 @@ import { tierBoundsOf, type Affix, type GearInscription, type GearInstance, type
 import type { DamageTier, EncounterRecord, RoundTally } from './combat.js';
 import type { Contribution } from './modifiers.js';
 import { restoreStats, type StatSnapshot } from './stats.js';
+import {
+  appendRecord,
+  cloneJournal,
+  cloneJournalAnchor,
+  cloneOpenValue,
+  closeOpen,
+  emptyOpenState,
+  restoreAnchor,
+  restoreCounters,
+  restoreJournal,
+  restoreJournalOpen,
+  type JournalAnchor,
+  type JournalOpenState,
+  type JournalState,
+  type VisitOpen,
+} from './journal.js';
 
 export interface SkillProgress {
   xp: number;
@@ -137,6 +153,17 @@ export interface GameState {
   stats: StatSnapshot;
   /** 已解锁成就 id（内容包 achievements 稳定引用，ADR-015；记录资产，兵解 default-keep）。 */
   achievements: string[];
+  /**
+   * 修行录流水（#33）：行为段环形条目 + 流水序号（记录资产，兵解 default-keep；
+   * 条目一经写入不可变，clone 走数组浅拷 + 缓存复用）。
+   */
+  journal: JournalState;
+  /** 修行录进行中聚合段（#33，随档；行为段与访问段分槽并存——访问段不闭行为段）。 */
+  journalOpen: JournalOpenState;
+  /** 流量计数器（#33）：`kind:id:source` → Σcount 带符号。独立开放键结构，不进 STAT_KEYS 闭集、不参与成就判定；终身累计，兵解 default-keep。 */
+  ledgerCounters: Record<string, number>;
+  /** 修行录锚点（#33）：墙钟 + 计数器快照（视角非资产——兵解由引擎硬绑清除，transient，不进内容声明式键表）。 */
+  journalAnchor: JournalAnchor | null;
 }
 
 /* ---------- 字段描述表（#42：持久字段知识的单一声明点） ---------- */
@@ -658,6 +685,60 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
           state.achievements.push(id);
         }
       }
+    },
+  },
+  journal: {
+    // —— 修行录流水（#33）：journal.ts 显式消毒（逐条白名单重建 + 截断环形上限），
+    // 条目不可变 → clone 数组浅拷 + WeakMap 缓存复用（快照零增量克隆，五轮审计 A）。
+    def: () => ({ records: [], seq: 0 }),
+    clone: (value) => cloneJournal(value),
+    restore: (raw, state) => {
+      state.journal = restoreJournal(raw.journal);
+    },
+  },
+  journalOpen: {
+    // —— 进行中聚合段（#33）：行为段/访问段双槽消毒收编；开放访问段不跨存档
+    //（票评：存档时刻强制闭段）——恢复即闭段成条，t1 = 存档墙钟（savedAt；
+    // 契约外缺省回落游戏内时间）。行为段随档恢复继续累计。
+    def: () => emptyOpenState(),
+    clone: (value) => ({
+      behavior: value.behavior ? cloneOpenValue(value.behavior) : null,
+      visit: value.visit ? (cloneOpenValue(value.visit) as VisitOpen) : null,
+    }),
+    restore: (raw, state, env) => {
+      const container = raw.journalOpen;
+      if (container === null || typeof container !== 'object') return;
+      const shape = container as Record<string, unknown>;
+      const behavior = restoreJournalOpen(shape.behavior);
+      if (behavior) state.journalOpen.behavior = behavior;
+      const visit = restoreJournalOpen(shape.visit);
+      if (visit && visit.kind === 'visit') {
+        const t1 = env.save?.savedAt ?? env.save?.time ?? 0;
+        const record = closeOpen(visit, t1, state.journal.seq + 1);
+        if (record) state.journal = appendRecord(state.journal, record);
+      }
+    },
+  },
+  ledgerCounters: {
+    // —— 流量计数器（#33）：开放键结构，键形态正则（kind 枚举 × id 形态 × 来源闭集，
+    // 拒原型污染键）+ 数值有限性校验；不过滤内容键——锚点快照差值要求键集跨包稳定。
+    def: () => ({}),
+    clone: (value) => ({ ...value }),
+    restore: (raw, state) => {
+      state.ledgerCounters = restoreCounters(raw.ledgerCounters);
+    },
+  },
+  journalAnchor: {
+    // —— 锚点（#33）：形状校验 + 快照同计数器消毒；视角非资产——兵解由引擎硬绑
+    // 清除（transient，不进内容声明式 reset/keep 键表，票面裁决）。
+    def: () => null,
+    clone: (value) => cloneJournalAnchor(value),
+    restore: (raw, state) => {
+      state.journalAnchor = restoreAnchor(raw.journalAnchor);
+    },
+    rebirth: 'transient',
+    rebirthClear: (state) => {
+      state.journalAnchor = null;
     },
   },
 };

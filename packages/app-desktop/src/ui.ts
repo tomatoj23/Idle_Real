@@ -53,6 +53,8 @@ export interface Ui {
 
 const MAX_LOG = 40;
 const MAX_FLOG = 60;
+/** 访问段信号页（#39 坊市 + #33 乾坤袋）：切进/切出各一对 visit 信号。 */
+const VISIT_PAGES: ReadonlySet<string> = new Set(['shop', 'bag']);
 
 export function buildUi(
   root: HTMLElement,
@@ -262,11 +264,11 @@ export function buildUi(
   }
 
   function navigate(next: TabId): void {
-    // 访问段信号（#39 D9）：坊市页切进/切出转发 visit 事件（引擎纯转发，
-    // 段开闭配对由壳层负责；非法载荷被引擎 reject，无副作用）。
+    // 访问段信号（#39 D9；#33 推广至乾坤袋）：交互页切进/切出各一对信号转发
+    //（引擎纯转发，段落账归引擎聚合器；非法载荷被引擎 reject，无副作用）。
     if (activeTab !== next) {
-      if (activeTab === 'shop') handler?.({ type: 'visit:end', payload: { page: 'shop' } });
-      if (next === 'shop') handler?.({ type: 'visit:begin', payload: { page: 'shop' } });
+      if (VISIT_PAGES.has(activeTab)) handler?.({ type: 'visit:end', payload: { page: activeTab } });
+      if (VISIT_PAGES.has(next)) handler?.({ type: 'visit:begin', payload: { page: next } });
     }
     // 换页即撤防（#6 兵解确认不跨页存续）：页面自持 UI 状态经 deactivate 复位。
     pages[activeTab].deactivate?.();
@@ -614,7 +616,18 @@ export function buildUi(
   /* ---------- 渲染（壳核） ---------- */
 
   const signature = (st: GameState, snap: SaveData): string =>
-    JSON.stringify([
+    // 修行录页（#33）走低频签名：列表由页 update 以 seq 差量增量追加（AC：
+    // 挂页时连续掉落不得整页重建——items/gold 等高频字段不进本页签名），
+    // 顶栏读数照常每帧轻刷。换页即回落全量签名（activeTab 变 → 签名变）。
+    activeTab === 'journal'
+      ? JSON.stringify([
+          activeTab,
+          st.journal?.seq ?? 0,
+          st.journalOpen ?? null,
+          st.journalAnchor ?? null,
+          snap.stats ?? null,
+        ])
+      : JSON.stringify([
       activeTab,
       Math.floor(st.gold),
       Object.entries(st.items).sort(),
@@ -679,14 +692,20 @@ export function buildUi(
     const sig = signature(st, snap);
     if (sig !== lastSig) {
       lastSig = sig;
-      // 页面挂载（D1：注册表查找分发，if/else 与坊市兜底退役）。
-      pageEl.innerHTML = pages[activeTab].render({ st, snap, content, T });
-      // 页面重建会丢滚动位置与日志内容：全量重放战斗日志并恢复到底部
-      //（挂 #flog 的页面自动恢复——斗法/秘境）。
-      const box = pageEl.querySelector<HTMLElement>('#flog');
-      if (box) {
-        box.innerHTML = '';
-        for (const line of flogBuffer) appendFlogLine(box, line.text, line.cls);
+      // 修行录页增量路径（#33 AC）：骨架在场时数据面只走页末 update（seq 差量
+      // 追加/净收获轻刷），不整页重建——挂页时连续掉落由增量追加承载；
+      // 其余页面（含修行录首次挂载、骨架缺失）走全量挂载路径。
+      const journalIncremental = activeTab === 'journal' && pageEl.querySelector('#jr-list');
+      if (!journalIncremental) {
+        // 页面挂载（D1：注册表查找分发，if/else 与坊市兜底退役）。
+        pageEl.innerHTML = pages[activeTab].render({ st, snap, content, T });
+        // 页面重建会丢滚动位置与日志内容：全量重放战斗日志并恢复到底部
+        //（挂 #flog 的页面自动恢复——斗法/秘境）。
+        const box = pageEl.querySelector<HTMLElement>('#flog');
+        if (box) {
+          box.innerHTML = '';
+          for (const line of flogBuffer) appendFlogLine(box, line.text, line.cls);
+        }
       }
       syncFlogScroll();
     }

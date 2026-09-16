@@ -266,6 +266,37 @@ export type {
   LedgerOrigin,
   LedgerSource,
 } from './ledger.js';
+
+// 修行录记录资产（#33：行为段聚合账本/流量计数器/锚点）。对外仅协议类型 +
+// 净收获投影 + 环形上限；clone/restore/append 等纯内部函数不经包面（state.ts
+// 包内消费）。
+export { JOURNAL_CAP, journalAnchorNet } from './journal.js';
+export type {
+  AnchorNetRow,
+  CombatOpen,
+  CombatRecord,
+  CraftOpen,
+  CraftRecord,
+  DungeonOpen,
+  DungeonRecord,
+  GatherOpen,
+  GatherRecord,
+  JournalAnchor,
+  JournalCells,
+  JournalLine,
+  JournalOpen,
+  JournalOpenState,
+  JournalRecord,
+  JournalState,
+  LevelupRecord,
+  OfflineLevelRow,
+  OfflineRecord,
+  OpenLine,
+  PointRecord,
+  RebirthRecord,
+  VisitOpen,
+  VisitRecord,
+} from './journal.js';
 export {
   achievementConditionMet,
   achievementProgressOf,

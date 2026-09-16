@@ -113,7 +113,7 @@
         },
         "tabs": {
           "type": "object",
-          "required": ["skills", "craft", "combat", "bag", "shop", "rebirth", "talents", "dungeon", "achievements"],
+          "required": ["skills", "craft", "combat", "bag", "shop", "rebirth", "talents", "dungeon", "achievements", "journal"],
           "additionalProperties": false,
           "properties": {
             "skills": { "$ref": "#/definitions/line" },
@@ -124,7 +124,8 @@
             "rebirth": { "$ref": "#/definitions/line", "description": "转生页签（#6；包无 rebirth 节时壳不渲染该页签）" },
             "talents": { "$ref": "#/definitions/line", "description": "天赋页签（#6；同上）" },
             "dungeon": { "$ref": "#/definitions/line", "description": "秘境页签（#7；包无 dungeons 节时壳不渲染该页签）" },
-            "achievements": { "$ref": "#/definitions/line", "description": "成就页签（#9；包无 achievements 节时壳不渲染该页签）" }
+            "achievements": { "$ref": "#/definitions/line", "description": "成就页签（#9；包无 achievements 节时壳不渲染该页签）" },
+            "journal": { "$ref": "#/definitions/line", "description": "修行录页签（#33，随档记录页）" }
           }
         },
         "side": {
@@ -252,7 +253,7 @@
         },
         "pages": {
           "type": "object",
-          "required": ["skills", "craft", "combat", "bag", "shop", "rebirth", "talents", "dungeon", "achievements"],
+          "required": ["skills", "craft", "combat", "bag", "shop", "rebirth", "talents", "dungeon", "achievements", "journal"],
           "additionalProperties": false,
           "properties": {
             "skills": {
@@ -456,6 +457,87 @@
                 "rewardGold": { "$ref": "#/definitions/template", "description": "灵石奖励行；槽位 {gold}" },
                 "rewardDaoYun": { "$ref": "#/definitions/template", "description": "道韵奖励行；槽位 {daoYun}" },
                 "rewardItems": { "$ref": "#/definitions/template", "description": "物品奖励行；槽位 {items}（壳按 nameOf + itemListSep 拼装）" }
+              }
+            },
+            "journal": {
+              "type": "object",
+              "required": [
+                "title", "subtitle", "empty", "anchorNew", "anchorBtn",
+                "netTitle", "netEmpty", "netHint", "netRow", "anchorAt",
+                "filterAll", "filterCombat", "filterDungeon", "filterCraft", "filterVisit", "filterOffline", "filterMilestone",
+                "badgeCombat", "badgeDungeon", "badgeGather", "badgeCraft", "badgeVisit", "badgeOffline", "badgeLevelup", "badgeAchievement", "badgeRebirth",
+                "combatTitle", "gatherTitle", "craftTitle", "craftFails",
+                "dungeonTitle", "dungeonDeepest", "dungeonCleared",
+                "visitTitle", "offlineTitle", "offlineCapped", "offlineExp",
+                "pointSell", "pointBuy", "pointEat", "pointSmelt", "pointReforge", "pointTalent", "pointFallback",
+                "levelupTitle", "achievementTitle", "rebirthTitle",
+                "autoSell", "autoSmelt", "autoNote",
+                "lineItem", "lineGold", "lineDaoYun", "lineExp",
+                "goldName", "daoYunName", "pageShop", "pageBag", "openNow", "expSuffix"
+              ],
+              "additionalProperties": false,
+              "description": "修行录页（#33）：行为段条目（引擎 JournalRecord 判别联合）→ 题材文案；条目引用 id 由壳查表渲染、查无回显 id（包变更兜底）",
+              "properties": {
+                "title": { "$ref": "#/definitions/line" },
+                "subtitle": { "$ref": "#/definitions/template", "description": "页副标题；槽位 {count}（流水条数）" },
+                "empty": { "$ref": "#/definitions/template", "description": "空流水占位（无槽位）" },
+                "anchorNew": { "$ref": "#/definitions/template", "description": "设锚按钮（尚无锚点；无槽位）" },
+                "anchorBtn": { "$ref": "#/definitions/template", "description": "重设锚点按钮（已有锚点；无槽位）" },
+                "netTitle": { "$ref": "#/definitions/line", "description": "净收获区标题（无槽位）" },
+                "netEmpty": { "$ref": "#/definitions/template", "description": "锚点以来无得失占位（无槽位）" },
+                "netHint": { "$ref": "#/definitions/template", "description": "无锚点提示（无槽位）" },
+                "netRow": { "$ref": "#/definitions/template", "description": "净收获行；槽位 {name}/{count}（count 带符号）" },
+                "anchorAt": { "$ref": "#/definitions/template", "description": "锚定时刻行；槽位 {time}（壳按 locale 格式化墙钟）" },
+                "filterAll": { "$ref": "#/definitions/line", "description": "过滤标签·全部" },
+                "filterCombat": { "$ref": "#/definitions/line", "description": "过滤标签·斗法（战斗段）" },
+                "filterDungeon": { "$ref": "#/definitions/line", "description": "过滤标签·秘境" },
+                "filterCraft": { "$ref": "#/definitions/line", "description": "过滤标签·采炼（采集+炼制段）" },
+                "filterVisit": { "$ref": "#/definitions/line", "description": "过滤标签·交易（访问段+买卖点条目）" },
+                "filterOffline": { "$ref": "#/definitions/line", "description": "过滤标签·离线" },
+                "filterMilestone": { "$ref": "#/definitions/line", "description": "过滤标签·纪事（升级/成就/兵解/其余点条目）" },
+                "badgeCombat": { "$ref": "#/definitions/line", "description": "条目徽标·斗法段" },
+                "badgeDungeon": { "$ref": "#/definitions/line", "description": "条目徽标·秘境段" },
+                "badgeGather": { "$ref": "#/definitions/line", "description": "条目徽标·采集段" },
+                "badgeCraft": { "$ref": "#/definitions/line", "description": "条目徽标·炼制段" },
+                "badgeVisit": { "$ref": "#/definitions/line", "description": "条目徽标·访问段" },
+                "badgeOffline": { "$ref": "#/definitions/line", "description": "条目徽标·离线段" },
+                "badgeLevelup": { "$ref": "#/definitions/line", "description": "条目徽标·升级" },
+                "badgeAchievement": { "$ref": "#/definitions/line", "description": "条目徽标·成就" },
+                "badgeRebirth": { "$ref": "#/definitions/line", "description": "条目徽标·兵解" },
+                "combatTitle": { "$ref": "#/definitions/template", "description": "战斗段标题；槽位 {wins}/{losses}" },
+                "gatherTitle": { "$ref": "#/definitions/template", "description": "采集段标题；槽位 {activity}/{cycles}" },
+                "craftTitle": { "$ref": "#/definitions/template", "description": "炼制段标题；槽位 {activity}/{cycles}" },
+                "craftFails": { "$ref": "#/definitions/template", "description": "炼制失败后缀；槽位 {fails}" },
+                "dungeonTitle": { "$ref": "#/definitions/template", "description": "秘境段标题；槽位 {name}（秘境展示名）" },
+                "dungeonDeepest": { "$ref": "#/definitions/template", "description": "秘境副行；槽位 {deepest}" },
+                "dungeonCleared": { "$ref": "#/definitions/template", "description": "通关徽标；槽位 {cleared}" },
+                "visitTitle": { "$ref": "#/definitions/template", "description": "访问段标题；槽位 {page}（坊市/乾坤袋展示名）" },
+                "offlineTitle": { "$ref": "#/definitions/template", "description": "离线段标题；槽位 {activity}/{cycles}" },
+                "offlineCapped": { "$ref": "#/definitions/template", "description": "离线上限徽标；槽位 {away}离开时长/{settled}结算时长（壳拼装）" },
+                "offlineExp": { "$ref": "#/definitions/template", "description": "离线副行；槽位 {exp}" },
+                "pointSell": { "$ref": "#/definitions/line", "description": "点条目动作词·卖出" },
+                "pointBuy": { "$ref": "#/definitions/line", "description": "点条目动作词·购入" },
+                "pointEat": { "$ref": "#/definitions/line", "description": "点条目动作词·服用" },
+                "pointSmelt": { "$ref": "#/definitions/line", "description": "点条目动作词·熔炼" },
+                "pointReforge": { "$ref": "#/definitions/line", "description": "点条目动作词·重铸" },
+                "pointTalent": { "$ref": "#/definitions/line", "description": "点条目动作词·点亮天赋" },
+                "pointFallback": { "$ref": "#/definitions/line", "description": "其余来源点条目兜底动作词" },
+                "levelupTitle": { "$ref": "#/definitions/template", "description": "升级条目；槽位 {skill}/{level}" },
+                "achievementTitle": { "$ref": "#/definitions/template", "description": "成就条目；槽位 {name}（成就展示名，查无回显 id）" },
+                "rebirthTitle": { "$ref": "#/definitions/template", "description": "兵解篇章条目；槽位 {count}/{daoYun}" },
+                "autoSell": { "$ref": "#/definitions/line", "description": "折叠补注动作词·售卖" },
+                "autoSmelt": { "$ref": "#/definitions/line", "description": "折叠补注动作词·熔炼" },
+                "autoNote": { "$ref": "#/definitions/template", "description": "折叠补注（自动售卖/熔炼标记行，count=0 会计不计）；槽位 {act}/{name}（被折物展示名）" },
+                "lineItem": { "$ref": "#/definitions/template", "description": "明细行·物品/装备；槽位 {name}/{count}（count 带符号）" },
+                "lineGold": { "$ref": "#/definitions/template", "description": "明细行·灵石；槽位 {count}" },
+                "lineDaoYun": { "$ref": "#/definitions/template", "description": "明细行·道韵；槽位 {count}" },
+                "lineExp": { "$ref": "#/definitions/template", "description": "明细行·修为；槽位 {count}" },
+                "goldName": { "$ref": "#/definitions/line", "description": "货币展示名·灵石（壳查名链 currency 分支）" },
+                "daoYunName": { "$ref": "#/definitions/line", "description": "货币展示名·道韵" },
+                "pageShop": { "$ref": "#/definitions/line", "description": "访问页展示名·坊市" },
+                "pageBag": { "$ref": "#/definitions/line", "description": "访问页展示名·乾坤袋" },
+                "openNow": { "$ref": "#/definitions/template", "description": "进行中聚合段行；槽位 {name}" },
+                "expSuffix": { "$ref": "#/definitions/template", "description": "段修为副行；槽位 {exp}" }
               }
             }
           }

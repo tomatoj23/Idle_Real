@@ -487,6 +487,8 @@ export interface ShellTabs {
   readonly dungeon: string;
   /** 成就页签（#9）；包无 achievements 节时壳不渲染该页签。 */
   readonly achievements: string;
+  /** 修行录页签（#33，随档记录页）。 */
+  readonly journal: string;
 }
 
 /** 侧栏（修行录）文案。 */
@@ -792,7 +794,100 @@ export interface ShellPageAchievements {
   readonly rewardItems: string;
 }
 
-/** 页面文案分组（键 = TabId 协议键；craft 随 #5、rebirth/talents 随 #6、dungeon 随 #7、achievements 随 #9 加入）。 */
+/**
+ * 修行录页文案（#33）：行为段条目（引擎 JournalRecord 判别联合）→ 题材文案
+ * 模板，条目引用（物品/技能/敌人 id）由壳查表渲染、查无回显 id（包变更兜底）。
+ */
+export interface ShellPageJournal {
+  readonly title: string;
+  /** 副标题；槽位 {count} = 流水条数。 */
+  readonly subtitle: string;
+  readonly empty: string;
+  /** 设锚按钮（尚无锚点）。 */
+  readonly anchorNew: string;
+  /** 重设锚点按钮（已有锚点）。 */
+  readonly anchorBtn: string;
+  /** 净收获区标题。 */
+  readonly netTitle: string;
+  /** 锚点以来无得失占位。 */
+  readonly netEmpty: string;
+  /** 无锚点提示。 */
+  readonly netHint: string;
+  /** 净收获行；槽位 {name}/{count}（count 带符号）。 */
+  readonly netRow: string;
+  /** 锚定时刻行；槽位 {time}（壳按 locale 格式化墙钟）。 */
+  readonly anchorAt: string;
+  /** 类型过滤标签（七键）。 */
+  readonly filterAll: string;
+  readonly filterCombat: string;
+  readonly filterDungeon: string;
+  readonly filterCraft: string;
+  readonly filterVisit: string;
+  readonly filterOffline: string;
+  readonly filterMilestone: string;
+  /** 条目类型徽标。 */
+  readonly badgeCombat: string;
+  readonly badgeDungeon: string;
+  readonly badgeGather: string;
+  readonly badgeCraft: string;
+  readonly badgeVisit: string;
+  readonly badgeOffline: string;
+  readonly badgeLevelup: string;
+  readonly badgeAchievement: string;
+  readonly badgeRebirth: string;
+  /** 段条目标题模板。 */
+  readonly combatTitle: string;
+  readonly gatherTitle: string;
+  readonly craftTitle: string;
+  /** 炼制失败后缀；槽位 {fails}。 */
+  readonly craftFails: string;
+  readonly dungeonTitle: string;
+  /** 秘境副行；槽位 {deepest}。 */
+  readonly dungeonDeepest: string;
+  /** 通关徽标；槽位 {cleared}。 */
+  readonly dungeonCleared: string;
+  /** 访问段标题；槽位 {page}（坊市/乾坤袋展示名）。 */
+  readonly visitTitle: string;
+  /** 离线段标题；槽位 {activity}/{cycles}。 */
+  readonly offlineTitle: string;
+  /** 离线上限徽标；槽位 {away}离开时长/{settled}结算时长（壳拼装）。 */
+  readonly offlineCapped: string;
+  /** 离线副行；槽位 {exp}。 */
+  readonly offlineExp: string;
+  /** 点条目动作词（按 ledger source）。 */
+  readonly pointSell: string;
+  readonly pointBuy: string;
+  readonly pointEat: string;
+  readonly pointSmelt: string;
+  readonly pointReforge: string;
+  readonly pointTalent: string;
+  /** 其余来源点条目兜底动作词。 */
+  readonly pointFallback: string;
+  readonly levelupTitle: string;
+  readonly achievementTitle: string;
+  readonly rebirthTitle: string;
+  /** 折叠补注动作词（auto 标记行）。 */
+  readonly autoSell: string;
+  readonly autoSmelt: string;
+  /** 折叠补注；槽位 {act}/{name}/{count}。 */
+  readonly autoNote: string;
+  /** 明细行模板；槽位 {name}/{count}（count 带符号）。 */
+  readonly lineItem: string;
+  readonly lineGold: string;
+  readonly lineDaoYun: string;
+  readonly lineExp: string;
+  /** 货币/页面展示名（壳查名链的 currency/page 分支）。 */
+  readonly goldName: string;
+  readonly daoYunName: string;
+  readonly pageShop: string;
+  readonly pageBag: string;
+  /** 进行中聚合段行；槽位 {name}。 */
+  readonly openNow: string;
+  /** 修为副行；槽位 {exp}。 */
+  readonly expSuffix: string;
+}
+
+/** 页面文案分组（键 = TabId 协议键；craft 随 #5、rebirth/talents 随 #6、dungeon 随 #7、achievements 随 #9、journal 随 #33 加入）。 */
 export interface ShellPages {
   readonly skills: ShellPageSkills;
   readonly craft: ShellPageCraft;
@@ -803,6 +898,7 @@ export interface ShellPages {
   readonly talents: ShellPageTalents;
   readonly dungeon: ShellPageDungeon;
   readonly achievements: ShellPageAchievements;
+  readonly journal: ShellPageJournal;
 }
 
 /** 壳层文案节（#26）：模板槽 {slot} 由壳按语境填入，缺键回显键名（裁决 ④ 同策略）。 */

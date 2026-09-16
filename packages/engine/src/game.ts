@@ -88,6 +88,7 @@ import {
   findDungeon,
 } from './dungeon.js';
 import { applyStatsEvent } from './stats.js';
+import { createJournalAggregator } from './journal.js';
 import { achievementConditionMet, achievementsOf } from './achievements.js';
 import { createCombatRun, makeCombatState } from './combatRun.js';
 import type {
@@ -183,6 +184,21 @@ export function createGame(options: CreateGameOptions): Game {
   // 统计累积（#9）：订阅自身事件总线，emit 即同步累积到 state.stats
   //（监听器异常由 EventBus 吞掉；成就评估在 tick/dispatch/settleOffline 末尾统一进行）。
   events.subscribe((event) => applyStatsEvent(state.stats, event));
+  // 修行录段落账（#33）：同式订阅（emit 即聚合）；条目墙钟走注入钟（仅记录
+  // 元数据，不参与机制解算——ADR-013 纪律边界，五轮审计 B）。
+  events.subscribe(
+    createJournalAggregator(state, {
+      now: () => clock.now(),
+      activity: () =>
+        state.activity ? { skillId: state.activity.skillId, name: state.activity.name } : null,
+      combat: () => (state.combat ? { enemyId: state.combat.enemyId } : null),
+      dungeon: () => (state.dungeon ? { dungeonId: state.dungeon.dungeonId } : null),
+      skillKindOf: (skillId) => {
+        const kind = findSkill(content, skillId)?.kind;
+        return kind === 'craft' || kind === 'gather' ? kind : undefined;
+      },
+    }),
+  );
   const hpCap = (): number => playerStats(hpContext()).maxHp;
   const xpOf = (skillId: string): number => state.skills[skillId]?.xp ?? 0;
   const levelOf = (skillId: string): number => levelFromXp(xpOf(skillId), pparams);
@@ -1955,6 +1971,12 @@ export function createGame(options: CreateGameOptions): Game {
             time,
             data: { nodeId, name: node.name, cost: node.cost, daoYun: state.daoYun },
           });
+          return;
+        }
+
+        case 'journal:anchor': {
+          // 锚点重设（#33）：换基准 = 当下注入钟墙钟 + 计数器快照浅拷；幂等可随时重设。
+          state.journalAnchor = { at: clock.now(), snap: { ...state.ledgerCounters } };
           return;
         }
 

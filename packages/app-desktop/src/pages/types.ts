@@ -26,7 +26,8 @@ export type TabId =
   | 'shop'
   | 'rebirth'
   | 'talents'
-  | 'achievements';
+  | 'achievements'
+  | 'journal';
 
 /** texts.shell 取词 + {slot} 填槽（缺键回显键名，防御可见）。 */
 export type ShellText = (key: string, vars?: Readonly<Record<string, string | number>>) => string;
