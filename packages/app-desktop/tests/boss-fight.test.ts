@@ -155,7 +155,7 @@ describe('#8 · Boss 战壳呈现', () => {
     root.querySelector<HTMLButtonElement>('.tab[data-tab="combat"]')!.click();
     root.querySelector<HTMLButtonElement>('[data-act="fight"][data-enemy="e1"]')!.click();
     game.events.drain();
-    ui.render(); // happy-dom 无 rAF，事件驱动的合并重绘需手动触发
+    ui.render(); // happy-dom 的 rAF 异步调度，合并重绘不即时，需手动触发（#64 复核）
     expect(root.querySelectorAll('.bar > i.tick')).toHaveLength(2);
     // 敌方血条 fill 存在性（无文本节点元素，innerText 断言盲区教训）
     expect(root.querySelector('[data-bar="enemy"]')).not.toBeNull();

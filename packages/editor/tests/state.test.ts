@@ -112,8 +112,8 @@ describe('confirmDirtyLoad：载入新包的脏确认守卫（审计修复①）
   it('main.ts 同款 window.confirm 接线：lambda 方法调用 + vi.spyOn stub', () => {
     const store = createStore(xiuxianPackJson);
     store.update(() => {});
-    // happy-dom 不把 confirm 落为 window 自有属性（spyOn 的前提是自有描述符），
-    // 先落到自有再 spy；结束恢复原型链查找。
+    // happy-dom 20 里 confirm 虽是自有访问器属性，getter 却返回 undefined，
+    // spyOn（要求现值是函数）仍拒绝——先赋值落成自有数据属性再 spy；结束删除还原。
     const holder = window as unknown as { confirm?: (message: string) => boolean };
     const hadOwn = Object.getOwnPropertyNames(holder).includes('confirm');
     holder.confirm = holder.confirm ?? ((message: string) => true);

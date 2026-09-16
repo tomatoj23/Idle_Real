@@ -15,7 +15,7 @@
     "fflate": "^0.8.2"
   },
   "devDependencies": {
-    "happy-dom": "^18.0.1",
+    "happy-dom": "^20.14.5",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vitest": "^4.1.11"

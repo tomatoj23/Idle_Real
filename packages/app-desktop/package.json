@@ -27,7 +27,7 @@
     "@wendao/engine": "*",
     "electron": "38.8.6",
     "electron-builder": "^26.0.12",
-    "happy-dom": "^18.0.1",
+    "happy-dom": "^20.14.5",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vitest": "^4.1.11"
