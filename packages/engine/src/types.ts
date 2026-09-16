@@ -146,8 +146,7 @@ export interface CombatNoteEvent extends GameEventBase {
   };
 }
 
-/** 同对手上一战对照记录（victory.prevEncounter）：复用 combat.ts 的 EncounterRecord（lastEncounter 值形状单一来源）。 */
-
+/** 胜利结算事件：灵石/掉落/修为实发与同对手对照（战利品段壳层拼装）。 */
 export interface VictoryEvent extends GameEventBase {
   readonly type: 'victory';
   readonly data: {
@@ -161,6 +160,7 @@ export interface VictoryEvent extends GameEventBase {
     readonly drops: readonly string[];
     /** 异宝器胚展示名（「档名·物品名」，实际入袋才有）。 */
     readonly gearDropName?: string;
+    /** 同对手上一战记录（combat.ts EncounterRecord，无对照记录 = 缺省）。 */
     readonly prevEncounter?: EncounterRecord;
     /** 与上一战对照语（无对照记录 = 缺省）。 */
     readonly compare?: string;

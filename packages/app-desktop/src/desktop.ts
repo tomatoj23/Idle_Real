@@ -66,9 +66,11 @@ export function wireAchievementReporting(
   bridge: DesktopBridge,
 ): () => void {
   return events.subscribe((event: GameEvent) => {
-    // #47 判别联合：type 收窄后 event.data.id 直接类型化读（手工二次校验退役）。
+    // #47 判别联合：type 收窄后载荷字段类型化读（手工二次校验退役）；链上
+    // 保留 `?.`——EventBus 是公共面，协议外畸形事件（如 desktop-bridge.test
+    // 钉的缺 data 场景）保持「静默不上报」而非 throw 被总线吞掉。
     if (event.type !== 'achievement:unlock') return;
-    const id = event.data.id;
-    if (id.length > 0) bridge.reportAchievement(id);
+    const id = event.data?.id;
+    if (typeof id === 'string' && id.length > 0) bridge.reportAchievement(id);
   });
 }
