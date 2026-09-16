@@ -82,10 +82,9 @@ import {
   type Contribution,
 } from './modifiers.js';
 import {
-  dungeonFloorEnemyOf,
+  createDungeonRun,
   dungeonGateOf,
   findDungeon,
-  pickDungeonEnemyOf,
   type DungeonView,
 } from './dungeon.js';
 import { applyStatsEvent } from './stats.js';
@@ -920,14 +919,58 @@ export function createGame(options: CreateGameOptions): Game {
     return 'ok';
   }
 
+  /* ---------- DungeonRun 装配（#52 D1）：秘境攻略状态机 + 层奖励入账单一门 ---------- */
+
+  /* 战斗中的敌人解析（resolveEnemy）与召唤物投影（minionViewOf）随 #51
+   * 内聚进 combatRun——秘境层倍率在前、Boss 阶段修正在后的单点组合，
+   * 战斗推进与快照投影共用一份（禁第二份缩放组合）。秘境攻略的进出/
+   * 推进/层奖励入账随 #52 收编 dungeon.ts 一侧的 DungeonRun（state.dungeon
+   * 唯一读写门），game.ts 只剩 dispatch 门控的身份读与离线整态清。 */
+
+  /**
+   * 秘境攻略的依赖注入（#51 CombatRun 同款读取器集合）：攻略指针/最高层
+   * 记录经存取句柄读写（存档形状零变化）；战斗接入与停战序列是窄门回调
+   * （enterCombat 单序列与 stopCombat 住 game.ts，#44）；层奖励入账走咽喉
+   * 窄面（'dungeon' 来源 + idle 归段绑定在此，credit sink 参数化——victory
+   * 只调 creditFloorRewards 单一门）。
+   */
+  const dungeonRun = createDungeonRun({
+    content,
+    random,
+    now: () => time,
+    emit: (event) => events.emit(event),
+    note: noteFrom,
+    reject,
+    lowHp: isLowHp,
+    beginCombat: enterCombat,
+    stopCombat: (note) => stopCombat(note),
+    run: {
+      get: () => state.dungeon,
+      set: (next) => {
+        state.dungeon = next;
+      },
+    },
+    best: {
+      of: (dungeonId) => state.dungeonBest[dungeonId] ?? 0,
+      record: (dungeonId, floor) => {
+        state.dungeonBest[dungeonId] = Math.max(state.dungeonBest[dungeonId] ?? 0, floor);
+      },
+    },
+    credit: {
+      gold: (delta) => ledgerGold(delta, 'dungeon', META_IDLE),
+      item: (itemId, count) => ledgerItem(itemId, count, 'dungeon', META_IDLE),
+      daoYun: (delta) => ledgerDaoYun(delta, 'dungeon', META_IDLE),
+    },
+  });
+
   /* ---------- CombatRun 装配（#51 D2）：deps = 读取器集合 + 咽喉/秘境窄门 ---------- */
 
   /**
    * 战斗推进的依赖注入（D2）：面板类读取器每次调用现读（战斗中吃丹/换装备
-   * 即时生效，禁快照值）；咽喉窄面把战斗路径的入账恒定为 idle 归段；秘境与
-   * 停战序列留在 game.ts（DungeonRun 归 #52），此处只递窄门回调。此后
-   * 战斗时序变量（pt/et/respT/ehp/伤档/bossPhase/召唤槽/系别临时态）的
-   * 读写全部收进 combatRun，game.ts 不再直接操作。
+   * 即时生效，禁快照值）；咽喉窄面把战斗路径的入账恒定为 idle 归段；秘境
+   * 与停战序列经窄门回调外递（秘境归上方 DungeonRun，#52）。此后战斗时序
+   * 变量（pt/et/respT/ehp/伤档/bossPhase/召唤槽/系别临时态）的读写全部
+   * 收进 combatRun，game.ts 不再直接操作。
    */
   const combatRun = createCombatRun({
     content,
@@ -982,9 +1025,10 @@ export function createGame(options: CreateGameOptions): Game {
       },
     },
     dungeon: {
-      current: () => state.dungeon,
-      advance: advanceDungeonFloor,
-      leave: leaveDungeon,
+      current: () => dungeonRun.current(),
+      advance: () => dungeonRun.advance(),
+      leave: () => dungeonRun.leave(),
+      creditFloorRewards: () => dungeonRun.creditFloorRewards(),
     },
     stopCombat: (note) => stopCombat(note),
     eatSilent: (itemId) => eatConsumable(itemId, true),
@@ -996,91 +1040,12 @@ export function createGame(options: CreateGameOptions): Game {
       }),
   });
 
-  /* ---------- 秘境（#7）：层序列战斗复用既有战斗状态机 ---------- */
-
-  /* 战斗中的敌人解析（resolveEnemy）与召唤物投影（minionViewOf）随 #51
-   * 内聚进 combatRun——秘境层倍率在前、Boss 阶段修正在后的单点组合，
-   * 战斗推进与快照投影共用一份（禁第二份缩放组合）。 */
-
-  /**
-   * 进入指定层：low-hp 复查 → 加权抽敌 → 以层倍率投影的气血 → enterCombat
-   * 单序列（战斗状态机与解算零分叉，#44）。层表空/敌人全缺失 = 'no-layer'
-   * （防御路径，包校验已拦）。low-hp 复查先于抽敌（isLowHp 同一谓词，非第
-   * 二份血线式）：拒绝路径不得有可观察副作用——先抽敌会烧一次 RNG（种子随
-   * 档持久，ADR-013），被拒动作无声改变后续随机流，破坏同种子回放确定性。
-   */
-  function enterDungeonFloor(
-    dungeon: DungeonView,
-    floor: number,
-    actionType?: string,
-  ): 'ok' | 'no-layer' | 'low-hp' {
-    if (isLowHp()) {
-      if (actionType !== undefined) reject(actionType, 'low-hp');
-      return 'low-hp';
-    }
-    const enemy = pickDungeonEnemyOf(content, dungeon, floor, random);
-    if (!enemy) return 'no-layer';
-    const scaled = dungeonFloorEnemyOf(content, dungeon.id, floor, enemy.id) ?? enemy;
-    return enterCombat(scaled, actionType);
-  }
-
-  /** 离境结算（#7）：清攻略 + dungeon:leave 事件（最高层已随进层实时登记）。 */
-  function leaveDungeon(): void {
-    const run = state.dungeon;
-    if (!run) return;
-    state.dungeon = null;
-    const dungeon = findDungeon(content, run.dungeonId);
-    events.emit({
-      type: 'dungeon:leave',
-      time,
-      data: {
-        dungeonId: run.dungeonId,
-        dungeonName: dungeon?.name ?? run.dungeonId,
-        floor: run.floor,
-        best: Math.max(state.dungeonBest[run.dungeonId] ?? 0, run.floor),
-      },
-    });
-  }
-
-  /**
-   * 秘境层推进（胜利休整到期消费，#7）：顶层已清 → 通关离境；否则层号 +1、
-   * 登记最高层、抽敌开战下一层。层奖励已在 victory 入账（dungeon:floor），
-   * 此处只决定去留；层表空/敌人全缺失 = 防御离境（绝不抛错卡死）。
-   */
-  function advanceDungeonFloor(): void {
-    const run = state.dungeon;
-    if (!run) return;
-    const dungeon = findDungeon(content, run.dungeonId);
-    if (!dungeon) {
-      state.dungeon = null; // 内容包已变更：安全弃置
-      return;
-    }
-    if (run.floor >= dungeon.floors) {
-      state.dungeon = null;
-      events.emit({
-        type: 'dungeon:clear',
-        time,
-        data: { dungeonId: dungeon.id, dungeonName: dungeon.name, floors: dungeon.floors },
-      });
-      stopCombat(noteFrom('retreatVictory'));
-      return;
-    }
-    run.floor += 1;
-    state.dungeonBest[run.dungeonId] = Math.max(state.dungeonBest[run.dungeonId] ?? 0, run.floor);
-    if (enterDungeonFloor(dungeon, run.floor) !== 'ok') {
-      // 层表空/敌人全缺失：防御离境（包校验已拦，引擎不崩；low-hp 为不可达
-      // 复查位——combatRun.step 的退避判定先行担保，两支同样就地离境）。
-      state.dungeon = null;
-      stopCombat();
-    }
-  }
-
   function stopCombat(note?: string): void {
     const c = state.combat;
     if (!c) return;
     state.combat = null;
     emitNote(note ?? noteFrom('retreat'), c.enemyId);
-    leaveDungeon(); // 秘境攻略随战团散去（#7：撤退/退避/转赴修行一律离境）
+    dungeonRun.leave(); // 秘境攻略随战团散去（#7：撤退/退避/转赴修行一律离境）
   }
 
   /* 玩家一击（集火选靶）/ 敌方一击 / victory / defeat / settleCombat 逐轮
@@ -1143,7 +1108,7 @@ export function createGame(options: CreateGameOptions): Game {
       state.combat = null; // 离线不可战斗：视作离场休整
       combatRun.resetProcs(); // 系别临时态不落盘，离线离场即散（#15）
     }
-    if (state.dungeon) state.dungeon = null; // 秘境不可离线续跑：就地离境（最高层已随进层登记，#7）
+    if (state.dungeon) state.dungeon = null; // 秘境不可离线续跑：就地静默弃置（非 DungeonRun.leave——不发 dungeon:leave，保离线单条汇总契约；最高层已随进层登记，#7）
     // 休整回满血统一在此一次（战斗中离线时 activity 必为 null——开战已清采集，
     // 不回满则残血横穿整个离线期，与"气血按脱战回满"契约相悖）。
     state.hp = hpCap();
@@ -1687,20 +1652,15 @@ export function createGame(options: CreateGameOptions): Game {
             }
             return;
           }
-          const entered = enterDungeonFloor(dungeon, 1, action.type);
+          const entered = dungeonRun.enterFloor(dungeon, 1, action.type);
           if (entered !== 'ok') {
             // low-hp 已由序列代发 reject；层表空/敌人全缺失 = 防御路径
             // （包校验已拦，引擎不崩），此处补 no-layer 拒绝。
             if (entered === 'no-layer') reject(action.type, 'no-layer');
             return;
           }
-          state.dungeon = { dungeonId: dungeon.id, floor: 1 };
-          state.dungeonBest[dungeon.id] = Math.max(state.dungeonBest[dungeon.id] ?? 0, 1);
-          events.emit({
-            type: 'dungeon:enter',
-            time,
-            data: { dungeonId: dungeon.id, dungeonName: dungeon.name, floor: 1, floors: dungeon.floors },
-          });
+          // 开攻略：登记攻略指针 + 最高层（进层即登记）+ dungeon:enter 事件。
+          dungeonRun.begin(dungeon);
           return;
         }
 
@@ -1711,7 +1671,7 @@ export function createGame(options: CreateGameOptions): Game {
           if (state.combat) {
             stopCombat();
           } else {
-            leaveDungeon();
+            dungeonRun.leave();
           }
           return;
         }

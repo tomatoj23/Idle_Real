@@ -14,8 +14,8 @@
  * 内存、不落盘，开战/再战/离线一律 resetProcs（存档恢复即散尽）。
  *
  * 三不动（D3）：Game 对外四方法、dispatch 巨 switch、存档形状/SAVE_KEY
- * 均不因本模块引入而变化。秘境层推进（advance/leave）与停战序列仍住
- * game.ts（DungeonRun 归第二步票 #52），此处仅窄门回调。
+ * 均不因本模块引入而变化。秘境攻略的进出/推进与层奖励入账归 DungeonRun
+ * （#52，dungeon.ts 一侧），此处仅窄门回调。
  */
 
 import {
@@ -34,11 +34,7 @@ import {
   type ElementCombatPrimitive,
 } from './combat.js';
 import { gearName, rollGear, type GearInstance } from './gear.js';
-import {
-  dungeonFloorEnemyOf,
-  dungeonLayerOf,
-  findDungeon,
-} from './dungeon.js';
+import { dungeonFloorEnemyOf } from './dungeon.js';
 import {
   bossEnemyOf,
   findBossOf,
@@ -164,7 +160,7 @@ export interface CombatRunDeps {
     record(enemyId: string, rounds: number, won: boolean): void;
   };
 
-  /** 秘境窄门（DungeonRun 归 #52）：攻略指针 + 层推进 + 离境。 */
+  /** 秘境窄门（DungeonRun，#52）：攻略指针 + 层推进 + 离境 + 层奖励入账。 */
   readonly dungeon: {
     /** 当前攻略（无 = null）：敌投影层倍率 / 掉落筛层 / 层奖励三处消费。 */
     current(): DungeonState | null;
@@ -172,6 +168,8 @@ export interface CombatRunDeps {
     advance(): void;
     /** 离境（败退/敌失引用自愈；撤退走 stopCombat，#7）。 */
     leave(): void;
+    /** 胜利入账单一门（#52 D1）：层奖励守卫入账 + dungeon:floor 事件。 */
+    creditFloorRewards(): void;
   };
 
   /** 停战序列（撤退 note + 清战斗态 + 离境）：dispatch 面与战斗面共用一条序。 */
@@ -590,46 +588,10 @@ export function createCombatRun(deps: CombatRunDeps): CombatRun {
       },
     });
 
-    // 秘境层奖励（#7）：层表 rewards 逐项入账 + dungeon:floor 事件；
-    // 道韵双键同律（daoYunEarned 只增不减——花掉不回锁，深层秘境供养兵解）。
-    const loc = deps.dungeon.current();
-    if (loc) {
-      const dungeon = findDungeon(content, loc.dungeonId);
-      const rewards = dungeon ? dungeonLayerOf(dungeon, loc.floor)?.rewards : undefined;
-      const goldReward =
-        typeof rewards?.gold === 'number' && Number.isFinite(rewards.gold) && rewards.gold > 0
-          ? Math.floor(rewards.gold)
-          : 0;
-      deps.ledger.gold(goldReward, 'dungeon');
-      const items: Record<string, number> = {};
-      for (const stack of rewards?.items ?? []) {
-        const count = stack?.count;
-        if (typeof stack?.item === 'string' && typeof count === 'number' && Number.isFinite(count) && count > 0) {
-          if (deps.ledger.item(stack.item, Math.floor(count), 'dungeon')) {
-            items[stack.item] = (items[stack.item] ?? 0) + Math.floor(count);
-          }
-        }
-      }
-      const rawDaoYun = rewards?.daoYun;
-      const daoYunReward =
-        typeof rawDaoYun === 'number' && Number.isFinite(rawDaoYun) && rawDaoYun > 0
-          ? Math.floor(rawDaoYun)
-          : 0;
-      deps.ledger.daoYun(daoYunReward, 'dungeon');
-      emit({
-        type: 'dungeon:floor',
-        time: now(),
-        data: {
-          dungeonId: loc.dungeonId,
-          dungeonName: dungeon?.name ?? loc.dungeonId,
-          floor: loc.floor,
-          floors: dungeon?.floors ?? 0,
-          gold: goldReward,
-          daoYun: daoYunReward,
-          items,
-        },
-      });
-    }
+    // 秘境层奖励（#7）：victory 只调用 DungeonRun 胜利入账单一门（#52 D1）
+    // ——finite 守卫、咽喉三路入账与 dungeon:floor 事件内聚 dungeon.ts
+    // 一侧（「通关一层给什么」一处可读）。
+    deps.dungeon.creditFloorRewards();
   }
 
   /** 落败：残血被救回，对照记录 won=false（「前番不敌」的基准）。 */

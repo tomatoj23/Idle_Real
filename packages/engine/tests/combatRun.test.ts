@@ -151,6 +151,7 @@ function makeHarness(pack: GameContent, opts?: { atk?: number }) {
       current: () => null,
       advance: () => dungeonCalls.push('advance'),
       leave: () => dungeonCalls.push('leave'),
+      creditFloorRewards: () => dungeonCalls.push('credit'), // #52 胜利入账窄门（直测不消费层奖励）
     },
     stopCombat: (n) => {
       stopNotes.push(n);
