@@ -109,6 +109,7 @@ export const textsSample: TextsSection = {
       dungeonClear: '【{name}】已通关（{floors} 层）！',
       dungeonLeave: '退出【{name}】（第 {floor} 层，最深 {best}）',
       bossPhase: '【{enemy}】显露「{name}」之相！（阶段 {phase}）',
+      bossSummon: '【{enemy}】怒啸震野，唤出 {count} 道援影！',
       achievementToast: '成就达成【{name}】',
       achievementLog: '成就达成【{name}】',
       gearSmelt: '熔炼【{name}】，得 {shard}×{count}',

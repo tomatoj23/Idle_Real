@@ -89,6 +89,7 @@ function makePack(): ContentPack {
         common: { needLevel: '需 {level} 层', needDaoYun: '需 {daoYun} 道韵', compareWrap: '（{compare}）', itemListSep: '、' },
         events: {
           bossPhase: '【{enemy}】显露「{name}」之相！（阶段 {phase}）',
+          bossSummon: '【{enemy}】怒啸震野，唤出 {count} 道援影！',
           victoryFlog: '【{name}】倒下！{summary}',
           victoryLog: '击倒【{name}】',
           defeatFlog: '你不敌【{name}】',
@@ -197,6 +198,11 @@ describe('#30 · 召唤物壳呈现', () => {
       ui.render();
     }
     expect(seen.some((e) => e.type === 'boss:summon')).toBe(true);
+    // #47 D5 冒烟钉：boss:summon 叙事行入战斗日志（events.bossSummon 模板 +
+    // {enemy}/{count} 填槽）；#34 重写 handler 表时不容许退化。
+    const flogText = root.querySelector('#flog')?.textContent ?? '';
+    expect(flogText).toContain('怒啸震野');
+    expect(flogText).toContain('唤出 1 道援影');
     // 召唤物行：e2 缩影（无 mult = 投影原值 hp 24），集火徽标随首槽渲染。
     expect(root.querySelectorAll('.minion-row')).toHaveLength(1);
     expect(root.querySelector('.minion-row.focus')).not.toBeNull();

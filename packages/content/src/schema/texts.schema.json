@@ -196,7 +196,7 @@
             "craftFail", "craftHalt",
             "rebirthToast", "rebirthLog", "talentBuyToast", "talentBuyLog",
             "dungeonEnter", "dungeonFloor", "dungeonDaoYun", "dungeonClear", "dungeonLeave",
-            "bossPhase",
+            "bossPhase", "bossSummon",
             "achievementToast", "achievementLog",
             "gearSmelt", "gearReforge"
           ],
@@ -243,6 +243,7 @@
             "dungeonClear": { "$ref": "#/definitions/template", "description": "通关浮提示（#7，dungeon:clear 事件）；槽位 {name}/{floors}" },
             "dungeonLeave": { "$ref": "#/definitions/template", "description": "离境修行录行（#7，dungeon:leave 事件）；槽位 {name}/{floor}/{best}" },
             "bossPhase": { "$ref": "#/definitions/template", "description": "Boss 阶段转场修行录行（#8，boss:phase 事件）；槽位 {name}/{phase}" },
+            "bossSummon": { "$ref": "#/definitions/template", "description": "Boss 召唤入场战斗日志行（#30 事件缝 #47，boss:summon 事件）；槽位 {enemy}/{count}" },
             "achievementToast": { "$ref": "#/definitions/template", "description": "成就达成浮提示（#9，achievement:unlock 事件）；槽位 {name}" },
             "achievementLog": { "$ref": "#/definitions/template", "description": "成就达成修行录行（#9）；槽位 {name}" },
             "gearSmelt": { "$ref": "#/definitions/template", "description": "熔炼修行录行（#14，gear:smelt 事件）；槽位 {name}/{shard}/{count}（shard = 器屑物品展示名）" },

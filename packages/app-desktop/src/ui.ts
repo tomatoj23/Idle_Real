@@ -299,9 +299,11 @@ export function buildUi(
   }
 
   events.subscribe((event) => {
-    const data = event.data ?? {};
+    // #47 判别联合：case 内 event.data 自动窄化为该事件的载荷类型
+    //（字段名拼错 = 编译错）；各 case 自取 data，壳层 handler 表结构不动。
     switch (event.type) {
-      case 'loot':
+      case 'loot': {
+        const data = event.data;
         if (data.source === 'gear') {
           flog(T('events.lootGear', { name: String(data.itemName ?? '') }), 't-gold');
           log(T('events.lootGearLog', { name: String(data.itemName ?? '') }), 't-gold');
@@ -321,14 +323,20 @@ export function buildUi(
           }
         }
         break;
-      case 'attack':
+      }
+      case 'attack': {
         // 战斗叙事：完整文案入战斗日志（伤害已嵌入 {d} 槽，非干瘪直出）
+        const data = event.data;
         flog(String(data.text ?? ''), data.side === 'player' ? (data.crit ? 't-gold' : 't-jade') : 't-red');
         break;
-      case 'combat-note':
+      }
+      case 'combat-note': {
+        const data = event.data;
         flog(String(data.text ?? ''), 't-sys');
         break;
+      }
       case 'victory': {
+        const data = event.data;
         const compare = data.compare ? T('common.compareWrap', { compare: String(data.compare) }) : '';
         // 战利品段（#62 保真收口，旧版"得灵石 X，缴获…"回迁战斗日志）：
         // 材料 + 器胚/异宝（gearDropName）并列；空缴获回落"无所获"占位。
@@ -350,11 +358,14 @@ export function buildUi(
         log(T('events.victoryLog', victoryVars), 't-gold');
         break;
       }
-      case 'defeat':
+      case 'defeat': {
+        const data = event.data;
         flog(T('events.defeatFlog', { name: String(data.enemyName ?? '') }), 't-red');
         toast(T('events.defeatToast'), 'red');
         break;
-      case 'consumable:eat':
+      }
+      case 'consumable:eat': {
+        const data = event.data;
         if (data.kind === 'heal') {
           flog(T('events.eatHeal', { name: String(data.itemName ?? ''), healed: Number(data.healed ?? 0) }), 't-sys');
         } else {
@@ -362,15 +373,21 @@ export function buildUi(
           log(T('events.eatBuffLog', { name: String(data.itemName ?? ''), minutes: Number(data.minutes ?? 0) }), 't-jade');
         }
         break;
-      case 'equip:wear':
+      }
+      case 'equip:wear': {
+        const data = event.data;
         toast(T('events.equipWearToast', { name: String(data.name ?? '') }));
         log(T('events.equipWearLog', { name: String(data.name ?? '') }), 't-jade');
         break;
-      case 'equip:remove':
+      }
+      case 'equip:remove': {
+        const data = event.data;
         log(T('events.equipRemoveLog', { name: String(data.name ?? '') }));
         break;
-      case 'gear:smelt':
+      }
+      case 'gear:smelt': {
         // 熔炼（#14）：{shard} 槽 = 器屑物品展示名（content 数据直出）。
+        const data = event.data;
         log(
           T('events.gearSmelt', {
             name: String(data.name ?? ''),
@@ -380,34 +397,52 @@ export function buildUi(
           't-jade',
         );
         break;
-      case 'gear:reforge':
+      }
+      case 'gear:reforge': {
+        const data = event.data;
         log(T('events.gearReforge', { name: String(data.name ?? ''), tier: Number(data.tier ?? 0) }), 't-jade');
         break;
-      case 'exp':
+      }
+      case 'exp': {
         // 引擎 exp 事件的数值字段是 amount（grantExp 载荷），非 exp。
+        const data = event.data;
         if (data.skillId === combatSkillId) flog(T('events.expCombat', { amount: Number(data.amount ?? 0) }), 't-sys');
         break;
-      case 'levelup':
+      }
+      case 'levelup': {
+        const data = event.data;
         toast(T('events.levelupToast', { name: String(data.skillName ?? ''), level: Number(data.level ?? 0) }));
         log(T('events.levelupLog', { name: String(data.skillName ?? ''), level: Number(data.level ?? 0) }), 't-gold');
         break;
-      case 'sell':
+      }
+      case 'sell': {
+        const data = event.data;
         log(T('events.sellLog', { name: String(data.itemName ?? ''), gained: Number(data.gained ?? 0) }));
         break;
-      case 'buy':
+      }
+      case 'buy': {
+        const data = event.data;
         log(T('events.buyLog', { name: String(data.itemName ?? ''), count: Number(data.count ?? 0), cost: Number(data.cost ?? 0) }));
         break;
-      case 'reject':
+      }
+      case 'reject': {
+        const data = event.data;
         toast(String(data.message ?? T('events.rejectFallback')), 'red');
         break;
-      case 'craft-fail':
+      }
+      case 'craft-fail': {
+        const data = event.data;
         log(T('events.craftFail', { name: String(data.recipeName ?? ''), exp: Number(data.exp ?? 0) }), 't-red');
         break;
-      case 'craft-halt':
+      }
+      case 'craft-halt': {
+        const data = event.data;
         toast(T('events.craftHalt', { name: String(data.recipeName ?? '') }), 'red');
         log(T('events.craftHalt', { name: String(data.recipeName ?? '') }), 't-red');
         break;
-      case 'rebirth':
+      }
+      case 'rebirth': {
+        const data = event.data;
         toast(T('events.rebirthToast', { daoYun: Number(data.daoYun ?? 0) }));
         log(
           T('events.rebirthLog', {
@@ -418,20 +453,26 @@ export function buildUi(
           't-gold',
         );
         break;
-      case 'talent:buy':
+      }
+      case 'talent:buy': {
+        const data = event.data;
         toast(T('events.talentBuyToast', { name: String(data.name ?? ''), cost: Number(data.cost ?? 0) }));
         log(T('events.talentBuyLog', { name: String(data.name ?? ''), daoYun: Number(data.daoYun ?? 0) }), 't-jade');
         break;
-      case 'dungeon:enter':
+      }
+      case 'dungeon:enter': {
+        const data = event.data;
         toast(T('events.dungeonEnter', {
           name: String(data.dungeonName ?? ''),
           floor: Number(data.floor ?? 0),
           floors: Number(data.floors ?? 0),
         }));
         break;
+      }
       case 'dungeon:floor': {
         // 层奖励行：{items} 槽由壳按 nameOf + itemListSep 拼装（offlineLog 同律）；
         // 道韵后缀（events.dungeonDaoYun）仅在实际入账时拼接。
+        const data = event.data;
         const items = Object.entries((data.items ?? {}) as Record<string, number>)
           .map(([id, n]) => `${nameOf(id)}×${n}`)
           .join(T('common.itemListSep'));
@@ -448,10 +489,13 @@ export function buildUi(
         );
         break;
       }
-      case 'dungeon:clear':
+      case 'dungeon:clear': {
+        const data = event.data;
         toast(T('events.dungeonClear', { name: String(data.dungeonName ?? ''), floors: Number(data.floors ?? 0) }));
         break;
-      case 'dungeon:leave':
+      }
+      case 'dungeon:leave': {
+        const data = event.data;
         log(
           T('events.dungeonLeave', {
             name: String(data.dungeonName ?? ''),
@@ -461,30 +505,42 @@ export function buildUi(
           't-sys',
         );
         break;
-      case 'boss:phase':
+      }
+      case 'boss:summon': {
+        // Boss 召唤入场（#47 D2 缺口事件）：战斗日志一行叙事；呈现细节归 #34。
+        const data = event.data;
+        flog(T('events.bossSummon', { enemy: data.enemyName, count: data.count }), 't-red');
+        break;
+      }
+      case 'boss:phase': {
         // Boss 阶段转场（#8）：{enemy} 敌名 / {name} 阶段名 / {phase} 阶段序号。
+        const data = event.data;
         toast(
           T('events.bossPhase', {
-            enemy: String(data.enemyName ?? ''),
-            name: String(data.name ?? ''),
-            phase: Number(data.phase ?? 0),
+            enemy: data.enemyName,
+            name: data.name,
+            phase: data.phase,
           }),
         );
         log(
           T('events.bossPhase', {
-            enemy: String(data.enemyName ?? ''),
-            name: String(data.name ?? ''),
-            phase: Number(data.phase ?? 0),
+            enemy: data.enemyName,
+            name: data.name,
+            phase: data.phase,
           }),
           't-red',
         );
         break;
-      case 'achievement:unlock':
+      }
+      case 'achievement:unlock': {
         // 成就达成（#9）：浮提示 + 修行录行；奖励已在引擎入账，页面卡片承载展示。
-        toast(T('events.achievementToast', { name: String(data.name ?? '') }));
-        log(T('events.achievementLog', { name: String(data.name ?? '') }), 't-gold');
+        const data = event.data;
+        toast(T('events.achievementToast', { name: data.name }));
+        log(T('events.achievementLog', { name: data.name }), 't-gold');
         break;
+      }
       case 'offline-settled': {
+        const data = event.data;
         const seconds = Math.max(0, Math.floor(Number(data.seconds) || 0));
         // 离线上限钳制时引擎双报（awaySeconds=真实离开 / seconds=实际结算）：
         // 切 offlineCapped* 模板区分展示，防结算时长冒充离开时长（挂机 20h
@@ -534,6 +590,21 @@ export function buildUi(
             't-gold',
           );
         }
+        break;
+      }
+      case 'activity-start': // 活动启停/心跳/账本无即时呈现（#47 D2 缺口事件显式 no-op；
+      case 'activity-complete': // 活动条/修行录呈现归 #34/#33 的 handler 表重写）
+      case 'activity-stop':
+      case 'tick':
+      case 'ledger':
+      case 'visit:begin': // 访问段信号（#39）：壳层派发→引擎纯转发回环，段落账归 #33
+      case 'visit:end':
+        break;
+      default: {
+        // 穷尽断言（#47 D2）：引擎新增事件类型而壳层漏接 = never 赋值编译错
+        //（删任一 case 同理）。运行时兜底不可达，仅防御性 warn。
+        const unhandled: never = event;
+        void unhandled;
         break;
       }
     }

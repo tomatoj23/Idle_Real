@@ -581,6 +581,8 @@ export interface ShellEvents {
   readonly dungeonLeave: string;
   /** Boss 阶段转场修行录行（#8，boss:phase 事件；槽位 {name}/{phase}）。 */
   readonly bossPhase: string;
+  /** Boss 召唤入场战斗日志行（#30 事件缝 #47；槽位 {enemy}/{count}）。 */
+  readonly bossSummon: string;
   /** 成就达成浮提示（#9，achievement:unlock 事件；槽位 {name}）。 */
   readonly achievementToast: string;
   /** 成就达成修行录行（#9；槽位 {name}）。 */

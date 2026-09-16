@@ -60,6 +60,7 @@ import type {
   Clock,
   GameAction,
   GameContent,
+  LootEventSource,
   PlayerStatsView,
   SaveData,
 } from './types.js';
@@ -640,7 +641,7 @@ export function createGame(options: CreateGameOptions): Game {
     });
   }
 
-  function emitLoot(item: string, count: number, source: string): void {
+  function emitLoot(item: string, count: number, source: LootEventSource): void {
     const def = findItem(content, item);
     events.emit({
       type: 'loot',
@@ -1610,7 +1611,12 @@ export function createGame(options: CreateGameOptions): Game {
             reject(action.type, 'bad-payload');
             return;
           }
-          events.emit({ type: action.type, time, data: { page } });
+          // 判别联合要求字面量 type（#47）：case 标签只容纳这两个动作，分支等价转发。
+          if (action.type === 'visit:begin') {
+            events.emit({ type: 'visit:begin', time, data: { page } });
+          } else {
+            events.emit({ type: 'visit:end', time, data: { page } });
+          }
           return;
         }
 

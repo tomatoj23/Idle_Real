@@ -55,7 +55,12 @@ import {
   type SkillView,
 } from './contentView.js';
 import type { CombatState, CombatSummonState, DungeonState } from './state.js';
-import type { CombatMinionProjection, GameContent, GameEvent } from './types.js';
+import type {
+  CombatMinionProjection,
+  GameContent,
+  GameEvent,
+  LootEventSource,
+} from './types.js';
 import type { LedgerSource } from './ledger.js';
 
 /**
@@ -274,7 +279,7 @@ export function createCombatRun(deps: CombatRunDeps): CombatRun {
     gearName(content, findItem(content, gear.itemId)?.name ?? gear.itemId, gear.rarity);
 
   /** 掉落 loot 事件（与 game.ts 旧 emitLoot 同形载荷；物品名缺省回显键，#019）。 */
-  function emitLoot(item: string, count: number, source: string): void {
+  function emitLoot(item: string, count: number, source: LootEventSource): void {
     const def = findItem(content, item);
     emit({
       type: 'loot',

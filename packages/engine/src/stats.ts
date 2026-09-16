@@ -67,13 +67,13 @@ function bumpMin(stats: StatSnapshot, key: StatKey, value: number): void {
 /**
  * 单事件 → 统计累积（纯过程，就地改写 snapshot）。
  * 未登记的事件类型零扰动（成就判定之外的引擎事件自由演进）。
+ * #47 判别联合：case 内 event.data 自动窄化（字段名拼写错 = 编译错）。
  */
 export function applyStatsEvent(stats: StatSnapshot, event: GameEvent): void {
-  const data = event.data ?? {};
   switch (event.type) {
     case 'victory': {
       bump(stats, 'kills', 1);
-      const rounds = asCount(data.rounds);
+      const rounds = asCount(event.data.rounds);
       if (rounds !== undefined) bumpMin(stats, 'fastestKill', rounds); // min 累积：最快击杀
       break;
     }
@@ -88,25 +88,25 @@ export function applyStatsEvent(stats: StatSnapshot, event: GameEvent): void {
       break;
     case 'offline-settled': {
       // 在线/离线语义对称（#6 先例）：离线轮数并入 cycles。
-      const cycles = asCount(data.cycles);
+      const cycles = asCount(event.data.cycles);
       if (cycles !== undefined) bump(stats, 'cycles', Math.floor(cycles));
       break;
     }
     case 'attack': {
-      if (data.side !== 'player') break;
-      const dmg = asCount(data.dmg);
+      if (event.data.side !== 'player') break;
+      const dmg = asCount(event.data.dmg);
       if (dmg !== undefined) bumpMax(stats, 'maxHit', dmg);
       break;
     }
     case 'dungeon:enter':
     case 'dungeon:floor': {
-      const floor = asCount(data.floor);
+      const floor = asCount(event.data.floor);
       if (floor !== undefined) bumpMax(stats, 'dungeonFloorBest', floor);
       break;
     }
     case 'dungeon:leave': {
       // leave 载荷 best = max(记录, 本次到达层)——离境结算一并覆盖。
-      const best = asCount(data.best) ?? asCount(data.floor);
+      const best = asCount(event.data.best) ?? asCount(event.data.floor);
       if (best !== undefined) bumpMax(stats, 'dungeonFloorBest', best);
       break;
     }

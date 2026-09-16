@@ -7,6 +7,8 @@
 
 import type { EnemyView } from './contentView.js';
 import type { CombatSummonState } from './state.js';
+import type { DamageTier } from './combat.js';
+import type { LedgerData } from './ledger.js';
 
 /** 召唤物投影行（#40 D4 纯数据）：槽位态（集火序）+ 生效视图，壳层直读零组合。 */
 export interface CombatMinionProjection {
@@ -26,12 +28,455 @@ export interface GameAction {
   readonly payload?: unknown;
 }
 
-/** 引擎产出的领域事件。 */
-export interface GameEvent {
-  readonly type: string;
-  /** 事件发生的游戏内时间（自开局累计，毫秒）。 */
+/* ---------- 引擎事件缝（#47 判别联合）：每个 type 携带自己的载荷类型 ---------- */
+
+/**
+ * 引擎产出的领域事件。运行时对象不落盘（零存档形状影响）；type 字符串
+ * 运行时不变（既有事件流测试/壳层 handler 表零语义改动）。载荷全量类型化：
+ * emit 点载荷键拼错 = 编译错；壳层 switch 内 event.data 按类型自动窄化。
+ */
+export type GameEvent =
+  | TickEvent
+  | LedgerEvent
+  | AttackEvent
+  | CombatNoteEvent
+  | VictoryEvent
+  | DefeatEvent
+  | BossPhaseEvent
+  | BossSummonEvent
+  | LootEvent
+  | ExpEvent
+  | LevelupEvent
+  | RejectEvent
+  | ActivityStartEvent
+  | ActivityStopEvent
+  | ActivityCompleteEvent
+  | CraftFailEvent
+  | CraftHaltEvent
+  | SellEvent
+  | BuyEvent
+  | ConsumableEatEvent
+  | EquipWearEvent
+  | EquipRemoveEvent
+  | GearSmeltEvent
+  | GearReforgeEvent
+  | RebirthEvent
+  | TalentBuyEvent
+  | AchievementUnlockEvent
+  | OfflineSettledEvent
+  | DungeonEnterEvent
+  | DungeonFloorEvent
+  | DungeonClearEvent
+  | DungeonLeaveEvent
+  | VisitBeginEvent
+  | VisitEndEvent;
+
+/** 事件公共底座：发生时刻（游戏内时间，自开局累计毫秒）。 */
+interface GameEventBase {
   readonly time: number;
-  readonly data?: Readonly<Record<string, unknown>>;
+}
+
+export interface TickEvent extends GameEventBase {
+  readonly type: 'tick';
+  readonly data: { readonly dt: number };
+}
+
+/** 入账咽喉事件（#39）：载荷协议面在 ledger.ts（D8）。 */
+export interface LedgerEvent extends GameEventBase {
+  readonly type: 'ledger';
+  readonly data: LedgerData;
+}
+
+/** 掉落播报来源闭集：采集产出 / 副产出 / 炼制产出 / 战斗材料 / 异宝器胚。 */
+export type LootEventSource = 'activity' | 'byproduct' | 'craft' | 'drop' | 'gear';
+
+export interface LootEvent extends GameEventBase {
+  readonly type: 'loot';
+  readonly data: {
+    readonly item: string;
+    readonly itemName: string;
+    readonly count: number;
+    readonly source: LootEventSource;
+    /** 装备实例产出（craft/gear 播报）携带。 */
+    readonly rarity?: string;
+    readonly uid?: number;
+  };
+}
+
+/** 单次攻击播报：玩家侧带暴击标记，敌方/召唤物侧无。 */
+export type AttackEvent = PlayerAttackEvent | EnemyAttackEvent;
+
+export interface PlayerAttackEvent extends GameEventBase {
+  readonly type: 'attack';
+  readonly data: {
+    readonly side: 'player';
+    readonly enemyId: string;
+    readonly enemyName: string;
+    /** 完整战斗文案（伤害已嵌入 {d} 槽，壳层直出）。 */
+    readonly text: string;
+    readonly dmg: number;
+    readonly crit: boolean;
+    readonly tier: DamageTier;
+    /** 攻方系别（无武器/未声明 = 凡击，缺省）。 */
+    readonly element?: string;
+  };
+}
+
+export interface EnemyAttackEvent extends GameEventBase {
+  readonly type: 'attack';
+  readonly data: {
+    readonly side: 'enemy';
+    readonly enemyId: string;
+    readonly enemyName: string;
+    readonly text: string;
+    readonly dmg: number;
+    readonly tier: DamageTier;
+    readonly element?: string;
+  };
+}
+
+export interface CombatNoteEvent extends GameEventBase {
+  readonly type: 'combat-note';
+  readonly data: {
+    readonly text: string;
+    /** 战团归属（开战/撤退/阶段叙事带；系统注记缺省）。 */
+    readonly enemyId?: string;
+    /** 注记类别（静默服丹 = 'consumable'；呈现方可据此分色）。 */
+    readonly kind?: 'consumable';
+  };
+}
+
+/** 同对手上一战对照记录（victory.prevEncounter，encounter 表同形）。 */
+export interface EncounterRecord {
+  readonly rounds: number;
+  readonly won: boolean;
+  readonly at: number;
+}
+
+export interface VictoryEvent extends GameEventBase {
+  readonly type: 'victory';
+  readonly data: {
+    readonly enemyId: string;
+    readonly enemyName: string;
+    readonly gold: number;
+    readonly rounds: number;
+    /** 斗法修为实发值（xpMult 后，与账本同源）。 */
+    readonly exp: number;
+    readonly summary: string;
+    readonly drops: readonly string[];
+    /** 异宝器胚展示名（「档名·物品名」，实际入袋才有）。 */
+    readonly gearDropName?: string;
+    readonly prevEncounter?: EncounterRecord;
+    /** 与上一战对照语（无对照记录 = 缺省）。 */
+    readonly compare?: string;
+  };
+}
+
+export interface DefeatEvent extends GameEventBase {
+  readonly type: 'defeat';
+  readonly data: { readonly enemyId: string; readonly enemyName: string };
+}
+
+export interface BossPhaseEvent extends GameEventBase {
+  readonly type: 'boss:phase';
+  readonly data: {
+    readonly enemyId: string;
+    readonly enemyName: string;
+    /** 阶段序号（1 起，单击跨多阈值逐级补发）。 */
+    readonly phase: number;
+    /** 阶段名（content 数据直出；未声明 = 空串）。 */
+    readonly name: string;
+  };
+}
+
+export interface BossSummonEvent extends GameEventBase {
+  readonly type: 'boss:summon';
+  readonly data: {
+    readonly enemyId: string;
+    readonly enemyName: string;
+    readonly phase: number;
+    /** 实际入场召唤槽数（池全缺失 = 不播报）。 */
+    readonly count: number;
+  };
+}
+
+export interface ExpEvent extends GameEventBase {
+  readonly type: 'exp';
+  readonly data: {
+    readonly skillId: string;
+    readonly skillName: string;
+    /** 实发值（xpMult 后）。 */
+    readonly amount: number;
+  };
+}
+
+export interface LevelupEvent extends GameEventBase {
+  readonly type: 'levelup';
+  readonly data: {
+    readonly skillId: string;
+    readonly skillName: string;
+    readonly level: number;
+  };
+}
+
+export interface RejectEvent extends GameEventBase {
+  readonly type: 'reject';
+  readonly data: {
+    readonly action: string;
+    readonly reason: string;
+    /** 展示文案（texts.reject 解析；缺包回显 {action}/{reason}）。 */
+    readonly message: string;
+  };
+}
+
+export interface ActivityStartEvent extends GameEventBase {
+  readonly type: 'activity-start';
+  readonly data: {
+    readonly skillId: string;
+    readonly skillName: string;
+    /** 动作下标（craft 类 = recipes 下标）。 */
+    readonly index: number;
+    readonly activityName: string;
+  };
+}
+
+export interface ActivityStopEvent extends GameEventBase {
+  readonly type: 'activity-stop';
+  readonly data: {
+    readonly skillId: string;
+    /** 活动名随档保存；恢复侧查活动定义失败时缺省。 */
+    readonly activityName?: string;
+  };
+}
+
+export interface ActivityCompleteEvent extends GameEventBase {
+  readonly type: 'activity-complete';
+  readonly data: {
+    readonly skillId: string;
+    readonly skillName: string;
+    readonly activityName: string;
+  };
+}
+
+export interface CraftFailEvent extends GameEventBase {
+  readonly type: 'craft-fail';
+  readonly data: {
+    readonly skillId: string;
+    readonly skillName: string;
+    readonly recipeName: string;
+    /** 失败返还修为（round(exp × failRefund)）。 */
+    readonly exp: number;
+  };
+}
+
+export interface CraftHaltEvent extends GameEventBase {
+  readonly type: 'craft-halt';
+  readonly data: {
+    readonly skillId: string;
+    readonly skillName: string;
+    readonly recipeName: string;
+  };
+}
+
+export interface SellEvent extends GameEventBase {
+  readonly type: 'sell';
+  readonly data: {
+    readonly item: string;
+    readonly itemName: string;
+    readonly count: number;
+    readonly gained: number;
+    readonly gold: number;
+  };
+}
+
+export interface BuyEvent extends GameEventBase {
+  readonly type: 'buy';
+  readonly data: {
+    readonly item: string;
+    readonly itemName: string;
+    readonly count: number;
+    readonly cost: number;
+    readonly gold: number;
+  };
+}
+
+/** 服用消耗品：即时恢复 / 持续增益两形（kind 判别）。 */
+export type ConsumableEatEvent =
+  | (GameEventBase & {
+      readonly type: 'consumable:eat';
+      readonly data: {
+        readonly item: string;
+        readonly itemName: string;
+        readonly kind: 'heal';
+        readonly healed: number;
+      };
+    })
+  | (GameEventBase & {
+      readonly type: 'consumable:eat';
+      readonly data: {
+        readonly item: string;
+        readonly itemName: string;
+        readonly kind: 'buff';
+        readonly minutes: number;
+      };
+    });
+
+export interface EquipWearEvent extends GameEventBase {
+  readonly type: 'equip:wear';
+  readonly data: {
+    readonly uid: number;
+    readonly slot: string;
+    /** 「档名·物品名」展示名。 */
+    readonly name: string;
+  };
+}
+
+export interface EquipRemoveEvent extends GameEventBase {
+  readonly type: 'equip:remove';
+  readonly data: {
+    readonly slot: string;
+    readonly uid: number;
+    /** 装备实例已不在囊中（防御路径）= 缺省。 */
+    readonly name?: string;
+  };
+}
+
+export interface GearSmeltEvent extends GameEventBase {
+  readonly type: 'gear:smelt';
+  readonly data: {
+    readonly uid: number;
+    /** 器屑物品 id（壳层经 items 表投影展示名）。 */
+    readonly item: string;
+    readonly shards: number;
+    /** 「档名·物品名」展示名。 */
+    readonly name: string;
+  };
+}
+
+export interface GearReforgeEvent extends GameEventBase {
+  readonly type: 'gear:reforge';
+  readonly data: {
+    readonly uid: number;
+    readonly index: number;
+    /** 重随后的纹阶（T1~T3，天花板由器胚 tierRange 数据锁死）。 */
+    readonly tier: number;
+    readonly inscriptionId: string;
+    readonly name: string;
+  };
+}
+
+export interface RebirthEvent extends GameEventBase {
+  readonly type: 'rebirth';
+  readonly data: {
+    readonly daoYun: number;
+    readonly totalXp: number;
+    readonly rebirths: number;
+  };
+}
+
+export interface TalentBuyEvent extends GameEventBase {
+  readonly type: 'talent:buy';
+  readonly data: {
+    readonly nodeId: string;
+    readonly name: string;
+    readonly cost: number;
+    /** 购买后道韵余额。 */
+    readonly daoYun: number;
+  };
+}
+
+export interface AchievementUnlockEvent extends GameEventBase {
+  readonly type: 'achievement:unlock';
+  readonly data: {
+    readonly id: string;
+    readonly name: string;
+    /** 奖励已在引擎入账（物品静默入袋不重发 loot）；无该项奖励 = 缺省。 */
+    readonly gold?: number;
+    readonly daoYun?: number;
+    readonly items?: Readonly<Record<string, number>>;
+  };
+}
+
+/** 离线升级行（offline-settled.levels）。 */
+export interface OfflineLevelUp {
+  readonly skillId: string;
+  readonly skillName: string;
+  readonly level: number;
+}
+
+export interface OfflineSettledEvent extends GameEventBase {
+  readonly type: 'offline-settled';
+  readonly data: {
+    /** 实际结算时长（秒）。 */
+    readonly seconds: number;
+    /** 真实离开时长（秒；上限钳制时 ≠ seconds）。 */
+    readonly awaySeconds: number;
+    readonly capped: boolean;
+    readonly skillId: string;
+    readonly skillName: string;
+    readonly activityName: string;
+    readonly cycles: number;
+    /** 修为实发值（离线/在线同源口径）。 */
+    readonly exp: number;
+    readonly items: Readonly<Record<string, number>>;
+    readonly levels: readonly OfflineLevelUp[];
+  };
+}
+
+/** 秘境入门事件（#7）：begin 时登记攻略 + 最高层后发射。 */
+export interface DungeonEnterEvent extends GameEventBase {
+  readonly type: 'dungeon:enter';
+  readonly data: {
+    readonly dungeonId: string;
+    readonly dungeonName: string;
+    readonly floor: number;
+    readonly floors: number;
+  };
+}
+
+/** 层奖励事件（#52 层奖励入账单一门尾）：与实入账同源（折叠/拒收不计）。 */
+export interface DungeonFloorEvent extends GameEventBase {
+  readonly type: 'dungeon:floor';
+  readonly data: {
+    readonly dungeonId: string;
+    readonly dungeonName: string;
+    readonly floor: number;
+    readonly floors: number;
+    readonly gold: number;
+    readonly daoYun: number;
+    readonly items: Readonly<Record<string, number>>;
+  };
+}
+
+export interface DungeonClearEvent extends GameEventBase {
+  readonly type: 'dungeon:clear';
+  readonly data: {
+    readonly dungeonId: string;
+    readonly dungeonName: string;
+    readonly floors: number;
+  };
+}
+
+export interface DungeonLeaveEvent extends GameEventBase {
+  readonly type: 'dungeon:leave';
+  readonly data: {
+    readonly dungeonId: string;
+    readonly dungeonName: string;
+    readonly floor: number;
+    /** max(历史最高, 本次到达层)——离境结算一并覆盖。 */
+    readonly best: number;
+  };
+}
+
+/** 访问段信号（#39 D9）：壳层派发、引擎纯转发（段状态归 #33）。 */
+export interface VisitBeginEvent extends GameEventBase {
+  readonly type: 'visit:begin';
+  readonly data: { readonly page: string };
+}
+
+export interface VisitEndEvent extends GameEventBase {
+  readonly type: 'visit:end';
+  readonly data: { readonly page: string };
 }
 
 /** 玩家属性面板（#4）：经修饰符管线聚合后的快照读数。 */

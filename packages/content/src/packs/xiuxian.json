@@ -655,6 +655,7 @@
         "dungeonClear": "【{name}】通贯 {floors} 层，满载而归！",
         "dungeonLeave": "退出【{name}】：止步第 {floor} 层，最深曾至第 {best} 层",
         "bossPhase": "【{enemy}】显露「{name}」之相！（阶段 {phase}）",
+        "bossSummon": "【{enemy}】怒啸震野，唤出 {count} 道援影！",
         "achievementToast": "成就达成【{name}】！",
         "achievementLog": "成就达成【{name}】",
         "gearSmelt": "熔炼【{name}】，得 {shard}×{count}",
