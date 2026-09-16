@@ -23,6 +23,13 @@ single-context 布局：根目录 `CONTEXT.md` + `docs/adr/`（按需懒创建�
 - 凡从 globalThis/window 解构原生方法（定时器/storage/console 等），必须 bind 宿主再存函数值，否则真机抛 Illegal invocation；happy-dom 不校验 this，测试全绿完全遮蔽（e93727e 教训）。
 - 真实浏览器首跑是必要验收步骤，UI 冒烟（vitest+happy-dom）不能替代。
 
+## 工具链校准（防训练数据滞后，ADR-018）
+
+- 动工具链/编译项/依赖用法前，先读 package.json 与 tsconfig 的**实际版本**，勿按训练数据旧知识建议（现役 TS 7 = Go 原生编译器：`baseUrl`、`moduleResolution: node10`、`import assert`、ts-node 均为硬错误或不存在）。
+- 新增依赖先查维护状态与 GA 时长，停更线不进 package.json；对齐策略（事件驱动+巡检，反对随时对齐）见 `docs/adr/0018-toolchain-alignment-policy.md`。
+- 查「最新版本」必须显式官方源 `npm view <pkg> … --registry=https://registry.npmjs.org`（本机默认 npmmirror 镜像，可能滞后）。
+- JSON Schema 为 draft-07 子集：校验器只认 `#/definitions/`（勿按 2020-12 习惯用 `$defs`）；扩关键字先加 `packages/content/src/schema/keywords.ts` 矩阵行。
+
 ## Git 钩子（交付门禁）
 
 - `npm run setup` 启用 `.githooks/`（core.hooksPath 不入库，换克隆后须重跑一次）。pre-push = 全量 check + test（vmThreads）；push 被钩子拦下时**修复后再推，禁 `--no-verify` 绕过**。

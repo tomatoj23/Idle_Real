@@ -54,7 +54,7 @@
 
 | # | 决策 | 理由 | 日期 |
 |---|---|---|---|
-| 001 | 桌面壳用 **Electron**（steamworks.js），Android 后续用 **Capacitor** 包同一套 web 代码 | steamworks.js 活跃成熟（已核实）；游戏逻辑是纯 web 代码零改动；Melvor 同款路线 | 2026-09-02 |
+| 001 | 桌面壳用 **Electron**（steamworks.js），Android 后续用 **Capacitor** 包同一套 web 代码 | steamworks.js 成熟但上游停更（0.4.0 后 2024-08 起无发版；2026-09 复核勘误，N-API prebuild 不受阻）；游戏逻辑是纯 web 代码零改动；Melvor 同款路线 | 2026-09-02 |
 | 002 | Steam 第一版只做 **成就 + 云存档** | 放置游戏刚需；排行榜/创意工坊延后，编辑器成熟后工坊联动 | 2026-09-02 |
 | 003 | **核心直接重写**，现有 data.js/game.js 仅作设计参考不作保留 | 用户决策；现版本按"可能有 bug"对待 | 2026-09-02 |
 | 004 | 数据格式 **content/*.json + schemas/*.json + 启动校验** | 编辑器表单可由 schema 生成；AI 生成内容可机器校验；SexyMUD 管线先例 | 2026-09-02 |
@@ -71,6 +71,7 @@
 | 015 | **内容工程纪律**：id 一经发布不可变；`prototypeKey`/`prototypeParent` 第一天预留（加载期展平继承、环检测双保险）；tags/flags 分工（归类批量捞 vs 裸布尔）；schema 变更三处同步（schemas/+引擎类型/字段约定文档） | 变体靠原型继承不靠笛卡尔积；事后补原型继承是灾难（SexyMUD ADR-0030） | 2026-09-02 |
 | 016 | **档位词表与文案归 content（隔离审计修复批 0，docs/audit/2026-09-03）**：①缺省分策——词表（稀有度/词条池）与文案 validate 强制恒在、引擎零默认（ADR-010 先例：校验恒在+机制兜底，兜底降级为非文案占位）；数值参数引擎内置基线+config 覆盖；②引擎 snapshot 暴露 locked，UI 零公式复算；③系统文案全归 content 包（texts 节 + combatText 扩节），引擎零中文字符串；④rarity def 加显式 bool 驱动 UI 特判；⑤gearDrops 稀有度权重随 #14；⑥verbStyle/EnemyKind 键域开放+存在性校验；⑦N2 修复并入批 1 | engine 持有词表/文案/参数违反铁律（审计 P0-1/P0-2/P0-3、N1-N4；SPEC:55/63）；修复路线审计 §八 批 0-4 | 2026-09-03 |
 | 017 | **项目转向：从开发游戏到开发放置游戏引擎框架**（细目 docs/adr/0017-engine-pivot.md）：第一期只做框架层（生成器后置）；第一阶段服务开发者用户；游戏本体继续狗粮；monorepo 不拆；验收=第二款（西方魔幻）只写内容包+壳跑通；content 包内分目录+default 缺省题材包地位取消；机制键改名 gp→gold/pill→consumable/fist→basic（scope 中性化后置；**#24 已落地，2026-09-06**，SAVE_KEY bump v3）；Element 键域开放（**#25 已落地，2026-09-06**，elements 节注册表+存在性校验）+CombatText 槽位审查不重构；UI 自写壳路线（engine 义务=清公式复算+外壳文案归 content） | 引擎机制核心已基本通用、修仙性沉淀可枚举，框架化边际成本低；editor 空壳使创作者路线后置；未发布=唯一免费改名窗口 | 2026-09-05 |
+| 018 | **工具链版本对齐策略**（细目 docs/adr/0018-toolchain-alignment-policy.md）：事件驱动 + 周期巡检，**反对「随时对齐」**——选型先查维护状态与 GA 时长；批收口/季度巡检 outdated+audit+Electron 支持窗口；critical/high 通报或滑出支持窗口即插队；非安全驱动的大版本等 GA 满 2–3 个月。当期=小步对齐（#64 happy-dom 20+Vite 8.3、#65 fuses、#66 tsc 覆盖测试），**Electron 38.8.6 暂持**（19 条 GHSA 风险有意识接受，复评=#67，不得无票延长）；Vitest 5 观望（#68） | 训练数据滞后使「最新」反而覆盖最差（V5 GA 13 天覆盖≈0）；坑在「新鲜时刻选中停更线」不在落后过程（证据 docs/research/version-drift-impact{,-round2}.md） | 2026-09-16 |
 
 ## 内容与引擎的边界（示例）
 
