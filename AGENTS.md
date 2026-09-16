@@ -32,4 +32,4 @@ single-context 布局：根目录 `CONTEXT.md` + `docs/adr/`（按需懒创建�
 
 ## Git 钩子（交付门禁）
 
-- `npm run setup` 启用 `.githooks/`（core.hooksPath 不入库，换克隆后须重跑一次）。pre-push = 全量 check + test（vmThreads）；push 被钩子拦下时**修复后再推，禁 `--no-verify` 绕过**。
+- `npm run setup` 启用 `.githooks/`（core.hooksPath 不入库，换克隆后须重跑一次）。pre-push = 全量 check + test（vitest 默认池，#72 已证伪旧 vmThreads 硬约束）；push 被钩子拦下时**修复后再推，禁 `--no-verify` 绕过**。
