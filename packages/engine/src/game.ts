@@ -85,7 +85,6 @@ import {
   createDungeonRun,
   dungeonGateOf,
   findDungeon,
-  type DungeonView,
 } from './dungeon.js';
 import { applyStatsEvent } from './stats.js';
 import { achievementConditionMet, achievementsOf } from './achievements.js';
