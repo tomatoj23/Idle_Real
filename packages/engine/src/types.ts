@@ -7,7 +7,7 @@
 
 import type { EnemyView } from './contentView.js';
 import type { CombatSummonState } from './state.js';
-import type { DamageTier } from './combat.js';
+import type { DamageTier, EncounterRecord } from './combat.js';
 import type { LedgerData } from './ledger.js';
 
 /** 召唤物投影行（#40 D4 纯数据）：槽位态（集火序）+ 生效视图，壳层直读零组合。 */
@@ -146,12 +146,7 @@ export interface CombatNoteEvent extends GameEventBase {
   };
 }
 
-/** 同对手上一战对照记录（victory.prevEncounter，encounter 表同形）。 */
-export interface EncounterRecord {
-  readonly rounds: number;
-  readonly won: boolean;
-  readonly at: number;
-}
+/** 同对手上一战对照记录（victory.prevEncounter）：复用 combat.ts 的 EncounterRecord（lastEncounter 值形状单一来源）。 */
 
 export interface VictoryEvent extends GameEventBase {
   readonly type: 'victory';
