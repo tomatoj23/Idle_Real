@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { validateContentPack } from '../src/index.js';
-import type { ContentError } from '../src/index.js';
+import type { ValidationResult } from '../src/index.js';
 import { shellFixture } from './fixtures.js';
 
 /**
@@ -150,7 +150,7 @@ function makeBasePack(): Record<string, any> {
 }
 
 function expectError(
-  result: { readonly ok: boolean; readonly errors?: readonly ContentError[] },
+  result: ValidationResult,
   path: string,
   keyword: string,
 ): void {

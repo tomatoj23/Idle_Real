@@ -66,7 +66,7 @@ const blank = (
  * 掉落管线测试包：单档位（weight 1，affix 可调）+ chance 1 的器胚池
  * （低层段 1-4 / 高层段 5-10），RNG 行为全确定。
  */
-function makeLoopPack(affix = 2, extra: Array<Record<string, unknown>> = []): GameContent {
+function makeLoopPack(affix = 2, extra: Array<Record<string, unknown>> = []) {
   return {
     ...makeCombatPack(),
     items: [
@@ -89,10 +89,10 @@ function makeLoopPack(affix = 2, extra: Array<Record<string, unknown>> = []): Ga
       slots: [{ id: 'weapon', name: '法器' }],
       gear: { shardItem: 'gear_shard', reforgeCost: 3, tagWeightPerMatch: 1 },
     },
-  } as GameContent;
+  };
 }
 
-const dropDef = (content: GameContent) => content.gearDrops[0]!;
+const dropDef = (content: ReturnType<typeof makeLoopPack>) => content.gearDrops[0]!;
 const blankIds = (gear: GearInstance) => gear.inscriptions?.map((i) => i.id) ?? [];
 
 /* ---------- tag 倒排索引（#14 基建） ---------- */
@@ -257,7 +257,7 @@ describe('#14 · makeInscribedGear 与 gearContributions', () => {
     const full = makeLoopPack(1);
     const gear = makeInscribedGear(full, 'blank_low', 1, () => 0.1, { rarity: 'only' });
     const slim = makeLoopPack(1).items.filter((it) => !String(it.id).startsWith('insc_o'));
-    (slim as { gearDrops: unknown }).gearDrops = (full as { gearDrops: unknown }).gearDrops;
+    (slim as unknown as { gearDrops: unknown }).gearDrops = full.gearDrops;
     const packWithout = { ...full, items: slim } as GameContent;
     expect(gearContributions(packWithout, gear, {}, '凡铁剑胚').some((c) => c.source.kind === 'inscription')).toBe(false);
   });
@@ -323,16 +323,16 @@ describe('#14 · gear:smelt 熔炼', () => {
     const wornGame = createGame({ content: pack, clock: new ManualClock(), save });
     wornGame.dispatch({ type: 'gear:smelt', payload: { uid: 1 } });
     const rejects = wornGame.events.drain().filter((e) => e.type === 'reject');
-    expect(rejects.some((e) => e.data?.reason === 'worn')).toBe(true);
+    expect(rejects.some((e) => e.type === 'reject' && e.data.reason === 'worn')).toBe(true);
 
     const bare = createGame({ content: pack, clock: new ManualClock() });
     bare.dispatch({ type: 'gear:smelt', payload: { uid: 42 } });
-    expect(bare.events.drain().some((e) => e.data?.reason === 'not-found')).toBe(true);
+    expect(bare.events.drain().some((e) => e.type === 'reject' && e.data.reason === 'not-found')).toBe(true);
 
     const noEconomy = { ...pack, config: { slots: [{ id: 'weapon', name: '法器' }] } } as GameContent;
     const frugal = createGame({ content: noEconomy, clock: new ManualClock(), save: saveWithGear([gear]) });
     frugal.dispatch({ type: 'gear:smelt', payload: { uid: 1 } });
-    expect(frugal.events.drain().some((e) => e.data?.reason === 'not-available')).toBe(true);
+    expect(frugal.events.drain().some((e) => e.type === 'reject' && e.data.reason === 'not-available')).toBe(true);
   });
 });
 
@@ -388,7 +388,7 @@ describe('#14 · gear:reforge 重铸铭纹', () => {
       save: saveWithGear([gear], { gear_shard: 2 }), // < reforgeCost 3
     });
     poor.dispatch({ type: 'gear:reforge', payload: { uid: 1, index: 0 } });
-    expect(poor.events.drain().some((e) => e.data?.reason === 'no-shard')).toBe(true);
+    expect(poor.events.drain().some((e) => e.type === 'reject' && e.data.reason === 'no-shard')).toBe(true);
 
     const rich = createGame({
       content: pack,
@@ -408,7 +408,7 @@ describe('#14 · gear:reforge 重铸铭纹', () => {
     (save.state as { equips: Record<string, number> }).equips = { weapon: 1 };
     const wornGame = createGame({ content: pack, clock: new ManualClock(), save });
     wornGame.dispatch({ type: 'gear:reforge', payload: { uid: 1, index: 0 } });
-    expect(wornGame.events.drain().some((e) => e.data?.reason === 'worn')).toBe(true);
+    expect(wornGame.events.drain().some((e) => e.type === 'reject' && e.data.reason === 'worn')).toBe(true);
   });
 });
 

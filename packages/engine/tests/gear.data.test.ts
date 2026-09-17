@@ -69,13 +69,16 @@ describe('#018 · rollRarity 按内容权重占比归一化掷档', () => {
     const rng = createRng(42);
     const counts: Record<string, number> = { rough: 0, polished: 0, refined: 0 };
     const N = 20_000;
-    for (let i = 0; i < N; i++) counts[rollRarity(pack, () => rng.next())] += 1;
-    expect(counts.rough / N).toBeGreaterThan(0.68);
-    expect(counts.rough / N).toBeLessThan(0.72);
-    expect(counts.polished / N).toBeGreaterThan(0.18);
-    expect(counts.polished / N).toBeLessThan(0.22);
-    expect(counts.refined / N).toBeGreaterThan(0.08);
-    expect(counts.refined / N).toBeLessThan(0.12);
+    for (let i = 0; i < N; i++) {
+      const rarity = rollRarity(pack, () => rng.next());
+      counts[rarity] = counts[rarity]! + 1;
+    }
+    expect(counts.rough! / N).toBeGreaterThan(0.68);
+    expect(counts.rough! / N).toBeLessThan(0.72);
+    expect(counts.polished! / N).toBeGreaterThan(0.18);
+    expect(counts.polished! / N).toBeLessThan(0.22);
+    expect(counts.refined! / N).toBeGreaterThan(0.08);
+    expect(counts.refined! / N).toBeLessThan(0.12);
   });
 
   it('空表 / 无正权重 → 空串（缺内容降级）', () => {

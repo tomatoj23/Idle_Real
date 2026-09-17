@@ -125,7 +125,7 @@ describe('#33 · 修行录页', () => {
     const { root, ui, game } = mount();
     root.querySelector<HTMLButtonElement>('.tab[data-tab="journal"]')!.click();
     ui.render();
-    const page = root.querySelector('#page-root')!;
+    const page = root.querySelector<HTMLElement>('#page-root')!;
     const list = root.querySelector<HTMLElement>('#jr-list')!;
     page.dataset.mark = 'page-kept'; // 页骨架标记
     list.dataset.mark = 'list-kept'; // 列表容器标记

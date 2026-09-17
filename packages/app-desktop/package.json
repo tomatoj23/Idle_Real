@@ -14,7 +14,7 @@
     "build": "tsc --noEmit && tsc --noEmit -p tsconfig.electron.json && vite build && tsc -p tsconfig.electron.json && node -e \"require('fs').copyFileSync('electron/preload.cjs','dist-electron/preload.cjs')\"",
     "preview": "vite preview",
     "dist": "electron-builder --win",
-    "check": "tsc --noEmit && tsc --noEmit -p tsconfig.electron.json",
+    "check": "tsc --noEmit && tsc --noEmit -p tsconfig.electron.json && tsc --noEmit -p tsconfig.tests.json",
     "test": "vitest run"
   },
   "dependencies": {},

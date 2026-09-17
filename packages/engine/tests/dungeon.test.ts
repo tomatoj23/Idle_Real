@@ -112,14 +112,15 @@ function strongSave(): SaveData {
   } as unknown as SaveData;
 }
 
+/** 分桶按 type 判别收窄（#47 判别联合），桶内直读载荷零再断言。 */
 interface Buckets {
-  enter: GameEvent[];
-  floor: GameEvent[];
-  clear: GameEvent[];
-  leave: GameEvent[];
-  victory: GameEvent[];
-  defeat: GameEvent[];
-  reject: GameEvent[];
+  enter: Extract<GameEvent, { type: 'dungeon:enter' }>[];
+  floor: Extract<GameEvent, { type: 'dungeon:floor' }>[];
+  clear: Extract<GameEvent, { type: 'dungeon:clear' }>[];
+  leave: Extract<GameEvent, { type: 'dungeon:leave' }>[];
+  victory: Extract<GameEvent, { type: 'victory' }>[];
+  defeat: Extract<GameEvent, { type: 'defeat' }>[];
+  reject: Extract<GameEvent, { type: 'reject' }>[];
 }
 
 const buckets = (): Buckets => ({
@@ -186,7 +187,7 @@ describe('#7 · AC1 假时钟推塔 10 层（事件序列/层奖励/通关）', 
     expect(st.gold).toBeGreaterThanOrEqual(150);
     expect(st.daoYun).toBe(5);
     expect(st.daoYunEarned).toBe(7);
-    expect(st.items.core1).toBeGreaterThanOrEqual(5);
+    expect((st.items as Record<string, number>).core1).toBeGreaterThanOrEqual(5);
     // 逐层战斗事件序列：每层恰一场胜利。
     expect(b.victory).toHaveLength(10);
     expect(b.defeat).toHaveLength(0);
@@ -198,7 +199,7 @@ describe('#7 · AC1 假时钟推塔 10 层（事件序列/层奖励/通关）', 
     game.dispatch({ type: 'dungeon:enter', payload: { dungeonId: 'crypt' } });
     drainInto(game, b);
     tickUntil(game, b, () => b.floor.length >= 2); // 1、2 层已通
-    tickUntil(game, b, () => game.snapshot().state.dungeon?.floor === 3); // 进入第 3 层
+    tickUntil(game, b, () => (game.snapshot().state.dungeon as { floor: number } | null)?.floor === 3); // 进入第 3 层
     game.dispatch({ type: 'dungeon:leave' });
     drainInto(game, b);
     expect(b.leave).toHaveLength(1);
@@ -250,7 +251,7 @@ describe('#7 · AC1 假时钟推塔 10 层（事件序列/层奖励/通关）', 
     game.dispatch({ type: 'dungeon:enter', payload: { dungeonId: 'crypt' } });
     drainInto(game, b);
     tickUntil(game, b, () => b.floor.length >= 1);
-    tickUntil(game, b, () => game.snapshot().state.dungeon?.floor === 2);
+    tickUntil(game, b, () => (game.snapshot().state.dungeon as { floor: number } | null)?.floor === 2);
     const resumed = createGame({
       content: makeDungeonPack(),
       clock: new ManualClock(),
@@ -293,7 +294,7 @@ describe('#7 · AC1 假时钟推塔 10 层（事件序列/层奖励/通关）', 
     game.dispatch({ type: 'dungeon:enter', payload: { dungeonId: 'crypt' } });
     drainInto(game, b);
     tickUntil(game, b, () => b.floor.length >= 1);
-    tickUntil(game, b, () => game.snapshot().state.dungeon?.floor === 2);
+    tickUntil(game, b, () => (game.snapshot().state.dungeon as { floor: number } | null)?.floor === 2);
     // 攻略战斗在身：兵解拒绝（与斗法同律），攻略态不被波及。
     game.dispatch({ type: 'rebirth:perform' }); // 总修为 20000 ≥ 门槛 5000
     drainInto(game, b);
@@ -435,7 +436,7 @@ describe('#7 · AC2 层表换包生效（引擎零改动验证）', () => {
     expect(b.floor[2]!.data?.items).toEqual({ core1: 2 });
     const st = game.snapshot().state;
     expect(st.dungeonBest).toEqual({ abyss: 3 });
-    expect(st.items.core1).toBeGreaterThanOrEqual(2); // e1 自带掉落为概率性额外进账
+    expect((st.items as Record<string, number>).core1).toBeGreaterThanOrEqual(2); // e1 自带掉落为概率性额外进账
   });
 });
 

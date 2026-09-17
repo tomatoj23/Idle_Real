@@ -81,8 +81,15 @@ function fightUntil(
   }
 }
 
-const unlocksOf = (events: GameEvent[], id: string): GameEvent[] =>
-  events.filter((event) => event.type === 'achievement:unlock' && event.data?.['id'] === id);
+/** 解锁分支收窄（#47 判别联合）：谓词保持原过滤语义，返回侧可直接读载荷。 */
+const unlocksOf = (
+  events: GameEvent[],
+  id: string,
+): Extract<GameEvent, { type: 'achievement:unlock' }>[] =>
+  events.filter(
+    (event): event is Extract<GameEvent, { type: 'achievement:unlock' }> =>
+      event.type === 'achievement:unlock' && event.data.id === id,
+  );
 
 describe('#9 · 统计聚合器：事件流累积', () => {
   it('击杀累积 kills、最快击杀取 min、最大伤害取 max（玩家侧）', () => {
@@ -202,7 +209,7 @@ describe('#9 · AC1：达成条件 → 解锁一次且仅一次', () => {
           reward: { gold: 100, items: [{ item: 'ghost_item', count: 3 }] },
         },
       ],
-    } as GameContent;
+    };
     const game = createGame({
       content: { ...pack, enemies: [...pack.enemies, EWEAK] } as GameContent,
       clock: new ManualClock(),
@@ -237,11 +244,11 @@ describe('#9 · AC2：成就表换包即换（引擎零改动）', () => {
     const packA = {
       ...makeCombatPack(),
       achievements: [{ id: 'a_pack', name: '甲包成就', condition: { stat: 'kills', target: 1 } }],
-    } as GameContent;
+    };
     const packB = {
       ...makeCombatPack(),
       achievements: [{ id: 'b_pack', name: '乙包成就', condition: { stat: 'cycles', target: 1 } }],
-    } as GameContent;
+    };
     expect(achievementsOf(packA).map((def) => def.id)).toEqual(['a_pack']);
     expect(achievementsOf(packB).map((def) => def.id)).toEqual(['b_pack']);
     expect(achievementsOf(makeCombatPack() as GameContent)).toEqual([]);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { validateContentPack } from '../src/index.js';
-import type { ContentError } from '../src/index.js';
+import type { ValidationResult } from '../src/index.js';
 import { loadXiuxianPack } from '../src/packs/xiuxian.js';
 import { loadFantasyPack } from '../src/packs/fantasy.js';
 import { minimalPack } from './fixtures.js';
@@ -22,7 +22,7 @@ const VALID = {
 };
 
 function expectError(
-  result: { readonly ok: boolean; readonly errors?: readonly ContentError[] },
+  result: ValidationResult,
   path: string,
   keyword: string,
 ): void {
@@ -52,16 +52,16 @@ describe('#9 · achievements schema 关卡', () => {
   });
 
   it('缺 id / name / condition 被拒（required）', () => {
-    const noId = [{ ...VALID }] as Record<string, unknown>;
-    delete noId[0]['id'];
+    const noId = [{ ...VALID }] as Array<Record<string, unknown>>;
+    delete noId[0]!['id'];
     expectError(validateContentPack(makePack(noId)), '/achievements/0/id', 'required');
 
-    const noName = [{ ...VALID }] as Record<string, unknown>;
-    delete noName[0]['name'];
+    const noName = [{ ...VALID }] as Array<Record<string, unknown>>;
+    delete noName[0]!['name'];
     expectError(validateContentPack(makePack(noName)), '/achievements/0/name', 'required');
 
-    const noCond = [{ ...VALID }] as Record<string, unknown>;
-    delete noCond[0]['condition'];
+    const noCond = [{ ...VALID }] as Array<Record<string, unknown>>;
+    delete noCond[0]!['condition'];
     expectError(validateContentPack(makePack(noCond)), '/achievements/0/condition', 'required');
   });
 
@@ -140,7 +140,7 @@ describe('#9 · achievements 语义关卡', () => {
     const pack = makePack([
       { ...VALID, reward: { items: [{ item: 'sword1', count: 1 }] } },
     ]) as Record<string, unknown>;
-    (pack['items'] as Array<{ id: string; type?: string }>).push({
+    (pack['items'] as Array<Record<string, unknown>>).push({
       id: 'sword1',
       name: '青锋剑',
       icon: '剑',

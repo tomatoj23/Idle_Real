@@ -165,7 +165,7 @@ describe('#020 · 装备词条机制参数（config.affix）', () => {
 
   it('缺省基线：标尺 max(hp÷5, crit×0.8, 兜底 3) = 8，±20% 波动', () => {
     // rng 0.5 → 乘数 0.8 + 0.5×0.4 = 1.0 → val = round(8×1) = 8
-    const gear = makeGear(gearPack, 'sword', { hp: 10, crit: 10 }, 1, () => 0.5, 'only');
+    const gear = makeGear(gearPack, 'sword', { hp: 10, crit: 10 }, 1, () => 0.5, { rarity: 'only' });
     expect(gear.affixes[0]?.val).toBe(8);
   });
 

@@ -6,9 +6,14 @@ import {
   talentGateOf,
   type GameContent,
   type GameEvent,
+  type GameState,
   type SaveData,
 } from '../src/index.js';
 import { makeCombatPack } from './fixtures.js';
+
+function stateOf(game: ReturnType<typeof createGame>): GameState {
+  return game.snapshot().state as unknown as GameState;
+}
 
 /**
  * #6 验收：转生系统（兵解重修）引擎面——
@@ -81,7 +86,7 @@ describe('#6 · AC1 兵解结算：重置归零 / 保留不变 / 道韵入账', 
     const rebirth = events.find((event) => event.type === 'rebirth');
     expect(rebirth?.data).toMatchObject({ daoYun: 5, totalXp: 5300, rebirths: 1 });
 
-    const st = game.snapshot().state;
+    const st = stateOf(game);
     // 重置集（content.rebirth.reset 声明的五键）。
     expect(st.gold).toBe(0);
     expect(st.items).toEqual({});
@@ -168,8 +173,8 @@ describe('#6 · AC2 天赋：攻击节点永久提升 + 推进速度模拟对比
     b.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
     b.tick(30000);
 
-    const axp = a.snapshot().state.skills.herb?.xp ?? 0;
-    const bxp = b.snapshot().state.skills.herb?.xp ?? 0;
+    const axp = stateOf(a).skills.herb?.xp ?? 0;
+    const bxp = stateOf(b).skills.herb?.xp ?? 0;
     expect(axp).toBe(60);
     expect(bxp).toBe(120); // exp 6 × gatherXp 2 = 12/轮，推进速度可感知
   });
@@ -195,8 +200,8 @@ describe('#6 · AC2 天赋：攻击节点永久提升 + 推进速度模拟对比
     b.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
     b.tick(60000); // 有效间隔 2000 → 30 轮
 
-    expect(a.snapshot().state.items.herb1).toBe(20);
-    expect(b.snapshot().state.items.herb1).toBe(30);
+    expect(stateOf(a).items.herb1).toBe(20);
+    expect(stateOf(b).items.herb1).toBe(30);
   });
 });
 
@@ -376,7 +381,7 @@ describe('#6 · 新 stat 消费点（round3 E3 注册表收口）', () => {
     const game = createGame({ content: pack, clock: new ManualClock(), save, seed: 7 });
     game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
     game.tick(3000); // 恰一轮：exp 6 × xpMult 2 = 12
-    expect(game.snapshot().state.skills.herb?.xp).toBe(12);
+    expect(stateOf(game).skills.herb?.xp).toBe(12);
   });
 
   it('gatherXp 与 xpMult 叠乘（采集特化 × 全局）', () => {
@@ -384,7 +389,7 @@ describe('#6 · 新 stat 消费点（round3 E3 注册表收口）', () => {
     const game = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save, seed: 7 });
     game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
     game.tick(3000); // exp 6 × gatherXp 2（t_xp）× xpMult 1 = 12
-    expect(game.snapshot().state.skills.herb?.xp).toBe(12);
+    expect(stateOf(game).skills.herb?.xp).toBe(12);
   });
 });
 
@@ -404,7 +409,7 @@ describe('#6 · 境界词表（B2 收编）与存档规范化', () => {
       state: { gold: 0, hp: 100, items: {}, skills: {}, activity: null },
     } as unknown as SaveData;
     const game = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save: legacy, seed: 7 });
-    const st = game.snapshot().state;
+    const st = stateOf(game);
     expect(st.rebirths).toBe(0);
     expect(st.daoYun).toBe(0);
     expect(st.daoYunEarned).toBe(0);

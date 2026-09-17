@@ -197,6 +197,8 @@ describe('#26 · 事件文案随 texts.shell 模板走', () => {
       time: 0,
       data: {
         seconds: 5400, // 1 时 30 分
+        awaySeconds: 5400, // 未钳制结算：与 seconds 同值（对齐引擎 emit 形态）
+        capped: false,
         skillId: 'fight',
         skillName: '斗法',
         activityName: '采青灵草',
@@ -223,6 +225,8 @@ describe('#26 · 事件文案随 texts.shell 模板走', () => {
       time: 0,
       data: {
         seconds: 90, // 1 分 30 秒 → away = minute 模板
+        awaySeconds: 90, // 未钳制结算：与 seconds 同值（对齐引擎 emit 形态）
+        capped: false,
         skillId: 'fight',
         skillName: '斗法',
         activityName: '采青灵草',

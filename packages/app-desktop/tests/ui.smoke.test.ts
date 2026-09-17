@@ -11,6 +11,7 @@ import {
   localStorageSaveAdapter,
   ManualClock,
   type GameAction,
+  type GameState,
 } from '@wendao/engine';
 import { buildUi } from '../src/ui';
 
@@ -51,7 +52,7 @@ describe('UI 烟测（issue #3 验收）', () => {
       game.tick(3000);
     }
     ui.render();
-    expect(game.snapshot().state.items['herb1']).toBe(20);
+    expect((game.snapshot().state as unknown as GameState).items['herb1']).toBe(20);
 
     // 切到乾坤袋：材料行出现且数量正确
     root.querySelector<HTMLButtonElement>('.tab[data-tab="bag"]')!.click();

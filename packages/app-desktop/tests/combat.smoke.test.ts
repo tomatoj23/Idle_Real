@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
-import { createGame, ManualClock, type GameAction, type SaveData } from '@wendao/engine';
+import { createGame, ManualClock, type GameAction, type GameState, type SaveData } from '@wendao/engine';
 import { buildUi } from '../src/ui';
 
 const MAX_FLOG = 60;
@@ -140,7 +140,7 @@ describe('UI 烟测（issue #4 战斗切片）', () => {
     expect(root.querySelector('#res-hp-text')!.textContent).toContain('84/');
     // 血条 fill 元素存在性（进度条被删后 innerText 断言仍绿的历史教训）
     expect(root.querySelector('#res-hp')).not.toBeNull();
-    expect(game.snapshot().state.items['consumable_heal']).toBeUndefined();
+    expect((game.snapshot().state as unknown as GameState).items['consumable_heal']).toBeUndefined();
   });
 
   it('增益条：同数量换 buff（A 到期 + B 服下）chip 跟随换新', () => {

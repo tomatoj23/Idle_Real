@@ -88,7 +88,7 @@ function makeCraftPack(config?: Record<string, unknown>): GameContent {
 }
 
 function stateOf(save: SaveData): GameState {
-  return save.state as GameState;
+  return save.state as unknown as GameState;
 }
 
 /** 开炉 + 假时钟按整 interval 推进 N 轮（精确计轮，无跨 tick 结转）。 */
@@ -243,7 +243,7 @@ describe('#5 · 配方执行循环（成功率掷点/失败损料/exp 入技能�
 
   it('开炉门控：层数不足 / 坏下标 / 材料不齐分别拒绝，不产生活动', () => {
     const pack = makeCraftPack();
-    (pack as { recipes: Array<{ unlockLevel: number }> }).recipes[1].unlockLevel = 5;
+    (pack as { recipes: Array<{ unlockLevel: number }> }).recipes[1]!.unlockLevel = 5;
     const game = createGame({
       content: pack,
       clock: new ManualClock(),
@@ -485,7 +485,7 @@ describe('#5 · 炼制离线补偿（O(1) 统计式，欠账不丢）', () => {
 
   it('装备产出 count>1：离线实例数 = 成功数 × 产出数（与在线逐件语义一致）', () => {
     const pack = makeCraftPack();
-    (pack as { recipes: Array<{ output: { count: number } }> }).recipes[1].output.count = 2;
+    (pack as { recipes: Array<{ output: { count: number } }> }).recipes[1]!.output.count = 2;
     const clock = new ManualClock();
     const game = createGame({
       content: pack,

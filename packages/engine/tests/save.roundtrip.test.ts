@@ -25,13 +25,13 @@ import { makeCombatPack } from './fixtures.js';
  */
 
 /** 全字段域覆盖的内容包：combat 基座 + craft/配方 + 器胚/铭纹 + 秘境 + Boss 召唤。 */
-function makeRoundtripPack(): ReturnType<typeof makeCombatPack> {
+function makeRoundtripPack() {
   const base = makeCombatPack();
-  const items = (base as { items: Array<Record<string, unknown>> }).items;
+  const items = base.items;
   return {
     ...base,
     skills: [
-      ...(base as { skills: Array<Record<string, unknown>> }).skills,
+      ...base.skills,
       { id: 'smith', name: '炼器', icon: '器', kind: 'craft' },
     ],
     recipes: [
@@ -281,7 +281,7 @@ describe('#42 roundtrip 安全网（字段表的恒等契约）', () => {
     if (state.gear.length === 0) {
       state.gear.push({ uid: 501, itemId: 'blank_sword', rarity: 'common', affixes: [], inscriptions: [{ id: 'insc_lie', tier: 2 }] });
     }
-    state.gear[0]!.inscriptions ??= [];
+    ((state.gear[0]!) as { inscriptions?: { id: string; tier: number }[] }).inscriptions ??= [];
     if (state.dungeon === null) state.dungeon = { dungeonId: 'crypt', floor: 1 };
     if (state.activity === null) state.activity = { skillId: 'herb', index: 0, name: '采青灵草', progress: 100 };
     state.equips['weapon'] ??= state.gear[0]!.uid;
@@ -296,8 +296,8 @@ describe('#42 roundtrip 安全网（字段表的恒等契约）', () => {
     clone.activity!.progress = 999;
     clone.equips['weapon'] = 999;
     clone.buffs['consumable_atk'] = 999;
-    clone.gear[0]!.affixes.push({ name: '渗', stat: 'atk', val: 1 });
-    clone.gear[0]!.inscriptions!.push({ id: '渗', tier: 1 });
+    (clone.gear[0]!.affixes as { name: string; stat: string; val: number }[]).push({ name: '渗', stat: 'atk', val: 1 });
+    (clone.gear[0]!.inscriptions! as { id: string; tier: number }[]).push({ id: '渗', tier: 1 });
     clone.combat!.ehp = 999;
     clone.combat!.tiers.light = 999;
     clone.combat!.summons[0]!.hp = 999;

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ManualClock } from '../src/clock.js';
 import {
   createGame,
+  type Contribution,
   type GameContent,
   type GameState,
   type SaveData,
@@ -16,10 +17,10 @@ import { makeCombatPack } from './fixtures.js';
  */
 
 function stateOf(save: SaveData): GameState {
-  return save.state as GameState;
+  return save.state as unknown as GameState;
 }
 
-const xpMultContribs = (value: number) => [
+const xpMultContribs = (value: number): Contribution[] => [
   {
     modifier: { stat: 'xpMult', zone: 'mult', value },
     source: { id: 'audit', kind: 'test', name: '自查' },
@@ -176,7 +177,7 @@ describe('自查 · 离线入口与恢复防御', () => {
     g1.dispatch({ type: 'combat:start', payload: { enemyId: 'efatal' } });
     g1.events.drain();
     const save = g1.snapshot();
-    save.state.hp = 5; // 濒血下线（战斗中退出是常态路径）
+    (save.state as { hp: number }).hp = 5; // 濒血下线（战斗中退出是常态路径）
     const g2 = createGame({ content: makeCombatPack() as GameContent, clock: new ManualClock(), save, seed: 7 });
     g2.settleOffline(3600000);
     const st = stateOf(g2.snapshot());

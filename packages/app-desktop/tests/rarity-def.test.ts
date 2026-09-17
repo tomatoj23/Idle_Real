@@ -93,12 +93,12 @@ describe('#018 · 稀有度展示 def 驱动', () => {
     const root = mount(pack, game);
 
     // 合成 loot 事件直接打 UI 接缝（buildUi 的事件订阅路径与生产一致）
-    game.events.emit({ type: 'loot', time: 0, data: { source: 'gear', item: 'sword', itemName: '试炼剑', rarity: 'refined', uid: 1 } });
+    game.events.emit({ type: 'loot', time: 0, data: { source: 'gear', item: 'sword', itemName: '试炼剑', count: 1, rarity: 'refined', uid: 1 } });
     expect(root.querySelectorAll('.toast').length).toBe(1);
     expect(root.querySelector('.toast')?.textContent).toContain('天降异宝');
 
     // 无 showcase 的档位不掉特判
-    game.events.emit({ type: 'loot', time: 1, data: { source: 'gear', item: 'sword', itemName: '试炼剑', rarity: 'plain', uid: 2 } });
+    game.events.emit({ type: 'loot', time: 1, data: { source: 'gear', item: 'sword', itemName: '试炼剑', count: 1, rarity: 'plain', uid: 2 } });
     expect(root.querySelectorAll('.toast').length).toBe(1);
 
     // 存档注入精淬装备 → 着色类 r-refined（def.id 驱动，非旧白名单）
@@ -188,7 +188,8 @@ describe('#018 · 稀有度展示 def 驱动', () => {
     // rng 恒 0.995：掉落必中（<0.999）、稀有度必中绝世（0.995×100=99.5 → 权重段 [98,100)）
     const game = createGame({ content: pack, clock, rng: () => 0.995 });
     const root = mount(pack, game);
-    const loots: GameEvent[] = [];
+    // LootEvent 未从 engine 公共面导出：判别联合按 type 收窄取分支。
+    const loots: Extract<GameEvent, { type: 'loot' }>[] = [];
     game.events.subscribe((e) => {
       if (e.type === 'loot' && e.data?.source === 'gear') loots.push(e);
     });

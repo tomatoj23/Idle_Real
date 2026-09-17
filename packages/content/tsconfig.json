@@ -6,7 +6,8 @@
     "outDir": "dist",
     "declarationMap": true,
     "sourceMap": true,
-    "tsBuildInfoFile": "dist/.tsbuildinfo"
+    "tsBuildInfoFile": "dist/.tsbuildinfo",
+    "types": []
   },
   "include": ["src", "src/**/*.json"]
 }

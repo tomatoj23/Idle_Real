@@ -90,11 +90,11 @@ function midSave(): SaveData {
 }
 
 interface Capture {
-  summons: GameEvent[];
-  phases: GameEvent[];
-  notes: GameEvent[];
-  attacks: GameEvent[];
-  victories: GameEvent[];
+  summons: Extract<GameEvent, { type: 'boss:summon' }>[];
+  phases: Extract<GameEvent, { type: 'boss:phase' }>[];
+  notes: Extract<GameEvent, { type: 'combat-note' }>[];
+  attacks: Extract<GameEvent, { type: 'attack' }>[];
+  victories: Extract<GameEvent, { type: 'victory' }>[];
 }
 
 const capture = (): Capture => ({ summons: [], phases: [], notes: [], attacks: [], victories: [] });

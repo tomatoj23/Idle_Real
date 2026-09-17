@@ -116,8 +116,11 @@ function makeHarness(pack: GameContent, opts?: { lowHp?: boolean }) {
   };
 }
 
-const eventsOf = (events: GameEvent[], type: string): GameEvent[] =>
-  events.filter((event) => event.type === type);
+const eventsOf = <T extends GameEvent['type']>(
+  events: GameEvent[],
+  type: T,
+): Extract<GameEvent, { type: T }>[] =>
+  events.filter((event): event is Extract<GameEvent, { type: T }> => event.type === type);
 
 describe('#52 D5 · 胜利入账单一门（creditFloorRewards）', () => {
   it('层奖励三路入账：finite 守卫取整（10.9→10 / 3.9→3 / 2.4→2）+ dungeon:floor 载荷', () => {

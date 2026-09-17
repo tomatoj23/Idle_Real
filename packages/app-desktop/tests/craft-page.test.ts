@@ -121,8 +121,9 @@ describe('#5 · 开炉 → 停炉链路（真实点击路径）', () => {
   });
 
   it('材料不齐开炉被拒：已解锁但缺料 → reject 红字浮提示', () => {
-    const save = makeSave();
-    save.state = { ...save.state, items: {} } as typeof save.state;
+    // readonly state 不可原地改写：以展开式新建同形存档（items 清空）。
+    const base = makeSave();
+    const save: SaveData = { ...base, state: { ...base.state, items: {} } };
     const { root, ui } = mount(save);
     root.querySelector<HTMLButtonElement>('.tab[data-tab="craft"]')!.click();
     ui.render();

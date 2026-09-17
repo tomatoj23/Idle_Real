@@ -187,8 +187,10 @@ function makeHarness(pack: GameContent, opts?: { atk?: number }) {
   };
 }
 
-const playerAttacks = (events: GameEvent[]): GameEvent[] =>
-  events.filter((e) => e.type === 'attack' && e.data?.side === 'player');
+const playerAttacks = (events: GameEvent[]): Extract<GameEvent, { type: 'attack' }>[] =>
+  events.filter(
+    (e): e is Extract<GameEvent, { type: 'attack' }> => e.type === 'attack' && e.data?.side === 'player',
+  );
 const notesOf = (events: GameEvent[]): string[] =>
   events.filter((e) => e.type === 'combat-note').map((e) => String(e.data?.text));
 

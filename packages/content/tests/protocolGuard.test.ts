@@ -55,7 +55,7 @@ function extractExports(source: string): { values: string[]; types: string[] } {
   const block = /export\s+(type\s+)?\{([^}]*)\}\s*from\s*['"][^'"]+['"];?/g;
   for (const m of source.matchAll(block)) {
     const isType = m[1] !== undefined;
-    for (const raw of m[2].split(',')) {
+    for (const raw of m[2]!.split(',')) {
       const name = raw.trim();
       if (name !== '') {
         (isType ? types : values).push(name);

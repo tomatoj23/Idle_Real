@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { validateContent, validateContentPack } from '../src/index.js';
-import type { ContentError, JsonSchema } from '../src/index.js';
+import type { JsonSchema, ValidationResult } from '../src/index.js';
 import itemSchemaJson from '../src/schema/item.schema.json';
 import { shellFixture } from './fixtures.js';
 
@@ -15,7 +15,7 @@ import { shellFixture } from './fixtures.js';
 const itemSchema = itemSchemaJson as unknown as JsonSchema;
 
 function expectError(
-  result: { readonly ok: boolean; readonly errors?: readonly ContentError[] },
+  result: ValidationResult,
   path: string,
   keyword: string,
 ): void {
@@ -161,17 +161,17 @@ describe('#16 · 器胚 schema 定形', () => {
 
   it('缺 slot 的器胚被 schema 拒绝（判别式字段级错误）', () => {
     const items = [{ ...BLANK }] as Array<Record<string, unknown>>;
-    delete items[0].slot;
+    delete items[0]!.slot;
     expectError(validateContent(items, itemSchema), '/0/slot', 'required');
   });
 
   it('缺 floorRange / tierRange 的器胚被 schema 拒绝', () => {
     const noFloor = [{ ...BLANK }] as Array<Record<string, unknown>>;
-    delete noFloor[0].floorRange;
+    delete noFloor[0]!.floorRange;
     expectError(validateContent(noFloor, itemSchema), '/0/floorRange', 'required');
 
     const noTier = [{ ...BLANK }] as Array<Record<string, unknown>>;
-    delete noTier[0].tierRange;
+    delete noTier[0]!.tierRange;
     expectError(validateContent(noTier, itemSchema), '/0/tierRange', 'required');
   });
 
@@ -241,7 +241,7 @@ describe('#16 · 铭纹 schema 定形', () => {
 
   it('缺 tiers 的铭纹被 schema 拒绝（判别式字段级错误）', () => {
     const items = [{ ...INSCRIPTION }] as Array<Record<string, unknown>>;
-    delete items[0].tiers;
+    delete items[0]!.tiers;
     expectError(validateContent(items, itemSchema), '/0/tiers', 'required');
   });
 

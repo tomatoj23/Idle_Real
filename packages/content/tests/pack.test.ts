@@ -534,7 +534,7 @@ describe('validateContentPack · 包版本 version（#12 版本策略）', () =>
     const result = validateContentPack(BASE_PACK);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.pack.version).toBe(BASE_PACK.version);
+      expect(result.pack.version).toBe((BASE_PACK as { version: string }).version);
     }
   });
 
@@ -561,7 +561,7 @@ describe('validateContentPack · 包版本 version（#12 版本策略）', () =>
   });
 
   it('两题材包均声明合法 version（发版追踪的地基）', () => {
-    expect(String(xiuxianPackJson['version'])).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(String((xiuxianPackJson as { version: string })['version'])).toMatch(/^\d+\.\d+\.\d+$/);
   });
 });
 
@@ -623,7 +623,7 @@ describe('validateContentPack · texts.reject 理由 code 键域形态（审计�
 
   it('两题材包现有 reasonMap 键全部合规（边界收紧不误伤现包）', () => {
     for (const raw of [xiuxianPackJson, fantasyPackJson]) {
-      expect(validateContentPack(raw).ok, `${String(raw['version'])} 全包校验`).toBe(true);
+      expect(validateContentPack(raw).ok, `${String((raw as { version: string })['version'])} 全包校验`).toBe(true);
     }
   });
 });

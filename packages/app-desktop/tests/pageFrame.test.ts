@@ -271,7 +271,7 @@ describe('#46 · 战斗敌卡（件5）', () => {
         { id: 'herb1', name: '青灵草', icon: '草', type: 'mat', sell: 1 },
       ],
     } as unknown as ContentPack;
-    const bag = { items: { heal1: 2 } } as GameState;
+    const bag = { items: { heal1: 2 } } as unknown as GameState;
     const html = consumablesHtml(content, bag);
     expect(html).toContain('回气丹 ×2');
     expect(html).toContain('data-act="eat" data-item="heal1"');

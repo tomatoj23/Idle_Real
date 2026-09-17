@@ -6,7 +6,7 @@
  * - 成就上报管道：引擎事件流 achievement:unlock → 桥上报（其余事件零搬运）。
  */
 import { describe, expect, it } from 'vitest';
-import { EventBus, type SaveData } from '@wendao/engine';
+import { EventBus, type GameEvent, type SaveData } from '@wendao/engine';
 import {
   desktopBridgeOf,
   desktopSaveAdapter,
@@ -102,10 +102,10 @@ describe('#10 · 事件流 → 成就上报管道', () => {
     const unsubscribe = wireAchievementReporting(bus, bridge);
     bus.emit({ type: 'tick', time: 0, data: { dt: 250 } });
     bus.emit({ type: 'achievement:unlock', time: 1, data: { id: 'cycles_100', name: 'x' } });
-    bus.emit({ type: 'achievement:unlock', time: 2 }); // 缺 id：不上报
+    bus.emit({ type: 'achievement:unlock', time: 2 } as unknown as GameEvent); // 缺 id：不上报
     expect(bridge.reports).toEqual(['cycles_100']);
     unsubscribe();
-    bus.emit({ type: 'achievement:unlock', time: 3, data: { id: 'first_kill' } });
+    bus.emit({ type: 'achievement:unlock', time: 3, data: { id: 'first_kill' } } as GameEvent);
     expect(bridge.reports).toEqual(['cycles_100']);
   });
 });

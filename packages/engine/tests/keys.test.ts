@@ -44,8 +44,11 @@ function saveWithWeapon(): SaveData {
 function firstAttackText(game: ReturnType<typeof createGame>, side: string): string {
   const attack = game.events
     .drain()
-    .find((event: GameEvent) => event.type === 'attack' && event.data?.side === side);
-  return String(attack?.data?.text ?? '');
+    .find(
+      (event): event is Extract<GameEvent, { type: 'attack' }> =>
+        event.type === 'attack' && event.data.side === side,
+    );
+  return String(attack?.data.text ?? '');
 }
 
 describe('#021 · 新增 stat 键 = 纯 JSON（N3 键域贯通）', () => {

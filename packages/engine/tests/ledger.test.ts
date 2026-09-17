@@ -3,6 +3,7 @@ import { ManualClock } from '../src/clock.js';
 import {
   createGame,
   type AutoFoldRule,
+  type Contribution,
   type GameContent,
   type GameEvent,
   type GameState,
@@ -12,7 +13,7 @@ import {
 import { makeCombatPack, makePack } from './fixtures.js';
 
 function stateOf(save: SaveData): GameState {
-  return save.state as GameState;
+  return save.state as unknown as GameState;
 }
 
 function ledgerEntries(events: GameEvent[]): LedgerData[] {
@@ -217,7 +218,7 @@ describe('#39 · 入账咽喉：统一账本事件（与旧形状并行发射）
       ],
       items: [{ id: 'ore', name: '灵砂', icon: '砂', type: 'mat', sell: 2 }],
     } as GameContent;
-    const contributions = [
+    const contributions: Contribution[] = [
       {
         modifier: { stat: 'gatherXp', zone: 'mult', value: 1.05 },
         source: { id: 'paragon', kind: 'test', name: '对拍' },
@@ -487,7 +488,7 @@ describe('#39 · 道韵账本与访问段信号', () => {
     game.dispatch({ type: 'visit:begin', payload: { page: 'shop' } });
     game.dispatch({ type: 'visit:begin', payload: { page: 'shop' } }); // 重复开段照发（配对归壳层）
     game.dispatch({ type: 'visit:end', payload: { page: 'shop' } });
-    const seen = game.events.drain().map((e) => [e.type, e.data?.page]);
+    const seen = game.events.drain().map((e) => [e.type, (e.data as { page?: string } | undefined)?.page]);
     expect(seen).toEqual([
       ['visit:begin', 'shop'],
       ['visit:begin', 'shop'],

@@ -49,43 +49,43 @@ describe('validateContent', () => {
 
   it('对缺字段样例报字段级错误', () => {
     const skills = makeSkills() as Array<Record<string, unknown>>;
-    delete skills[0].name;
+    delete skills[0]!.name;
     expectFieldError(validateContent(skills, schema), '/0/name', 'required');
   });
 
   it('对类型错误报出实际类型', () => {
     const skills = makeSkills() as Array<Record<string, unknown>>;
-    (skills[0].activities as Array<Record<string, unknown>>)[0].interval = '很快';
+    (skills[0]!.activities as Array<Record<string, unknown>>)[0]!.interval = '很快';
     expectFieldError(validateContent(skills, schema), '/0/activities/0/interval', 'type');
   });
 
   it('对越界数值报出字段错误', () => {
     const skills = makeSkills() as Array<Record<string, unknown>>;
-    (skills[0].activities as Array<Record<string, unknown>>)[0].unlockLevel = 0;
+    (skills[0]!.activities as Array<Record<string, unknown>>)[0]!.unlockLevel = 0;
     expectFieldError(validateContent(skills, schema), '/0/activities/0/unlockLevel', 'minimum');
   });
 
   it('对额外字段报 additionalProperties 错误', () => {
     const skills = makeSkills() as Array<Record<string, unknown>>;
-    skills[0].cheat = true;
+    skills[0]!.cheat = true;
     expectFieldError(validateContent(skills, schema), '/0/cheat', 'additionalProperties');
   });
 
   it('对非法 id 报 pattern 错误', () => {
     const skills = makeSkills() as Array<Record<string, unknown>>;
-    skills[0].id = '采药';
+    skills[0]!.id = '采药';
     expectFieldError(validateContent(skills, schema), '/0/id', 'pattern');
   });
 
   it('对空活动列表报 minItems 错误', () => {
     const skills = makeSkills() as Array<Record<string, unknown>>;
-    skills[0].activities = [];
+    skills[0]!.activities = [];
     expectFieldError(validateContent(skills, schema), '/0/activities', 'minItems');
   });
 
   it('对副产出概率越界报 maximum 错误', () => {
     const skills = makeSkills() as Array<Record<string, unknown>>;
-    ((skills[0].activities as Array<Record<string, unknown>>)[0].byproduct as Record<string, unknown>).chance = 1.5;
+    ((skills[0]!.activities as Array<Record<string, unknown>>)[0]!.byproduct as Record<string, unknown>).chance = 1.5;
     expectFieldError(
       validateContent(skills, schema),
       '/0/activities/0/byproduct/chance',

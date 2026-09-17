@@ -4,7 +4,7 @@ import { createGame, type GameState, type SaveData } from '../src/index.js';
 import { CYCLES_60S, makePack } from './fixtures.js';
 
 function stateOf(save: SaveData): GameState {
-  return save.state as GameState;
+  return save.state as unknown as GameState;
 }
 
 describe('挂机采集（issue #3 验收）', () => {
@@ -68,8 +68,8 @@ describe('挂机采集（issue #3 验收）', () => {
     game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 1 } }); // 需 15 层
 
     const [event] = game.events.drain();
-    expect(event.type).toBe('reject');
-    expect(event.data).toMatchObject({ action: 'activity:start', reason: 'level' });
+    expect(event!.type).toBe('reject');
+    expect(event!.data).toMatchObject({ action: 'activity:start', reason: 'level' });
     expect(stateOf(game.snapshot()).activity).toBeNull();
   });
 
@@ -78,8 +78,8 @@ describe('挂机采集（issue #3 验收）', () => {
     game.dispatch({ type: 'bag:sell', payload: { item: 'herb1', count: 10 } });
 
     const [event] = game.events.drain();
-    expect(event.type).toBe('reject');
-    expect(event.data).toMatchObject({ reason: 'no-item' });
+    expect(event!.type).toBe('reject');
+    expect(event!.data).toMatchObject({ reason: 'no-item' });
     expect(stateOf(game.snapshot()).gold).toBe(0);
   });
 

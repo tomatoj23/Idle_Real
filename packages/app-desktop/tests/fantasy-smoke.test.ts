@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { loadFantasyPack } from '@wendao/content/packs/fantasy';
-import { createGame, ManualClock, type GameAction } from '@wendao/engine';
+import { createGame, ManualClock, type GameAction, type GameState } from '@wendao/engine';
 import { buildUi } from '../src/ui';
 
 /** 驱动 tick 直至条件满足（maxSteps 兜底断言防挂死）。 */
@@ -38,7 +38,7 @@ describe('fantasy tracer · 挂机循环', () => {
       clock.advance(3000);
       game.tick(3000);
     }
-    const st = game.snapshot().state;
+    const st = game.snapshot().state as unknown as GameState;
     expect(st.items['herb']).toBe(40);
     // 副产出协议面在跑（概率性，仅断言无崩溃且池内）。
     expect(st.skills['herbalism']?.xp).toBeGreaterThan(0);
@@ -74,7 +74,7 @@ describe('fantasy tracer · 战斗解算与事件流', () => {
       // 协议面验收：任何槽位都已被引擎填槽，无 {slot} 键名残留。
       expect(text).not.toMatch(/\{[a-zA-Z]+\}/);
     }
-    const st = game.snapshot().state;
+    const st = game.snapshot().state as unknown as GameState;
     expect(st.gold).toBeGreaterThan(0);
     expect(st.skills['swordplay']?.xp).toBeGreaterThan(0);
   });
@@ -93,8 +93,8 @@ describe('fantasy tracer · 装备掷点与佩戴', () => {
     // 连猎魔像博异宝掉落。引擎语义（探针证实）：残血退避会退出自动再战，
     // 需重开战；无战可打时低血先嗑药/等脱战回血，金币够就补药（autoEat 兜底）。
     game.dispatch({ type: 'combat:start', payload: { enemyId: 'arcane_golem' } });
-    for (let i = 0; i < 800 && game.snapshot().state.gear.length === 0; i++) {
-      const st = game.snapshot().state;
+    for (let i = 0; i < 800 && (game.snapshot().state as unknown as GameState).gear.length === 0; i++) {
+      const st = game.snapshot().state as unknown as GameState;
       const maxHp = game.snapshot().stats?.maxHp ?? 1;
       if (!st.combat) {
         if (st.hp < maxHp * 0.85 && (st.items['potion'] ?? 0) > 0) {
@@ -109,14 +109,14 @@ describe('fantasy tracer · 装备掷点与佩戴', () => {
       game.tick(3000);
     }
 
-    const gear = game.snapshot().state.gear;
+    const gear = (game.snapshot().state as unknown as GameState).gear;
     expect(gear.length).toBeGreaterThan(0);
     const rarityIds = ['plain', 'fine', 'mythic'];
     for (const instance of gear) {
       expect(rarityIds).toContain(instance.rarity);
       // 词条数与稀有度词表一致（plain 0 / fine 1 / mythic 2），词条值正值。
       const rarity = rarityIds.indexOf(instance.rarity);
-      const expectedAffixes = [0, 1, 2][rarity];
+      const expectedAffixes = [0, 1, 2][rarity]!;
       expect(instance.affixes).toHaveLength(expectedAffixes);
       for (const affix of instance.affixes) {
         expect(affix.val).toBeGreaterThan(0);
@@ -132,7 +132,7 @@ describe('fantasy tracer · 装备掷点与佩戴', () => {
     game.dispatch({ type: 'gear:equip', payload: { uid: target.uid } });
     const after = game.snapshot().stats;
     expect(after).toBeDefined();
-    expect(Object.values(game.snapshot().state.equips)).toContain(target.uid);
+    expect(Object.values((game.snapshot().state as unknown as GameState).equips)).toContain(target.uid);
     const bonuses = content.items.find((it) => it.id === target.itemId)?.bonuses ?? {};
     if (bonuses.atk) expect(after!.atk).toBeGreaterThan(before!.atk);
     if (bonuses.def) expect(after!.def).toBeGreaterThan(before!.def);

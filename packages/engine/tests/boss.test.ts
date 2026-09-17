@@ -68,11 +68,12 @@ function midSave(): SaveData {
   } as unknown as SaveData;
 }
 
+/** 收集器按 type 判别收窄（#47 判别联合），字段直读零再断言。 */
 interface Capture {
-  phases: GameEvent[];
-  notes: GameEvent[];
-  attacks: GameEvent[];
-  victories: GameEvent[];
+  phases: Extract<GameEvent, { type: 'boss:phase' }>[];
+  notes: Extract<GameEvent, { type: 'combat-note' }>[];
+  attacks: Extract<GameEvent, { type: 'attack' }>[];
+  victories: Extract<GameEvent, { type: 'victory' }>[];
 }
 
 const capture = (): Capture => ({ phases: [], notes: [], attacks: [], victories: [] });
@@ -109,7 +110,7 @@ describe('#8 · AC1 假时钟打 Boss（阈值推进/属性修正/阶段文案/�
       cap.attacks.some((e) => e.data?.side === 'enemy' && String(e.data?.text).includes('狂暴撕咬')),
     ).toBe(true);
     // 专属掉落：boss.drops chance 1 → 必得 core1（与 enemy.drops 叠加）。
-    expect(game.snapshot().state.items.core1).toBeGreaterThanOrEqual(1);
+    expect((game.snapshot().state.items as Record<string, number>).core1).toBeGreaterThanOrEqual(1);
   });
 
   it('再战重置：自动再战从头演阶段（第二场 boss:phase 重新逐级触发）', () => {
@@ -178,7 +179,7 @@ describe('#8 · 秘境 × Boss 叠乘与存档往返', () => {
     const resumed = createGame({ content: makeBossPack(), clock: new ManualClock(), save: game.snapshot(), seed: 7 });
     const cap2 = capture();
     wire(resumed, cap2);
-    expect(resumed.snapshot().state.combat?.bossPhase).toBe(0);
+    expect((resumed.snapshot().state.combat as { bossPhase: number } | null)?.bossPhase).toBe(0);
     for (let i = 0; i < 60 && cap2.victories.length === 0; i++) resumed.tick(1000);
     expect(cap2.phases.map((e) => e.data?.phase)).toEqual([2]); // 第二阶段续演
     expect(cap2.victories.length).toBe(1);

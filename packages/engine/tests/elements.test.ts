@@ -30,7 +30,7 @@ import { makeCombatPack } from './fixtures.js';
 const rng = (): number => 0.5; // 波动 1.0、暴击不中（50 ≥ 5）、掉落不中
 
 /** 系别测试包：四系注册 + 机械签名 + 系别武器 + 高防木桩/亲和 Boss + 风味池。 */
-function makeElementPack(): GameContent {
+function makeElementPack() {
   const base = makeCombatPack();
   return {
     ...base,
@@ -118,7 +118,7 @@ function makeElementPack(): GameContent {
         fire: { attacks: ['炎潮般的煞气翻涌而至。'] },
       },
     },
-  } as GameContent;
+  };
 }
 
 /** 佩戴指定武器的存档（寻常档无词条 → atk = 基线 11 + 6 = 17）。 */

@@ -35,10 +35,10 @@ describe('修仙题材包 · 验收（issue #2）', () => {
       'bingsilk',
     ]);
     const recipeByName = Object.fromEntries(pack.recipes.map((r) => [r.name, r]));
-    expect(Object.keys(recipeByName['缝布道袍'].materials)).toContain('silk');
-    expect(Object.keys(recipeByName['织星辰法衣'].materials)).toContain('bingsilk');
-    expect(Object.keys(recipeByName['锻玄铁甲'].materials)).toContain('ore2');
-    expect(Object.keys(recipeByName['锻不灭金身甲'].materials)).toContain('ore4');
+    expect(Object.keys(recipeByName['缝布道袍']!.materials)).toContain('silk');
+    expect(Object.keys(recipeByName['织星辰法衣']!.materials)).toContain('bingsilk');
+    expect(Object.keys(recipeByName['锻玄铁甲']!.materials)).toContain('ore2');
+    expect(Object.keys(recipeByName['锻不灭金身甲']!.materials)).toContain('ore4');
   });
 
   it('引擎兜底网：basic 招式与官方包动词池齐备（键域开放后 basic 为 schema 唯一恒需）', () => {
@@ -279,14 +279,14 @@ describe('修仙题材包 · 数值基线', () => {
     // 三阶表定长 3 且逐阶非空。
     for (const insc of inscriptions) {
       expect(insc.tiers).toHaveLength(3);
-      for (const row of insc.tiers) expect(row.length).toBeGreaterThan(0);
+      for (const row of insc.tiers!) expect(row.length).toBeGreaterThan(0);
     }
     // 机制型特色铭纹（feature condition+primitive，引擎原语池零新增）2~3 条。
     expect(inscriptions.filter((it) => it.feature !== undefined).length).toBeGreaterThanOrEqual(2);
     expect(inscriptions.filter((it) => it.feature !== undefined).length).toBeLessThanOrEqual(3);
     // 条件铭纹（受火系防御）：元素条件引用已注册系别。
     const nilin = inscriptions.find((it) => it.id === 'insc_nilin');
-    expect(nilin?.tiers[2]).toEqual([{ stat: 'def', zone: 'flat', value: 24, condition: { element: 'fire' } }]);
+    expect(nilin?.tiers?.[2]).toEqual([{ stat: 'def', zone: 'flat', value: 24, condition: { element: 'fire' } }]);
     // 标签词表：器胚 preferredTags 的键域来源。
     const tagVocab = new Set(inscriptions.flatMap((it) => it.tags ?? []));
     for (const blank of pack.items.filter((it) => it.type === 'blank')) {
@@ -295,11 +295,11 @@ describe('修仙题材包 · 数值基线', () => {
   });
 
   it('消耗品：回气丹恢复三成，增益丹时长五分钟', () => {
-    expect(itemById.consumable_heal.heal).toEqual({ percent: 0.3 });
-    expect(itemById.consumable_qi.effect).toEqual({ duration: 300000, multipliers: { gatherXp: 1.25 } });
-    expect(itemById.consumable_atk.effect).toEqual({ duration: 300000, multipliers: { atk: 1.2 } });
-    expect(itemById.consumable_def.effect).toEqual({ duration: 300000, multipliers: { def: 1.3 } });
-    expect(itemById.consumable_gold.effect).toEqual({
+    expect(itemById.consumable_heal!.heal).toEqual({ percent: 0.3 });
+    expect(itemById.consumable_qi!.effect).toEqual({ duration: 300000, multipliers: { gatherXp: 1.25 } });
+    expect(itemById.consumable_atk!.effect).toEqual({ duration: 300000, multipliers: { atk: 1.2 } });
+    expect(itemById.consumable_def!.effect).toEqual({ duration: 300000, multipliers: { def: 1.3 } });
+    expect(itemById.consumable_gold!.effect).toEqual({
       duration: 300000,
       multipliers: { atk: 1.4, def: 1.4 },
       crit: 10,

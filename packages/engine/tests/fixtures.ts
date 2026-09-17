@@ -1,10 +1,9 @@
-import type { GameContent } from '../src/index.js';
-
 /**
  * 形状合规的最小内容包：引擎零内容感知，测试自备形状。
  * 采青灵草 interval=3000 → 假时钟 60 游戏秒恰好 20 轮。
+ * 返回类型保持字面量推断（不擦成 GameContent=object），各测试直读包字段。
  */
-export function makePack(): GameContent {
+export function makePack() {
   return {
     skills: [
       {
@@ -49,7 +48,7 @@ export const CYCLES_60S = 20;
  * 战斗切片内容包（issue #4）：在 makePack 基础上补敌人/武器/丹药/
  * 异宝掉落/战斗词库。e1 数值对齐修仙包青鬃狼（hp 60）。
  */
-export function makeCombatPack(): GameContent {
+export function makeCombatPack() {
   return {
     ...makePack(),
     items: [
@@ -198,5 +197,5 @@ export function makeCombatPack(): GameContent {
         'combat:start': { level: '境界太低（需 {level} 层斗法），恐有性命之虞' },
       },
     },
-  } as GameContent;
+  };
 }

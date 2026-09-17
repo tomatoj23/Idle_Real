@@ -13,10 +13,10 @@ import {
 import { makeCombatPack, makePack } from './fixtures.js';
 
 function stateOf(save: SaveData): GameState {
-  return save.state as GameState;
+  return save.state as unknown as GameState;
 }
 
-function recordsOf(game: { snapshot(): SaveData }): JournalRecord[] {
+function recordsOf(game: { snapshot(): SaveData }): readonly JournalRecord[] {
   return stateOf(game.snapshot()).journal.records;
 }
 
@@ -633,7 +633,7 @@ describe('#33 · 存档持久化（显式消毒恢复，禁透明收编）', () 
     game.dispatch({ type: 'activity:stop' }); // 闭段 → 1 条冻结条目
 
     const cloned = stateOf(game.snapshot());
-    const record = cloned.journal.records[0]!;
+    const record = cloned.journal.records[0]! as Extract<JournalRecord, { kind: 'gather' }>;
     // 条目深冻结：写穿引擎的 mutate 路径当场抛错（严格模式），静默写穿不可能。
     expect(Object.isFrozen(record)).toBe(true);
     expect(Object.isFrozen(record.lines)).toBe(true);
@@ -657,7 +657,7 @@ describe('#33 · 存档持久化（显式消毒恢复，禁透明收编）', () 
     expect(fresh.journal.records).toHaveLength(2); // 克隆里 push 的条目未入引擎
     expect(fresh.journal.records[0]).toMatchObject({ kind: 'gather', cycles: 2 });
     expect(fresh.journal.records[1]).toMatchObject({ kind: 'gather', cycles: 1 });
-    expect(fresh.journal.records[0]!.lines).toHaveLength(2); // 产出行 + 修为行
+    expect((fresh.journal.records[0]! as Extract<JournalRecord, { kind: 'gather' }>).lines).toHaveLength(2); // 产出行 + 修为行
     expect(fresh.ledgerCounters['item:herb1:gather']).toBe(3);
     expect(fresh.journalAnchor?.snap['item:herb1:gather']).toBe(2); // 锚点基准 = 设锚时的 2 轮
   });

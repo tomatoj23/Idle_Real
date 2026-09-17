@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
-import { createGame, ManualClock, type GameAction, type GameEvent, type SaveData } from '@wendao/engine';
+import { createGame, ManualClock, type GameAction, type GameEvent, type GameState, type SaveData } from '@wendao/engine';
 import { buildUi } from '../src/ui';
 
 /** 带累计道韵（妖窟门槛 10）与回气丹的存档：clv1，全页签可见。 */
@@ -108,7 +108,7 @@ describe('#7 · 秘境页与推塔链路', () => {
     ui.render();
     expect(root.querySelector('#log')!.textContent).toContain('第 1/10 层已通');
     // 层号推进（胜利休整到期自动进层）。
-    tickUntil(game, () => game.snapshot().state.dungeon?.floor === 2, seen);
+    tickUntil(game, () => (game.snapshot().state as unknown as GameState).dungeon?.floor === 2, seen);
     ui.render();
     expect(root.querySelector('#page-root')!.textContent).toContain('当前 · 第 2/10 层');
   });
@@ -121,7 +121,7 @@ describe('#7 · 秘境页与推塔链路', () => {
     tickUntil(game, () => seen.some((e) => e.type === 'dungeon:floor'), seen);
     root.querySelector<HTMLButtonElement>('[data-act="dungeon-leave"]')!.click();
     ui.render();
-    const st = game.snapshot().state;
+    const st = game.snapshot().state as unknown as GameState;
     expect(st.dungeon).toBeNull();
     expect(st.dungeonBest.yaoku).toBeGreaterThanOrEqual(1);
     const page = root.querySelector('#page-root')!.textContent ?? '';
