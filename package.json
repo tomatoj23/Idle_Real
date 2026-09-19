@@ -13,6 +13,7 @@
     "packages/app-desktop"
   ],
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || exit 0",
     "setup": "git config core.hooksPath .githooks",
     "dev": "npm run dev -w @wendao/app-desktop",
     "dev:editor": "npm run dev -w @wendao/editor",

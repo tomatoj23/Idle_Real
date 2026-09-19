@@ -1,0 +1,63 @@
+name: CI
+
+# #78-A 裁决：采纳最小 CI，跑与 .githooks/pre-push 完全相同的两件事（check + test）。
+# 定位是**回归网**，不是验收：本项目最硬的一关「真实浏览器首跑」CI 覆盖不到（AGENTS.md 工程红线），
+# 绿勾不等于可发版。价值面在钩子拦不住的三处——--no-verify 绕过、未跑过 setup 的新克隆、
+# 多会话并行下 main 的跨机会话漂移。
+#
+# 刻意不含 `npm audit`：ADR-018 已裁「audit 非绿不阻断验收」（extract-zip 两条 8.1 无修复版，
+# 永久残留），装成红灯只会训练人忽略它。巡检走根 scripts + docs/research。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: gate（check + test + lint 观察）
+    # windows-latest：真机红线在 Windows 上，runner 与开发机同 OS 比 ubuntu 矩阵有意义（#78 票面）。
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      # 四包测试全走 happy-dom + node，不启真 Electron（已 grep 实证 tests/ 零 child_process /
+      # electron 引用来），故跳过约 100MB 二进制下载——CI 分钟数本来就几乎全在 npm ci。
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      # 入库的 package-lock.json 有 437 条 resolved 钉在国内镜像（开发机装出来的）。npm 的
+      # replace-registry-host 默认只把 npmjs 主机改写成本机 registry，反向不成立，不改写就会
+      # 让 runner 去国内 CDN 拉全部依赖。只改 CI 工作副本、不改仓库文件，本地镜像加速不受影响。
+      # 详见脚本头注（含「顺带把对镜像的信任收回为对官方源的逐条校验」一节）。
+      - name: Normalize dependency hosts
+        run: node .github/scripts/canonicalize-lockfile.mjs
+
+      - uses: actions/setup-node@v7.0.0
+        with:
+          # 与开发机同线（本机 v24.13.0）。engines 下限 22.12 的第二矩阵候选记在 #78 票评，
+          # 现阶段不加——两分钟成本 × 每次 push 换不到本仓看得见的收益。
+          node-version: "24"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Type check（四包）
+        run: npm run check --workspaces --if-present
+
+      - name: Test（四包）
+        run: npm test --workspaces --if-present
+
+      # #78-B 裁决：lint 采纳但先挂观察期。CI 比本地 pre-push 更严会让人对着红勾摸不着头脑，
+      # 等噪声面确认稳定后再串进钩子与 check（那时删掉 continue-on-error 即可）。
+      - name: Lint（oxlint correctness，观察中）
+        continue-on-error: true
+        run: npm run lint

@@ -32,4 +32,8 @@ single-context 布局：根目录 `CONTEXT.md` + `docs/adr/`（按需懒创建�
 
 ## Git 钩子（交付门禁）
 
-- `npm run setup` 启用 `.githooks/`（core.hooksPath 不入库，换克隆后须重跑一次）。pre-push = 全量 check + test（vitest 默认池，#72 已证伪旧 vmThreads 硬约束）；push 被钩子拦下时**修复后再推，禁 `--no-verify` 绕过**。
+- **钩子自愈**：根 `prepare` 脚本在 `npm install` 时自动 `git config core.hooksPath .githooks`（`npm run setup` 是同一条命令的显式入口，手动跑一次也可）。core.hooksPath 属本地 git 配置、不入库，此前换克隆须重跑——现由 install 兜住。
+- **pre-push = 全量 check + test**（vitest 默认池，#72 已证伪旧 vmThreads 硬约束）；push 被钩子拦下时**修复后再推，禁 `--no-verify` 绕过**。
+- **CI（`.github/workflows/ci.yml`）= 第二环境回归网**：windows-latest 跑与钩子相同的 check + test，另挂 oxlint 观察步。它不拦钩子的绕过，价值在钩子覆盖不到的三处：`--no-verify`、未跑过 install 的新克隆、多会话并行下 main 的跨机漂移。
+- **CI 绿不等于验收**：最硬的一关仍是真实浏览器首跑（见工程红线），CI 与钩子都覆盖不到。
+- **lint 处于观察期**：`npm run lint`（oxlint correctness 最小集）当前零命中，尚未串进 check/pre-push；格式化（prettier 类）已裁为缓做，理由见 #78 票评。
