@@ -121,14 +121,12 @@ export interface SaveRejection {
   readonly holdSlot: boolean;
 }
 
-/** 版本值的诊断措辞：字符串带引号（与数字区分），Symbol 等不可转换值也不抛错。 */
+/** 版本值的诊断措辞：总函数——字符串带引号与数字区分，其余只报类型名，
+ *  绝不 stringify 未知对象（循环/抛错 toString 都不能让门禁本身抛）。 */
 function describeVersion(value: unknown): string {
   if (typeof value === 'string') return JSON.stringify(value);
-  try {
-    return String(value);
-  } catch {
-    return typeof value;
-  }
+  if (value === null || typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return `<${typeof value}>`;
 }
 
 export function saveRejection(save: unknown): SaveRejection | undefined {

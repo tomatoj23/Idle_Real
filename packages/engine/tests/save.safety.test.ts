@@ -64,6 +64,11 @@ describe('#69 · 存档版本门禁（项 1：有号无检）', () => {
     const bigintRejection = saveRejection({ version: 10n }); // 不可 JSON 序列化值不得抛
     expect(bigintRejection).toMatchObject({ holdSlot: false, message: /not an integer/ });
     expect(saveRejection({ version: Symbol('v') })).toMatchObject({ holdSlot: false });
+    // 消息构造是总函数：对象值只报类型名，绝不 stringify（循环/抛错 toString 都在这条路上）
+    expect(saveRejection({ version: {} })?.message).toMatch(/<object>/);
+    const cyclicVersion: Record<string, unknown> = { self: null };
+    cyclicVersion.self = cyclicVersion;
+    expect(saveRejection({ version: cyclicVersion })?.message).toMatch(/<object>/);
     // 正对照：真正的数字异版本才保（解药＝换回能读它的引擎）。
     expect(saveRejection({ version: 2 })).toMatchObject({ holdSlot: true });
     expect(saveRejection({ version: 0 })).toMatchObject({ holdSlot: true });
