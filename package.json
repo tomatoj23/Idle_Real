@@ -20,9 +20,11 @@
     "build": "npm run build --workspaces --if-present",
     "dist": "npm run build --workspaces --if-present && npm run dist -w @wendao/app-desktop",
     "build:desktop": "npm run dist",
-    "check": "npm run check --workspaces --if-present"
+    "check": "npm run check --workspaces --if-present",
+    "lint": "oxlint"
   },
   "devDependencies": {
+    "oxlint": "^1.83.0",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   }

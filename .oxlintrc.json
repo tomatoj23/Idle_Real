@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // #78 裁决：lint 采纳、format 缓做。
+  // 2026-09-18 实测（v1.83.0，138 文件 / 24ms）：correctness 8 命中已清零；
+  // suspicious 88 / pedantic 910 / vitest-plugin 187 噪声面未清，故不开；
+  // 不启用 --type-aware（官方自评覆盖 incomplete，见票评）。
+  // 本文件只管静态错误，不做格式化：204 个跟踪文件全量重排会毁掉 git blame 与二分定位。
+  "plugins": ["typescript", "unicorn", "oxc", "import", "promise"],
+  "categories": {
+    "correctness": "error"
+  },
+  "ignorePatterns": [
+    "dist",
+    "dist-electron",
+    "release",
+    "js",
+    "css",
+    "steam",
+    ".playwright-cli"
+  ],
+  "env": { "builtin": true }
+}
