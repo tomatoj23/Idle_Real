@@ -78,14 +78,18 @@ function registerIpc(): void {
   ipcMain.on('wendao:save-flush', (event, key, json) => {
     const slot = asString(key);
     const raw = asString(json);
+    let written = false;
     if (slot && raw !== undefined) {
       try {
-        platform?.writeSlot(slot, raw);
+        written = platform?.writeSlot(slot, raw) ?? false;
       } catch (err) {
         log(`[ipc] save-flush failed: ${errMsg(err)}`);
       }
     }
-    event.returnValue = 'ok';
+    // ack 说实话：'not-written' = 这次一字未落盘（槽位被保槽钉住 / 云端拒写 /
+    // 入参不合），'ok' 才是存储确认收到。renderer 目前不读它，但把「没写」回执成
+    // 「已落盘」正是下一个丢档故事的种子（#69 复审补）。
+    event.returnValue = written ? 'ok' : 'not-written';
   });
 
   ipcMain.on('wendao:ach-report', (_event, id) => {

@@ -13,8 +13,9 @@
  * ADR-013：未显式写入的字段不落盘——恢复时只按已知键规范化收编；
  * 未知顶层键透明透传（向后兼容未来节的存档，字段表只管已知字段）。
  *
- * #69 存档安全批：档面键域一律消毒（map 行与透传区共用一份污染键黑名单、
- * 判据取自有键域而非原型链），透传键在快照面逐键深拷（壳层改写不写穿引擎态）。
+ * #69 存档安全批：档面键的写入一律走自有键域判据 + 污染键黑名单（键域分两档，
+ * 见 PROTOTYPE 黑名单一节：内容 id 域只挡 __proto__，开放透传域挡四键，且透传
+ * 节的嵌套层逐层剔键）；透传键在快照面逐键深拷，壳层改写不再写穿引擎态。
  */
 import type { GameContent, SaveData } from './types.js';
 import { saveRejection } from './save.js';
@@ -204,34 +205,64 @@ interface FieldRow<K extends keyof GameState> {
 }
 
 /**
- * 原型污染键黑名单（#69 项 4）：存档 map 字段（items/skills/equips/buffs/
- * dungeonBest/lastEncounter）与顶层透传区的键都来自档面，直写自有键位。
+ * 污染键黑名单——按键域分两档（#69 项 4 的复审收窄，两档理由不同勿合并）：
  *
- * 两条真实杀伤路径（JSON.parse 把 "__proto__" 造成 own 数据属性——
- * CreateDataProperty 语义，不走 setter、不触发防写，故 Object.entries 看得见它）：
- * - `state.skills["__proto__"] = { xp }` 命中的是 Object.prototype 的 __proto__
- *   **setter** → 技能表对象的原型被换成 `{xp: n}`（实测 skills.xp === n，
- *   此后所有查不到自有键的技能读数一起串味）；
- * - `constructor` / `hasOwnProperty` 是自有键直写 → 顶掉原型方法，任何
- *   `map.hasOwnProperty(k)` 式消费方当场 TypeError，且随快照继续入盘。
+ * - OPEN_AREA_KEYS（顶层透传区）：键域**开放**——未知顶层键不是内容 id，
+ *   四键全挡（既有三键判断 + hasOwnProperty）。
+ * - CONTENT_ID_KEYS（items/skills/equips/buffs/dungeonBest/lastEncounter）：
+ *   键域 = 内容包 id，schema 形态是 `^[a-z][a-zA-Z0-9_]*$`（item/skill/enemy/
+ *   dungeon/slot 皆同源），故 `constructor`/`prototype`/`hasOwnProperty` 都是
+ *   **合法 id**——挡它们＝静默丢掉玩家合法条目的存档数据（比原缺陷更坏）。
+ *   真正能改对象结构的只有 `__proto__`（前导下划线，本就是非法 id），
+ *   它只可能来自手改/损坏档 → 这一档只挡它。
  *
- * 键集取票面三键与既有顶层判断（prototype）的并集。只挡「改原型/顶掉原型
- * 方法」的键，不做 Object.prototype 全键域穷举——收口是为了让各 map 行
- * 与透传区共用一份守卫，不是造一套键名黑名单体系。
- * （editor 侧读内容包时另有一份 io/files.ts：键集少一个 hasOwnProperty，
- * 它防的是深拷/合并路径的污染，与本处「写入有原型方法消费方的容器」不同因，
- * 跨包不互引故各自持份。）
+ * 为什么 `__proto__` 值得单列（实测）：JSON.parse 把 "__proto__" 造成 own 数据属性
+ * （CreateDataProperty 语义，不走 setter、不触发防写，Object.entries 看得见它），
+ * 而 `state.skills["__proto__"] = { xp }` 命中的却是 Object.prototype 的 __proto__
+ * **setter** → 目标对象的原型被整个换成 `{xp: n}`（此后 `skills.xp` 读出 n，
+ * 所有查不到自有键的读数一起串味）。旧判据 `id in state.skills` 走原型链，
+ * "__proto__"/"constructor" 恒真 → 污染键正是从这里走进写方的。
+ * （editor 侧读内容包时另有一份 io/files.ts：它防的是深拷/合并路径，递归剔三键，
+ * 与本处两档不同因，跨包不互引故各自持份。）
  */
-const PROTOTYPE_POLLUTION_KEYS: ReadonlySet<string> = new Set([
+const OPEN_AREA_KEYS: ReadonlySet<string> = new Set([
   '__proto__',
   'constructor',
   'prototype',
   'hasOwnProperty',
 ]);
+const CONTENT_ID_KEYS: ReadonlySet<string> = new Set(['__proto__']);
 
-/** 档面容器的自有键值对，剔除原型污染键（#69 项 4：各 map 行与透传区共用）。 */
-function rawEntries(container: Record<string, unknown>): Array<[string, unknown]> {
-  return Object.entries(container).filter(([key]) => !PROTOTYPE_POLLUTION_KEYS.has(key));
+/** 档面容器的自有键值对，按键域档位剔除污染键（#69 项 4：各 map 行与透传区共用）。 */
+function rawEntries(
+  container: Record<string, unknown>,
+  blocked: ReadonlySet<string>,
+): Array<[string, unknown]> {
+  return Object.entries(container).filter(([key]) => !blocked.has(key));
+}
+
+/**
+ * 透传区取值深消毒（#69 项 4 复审补）：只挡一层不够——未知节里的 "__proto__" 是
+ * own 数据属性，会原样进活态、随下一次落盘写回，而壳层/UI 只要对该节做一次
+ * Object.assign 或朴素键拷贝，目标对象的原型就被 setter 换掉（实测
+ * `getPrototypeOf(Object.assign({}, 该节)) !== Object.prototype`）。故入活态前逐层剔键。
+ * 只递归普通对象与数组；类实例/函数不动其语义，循环引用退化为共享引用（旧语义）。
+ */
+function sanitizeOpenValue(value: unknown, seen: WeakSet<object>): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  if (seen.has(value)) return value;
+  if (Array.isArray(value)) {
+    seen.add(value);
+    return value.map((item) => sanitizeOpenValue(item, seen));
+  }
+  if (Object.getPrototypeOf(value) !== Object.prototype) return value;
+  seen.add(value);
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (OPEN_AREA_KEYS.has(key)) continue;
+    out[key] = sanitizeOpenValue(item, seen);
+  }
+  return out;
 }
 
 /**
@@ -264,7 +295,7 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
     clone: (value) => ({ ...value }),
     restore: (raw, state) => {
       if (!isObj(raw.items)) return;
-      for (const [id, count] of rawEntries(raw.items)) {
+      for (const [id, count] of rawEntries(raw.items, CONTENT_ID_KEYS)) {
         if (typeof count === 'number' && Number.isFinite(count) && count > 0) {
           state.items[id] = Math.floor(count);
         }
@@ -287,7 +318,7 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
       Object.fromEntries(Object.entries(value).map(([id, progress]) => [id, { xp: progress.xp }])),
     restore: (raw, state) => {
       if (!isObj(raw.skills)) return;
-      for (const [id, progress] of rawEntries(raw.skills)) {
+      for (const [id, progress] of rawEntries(raw.skills, CONTENT_ID_KEYS)) {
         // 只收编内容包已知技能；内容已移除的技能不入盘。
         // 自有键域判定（#69 项 4）：旧判据 `id in state.skills` 走原型链，
         // "__proto__"/"constructor" 恒为真 → 污染键就此通过守卫。
@@ -466,7 +497,7 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
     restore: (raw, state, env) => {
       // —— 佩戴表：uid 必须指向收编的实例，且槽位与装备定义一致。
       if (!isObj(raw.equips)) return;
-      for (const [slot, uid] of rawEntries(raw.equips)) {
+      for (const [slot, uid] of rawEntries(raw.equips, CONTENT_ID_KEYS)) {
         if (typeof uid !== 'number' || !Number.isInteger(uid)) continue;
         const gear = state.gear.find((entry) => entry.uid === uid);
         if (!gear) continue;
@@ -482,7 +513,7 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
       // —— 消耗品 buff：consumable 须存在且有持续增益；已过期的不收编。
       // 存档缺 time（契约外畸形档）时与字段表前语义一致：一律不收编。
       if (!isObj(raw.buffs) || env.save === null) return;
-      for (const [consumableId, until] of rawEntries(raw.buffs)) {
+      for (const [consumableId, until] of rawEntries(raw.buffs, CONTENT_ID_KEYS)) {
         const item = findItem(env.content, consumableId);
         if (!item || item.type !== 'consumable' || item.effect === undefined) continue;
         if (typeof until === 'number' && Number.isFinite(until) && until > env.save.time) {
@@ -596,7 +627,7 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
     restore: (raw, state, env) => {
       // —— 同对手对照：键须指向现存敌人；负/零回合记录无意义不收编。
       if (!isObj(raw.lastEncounter)) return;
-      for (const [enemyId, rec] of rawEntries(raw.lastEncounter)) {
+      for (const [enemyId, rec] of rawEntries(raw.lastEncounter, CONTENT_ID_KEYS)) {
         if (!isObj(rec) || findEnemy(env.content, enemyId) === undefined) continue;
         const { rounds, won, at } = rec;
         if (
@@ -688,7 +719,7 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
       // —— 秘境最高层记录（#7）：键须指向现存秘境（包已变更的旧记录丢弃），
       // 数值钳非负；层号语义 = 「达到过」的最高层（进层即登记）。
       if (!isObj(raw.dungeonBest)) return;
-      for (const [dungeonId, best] of rawEntries(raw.dungeonBest)) {
+      for (const [dungeonId, best] of rawEntries(raw.dungeonBest, CONTENT_ID_KEYS)) {
         if (
           typeof best === 'number' &&
           Number.isFinite(best) &&
@@ -881,10 +912,11 @@ export function restoreState(
   if (rejection !== undefined) throw new Error(rejection.message);
   const state = initialState(content, fallbackSeed, contributions);
 
-  // 透明收编未知顶层键（跳过原型污染键），已知键随后由字段表逐行覆盖。
-  for (const [key, value] of rawEntries(raw)) {
+  // 透明收编未知顶层键（逐层剔污染键），已知键随后由字段表逐行覆盖。
+  const openSeen = new WeakSet<object>();
+  for (const [key, value] of rawEntries(raw, OPEN_AREA_KEYS)) {
     if (RESERVED_KEYS.has(key)) continue;
-    (state as unknown as Record<string, unknown>)[key] = value;
+    (state as unknown as Record<string, unknown>)[key] = sanitizeOpenValue(value, openSeen);
   }
 
   const env: FieldEnv = { content, contributions, seed: fallbackSeed, save, partial: state };

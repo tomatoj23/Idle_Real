@@ -110,27 +110,51 @@ export interface SaveRejection {
    */
   readonly message: string;
   /**
-   * 是否保槽（不许覆写这份字节）。只在「字节自证是另一格式的真存档」时为真——
-   * 那种档对别的引擎版本有价值，且解药（换回能读它的引擎）会让门禁自然放行。
-   * 解析不了的碎片不给：它不证明自己值得保，而为它断掉本局存档能力没有解除路径。
+   * 是否保槽（不许覆写这份字节）。判据收窄到**数字版本号且不等于本引擎**——
+   * 那是「另一版引擎写的档」的唯一自证形态，且解药（换回能读它的引擎）会让门禁
+   * 自然放行，所以值得为它停止落盘。
+   * 其余一律不保：非数字的 version（`"1"`/`true`/`{}`/`null`）不成其为版本标记，
+   * 保它＝为一堆无自证价值的字节永久断掉存档能力且**没有解除路径**（被保的字节
+   * 正是被禁止改写的那份，只能靠人手删文件脱困——复审实测抓出的死锁形态）；
+   * 解析不了的碎片同理。拒绝对所有形态一视同仁，保槽只给认得出的那一类。
    */
   readonly holdSlot: boolean;
+}
+
+/** 版本值的诊断措辞：字符串带引号（与数字区分），Symbol 等不可转换值也不抛错。 */
+function describeVersion(value: unknown): string {
+  if (typeof value === 'string') return JSON.stringify(value);
+  try {
+    return String(value);
+  } catch {
+    return typeof value;
+  }
 }
 
 export function saveRejection(save: unknown): SaveRejection | undefined {
   if (save === null || typeof save !== 'object' || Array.isArray(save)) {
     return { message: 'save rejected: not a save object', holdSlot: false };
   }
-  const version = (save as { readonly version?: unknown }).version;
+  // 自有键域判据（与本票项 4 同一条纪律）：版本从原型链上继承来的对象不是档面，
+  // 不能因为它读到 version===1 就放行——那等于让调用方的原型链决定存档格式。
+  const version = Object.hasOwn(save, 'version')
+    ? (save as { readonly version?: unknown }).version
+    : undefined;
   if (version === undefined) {
     return {
       message: `save rejected: save has no version field (engine format ${SAVE_VERSION})`,
       holdSlot: false,
     };
   }
+  if (typeof version !== 'number' || !Number.isInteger(version)) {
+    return {
+      message: `save rejected: version is not an integer save format (${describeVersion(version)})`,
+      holdSlot: false,
+    };
+  }
   if (version !== SAVE_VERSION) {
     return {
-      message: `save rejected: unsupported save version ${JSON.stringify(version)} (engine format ${SAVE_VERSION})`,
+      message: `save rejected: unsupported save version ${version} (engine format ${SAVE_VERSION})`,
       holdSlot: true,
     };
   }
@@ -176,9 +200,9 @@ export function decodeSave(
 export interface HoldLatch {
   /** 记住「这份槽位的字节保不得」。 */
   engage(): void;
-  /** 解除（读到合法档 / 确认无档 = 没有可被覆盖的字节）。 */
+  /** 解除（读到合法档 / 确认无档 = 没有可被覆盖的字节）；同时让下一次保槽重新出声。 */
   release(): void;
-  /** 处于保槽态则返回 true，且首次点名报一次诊断（周期自动保存会反复触发）。 */
+  /** 处于保槽态则返回 true，且本次保槽事件内只点名报一次（周期自动保存会反复触发）。 */
   refuses(): boolean;
 }
 
@@ -187,6 +211,11 @@ export interface HoldLatch {
  * 适配器共用同一机制与措辞（后者经 @wendao/engine 引）。
  * electron 主进程侧另有一份带键域的（app-desktop/electron/platform.ts
  * createSlotHold）——那边按槽位分别记、判据是 fs 错误码，语义不同故不并一处。
+ * 报一次的范围是**单次保槽事件**：解除后再进入保槽（同一适配器实例内）会重新
+ * 出声——「静默的第二次拒绝」正是本票要消灭的那类东西（复审实测抓出来的）。
+ * 边界如实记：闩是**每适配器实例**的，不跨实例也不跨标签页——另建一个从不 load()
+ * 的适配器写同键，仍会覆掉被保的字节。随壳的单例装配（main.ts 一个适配器 +
+ * Electron 单实例锁）触发不到它，纯浏览器多开没有那道锁，故记为已知边界。
  */
 export function createHoldLatch(subject: string, onProblem?: SaveDiagnostic): HoldLatch {
   let held = false;
@@ -197,6 +226,7 @@ export function createHoldLatch(subject: string, onProblem?: SaveDiagnostic): Ho
     },
     release: () => {
       held = false;
+      announced = false;
     },
     refuses(): boolean {
       if (!held) return false;

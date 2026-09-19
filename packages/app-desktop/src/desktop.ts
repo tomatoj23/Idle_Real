@@ -27,7 +27,11 @@ export interface DesktopBridge {
   loadSave(key: string): string | null;
   /** 异步写槽位（周期自动保存路径）。 */
   writeSave(key: string, json: string): void;
-  /** 同步写槽位（关闭即保存兜底：退出竞态下异步 send 可能不达主进程）。 */
+  /**
+   * 同步写槽位（关闭即保存兜底：退出竞态下异步 send 可能不达主进程）。
+   * 主进程的 ack 是 'ok' | 'not-written'（#69 复审补：不把没写回执成已落盘），
+   * 本票不消费它——UI 呈现「本次没存进去」要另开一张（票面遗留段）。
+   */
   flushSave(key: string, json: string): void;
   /** 成就上报（平台侧幂等）。 */
   reportAchievement(id: string): void;

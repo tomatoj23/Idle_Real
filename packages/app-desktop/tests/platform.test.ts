@@ -161,7 +161,7 @@ describe('#10 · mock 平台（文件槽位 + 成就本地记账）', () => {
     const root = tempRoot();
     const platform = createMockPlatform(root);
     expect(platform.loadSlot('wendao_changsheng_v3')).toBeNull();
-    platform.writeSlot('wendao_changsheng_v3', '{"version":1,"time":5}');
+    expect(platform.writeSlot('wendao_changsheng_v3', '{"version":1,"time":5}')).toBe(true);
     expect(platform.loadSlot('wendao_changsheng_v3')).toBe('{"version":1,"time":5}');
     // 落盘位置：root/saves/<key>.json（槽位文件可审计）。
     expect(existsSync(join(root, 'saves', 'wendao_changsheng_v3.json'))).toBe(true);
@@ -226,7 +226,7 @@ describe('#69 · mock 平台读失败分类与保槽', () => {
     expect(text).toMatch(/EISDIR|EPERM/); // 目录读取的错误码两端不同名，分类判据是「非 ENOENT」
 
     // 周期自动保存的形态：必须拒绝，而非把读不到的那份档换成新局。
-    platform.writeSlot('slotB', '{"version":1,"state":{"gold":0}}');
+    expect(platform.writeSlot('slotB', '{"version":1,"state":{"gold":0}}')).toBe(false);
     expect(logs.join('\n')).toMatch(/refus/i);
     expect(existsSync(`${blocked}.tmp`)).toBe(false); // 拒绝发生在任何写动作之前
     expect(statSync(blocked).isDirectory()).toBe(true); // 槽位本身没被替换/清空
@@ -260,6 +260,49 @@ describe('#69 · mock 平台读失败分类与保槽', () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  it('保槽事件各自出声一次：解除后再犯重新报一行（第二次静默是复审实测抓出的）', () => {
+    const root = tempRoot();
+    const logs: string[] = [];
+    const platform = createMockPlatform(root, (m) => logs.push(m));
+    const slot = join(root, 'saves', 'slotE.json');
+    mkdirSync(slot, { recursive: true });
+    const refusals = () => logs.filter((m) => /refusing to overwrite/.test(m)).length;
+
+    expect(platform.loadSlot('slotE')).toBeNull();
+    expect(platform.writeSlot('slotE', '{"version":1}')).toBe(false);
+    expect(refusals()).toBe(1);
+    platform.writeSlot('slotE', '{"version":1}'); // 同一事件内不刷屏
+    expect(refusals()).toBe(1);
+
+    rmSync(slot, { recursive: true }); // 清障 → 恢复正常
+    platform.loadSlot('slotE');
+    platform.writeSlot('slotE', '{"version":1,"time":1}');
+    expect(refusals()).toBe(1);
+
+    rmSync(slot); // 新事件：同一槽位再次读故障
+    mkdirSync(slot, { recursive: true });
+    platform.loadSlot('slotE');
+    platform.writeSlot('slotE', '{"version":1,"time":2}');
+    expect(refusals()).toBe(2);
+    expect(statSync(slot).isDirectory()).toBe(true); // 两次都真守住了，字节没被覆
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('坏键不被降级成「无档」：loadSlot 与 writeSlot 同律抛出（且不会误保槽）', () => {
+    const root = tempRoot();
+    const logs: string[] = [];
+    const platform = createMockPlatform(root, (m) => logs.push(m));
+    // #69 起 slotPath 的键校验移出 try：坏键是调用方 bug，静默返回 null 会被
+    // 读侧当成「无档」开局——正是本票要消灭的那类无声降级。
+    expect(() => platform.loadSlot('../evil')).toThrow(/bad save slot key/);
+    expect(() => platform.loadSlot('a/b')).toThrow(/bad save slot key/);
+    expect(() => platform.writeSlot('../evil', '{}')).toThrow(/bad save slot key/);
+    // 抛出之后仍可正常读写别的槽位 = 坏键没把任何槽位钉住。
+    platform.writeSlot('slotF', '{"version":1}');
+    expect(platform.loadSlot('slotF')).toBe('{"version":1}');
+    rmSync(root, { recursive: true, force: true });
+  });
+
   it('写失败不留半档：原档字节纹丝不动（tmp + rename 契约的回归网）', () => {
     const root = tempRoot();
     const logs: string[] = [];
@@ -270,12 +313,13 @@ describe('#69 · mock 平台读失败分类与保槽', () => {
     expect(() => platform.writeSlot('slotD', 'BAD-BYTES')).toThrow();
     expect(platform.loadSlot('slotD')).toBe('GOOD-BYTES');
     // 票面这条写的是「只读目录下 writeSlot 不覆盖好档」，但「只读」在两端的落点
-    // 不同：Windows 侧本机实测——目录只读属性既不拦目录内新建、也不拦往目录里
-    // rename-over，只有目标**文件**只读才让 rename 吃 EPERM（原字节留存）；
-    // POSIX 侧按权限模型应是反向（写与 rename 都取目录写权限，故目录 0444 两样
-    // 都拦、文件 0444 谁都不拦；本仓无 POSIX 环境，这一半未实测，留此备查）。
-    // 没有一根两端同义的「只读」杠杆，故改钉两端一致的那条性质：写失败时
-    // tmp+rename 的临时位被目录占住 → 必抛，而正档字节不动。
+    // 不同：Windows 侧本机手工试过（未留脚本，随时可复跑）——目录的只读属性既不
+    // 拦目录内新建文件、也不拦往该目录 rename-over 既有文件，只有把**目标文件**
+    // 设为只读才让 rename 吃 EPERM（且原字节留存）。POSIX 侧按权限模型应恰相反
+    // （新建与 rename 都只要目录写权限，故目录 0444 两样都拦；单把文件设 0444
+    // 不拦 rename）——本仓无 POSIX 环境，这一半**未实测**，留此备查勿当证据。
+    // 结论：没有一根两端同义的「只读」杠杆，故本例钉两端一致的那条性质——
+    // 写失败（tmp 位被同名目录占住 → EISDIR）时正档字节不动。
     rmSync(root, { recursive: true, force: true });
   });
 });
@@ -292,30 +336,62 @@ describe('#10 · steam 平台（云存档 + 成就上报）', () => {
   it('写槽位与成就上报调用真实接口面', () => {
     const logs: string[] = [];
     const platform = createSteamPlatform(fakeSteam(logs));
-    platform.writeSlot('wendao_changsheng_v3', '{"version":1}');
+    expect(platform.writeSlot('wendao_changsheng_v3', '{"version":1}')).toBe(true);
     platform.unlockAchievement('cycles_100');
     expect(logs.some((m) => m.startsWith('write:wendao_changsheng_v3:'))).toBe(true);
     expect(logs).toContain('activate:cycles_100');
   });
 
-    it('云接口抛错不外溢：loadSlot null / writeSlot 静默告警', () => {
-    const platform = createSteamPlatform({
-      achievement: { activate: () => true },
-      cloud: {
-        fileExists: () => {
-          throw new Error('steam down');
+    it('云写抛错不外溢且出声（读正常，才走得到写路径）；云写被拒也出声', () => {
+    // #69 后云读抛错会先保槽并短路写路径，故本例把读面做正常，专钉写失败这一支
+    //（原用例把三面一起弄抛，实际只覆盖了读，写路径的告警成了死代码）。
+      const logs: string[] = [];
+      const platform = createSteamPlatform(
+        {
+          achievement: { activate: () => true },
+          cloud: {
+            fileExists: () => true,
+            readFile: () => '{"version":1}',
+            writeFile: () => {
+              throw new Error('steam write down');
+            },
+          },
         },
-        readFile: () => {
-          throw new Error('steam down');
+        (m) => logs.push(m),
+      );
+      expect(platform.loadSlot('any')).toBe('{"version":1}');
+      expect(() => platform.writeSlot('any', '{}')).not.toThrow();
+      expect(logs.join('\n')).toMatch(/cloud write failed/);
+
+      const rejected = createSteamPlatform(
+        {
+          achievement: { activate: () => true },
+          cloud: { fileExists: () => false, readFile: () => '', writeFile: () => false },
         },
-        writeFile: () => {
-          throw new Error('steam down');
-        },
-      },
+        (m) => logs.push(m),
+      );
+      rejected.writeSlot('any', '{}');
+      expect(logs.join('\n')).toMatch(/cloud write rejected/);
     });
-    expect(platform.loadSlot('any')).toBeNull();
-    expect(() => platform.writeSlot('any', '{}')).not.toThrow();
-  });
+
+    it('云接口三面全抛时不外溢：loadSlot null（随后写被保槽短路，不再触云）', () => {
+      const platform = createSteamPlatform({
+        achievement: { activate: () => true },
+        cloud: {
+          fileExists: () => {
+            throw new Error('steam down');
+          },
+          readFile: () => {
+            throw new Error('steam down');
+          },
+          writeFile: () => {
+            throw new Error('steam down');
+          },
+        },
+      });
+      expect(platform.loadSlot('any')).toBeNull();
+      expect(() => platform.writeSlot('any', '{}')).not.toThrow();
+    });
 
   it('#69 · 云读失败同律保槽：读不到的档不许被云写覆盖（fileExists 恢复后解除）', () => {
     const logs: string[] = [];

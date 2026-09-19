@@ -45,8 +45,13 @@ export interface Platform {
   readonly mode: PlatformMode;
   /** 读存档槽位；无档返回 null（读故障同样 null，但平台侧就此保槽，见头注）。返回原始 JSON 串（解析在 renderer 侧）。 */
   loadSlot(key: string): string | null;
-  /** 写存档槽位；被保槽钉住的键静默拒绝（日志已报，见 createSlotHold）。 */
-  writeSlot(key: string, json: string): void;
+  /**
+   * 写存档槽位。返回值 = 「存储这次到底收没收到」（true 收到；false 没收到：被保槽
+   * 短路、或云端自己拒写——云端抛错走异常，由 IPC 层记日志）。
+   * 之所以要有这个返回：调用方（renderer 的关闭即保存 ack）据此说实话，
+   * 不能把「一次没写」回执成「已落盘」（#69 复审补）。
+   */
+  writeSlot(key: string, json: string): boolean;
   /** 成就上报（平台侧幂等：重复上报不重记/Steam 侧返回 false）。 */
   unlockAchievement(id: string): void;
 }
@@ -70,6 +75,8 @@ function errorCode(err: unknown): string | undefined {
  *
  * 拒绝而非「先备份 .old」是取票面两案之一：备份要在同一块出故障的存储上再做
  * 一次写，且明知要覆掉玩家档还要动手；拒绝把破坏留在发生之前。
+ * 出声范围 = 单次保槽事件（解除后再犯重新报一次）；措辞刻意不复用 "read failed"，
+ * 让 `grep 'slot read failed'` 与 `grep 'refusing'` 各自只命中一类事件。
  */
 function createSlotHold(log: Logger) {
   const held = new Set<string>();
@@ -80,13 +87,14 @@ function createSlotHold(log: Logger) {
     },
     release(key: string): void {
       held.delete(key);
+      announced.delete(key);
     },
-    /** 该槽位是否处于「只许保、不许覆」态（首次为真时点名报一次，不刷屏）。 */
+    /** 该槽位是否处于「只许保、不许覆」态（本次事件内点名报一次，不刷屏）。 */
     refuseOverwrite(key: string): boolean {
       if (!held.has(key)) return false;
       if (!announced.has(key)) {
         announced.add(key);
-        log(`[platform] slot held (last read failed), refusing to overwrite: ${key}`);
+        log(`[platform] slot held, refusing to overwrite: ${key}`);
       }
       return true;
     },
@@ -147,14 +155,15 @@ export function createMockPlatform(rootDir: string, log: Logger = () => {}): Pla
       }
     },
 
-    writeSlot(key: string, json: string): void {
-      if (hold.refuseOverwrite(key)) return;
+    writeSlot(key: string, json: string): boolean {
+      if (hold.refuseOverwrite(key)) return false;
       mkdirSync(savesDir, { recursive: true });
       // 临时文件 + rename：半写状态不留正档（进程被杀也不坏档）。
       const target = slotPath(key);
       const tmp = `${target}.tmp`;
       writeFileSync(tmp, json, 'utf8');
       renameSync(tmp, target);
+      return true;
     },
 
     unlockAchievement(id: string): void {
@@ -192,15 +201,18 @@ export function createSteamPlatform(client: SteamClient, log: Logger = () => {})
       }
     },
 
-    writeSlot(key: string, json: string): void {
-      if (hold.refuseOverwrite(key)) return;
+    writeSlot(key: string, json: string): boolean {
+      if (hold.refuseOverwrite(key)) return false;
       try {
         if (!client.cloud.writeFile(key, json)) {
           log(`[platform] cloud write rejected: ${key}`);
+          return false;
         }
       } catch (err) {
         log(`[platform] cloud write failed: ${errMsg(err)}`);
+        return false; // 不外溢（旧契约）：云侧故障既不崩壳也不落盘，回执说实话
       }
+      return true;
     },
 
     unlockAchievement(id: string): void {

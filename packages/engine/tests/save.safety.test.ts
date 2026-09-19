@@ -51,8 +51,22 @@ describe('#69 · 存档版本门禁（项 1：有号无检）', () => {
     expect(() => restoreState(content, 'not-a-save' as unknown as SaveData, 1)).toThrow(
       /not a save object/,
     );
-    expect(() => restoreState(content, saveOf({ gold: 1 }, null), 1)).toThrow(/version null/);
-    expect(() => restoreState(content, saveOf({ gold: 1 }, '1'), 1)).toThrow(/version "1"/);
+    expect(() => restoreState(content, saveOf({ gold: 1 }, null), 1)).toThrow(/not an integer/);
+    expect(() => restoreState(content, saveOf({ gold: 1 }, '1'), 1)).toThrow(/not an integer/);
+  });
+
+  it('保槽只给「数字版本号不等于本引擎」这一种自证形态；非数字版本一律不保（防死锁）', () => {
+    // 复审实测：把 "1"/true/{}/[] 也判成异型档去保槽，等于为一堆不自证的字节
+    // 永久停止落盘，而被保的字节正是禁止改写的那份 —— 没有解除路径。
+    for (const junk of ['1', true, null, {}, [], 1.5, Number.NaN]) {
+      expect(saveRejection({ version: junk })).toMatchObject({ holdSlot: false });
+    }
+    const bigintRejection = saveRejection({ version: 10n }); // 不可 JSON 序列化值不得抛
+    expect(bigintRejection).toMatchObject({ holdSlot: false, message: /not an integer/ });
+    expect(saveRejection({ version: Symbol('v') })).toMatchObject({ holdSlot: false });
+    // 正对照：真正的数字异版本才保（解药＝换回能读它的引擎）。
+    expect(saveRejection({ version: 2 })).toMatchObject({ holdSlot: true });
+    expect(saveRejection({ version: 0 })).toMatchObject({ holdSlot: true });
   });
 
   it('createGame 全链同律：异型档不产出半新半旧的运行态', () => {
@@ -62,6 +76,12 @@ describe('#69 · 存档版本门禁（项 1：有号无检）', () => {
     // 合法档不回归。
     const game = createGame({ content, clock: new ManualClock(), save: saveOf({ gold: 42 }) });
     expect(game.snapshot().state.gold).toBe(42);
+  });
+
+  it('version 从原型链继承不算数（与本票项 4 同一条自有键域纪律）', () => {
+    const inherited = Object.create({ version: SAVE_VERSION }) as SaveData;
+    expect(() => restoreState(content, inherited, 1)).toThrow(/no version/);
+    expect(saveRejection(inherited)).toMatchObject({ holdSlot: false });
   });
 
   it('saveRejection 是纯判定：合法档 undefined，异型档给原因 + 保槽位', () => {
@@ -212,6 +232,31 @@ describe('#69 · localStorageSaveAdapter 诊断面 + 异型档保槽', () => {
     expect(() => adapter.save(saveOf({ gold: 1 }))).not.toThrow();
   });
 
+  it('保槽事件各自出声一次：解除后再犯会重新报（第二次静默＝复审抓出的缺陷）', () => {
+    const store = stubStorage({ store: new Map([[KEY, JSON.stringify({ version: 2 })]]) });
+    const problems: string[] = [];
+    const adapter = localStorageSaveAdapter(KEY, { onProblem: (m) => problems.push(m) });
+    const refusals = () => problems.filter((m) => /refus/i.test(m)).length;
+
+    adapter.load();
+    adapter.save(saveOf({ gold: 1 }));
+    expect(refusals()).toBe(1);
+
+    // 事件结束：槽位换成合法档 → 读写恢复。
+    store.set(KEY, JSON.stringify({ version: SAVE_VERSION, time: 0, state: { gold: 2 } }));
+    expect(adapter.load()?.version).toBe(SAVE_VERSION);
+    adapter.save(saveOf({ gold: 3 }));
+    expect(refusals()).toBe(1);
+
+    // 新事件：槽位又变成异型档 → 这次拒绝必须再次出声（曾实测为静默）。
+    store.set(KEY, JSON.stringify({ version: 3 }));
+    expect(adapter.load()).toBeNull();
+    adapter.save(saveOf({ gold: 4 }));
+    expect(refusals()).toBe(2);
+    adapter.save(saveOf({ gold: 5 })); // 同一事件内仍不刷屏
+    expect(refusals()).toBe(2);
+  });
+
   it('读通道故障（getItem 抛错）：出诊断但不碰保槽态——既没证明有货也没证明没货', () => {
     stubStorage({ getItemThrows: new Error('SecurityError') });
     const problems: string[] = [];
@@ -225,59 +270,78 @@ describe('#69 · localStorageSaveAdapter 诊断面 + 异型档保槽', () => {
 
 describe('#69 · 存档 map 字段的原型污染面（项 4）', () => {
   // JSON.parse 造 own property 形态的 __proto__（与真实坏档同构，非对象字面量语义）。
-  it('skills 行：__proto__ 不再换掉技能表原型，constructor 不再成技能键', () => {
+
+  /**
+   * items 是六个 map 行里**唯一不查内容域**的（计数直接入库），故它也是唯一
+   * 能判别键域守卫有没有在办事的一行——带正对照：
+   * 内容 id 的 schema 形态是 `^[a-z][a-zA-Z0-9_]*$`，`constructor`/`prototype`/
+   * `hasOwnProperty` 都是合法 id，黑名单把它们一起挡掉＝静默丢玩家的合法条目数据
+   * （复审抓出的误伤，键域因此分两档）。只有 `__proto__`（前导下划线，天然非法 id）
+   * 走黑名单。
+   */
+  it('items 行（键域守卫的判别面）：__proto__ 挡掉且原型未换，三个合法形态 id 存活', () => {
     const raw = JSON.parse(
-      '{"skills":{"__proto__":{"xp":7},"constructor":{"xp":1},"hasOwnProperty":{"xp":2},"herb":{"xp":5}}}',
+      '{"items":{"__proto__":{"x":1},"constructor":6,"prototype":7,"hasOwnProperty":8,"herb1":3}}',
     ) as Record<string, unknown>;
-    const state = restoreState(content, saveOf(raw), 1);
-    expect(Object.getPrototypeOf(state.skills)).toBe(Object.prototype);
-    expect(Object.getOwnPropertyNames(state.skills)).not.toContain('constructor');
-    expect(Object.getOwnPropertyNames(state.skills)).not.toContain('hasOwnProperty');
-    expect((state.skills as unknown as Record<string, unknown>).xp).toBeUndefined();
-    expect(state.skills.herb).toEqual({ xp: 5 }); // 合法键照常收编
+    const items = restoreState(content, saveOf(raw), 1).items as unknown as Record<string, unknown>;
+    expect(Object.getPrototypeOf(items)).toBe(Object.prototype);
+    expect((items as Record<string, unknown>).x).toBeUndefined(); // 原型没被换成 {x:1}
+    expect(Object.getOwnPropertyNames(items)).not.toContain('__proto__');
+    // 正对照：这三键若被误挡，本断言立刻红。
+    expect([items['constructor'], items['prototype'], items['hasOwnProperty'], items['herb1']]).toEqual([
+      6, 7, 8, 3,
+    ]);
   });
 
-  it('skills 行：内容包没有的技能键不收编（自有键域，原型链命中不算）', () => {
-    const raw = JSON.parse('{"skills":{"noSuchSkill":{"xp":9},"fight":{"xp":12}}}') as Record<
+  it('skills 行：__proto__ 不再换掉技能表原型（旧判据 `id in` 恒真放行它）', () => {
+    const raw = JSON.parse('{"skills":{"__proto__":{"xp":7},"herb":{"xp":5}}}') as Record<
       string,
       unknown
     >;
     const state = restoreState(content, saveOf(raw), 1);
-    expect(Object.hasOwn(state.skills, 'noSuchSkill')).toBe(false);
-    expect(state.skills.fight).toEqual({ xp: 12 });
+    expect(Object.getPrototypeOf(state.skills)).toBe(Object.prototype);
+    expect((state.skills as unknown as Record<string, unknown>).xp).toBeUndefined();
+    expect(state.skills.herb).toEqual({ xp: 5 }); // 合法键照常收编
   });
 
-  it('items 行：污染键不入袋，袋面方法不被数值键顶掉', () => {
+  it('skills 行自有键域 gate 的两面：包内声明的 constructor 技能收编，包外技能不收', () => {
+    const packWithCtorSkill = {
+      ...content,
+      skills: [...content.skills, { id: 'constructor', name: '邪名', icon: '邪', kind: 'combat' }],
+    } as typeof content;
     const raw = JSON.parse(
-      '{"items":{"hasOwnProperty":5,"constructor":6,"__proto__":7,"prototype":8,"herb1":3}}',
+      '{"skills":{"constructor":{"xp":41},"noSuchSkill":{"xp":9},"fight":{"xp":12}}}',
     ) as Record<string, unknown>;
-    const state = restoreState(content, saveOf(raw), 1);
-    expect(Object.getOwnPropertyNames(state.items)).toEqual(['herb1']);
-    expect(state.items.herb1).toBe(3);
+    // 正对照：技能名合法地叫 constructor → xp 必须活着（黑名单不该误伤内容域）。
+    const declared = restoreState(packWithCtorSkill, saveOf(raw), 1);
+    expect(declared.skills['constructor']).toEqual({ xp: 41 });
+    expect(declared.skills.fight).toEqual({ xp: 12 });
+    // 反面对照：包里没有的技能即便撞了原型方法名也不入表（自有键域判据，非黑名单）。
+    const undeclared = restoreState(content, saveOf(raw), 1);
+    expect(Object.hasOwn(undeclared.skills, 'constructor')).toBe(false);
+    expect(Object.hasOwn(undeclared.skills, 'noSuchSkill')).toBe(false);
   });
 
-  it('equips/buffs/dungeonBest/lastEncounter 行同律：污染键不入库（值域/内容域本已挡，键域收口统一）', () => {
+  it('equips/buffs/lastEncounter/dungeonBest 行：__proto__ 不入库（这四行内容域守卫在前，四键全打不具判别力，故只钉它）', () => {
     const raw = JSON.parse(
       '{' +
         '"gear":[{"uid":2,"itemId":"sword1","rarity":"common","affixes":[]}],' +
-        '"equips":{"__proto__":2,"constructor":2,"hasOwnProperty":2,"prototype":2,"weapon":2},' +
-        '"buffs":{"__proto__":99999,"constructor":99999,"consumable_atk":99999},' +
+        '"equips":{"__proto__":2,"weapon":2},' +
+        '"buffs":{"__proto__":99999,"consumable_atk":99999},' +
         '"lastEncounter":{"__proto__":{"rounds":3,"won":true,"at":1},"e1":{"rounds":3,"won":true,"at":1}},' +
-        '"dungeonBest":{"__proto__":4,"crypt":4}' +
+        '"dungeonBest":{"__proto__":4}' +
         '}',
     ) as Record<string, unknown>;
     const state = restoreState(content, saveOf(raw), 1);
     for (const map of [state.equips, state.buffs, state.lastEncounter, state.dungeonBest]) {
-      const names = Object.getOwnPropertyNames(map as unknown as Record<string, unknown>);
-      for (const key of ['__proto__', 'constructor', 'hasOwnProperty', 'prototype']) {
-        expect(names).not.toContain(key);
-      }
+      expect(Object.getPrototypeOf(map)).toBe(Object.prototype);
+      expect(Object.getOwnPropertyNames(map)).not.toContain('__proto__');
     }
     expect(state.equips.weapon).toBe(2); // 合法键不受影响
     expect(state.lastEncounter.e1).toEqual({ rounds: 3, won: true, at: 1 });
   });
 
-  it('顶层透传区同黑名单（复用同一键集，不再各写一份三元判断）', () => {
+  it('顶层透传区（开放键域，非内容 id）：四键全挡', () => {
     const raw = JSON.parse(
       '{"gold":4,"futureFlag":true,"__proto__":{"polluted":1},"constructor":5,"prototype":6,"hasOwnProperty":7}',
     ) as Record<string, unknown>;
@@ -287,6 +351,26 @@ describe('#69 · 存档 map 字段的原型污染面（项 4）', () => {
       expect(names).not.toContain(key);
     }
     expect((state as unknown as Record<string, unknown>).futureFlag).toBe(true);
+  });
+
+  it('透传节的**嵌套层**同样剔键：消费方对本节做 Object.assign / 键拷贝不再被换原型', () => {
+    // 复审实测：只挡顶层一层时，{"future":{"__proto__":{...}}} 里的 own __proto__
+    // 会原样进活态并随落盘写回，消费方一合并就把自己的原型换掉。
+    const raw = JSON.parse(
+      '{"future":{"note":"ok","__proto__":{"injected":1},"deep":[{"__proto__":{"x":2},"k":1}]}}',
+    ) as Record<string, unknown>;
+    const state = restoreState(content, saveOf(raw), 1) as unknown as {
+      future: { note: string; deep: Record<string, unknown>[] };
+    };
+    expect(state.future.note).toBe('ok'); // 合法内容不动
+    expect(Object.getPrototypeOf(state.future)).toBe(Object.prototype);
+
+    const merged = Object.assign({}, state.future) as Record<string, unknown>;
+    expect(Object.getPrototypeOf(merged)).toBe(Object.prototype); // 合并方原型未被换
+    expect(({} as Record<string, unknown>).injected).toBeUndefined(); // 全局原型干净
+    expect(Object.getPrototypeOf(merged['deep'])).toBe(Array.prototype);
+    expect((state.future.deep[0] as Record<string, unknown>).k).toBe(1);
+    expect((state.future.deep[0] as Record<string, unknown>).x).toBeUndefined(); // 第二层也剔了
   });
 });
 
