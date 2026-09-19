@@ -10,9 +10,13 @@ import { describe, expect, it } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync, existsSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { ContentPack } from '@wendao/content';
+import { loadFantasyPack } from '@wendao/content/packs/fantasy';
+import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
 import {
   createMockPlatform,
   createSteamPlatform,
+  isSafeId,
   resolvePlatform,
   type SteamClient,
 } from '../electron/platform';
@@ -423,5 +427,32 @@ describe('#10 · steam 平台（云存档 + 成就上报）', () => {
     expect(platform.loadSlot('slotS')).toBe('{"version":1,"time":8}');
     platform.writeSlot('slotS', '{"version":1,"time":9}');
     expect(logs).toContain('writeFile-called');
+  });
+});
+
+/* ---------- #71 项 6：键域格式（成就 id 与存档槽位键共用一道门） ---------- */
+
+/** 在册题材包的成就 id：走导出面 loader（顺带过一遍启动校验），不抄清单。 */
+function packAchievementIds(pack: ContentPack): string[] {
+  return pack.achievements?.map((a) => a.id) ?? [];
+}
+
+describe('#71 项 6 · 键域格式 isSafeId', () => {
+  it('在册两包的成就 id 与线上槽位键全过门（加固不许顺手误拒合法值）', () => {
+    const byPack = [packAchievementIds(loadXiuxianPack()), packAchievementIds(loadFantasyPack())];
+    for (const ids of byPack) expect(ids.length).toBeGreaterThan(0); // 逐包正对照
+    for (const id of byPack.flat()) {
+      expect(typeof id).toBe('string'); // 缺 id 会退化成 'undefined' 串混过门（复审抓的）
+      expect(id.length).toBeGreaterThan(0);
+      expect(isSafeId(id)).toBe(true);
+    }
+    expect(isSafeId('wendao_changsheng_v3')).toBe(true);
+  });
+
+  it('畸形形状一律拒：路径分隔、空串、空白、超长；上限本身是放行值', () => {
+    for (const id of ['', 'a/b', '../evil', 'has space', 'nl\n', 'x'.repeat(129), '名称']) {
+      expect(isSafeId(id)).toBe(false);
+    }
+    expect(isSafeId('x'.repeat(128))).toBe(true); // 上限是放行值：差一即误拒（128 为壳自定界）
   });
 });

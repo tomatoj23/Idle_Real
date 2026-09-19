@@ -103,10 +103,26 @@ function createSlotHold(log: Logger) {
 
 /* ---------- mock：文件槽位 + 成就本地记账 ---------- */
 
-/** 槽位键白名单：字母数字与 ._-，防路径穿越（键由壳常量传入，纵深防御）。 */
+/**
+ * 键域格式：存档槽位键与成就 id 共用一道门（#71 项 6 起成就侧也接上）。
+ * 字母数字与 `._-` 防路径穿越；上限 128 是壳自定的界（现役键 ≤20 字符，留量），
+ * 只为堵住「无界长的键」这一条——Steamworks 文档未给成就 API 名长度上限，
+ * 别把 128 当外部约束。
+ */
+const SAFE_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
+
+export function isSafeId(value: string): boolean {
+  return SAFE_ID_PATTERN.test(value);
+}
+
+/**
+ * 槽位键白名单（形状同 isSafeId，键由壳常量传入，纵深防御）。
+ * 抛出消息不回显键本体：键是 renderer 可控串，含换行就能往 wendao.log 伪造条目
+ * （与 #71 项 6 成就侧同律——只报形状）。
+ */
 function assertSafeKey(key: string): void {
-  if (!/^[A-Za-z0-9._-]+$/.test(key)) {
-    throw new Error(`bad save slot key: ${key}`);
+  if (!isSafeId(key)) {
+    throw new Error(`bad save slot key (len=${key.length})`);
   }
 }
 

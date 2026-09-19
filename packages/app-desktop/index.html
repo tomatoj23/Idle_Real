@@ -3,6 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      CSP（#71 项 2）：内容包 texts 直通 DOM，转义（textContent / ui.ts 的 esc）是唯一
+      防线，这里补一层执行面纵深。dev 态 http 源实测（2026-09-20 真实浏览器）：注入的
+      内联 <script> 不执行、异源 fetch 被拒，游戏功能不回归；打包态 file: 源下的
+      'self' 匹配须随打包冒烟一并复验（同一张票的验收框）。
+      style-src 的 'unsafe-inline' 去不掉：进度条一类的模板写的就是内联 style 属性
+      （src/pageFrame.ts 的 style="width:…"），去掉后该属性整条被忽略（实测 37% → 撑满）；
+      CSSOM 改样式不受 style-src 管，所以这不等价于「禁止一切内联样式」。
+      connect-src 未设 = 由 default-src 'self' 兜；同源 ws 实测照连（vite HMR 未断）。
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'" />
     <title></title>
   </head>
   <body>
