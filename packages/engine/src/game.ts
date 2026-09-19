@@ -56,6 +56,7 @@ import {
   type ActivityState,
   type GameState,
 } from './state.js';
+import { SAVE_VERSION } from './types.js';
 import type {
   Clock,
   GameAction,
@@ -1992,7 +1993,7 @@ export function createGame(options: CreateGameOptions): Game {
     snapshot(): SaveData {
       // GameState 无索引签名，与 GameContent 同理放宽为透明 Record（#2 先例）。
       return {
-        version: 1,
+        version: SAVE_VERSION,
         time,
         savedAt: clock.now(),
         state: cloneState(state) as unknown as Readonly<Record<string, unknown>>,

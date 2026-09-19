@@ -483,9 +483,19 @@ export interface PlayerStatsView {
   readonly maxHp: number;
 }
 
+/**
+ * 存档格式版本（#69）：写侧标记（game.ts snapshot）与读侧门禁（save.ts
+ * saveRejection/decodeSave、state.ts restoreState）的单一事实源。
+ *
+ * 有号必须有检：版本号只做标记、读侧不校验，等于未来 v2 档被 v1 引擎按
+ * v1 语义静默错解（字段改名/删除时恢复守卫会「合法地」读出错的态）。
+ * 真正的 v1→v2 迁移机制（迁移表 + 幂等）不在本票范围——本常量是它的挂载点。
+ */
+export const SAVE_VERSION = 1;
+
 /** 存档快照。 */
 export interface SaveData {
-  readonly version: 1;
+  readonly version: typeof SAVE_VERSION;
   /** 存档时的游戏内时间（毫秒）。 */
   readonly time: number;
   /**

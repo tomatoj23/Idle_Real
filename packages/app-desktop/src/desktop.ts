@@ -10,7 +10,15 @@
  * API 名约定，见 electron/platform.ts）。挂载时机须早于 settleOffline
  * （启动欠账结算即可触发解锁，main.ts 保证顺序）。
  */
-import type { EventBus, GameEvent, SaveAdapter, SaveData } from '@wendao/engine';
+import {
+  createHoldLatch,
+  decodeSave,
+  type EventBus,
+  type GameEvent,
+  type SaveAdapter,
+  type SaveAdapterOptions,
+  type SaveData,
+} from '@wendao/engine';
 
 /** preload 暴露的桥面（window.wendao 的形状契约）。 */
 export interface DesktopBridge {
@@ -36,25 +44,44 @@ export function desktopBridgeOf(): DesktopBridge | undefined {
   return bridge as DesktopBridge;
 }
 
-/** 桥 → engine SaveAdapter（附 flushSync 供 beforeunload 关闭即保存）。 */
+/**
+ * 桥 → engine SaveAdapter（附 flushSync 供 beforeunload 关闭即保存）。
+ *
+ * 坏档处理与 localStorageSaveAdapter 同律（#69 项 3）：解析与形状/版本门禁、
+ * 以及「异型档保住槽位」的闩全在引擎侧（decodeSave / createHoldLatch）——
+ * 主进程守得住 fs 故障那一层，档字节这一层只有 renderer 看得见，两边各守各的。
+ */
 export function desktopSaveAdapter(
   key: string,
   bridge: DesktopBridge,
+  options: SaveAdapterOptions = {},
 ): SaveAdapter & { flushSync(data: SaveData): void } {
+  const report = options.onProblem;
+  const latch = createHoldLatch(key, report);
   return {
     load(): SaveData | null {
+      let raw: string | null;
       try {
-        const raw = bridge.loadSave(key);
-        if (typeof raw !== 'string' || raw.length === 0) return null;
-        return JSON.parse(raw) as SaveData;
-      } catch {
-        return null; // 坏档 = 全新开局（localStorageSaveAdapter 同策略）
+        raw = bridge.loadSave(key);
+      } catch (err) {
+        // 桥/通道故障：槽位字节一眼都没见到，不碰保槽态（与 localStorageSaveAdapter
+        // 的 getItem 分支同律——无从证明有货就把存档能力钉死，是更坏的降级）。
+        // 错误归一就地写而不引 errMsg：那位在 electron 主进程模块里（含 node:fs，
+        // renderer 引不到），为一行三元式跨包开面不值。
+        report?.(`desktop bridge read failed: ${err instanceof Error ? err.message : String(err)}`);
+        return null;
       }
+      const decoded = decodeSave(typeof raw === 'string' ? raw : null, report);
+      if (decoded.holdSlot) latch.engage();
+      else latch.release();
+      return decoded.save;
     },
     save(data: SaveData): void {
+      if (latch.refuses()) return;
       bridge.writeSave(key, JSON.stringify(data));
     },
     flushSync(data: SaveData): void {
+      if (latch.refuses()) return;
       bridge.flushSave(key, JSON.stringify(data));
     },
   };

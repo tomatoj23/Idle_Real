@@ -49,9 +49,14 @@ try {
   //（mock=文件槽位 / steam=Steam Cloud）；纯浏览器 dev 缺桥回落 localStorage。
   const bridge = desktopBridgeOf();
   if (bridge) console.info(`[wendao] adapter=${bridge.mode} (desktop bridge)`);
+  // 存档诊断面（#69 项 3）：坏档/异型档/写失败自此不再是「一声不响的全新开局」。
+  // 槽位字节的形状问题只有这一侧看得见（主进程只见 fs），故诊断落 renderer console。
+  const onProblem = (message: string): void => {
+    console.warn(`[wendao][save] ${message}`);
+  };
   const adapter: SaveAdapter & { flushSync?(data: SaveData): void } = bridge
-    ? desktopSaveAdapter(SAVE_KEY, bridge)
-    : localStorageSaveAdapter(SAVE_KEY);
+    ? desktopSaveAdapter(SAVE_KEY, bridge, { onProblem })
+    : localStorageSaveAdapter(SAVE_KEY, { onProblem });
   const save = adapter.load() ?? undefined;
   const game = createGame({
     content,

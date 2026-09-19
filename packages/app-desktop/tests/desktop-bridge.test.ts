@@ -6,7 +6,7 @@
  * - 成就上报管道：引擎事件流 achievement:unlock → 桥上报（其余事件零搬运）。
  */
 import { describe, expect, it } from 'vitest';
-import { EventBus, type GameEvent, type SaveData } from '@wendao/engine';
+import { EventBus, SAVE_VERSION, type GameEvent, type SaveData } from '@wendao/engine';
 import {
   desktopBridgeOf,
   desktopSaveAdapter,
@@ -92,6 +92,93 @@ describe('#10 · desktopSaveAdapter', () => {
     const save = { version: 1, time: 1, state: {} } as unknown as SaveData;
     adapter.flushSync(save);
     expect(bridge.flushes).toEqual(['slot']);
+  });
+});
+
+describe('#69 · desktopSaveAdapter 诊断面与坏档保槽', () => {
+  /** 桥固定回一段字节（null = 无档）。 */
+  function bridgeWith(payload: string | null): ReturnType<typeof fakeBridge> {
+    const bridge = fakeBridge();
+    bridge.loadSave = () => payload;
+    return bridge;
+  }
+
+  it('碎片档：load 仍 null（不回归）+ 诊断说原因，写通道照常（碎片不值得永久断档）', () => {
+    const problems: string[] = [];
+    const bridge = bridgeWith('{broken');
+    const adapter = desktopSaveAdapter('slot', bridge, { onProblem: (m) => problems.push(m) });
+    expect(adapter.load()).toBeNull();
+    expect(problems.join('\n')).toMatch(/parse/);
+
+    adapter.save({ version: SAVE_VERSION, time: 0, state: {} });
+    adapter.flushSync({ version: SAVE_VERSION, time: 0, state: {} });
+    expect(bridge.saves).toHaveLength(1);
+    expect(bridge.flushes).toEqual(['slot']);
+    expect(problems.some((m) => /refus/i.test(m))).toBe(false);
+  });
+
+  it('异型档保槽：save 与 flushSync 两条写通道都不许过桥，且只报一次', () => {
+    const problems: string[] = [];
+    const bridge = bridgeWith(JSON.stringify({ version: 2, time: 0, state: { gold: 1 } }));
+    const adapter = desktopSaveAdapter('slot', bridge, { onProblem: (m) => problems.push(m) });
+    expect(adapter.load()).toBeNull();
+    expect(problems.join('\n')).toMatch(/version 2/); // 拒绝原因指名版本
+
+    adapter.save({ version: SAVE_VERSION, time: 0, state: {} });
+    adapter.flushSync({ version: SAVE_VERSION, time: 0, state: {} });
+    adapter.save({ version: SAVE_VERSION, time: 1, state: {} });
+    expect(bridge.saves).toEqual([]);
+    expect(bridge.flushes).toEqual([]);
+    expect(problems.filter((m) => /refus/i.test(m))).toHaveLength(1);
+  });
+
+  it('保槽非单向棘轮：桥上的字节换成合法档后写通道恢复', () => {
+    const bridge = bridgeWith(JSON.stringify({ version: 2, time: 0 }));
+    const adapter = desktopSaveAdapter('slot', bridge, { onProblem: () => {} });
+    expect(adapter.load()).toBeNull();
+    adapter.save({ version: SAVE_VERSION, time: 0, state: {} });
+    expect(bridge.saves).toEqual([]);
+
+    bridge.loadSave = () => JSON.stringify({ version: SAVE_VERSION, time: 3, state: {} });
+    expect(adapter.load()?.version).toBe(SAVE_VERSION);
+    adapter.save({ version: SAVE_VERSION, time: 4, state: {} });
+    expect(bridge.saves).toHaveLength(1);
+  });
+
+  it('合法档往返不回归：零诊断、写正常过桥', () => {
+    const payload: SaveData = { version: SAVE_VERSION, time: 4, state: { gold: 2 } };
+    const problems: string[] = [];
+    const bridge = bridgeWith(JSON.stringify(payload));
+    const adapter = desktopSaveAdapter('slot', bridge, { onProblem: (m) => problems.push(m) });
+    expect(adapter.load()).toEqual(payload);
+    adapter.save(payload);
+    expect(bridge.saves).toEqual([{ key: 'slot', json: JSON.stringify(payload) }]);
+    expect(problems).toEqual([]);
+  });
+
+  it('无档（桥回 null）与旧语义一致：零诊断、直接可写', () => {
+    const problems: string[] = [];
+    const bridge = bridgeWith(null);
+    const adapter = desktopSaveAdapter('slot', bridge, { onProblem: (m) => problems.push(m) });
+    expect(adapter.load()).toBeNull();
+    adapter.save({ version: SAVE_VERSION, time: 0, state: {} });
+    expect(bridge.saves).toHaveLength(1);
+    expect(problems).toEqual([]);
+  });
+
+  it('桥本身抛错（IPC 通道故障）：诊断 + 不保槽（无从证明槽位有货）；不传诊断也不崩', () => {
+    const problems: string[] = [];
+    const bridge = bridgeWith(null);
+    bridge.loadSave = () => {
+      throw new Error('ipc dead');
+    };
+    const adapter = desktopSaveAdapter('slot', bridge, { onProblem: (m) => problems.push(m) });
+    expect(adapter.load()).toBeNull();
+    expect(problems.join('\n')).toMatch(/ipc dead/);
+    adapter.save({ version: SAVE_VERSION, time: 0, state: {} });
+    expect(bridge.saves).toHaveLength(1);
+
+    expect(desktopSaveAdapter('slot', bridge).load()).toBeNull();
   });
 });
 

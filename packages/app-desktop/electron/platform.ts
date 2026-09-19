@@ -12,6 +12,11 @@
  *   失败（客户端未开/原生模块缺失）静默回落 mock，绝不崩壳；
  * - 每次裁决打日志 `adapter=mock|steam`（票面验收）。
  *
+ * 读侧纪律（#69 项 2，mock 与 steam 两式同律）：loadSlot 分错误类别——
+ * ENOENT / 云侧无档 = null（真没档，可以开局）；其余故障也返回 null 但**保槽**，
+ * 本槽位后续 writeSlot 一律拒绝。不分这两类的代价是「静默降级全新开局 +
+ * 随后的周期自动保存」= 拿一局新档把那份我们读不到的档覆掉，且日志里什么都没有。
+ *
  * 约定：content 包成就 id 即 Steam 成就 API 名（零映射配置；
  * 官方成就名表待内容定版后另票引入映射）。
  */
@@ -38,9 +43,9 @@ export interface SteamClient {
 /** 壳层平台面：renderer 经 IPC 桥消费的全部能力。 */
 export interface Platform {
   readonly mode: PlatformMode;
-  /** 读存档槽位；无档返回 null。返回原始 JSON 串（解析在 renderer 侧）。 */
+  /** 读存档槽位；无档返回 null（读故障同样 null，但平台侧就此保槽，见头注）。返回原始 JSON 串（解析在 renderer 侧）。 */
   loadSlot(key: string): string | null;
-  /** 写存档槽位。 */
+  /** 写存档槽位；被保槽钉住的键静默拒绝（日志已报，见 createSlotHold）。 */
   writeSlot(key: string, json: string): void;
   /** 成就上报（平台侧幂等：重复上报不重记/Steam 侧返回 false）。 */
   unlockAchievement(id: string): void;
@@ -49,6 +54,43 @@ export interface Platform {
 /** 错误信息归一（catch 块日志共用）。 */
 export function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** fs 错误码提取（#69 项 2 的分类判据：ENOENT 与其余故障不是一回事）。 */
+function errorCode(err: unknown): string | undefined {
+  const code = (err as { code?: unknown } | null | undefined)?.code;
+  return typeof code === 'string' ? code : undefined;
+}
+
+/**
+ * 保槽守卫（#69 项 2）：某槽位「读失败且失败原因不是没有档」时，那字节我们
+ * 没见过内容——此后周期自动保存再往同一路径写一次，就是拿全新局覆盖
+ * 唯一那份档（不可逆 + 零线索）。故记下它，本槽位的写一律拒绝，直到一次
+ * 成功读或 ENOENT（两者都证明了「没有可被覆盖的字节」）解除。
+ *
+ * 拒绝而非「先备份 .old」是取票面两案之一：备份要在同一块出故障的存储上再做
+ * 一次写，且明知要覆掉玩家档还要动手；拒绝把破坏留在发生之前。
+ */
+function createSlotHold(log: Logger) {
+  const held = new Set<string>();
+  const announced = new Set<string>();
+  return {
+    hold(key: string): void {
+      held.add(key);
+    },
+    release(key: string): void {
+      held.delete(key);
+    },
+    /** 该槽位是否处于「只许保、不许覆」态（首次为真时点名报一次，不刷屏）。 */
+    refuseOverwrite(key: string): boolean {
+      if (!held.has(key)) return false;
+      if (!announced.has(key)) {
+        announced.add(key);
+        log(`[platform] slot held (last read failed), refusing to overwrite: ${key}`);
+      }
+      return true;
+    },
+  };
 }
 
 /* ---------- mock：文件槽位 + 成就本地记账 ---------- */
@@ -67,6 +109,7 @@ export function createMockPlatform(rootDir: string, log: Logger = () => {}): Pla
     return join(savesDir, `${key}.json`);
   };
   const achievementPath = join(rootDir, 'achievements.json');
+  const hold = createSlotHold(log);
 
   const readAchievements = (): Record<string, string> => {
     try {
@@ -85,14 +128,27 @@ export function createMockPlatform(rootDir: string, log: Logger = () => {}): Pla
     mode: 'mock',
 
     loadSlot(key: string): string | null {
+      // 键校验在 try 之外（slotPath 内）：坏键是调用方 bug，不许被降级成「无档」。
+      const target = slotPath(key);
       try {
-        return readFileSync(slotPath(key), 'utf8');
-      } catch {
-        return null; // 无档（ENOENT）= null；读失败同律静默降级全新开局
+        const raw = readFileSync(target, 'utf8');
+        hold.release(key); // 读通 = 槽位可用，此前的读故障一并作废
+        return raw;
+      } catch (err) {
+        // ENOENT = 真·无档（静默 null，旧语义）；其余是存储故障——槽位里有
+        // 我们读不到的字节，绝不能让它在下一次自动保存时被新局覆盖（#69 项 2）。
+        if (errorCode(err) === 'ENOENT') {
+          hold.release(key); // 确认无货 = 没有可被覆盖的字节
+          return null;
+        }
+        log(`[platform] slot read failed: ${key} (${errorCode(err) ?? 'unknown'}): ${errMsg(err)}`);
+        hold.hold(key);
+        return null;
       }
     },
 
     writeSlot(key: string, json: string): void {
+      if (hold.refuseOverwrite(key)) return;
       mkdirSync(savesDir, { recursive: true });
       // 临时文件 + rename：半写状态不留正档（进程被杀也不坏档）。
       const target = slotPath(key);
@@ -119,19 +175,25 @@ export function createMockPlatform(rootDir: string, log: Logger = () => {}): Pla
 /* ---------- steam：Steam Cloud 槽位 + 成就上报 ---------- */
 
 export function createSteamPlatform(client: SteamClient, log: Logger = () => {}): Platform {
+  const hold = createSlotHold(log);
   return {
     mode: 'steam',
 
     loadSlot(key: string): string | null {
       try {
-        return client.cloud.fileExists(key) ? client.cloud.readFile(key) : null;
+        const raw = client.cloud.fileExists(key) ? client.cloud.readFile(key) : null;
+        hold.release(key); // 云侧应答正常（有档读到 / 无档不存在）= 不必保槽
+        return raw;
       } catch (err) {
+        // 云故障与文件故障同律（#69 项 2）：不知道云上那份还在不在，就不许写。
         log(`[platform] cloud read failed: ${errMsg(err)}`);
+        hold.hold(key);
         return null;
       }
     },
 
     writeSlot(key: string, json: string): void {
+      if (hold.refuseOverwrite(key)) return;
       try {
         if (!client.cloud.writeFile(key, json)) {
           log(`[platform] cloud write rejected: ${key}`);

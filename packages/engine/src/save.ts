@@ -2,6 +2,10 @@
  * 存档适配层（issue #3）：SaveAdapter 统一读写接口，
  * memory / localStorage 可换（SPEC US-24，Steam Cloud/Capacitor 随壳接入）。
  *
+ * #69 起本模块兼负存档**读侧门禁**（saveRejection / decodeSave）：适配器层是
+ * 坏档能同时做到「不崩」「说得出来」并且（对异型档）「不许被覆掉」的位置；
+ * restoreState 里的同门禁是框架直供面的兜底（绕过适配器也要被拦）。
+ *
  * attachAutoSave 是应用显式挂载的基础设施（间隔由调用方给定）——
  * ADR-013 禁的"隐式定时器"指引擎核心逻辑不得依赖隐藏计时器，不与此冲突。
  *
@@ -9,7 +13,7 @@
  * 探测：engine 的 tsconfig 不含 DOM/node 类型库，也不应隐式依赖宿主环境。
  */
 import type { Game } from './game.js';
-import type { SaveData } from './types.js';
+import { SAVE_VERSION, type SaveData } from './types.js';
 
 /* ---------- 平台能力探测（全部可选，缺失即降级） ---------- */
 
@@ -80,6 +84,133 @@ export interface SaveAdapter {
   save(data: SaveData): void;
 }
 
+/* ---------- 读侧门禁与诊断（#69） ---------- */
+
+function reasonOf(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** 存档诊断回调（#69 项 3）：把「这次为什么没读到可用的档/为什么写不进去」说出来。 */
+export type SaveDiagnostic = (message: string) => void;
+
+export interface SaveAdapterOptions {
+  /** 缺省静默（降级行为同旧，壳层不接也不破）；接上即获诊断面。 */
+  readonly onProblem?: SaveDiagnostic;
+}
+
+/**
+ * 存档形状/版本门禁（#69 项 1）：`SaveData.version` 自此有了读侧消费者。
+ * undefined = 可加载；否则给出拒绝判定，两条消费路径都以它为准（decodeSave
+ * 据此决定是否保槽，restoreState 据此抛错）。
+ */
+export interface SaveRejection {
+  /**
+   * 完整拒绝语句。面向**开发者诊断**（console / wendao.log），不是玩家文案：
+   * ADR-016 要求系统文案归 content 包，壳层要呈现给玩家时自行取键，勿直读此串。
+   */
+  readonly message: string;
+  /**
+   * 是否保槽（不许覆写这份字节）。只在「字节自证是另一格式的真存档」时为真——
+   * 那种档对别的引擎版本有价值，且解药（换回能读它的引擎）会让门禁自然放行。
+   * 解析不了的碎片不给：它不证明自己值得保，而为它断掉本局存档能力没有解除路径。
+   */
+  readonly holdSlot: boolean;
+}
+
+export function saveRejection(save: unknown): SaveRejection | undefined {
+  if (save === null || typeof save !== 'object' || Array.isArray(save)) {
+    return { message: 'save rejected: not a save object', holdSlot: false };
+  }
+  const version = (save as { readonly version?: unknown }).version;
+  if (version === undefined) {
+    return {
+      message: `save rejected: save has no version field (engine format ${SAVE_VERSION})`,
+      holdSlot: false,
+    };
+  }
+  if (version !== SAVE_VERSION) {
+    return {
+      message: `save rejected: unsupported save version ${JSON.stringify(version)} (engine format ${SAVE_VERSION})`,
+      holdSlot: true,
+    };
+  }
+  return undefined;
+}
+
+export interface SaveDecode {
+  /** 可加载档；null = 本次无可用档（缺档/坏档/异型档）。 */
+  readonly save: SaveData | null;
+  /**
+   * 保槽判定（#69）：槽位里躺着一份自证为异格式存档的字节，覆盖它 = 那份档消失。
+   * 真·无档与读不懂的碎片都是 false（见 saveRejection.holdSlot）；
+   * 读通道故障不经此判定（无从证明槽位有货，见 localStorageSaveAdapter.load）。
+   */
+  readonly holdSlot: boolean;
+}
+
+/** JSON 串 → SaveData：解析 + 形状/版本门禁，问题经 diagnostic 说出（缺省静默）。 */
+export function decodeSave(
+  raw: string | null | undefined,
+  diagnostic?: SaveDiagnostic,
+): SaveDecode {
+  if (raw === null || raw === undefined || raw.length === 0) {
+    return { save: null, holdSlot: false };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    // 半写/截断/手改坏的碎片：报出来，但照常允许本局重新落盘（旧行为）。
+    // 与下面 saveRejection 分支的分别见 SaveRejection.holdSlot 的理由。
+    diagnostic?.(`save parse failed: ${reasonOf(err)}`);
+    return { save: null, holdSlot: false };
+  }
+  const rejection = saveRejection(parsed);
+  if (rejection !== undefined) {
+    diagnostic?.(rejection.message);
+    return { save: null, holdSlot: rejection.holdSlot };
+  }
+  return { save: parsed as SaveData, holdSlot: false };
+}
+
+export interface HoldLatch {
+  /** 记住「这份槽位的字节保不得」。 */
+  engage(): void;
+  /** 解除（读到合法档 / 确认无档 = 没有可被覆盖的字节）。 */
+  release(): void;
+  /** 处于保槽态则返回 true，且首次点名报一次诊断（周期自动保存会反复触发）。 */
+  refuses(): boolean;
+}
+
+/**
+ * 保槽闩（#69）：「拒绝了还要留住档」这一段判定，localStorage 适配器与桌面桥
+ * 适配器共用同一机制与措辞（后者经 @wendao/engine 引）。
+ * electron 主进程侧另有一份带键域的（app-desktop/electron/platform.ts
+ * createSlotHold）——那边按槽位分别记、判据是 fs 错误码，语义不同故不并一处。
+ */
+export function createHoldLatch(subject: string, onProblem?: SaveDiagnostic): HoldLatch {
+  let held = false;
+  let announced = false;
+  return {
+    engage: () => {
+      held = true;
+    },
+    release: () => {
+      held = false;
+    },
+    refuses(): boolean {
+      if (!held) return false;
+      if (!announced) {
+        announced = true;
+        onProblem?.(
+          `save slot held (foreign-format save on record), refusing to overwrite: ${subject}`,
+        );
+      }
+      return true;
+    },
+  };
+}
+
 export function memorySaveAdapter(): SaveAdapter {
   let current: SaveData | null = null;
   return {
@@ -90,23 +221,45 @@ export function memorySaveAdapter(): SaveAdapter {
   };
 }
 
-/** localStorage 适配器：坏档/不可用静默降级为全新开局（旧版同策略）。 */
-export function localStorageSaveAdapter(key: string): SaveAdapter {
+/**
+ * localStorage 适配器：坏档/不可用降级为全新开局（旧版同策略），但降级不再无声
+ * （#69 项 3）——故障经 onProblem 说出。唯一的主动行为差异：读到一份自证为
+ * 异格式的存档时保住槽位不再覆写（理由见 saveRejection.holdSlot）。
+ */
+export function localStorageSaveAdapter(
+  key: string,
+  options: SaveAdapterOptions = {},
+): SaveAdapter {
+  const report = options.onProblem;
+  const latch = createHoldLatch(key, report);
   return {
     load(): SaveData | null {
-      try {
-        const raw = platformOf().storage?.getItem(key);
-        if (!raw) return null;
-        return JSON.parse(raw) as SaveData;
-      } catch {
+      const storage = platformOf().storage;
+      if (!storage) {
+        report?.(`save storage unavailable (no localStorage): ${key}`);
         return null;
       }
+      let raw: string | null;
+      try {
+        raw = storage.getItem(key);
+      } catch (err) {
+        // 读通道故障（存储被策略禁用等）：不碰保槽态——既没证明有货，也没证明没货。
+        report?.(`save read channel failed: ${reasonOf(err)}`);
+        return null;
+      }
+      const decoded = decodeSave(raw, report);
+      if (decoded.holdSlot) latch.engage();
+      else latch.release();
+      return decoded.save;
     },
     save(data: SaveData): void {
+      // 拒绝加载却照常落盘 = 白拒：周期自动保存会把刚拒绝的那份档抹干净。
+      if (latch.refuses()) return;
       try {
         platformOf().storage?.setItem(key, JSON.stringify(data));
-      } catch {
-        // 隐私模式/配额满：保存失败不致命，游戏继续。
+      } catch (err) {
+        // 隐私模式/配额满：保存失败不致命，游戏继续（旧语义）——但如今说得出来。
+        report?.(`save write failed: ${reasonOf(err)}`);
       }
     },
   };

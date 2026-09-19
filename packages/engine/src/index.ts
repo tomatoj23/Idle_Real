@@ -18,9 +18,24 @@ export type { ProgressionParams } from './progression.js';
 export { createRng, weightedPick } from './rng.js';
 export type { SeededRng } from './rng.js';
 
-// 存档适配层（issue #3）
-export { attachAutoSave, localStorageSaveAdapter, memorySaveAdapter } from './save.js';
-export type { AutoSaveHandle, SaveAdapter } from './save.js';
+// 存档适配层（issue #3；读侧门禁与诊断 #69）
+export {
+  attachAutoSave,
+  createHoldLatch,
+  decodeSave,
+  localStorageSaveAdapter,
+  memorySaveAdapter,
+  saveRejection,
+} from './save.js';
+export type {
+  AutoSaveHandle,
+  HoldLatch,
+  SaveAdapter,
+  SaveAdapterOptions,
+  SaveDecode,
+  SaveDiagnostic,
+  SaveRejection,
+} from './save.js';
 
 // 内容包结构视图与状态树（issue #3；稀有度/词条池视图 #018 批 1；参数视图 #020 批 3；
 // 配方视图与炼制参数 #5）
@@ -100,6 +115,8 @@ export type {
   StackView,
 } from './contentView.js';
 export { cloneState, initialState, restoreState } from './state.js';
+// 存档格式版本（#69）：写侧 snapshot 与读侧门禁的单一事实源。
+export { SAVE_VERSION } from './types.js';
 export type {
   ActivityState,
   CombatState,

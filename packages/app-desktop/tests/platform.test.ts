@@ -7,7 +7,7 @@
  * - steam 平台：云存档读写 + 成就上报（假客户端断言调用面）。
  */
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, existsSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -197,6 +197,89 @@ describe('#10 · mock 平台（文件槽位 + 成就本地记账）', () => {
   });
 });
 
+/* ---------- #69 项 2：读失败分错误类别 + 坏读不得被周期自动保存覆写 ---------- */
+
+describe('#69 · mock 平台读失败分类与保槽', () => {
+  it('ENOENT = 真·无档：null、零日志、写路径照常', () => {
+    const root = tempRoot();
+    const logs: string[] = [];
+    const platform = createMockPlatform(root, (m) => logs.push(m));
+    expect(platform.loadSlot('slotA')).toBeNull();
+    expect(logs).toEqual([]); // 缺档不是故障，不出声
+    platform.writeSlot('slotA', '{"version":1}');
+    expect(platform.loadSlot('slotA')).toBe('{"version":1}');
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('非 ENOENT 读失败：null + 指名错误码的日志 + 此后该槽位的写一律拒绝覆盖', () => {
+    const root = tempRoot();
+    const logs: string[] = [];
+    const platform = createMockPlatform(root, (m) => logs.push(m));
+    mkdirSync(join(root, 'saves'), { recursive: true });
+    // 故障注入：槽位路径被同名目录占住 → readFileSync 必失败且非 ENOENT。
+    const blocked = join(root, 'saves', 'slotB.json');
+    mkdirSync(blocked);
+
+    expect(platform.loadSlot('slotB')).toBeNull();
+    const text = logs.join('\n');
+    expect(text).toMatch(/read failed/);
+    expect(text).toMatch(/EISDIR|EPERM/); // 目录读取的错误码两端不同名，分类判据是「非 ENOENT」
+
+    // 周期自动保存的形态：必须拒绝，而非把读不到的那份档换成新局。
+    platform.writeSlot('slotB', '{"version":1,"state":{"gold":0}}');
+    expect(logs.join('\n')).toMatch(/refus/i);
+    expect(existsSync(`${blocked}.tmp`)).toBe(false); // 拒绝发生在任何写动作之前
+    expect(statSync(blocked).isDirectory()).toBe(true); // 槽位本身没被替换/清空
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('保槽只钉住出事的槽位，同平台的其余槽位照写', () => {
+    const root = tempRoot();
+    const platform = createMockPlatform(root, () => {});
+    mkdirSync(join(root, 'saves'), { recursive: true });
+    mkdirSync(join(root, 'saves', 'bad.json'));
+    platform.loadSlot('bad');
+    platform.writeSlot('good', '{"version":1}');
+    expect(platform.loadSlot('good')).toBe('{"version":1}');
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('重读成功或确认无档（ENOENT）即解除保槽：瞬时故障不永久断档', () => {
+    const root = tempRoot();
+    const logs: string[] = [];
+    const platform = createMockPlatform(root, (m) => logs.push(m));
+    const blocked = join(root, 'saves', 'slotC.json');
+    mkdirSync(blocked, { recursive: true });
+    expect(platform.loadSlot('slotC')).toBeNull();
+    // 故障源清除（目录消失 = 此后该路径读为 ENOENT）→ 槽位重新可写。
+    rmSync(blocked, { recursive: true });
+    expect(platform.loadSlot('slotC')).toBeNull();
+    platform.writeSlot('slotC', '{"version":1,"time":3}');
+    expect(platform.loadSlot('slotC')).toBe('{"version":1,"time":3}');
+    expect(logs.join('\n')).not.toMatch(/refus/i);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('写失败不留半档：原档字节纹丝不动（tmp + rename 契约的回归网）', () => {
+    const root = tempRoot();
+    const logs: string[] = [];
+    const platform = createMockPlatform(root, (m) => logs.push(m));
+    platform.writeSlot('slotD', 'GOOD-BYTES');
+    // 故障注入：临时文件位被目录占住 → writeFileSync 必抛（两端一致）。
+    mkdirSync(join(root, 'saves', 'slotD.json.tmp'));
+    expect(() => platform.writeSlot('slotD', 'BAD-BYTES')).toThrow();
+    expect(platform.loadSlot('slotD')).toBe('GOOD-BYTES');
+    // 票面这条写的是「只读目录下 writeSlot 不覆盖好档」，但「只读」在两端的落点
+    // 不同：Windows 侧本机实测——目录只读属性既不拦目录内新建、也不拦往目录里
+    // rename-over，只有目标**文件**只读才让 rename 吃 EPERM（原字节留存）；
+    // POSIX 侧按权限模型应是反向（写与 rename 都取目录写权限，故目录 0444 两样
+    // 都拦、文件 0444 谁都不拦；本仓无 POSIX 环境，这一半未实测，留此备查）。
+    // 没有一根两端同义的「只读」杠杆，故改钉两端一致的那条性质：写失败时
+    // tmp+rename 的临时位被目录占住 → 必抛，而正档字节不动。
+    rmSync(root, { recursive: true, force: true });
+  });
+});
+
 describe('#10 · steam 平台（云存档 + 成就上报）', () => {
   it('槽位读写走 Steam Cloud：有云文件读内容，无云文件读 null', () => {
     const logs: string[] = [];
@@ -232,5 +315,37 @@ describe('#10 · steam 平台（云存档 + 成就上报）', () => {
     });
     expect(platform.loadSlot('any')).toBeNull();
     expect(() => platform.writeSlot('any', '{}')).not.toThrow();
+  });
+
+  it('#69 · 云读失败同律保槽：读不到的档不许被云写覆盖（fileExists 恢复后解除）', () => {
+    const logs: string[] = [];
+    let broken = true;
+    const platform = createSteamPlatform(
+      {
+        achievement: { activate: () => true },
+        cloud: {
+          fileExists: () => {
+            if (broken) throw new Error('cloud unavailable');
+            return true;
+          },
+          readFile: () => '{"version":1,"time":8}',
+          writeFile: () => {
+            logs.push('writeFile-called');
+            return true;
+          },
+        },
+      },
+      (m) => logs.push(m),
+    );
+    expect(platform.loadSlot('slotS')).toBeNull();
+    expect(logs.join('\n')).toMatch(/cloud read failed/);
+    platform.writeSlot('slotS', '{"version":1,"state":{}}');
+    expect(logs.join('\n')).toMatch(/refus/i);
+    expect(logs).not.toContain('writeFile-called'); // 一次都没往云上写
+
+    broken = false; // 云服务恢复：重读成功即解除保槽
+    expect(platform.loadSlot('slotS')).toBe('{"version":1,"time":8}');
+    platform.writeSlot('slotS', '{"version":1,"time":9}');
+    expect(logs).toContain('writeFile-called');
   });
 });
