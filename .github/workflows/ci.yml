@@ -12,13 +12,16 @@ on:
   push:
     branches: [main]
   pull_request:
+  # 无 push 也能复跑门禁：排障、验证 runner 环境、或钩子被 --no-verify 绕过后补一次第二环境证据。
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # PR 上取消过期跑省分钟；push:main 不取消——避免连续快推之间 main 尖端没有任何一次完整跑完。
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
   gate:

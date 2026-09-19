@@ -1,21 +1,25 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   // #78 裁决：lint 采纳、format 缓做。
-  // 2026-09-18 实测（v1.83.0，138 文件 / 24ms）：correctness 8 命中已清零；
-  // suspicious 88 / pedantic 910 / vitest-plugin 187 噪声面未清，故不开；
-  // 不启用 --type-aware（官方自评覆盖 incomplete，见票评）。
-  // 本文件只管静态错误，不做格式化：204 个跟踪文件全量重排会毁掉 git blame 与二分定位。
+  // 规则面保守起步：correctness 全开（接入时 8 处命中已清零）+ import/promise 插件（实测零新增噪声）。
+  // 暂不开 suspicious / pedantic / vitest-plugin——三者命中量用 `npx oxlint -W suspicious` 等随时可复测，
+  // 不在这里钉死数字防腐坏；也不启用 --type-aware（官方自评规则覆盖 incomplete，见 #78 票评，
+  // 故本配置**不承诺**拦得住「误删 await」类问题）。
+  // 本文件只管静态错误，不做格式化：全量重排 200+ 文件会毁掉 git blame 与二分定位（#78-B 已裁缓做）。
   "plugins": ["typescript", "unicorn", "oxc", "import", "promise"],
   "categories": {
     "correctness": "error"
   },
+  // 前导斜杠＝只挡仓库根那一个目录：oxlint 的 ignorePatterns 走 gitignore 语义，裸 `js` 实测会
+  // 连 `packages/*/src/**/js/` 这类嵌套目录一起静默跳过（2026-09-19 复审实证），故 js/css/steam
+  // 三个旧版参考件（ADR-003/008）显式锚定；dist 类是各包构建产物、按任意深度挡才对。
   "ignorePatterns": [
+    "/js",
+    "/css",
+    "/steam",
     "dist",
     "dist-electron",
     "release",
-    "js",
-    "css",
-    "steam",
     ".playwright-cli"
   ],
   "env": { "builtin": true }
