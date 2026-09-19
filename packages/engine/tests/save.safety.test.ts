@@ -78,6 +78,16 @@ describe('#69 · 存档版本门禁（项 1：有号无检）', () => {
     expect(game.snapshot().state.gold).toBe(42);
   });
 
+  it('门禁不因奇形 version 抛错（它是降级用的，抛错就把降级变成了白屏）', () => {
+    const circular: Record<string, unknown> = { v: 3 };
+    circular.self = circular;
+    const nasty: unknown[] = [{ version: 10n }, { version: circular }, { version: Symbol('s') }];
+    for (const value of nasty) {
+      expect(() => saveRejection(value)).not.toThrow();
+      expect(saveRejection(value)).toMatchObject({ holdSlot: false });
+    }
+  });
+
   it('version 从原型链继承不算数（与本票项 4 同一条自有键域纪律）', () => {
     const inherited = Object.create({ version: SAVE_VERSION }) as SaveData;
     expect(() => restoreState(content, inherited, 1)).toThrow(/no version/);

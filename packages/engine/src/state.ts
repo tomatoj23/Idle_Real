@@ -933,7 +933,10 @@ export function restoreState(
  *
  * 走 JSON 往返：透传区的用途就是「原样活到下一次落盘」，而落盘本就是
  * JSON.stringify —— 非 JSON 形态的值在存档里从来不存在，此处不必另造保真语义。
- * 循环引用（内存态直传、非 JSON.parse 产物）时退化为共享引用：在快照里抛错
+ * 两句如实的代价说明：① snapshot() 同时是 UI 的读数面，所以透传节里的
+ * undefined/NaN/Date/Map 这类值在快照中的**形状**会随这次往返前移（今日真实
+ * 存档里零透传键，未来若出现大透传节，先例是 journal 的 WeakMap 零增量克隆）；
+ * ② 循环引用（内存态直传、非 JSON.parse 产物）时退化为共享引用：在快照里抛错
  * 会炸掉整条渲染/自动保存链，两害相权取旧语义。
  */
 function clonePassthrough(value: unknown): unknown {
