@@ -8,7 +8,6 @@ import {
   pickElementFlavor,
   signatureOf,
   type Contribution,
-  type GameContent,
   type GameEvent,
 } from '../src/index.js';
 import type { GameState } from '../src/state.js';

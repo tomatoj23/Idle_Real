@@ -6,7 +6,7 @@
  * - 内容包变更（条目引用 id 查无）回显 id 兜底零崩溃；
  * - 乾坤袋页签切进/切出补发 visit 信号对（#39 坊市 + #33 乾坤袋）。
  */
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
 import { createGame, ManualClock, type GameAction, type GameEvent } from '@wendao/engine';
 import { buildUi } from '../src/ui';

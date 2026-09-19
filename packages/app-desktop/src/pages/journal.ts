@@ -23,7 +23,6 @@ import {
   type JournalRecord,
   type LedgerSource,
 } from '@wendao/engine';
-import type { ContentPack } from '@wendao/content';
 import { esc } from '../pageFrame';
 import type { PageCtx, PageEnv, PageView } from './types';
 

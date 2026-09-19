@@ -61,7 +61,7 @@ if (app) {
   const validatePanel = createValidatePanel(document.querySelector('#validate-panel')!, store, {
     onGoto: (path) => gotoError(path),
   });
-  const llmPanel = createLlmPanel(document.querySelector('#llm-panel')!, store, {
+  createLlmPanel(document.querySelector('#llm-panel')!, store, {
     onApplied: () => scheduleValidate(),
   });
 

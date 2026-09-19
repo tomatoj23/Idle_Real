@@ -12,7 +12,7 @@
 import { sectionSchemas, type JsonSchema } from '@wendao/content';
 import { skeletonOf, switchBranch } from '../core/defaults.js';
 import { SECTION_LABELS } from '../core/labels.js';
-import { buildFormNode, type ArrayNode, type DictNode, type FormNode, type ObjectNode, type OneOfNode } from '../core/model.js';
+import { buildFormNode, type ArrayNode, type FormNode, type ObjectNode, type OneOfNode } from '../core/model.js';
 import type { EditorStore } from '../core/state.js';
 import { xrefOptions, type XrefTarget } from '../core/xref.js';
 

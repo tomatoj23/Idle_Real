@@ -117,7 +117,7 @@ describe('confirmDirtyLoad：载入新包的脏确认守卫（审计修复①）
     // 先垫函数再 spy。hadOwn 恒真、finally 不删除：垫入留存本测试文件，无碍。
     const holder = window as unknown as { confirm?: (message: string) => boolean };
     const hadOwn = Object.getOwnPropertyNames(holder).includes('confirm');
-    holder.confirm = holder.confirm ?? ((message: string) => true);
+    holder.confirm = holder.confirm ?? (() => true);
     const spy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     try {
       expect(confirmDirtyLoad(store, (message) => window.confirm(message))).toBe(false);

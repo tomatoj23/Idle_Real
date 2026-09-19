@@ -718,6 +718,7 @@ export function createCombatRun(deps: CombatRunDeps): CombatRun {
       // 召唤物各自出招（#30）：出招键 = 自身敌 id（不继承 Boss 阶段变招）。
       // 间隔现取（玩家一击可能清槽，预计算的 intervals 不再对位）；迭代中
       // 召唤物不会被移除（召唤物攻击只可能击倒玩家 → defeat 早退）。
+      // oxlint-disable-next-line unicorn/no-useless-spread -- 快照迭代是刻意的：出招链可触发清槽，勿按「当前不变量」摘掉
       for (const minion of [...c.summons]) {
         const view = minionViewOf(minion);
         if (!view) continue;

@@ -38,8 +38,8 @@ export function createBagPage(env: PageEnv): PageView {
         return rows ? `<h3 class="group-title">${esc(title)}</h3>${rows}` : '';
       })
       .join('');
-    const worn = Object.entries(st.equips)
-      .map(([slot, uid]) => st.gear.find((entry) => entry.uid === uid))
+    const worn = Object.values(st.equips)
+      .map((uid) => st.gear.find((entry) => entry.uid === uid))
       .filter((gear): gear is NonNullable<typeof gear> => gear !== undefined)
       .map((gear) => gearCardHtml(ctx, gear))
       .join('');
