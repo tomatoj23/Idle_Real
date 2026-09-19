@@ -10,11 +10,13 @@
  * 校验下载内容，所以这一步顺带把「lockfile 生成期对镜像的信任」收回为「每次安装对官方源
  * 逐条验证」。
  *
- * 实现取字节级主机串替换而非 JSON 反序列化重排，有两个理由：
- * 1. 保持文件字节形态（缩进/键序/CRLF），本地若误跑也不会产出「整文件重排」这种毁 git blame
- *    的 diff——正是 #78-B 拒绝 formatifier 的同一理由；
- * 2. 一处替换同时覆盖 lockfileVersion 3 的 `packages` 与 v2 的嵌套 `dependencies` 块，
- *    不会因为只处理 `packages` 而留下半规范化的旧版块。
+ * 实现取「按整条 resolved 值做字节级替换」，两头都不要：
+ * 1. 不用 JSON 反序列化重排——那会改写全文件字节（缩进/键序/CRLF），本地若误跑就产出毁
+ *    git blame 的巨型 diff，正是 #78-B 拒绝格式化器的同一理由；
+ * 2. 不用「按主机替换」——那会连带改掉 classify() 刻意放过的 odd 条目（同主机上的非 registry
+ *    tarball 路径，如二进制镜像 URL），把 https://镜像/binary/x.tgz 拼成官方源上并不存在的
+ *    https://registry.npmjs.org/binary/x.tgz，代价是一次没人看得懂的 CI 安装失败。
+ * 带引号匹配 `"…"` 是因为 resolved 在 lockfile 里永远是独立的一整串值，不会被别的串包含而误伤。
  *
  * 只在 CI 里跑，不改入库的 lockfile —— 本地镜像加速的开发体验不受影响。
  */
@@ -22,9 +24,12 @@ import { readFileSync, writeFileSync } from 'node:fs';
 
 const FILE = 'package-lock.json';
 const OFFICIAL_HOST = 'registry.npmjs.org';
-const OFFICIAL_PREFIX = `https://${OFFICIAL_HOST}/`;
+const OFFICIAL_ORIGIN = `https://${OFFICIAL_HOST}`;
 
-/** 递归收集所有 resolved：v3 在 packages 扁平表里，v2 藏在层层嵌套的 dependencies 里。 */
+/**
+ * 递归收集所有 resolved：v3 在 packages 扁平表里，v2 另有一份嵌套 dependencies，
+ * 两块都要走——只收 packages 会在 v2 lockfile 上漏掉半规范化的旧版块。
+ */
 function collectResolved(node, out) {
   if (!node || typeof node !== 'object') return;
   for (const [name, entry] of Object.entries(node)) {
@@ -35,22 +40,26 @@ function collectResolved(node, out) {
 
 function classify(text) {
   const lock = JSON.parse(text);
-  const found = [];
-  collectResolved(lock.packages ?? lock.dependencies, found);
-  const mirrorHosts = new Map();
+  const entries = [];
+  collectResolved(lock.packages, entries);
+  collectResolved(lock.dependencies, entries); // v3 下为 undefined，直接返回
+  const mirrorUrls = new Map();
+  const hosts = new Set();
   const odd = [];
-  for (const [name, resolved] of found) {
+  for (const [name, resolved] of entries) {
     if (!/^https?:\/\//.test(resolved)) continue; // workspace 链接条目写作 "packages/engine"
     const url = new URL(resolved);
-    const isTarball = url.protocol === 'https:' && url.pathname.includes('/-/') && url.pathname.endsWith('.tgz');
-    if (!isTarball) {
-      odd.push(`${name} → ${resolved}`); // git/codeload 一类的依赖：本就不该改写，只报告
+    const isRegistryTarball = url.protocol === 'https:' && url.pathname.includes('/-/') && url.pathname.endsWith('.tgz');
+    if (!isRegistryTarball) {
+      odd.push(`${name} → ${resolved}`); // 二进制镜像 / git codeload 一类：按设计不改写，只报告
       continue;
     }
     if (url.host === OFFICIAL_HOST) continue;
-    mirrorHosts.set(url.host, (mirrorHosts.get(url.host) ?? 0) + 1);
+    mirrorUrls.set(resolved, (mirrorUrls.get(resolved) ?? 0) + 1);
+    hosts.add(url.host);
   }
-  return { mirrorHosts, odd, total: found.length };
+  const integrity = entries.map(([, , value]) => value).sort().join('|');
+  return { mirrorUrls, hosts, odd, count: entries.length, integrity };
 }
 
 const raw = readFileSync(FILE, 'utf8');
@@ -59,31 +68,28 @@ if (before.odd.length > 0) {
   console.warn(`非 registry tarball 形态的 resolved 共 ${before.odd.length} 条，按设计不改写、仅列出：`);
   for (const line of before.odd.slice(0, 10)) console.warn(`  ${line}`);
 }
-if (before.mirrorHosts.size === 0) {
-  console.log('lockfile 主机已是官方源，无需改写');
+if (before.mirrorUrls.size === 0) {
+  console.log('没有钉在镜像主机上的 registry tarball 条目，lockfile 无需改写');
   process.exit(0);
 }
 
 let out = raw;
-let expected = 0;
-for (const [host, count] of before.mirrorHosts) {
-  out = out.split(`https://${host}/`).join(OFFICIAL_PREFIX);
-  expected += count;
+let rewritten = 0;
+for (const url of before.mirrorUrls.keys()) {
+  const { pathname, search, hash } = new URL(url);
+  const quoted = `"${url}"`;
+  rewritten += out.split(quoted).length - 1;
+  out = out.split(quoted).join(`"${OFFICIAL_ORIGIN}${pathname}${search}${hash}"`);
 }
 
-// 改写后自证：仍能解析、非官方主机的 tarball 归零、integrity 多重集一条没变
+// 改写后自证：仍能解析、条目数没丢、镜像 tarball 归零、integrity 多重集一条没变
 const after = classify(out);
-const integrityOf = (text) => {
-  const found = [];
-  collectResolved(JSON.parse(text).packages ?? JSON.parse(text).dependencies, found);
-  return found.map(([, , integrity]) => integrity).sort().join('|');
-};
-if (after.mirrorHosts.size > 0 || integrityOf(raw) !== integrityOf(out)) {
-  console.error('规范化后自检失败：仍有非官方 tarball 主机，或 integrity 发生变动');
+if (after.mirrorUrls.size > 0 || after.count !== before.count || after.integrity !== before.integrity) {
+  console.error('规范化后自检失败：仍有镜像 tarball 主机，或 resolved 条目数 / integrity 发生变动');
   process.exit(1);
 }
 
 writeFileSync(FILE, out);
 console.log(
-  `lockfile 主机规范化：改写 ${expected} 条 resolved（来源主机 ${[...before.mirrorHosts.keys()].join(', ')}），integrity 未改动`,
+  `lockfile 主机规范化：改写 ${rewritten} 条 resolved（${before.mirrorUrls.size} 个不同 URL，来源主机 ${[...before.hosts].join(', ')}），integrity 未改动`,
 );

@@ -30,8 +30,13 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 15
     env:
-      # 四包测试全走 happy-dom + node，不启真 Electron（已 grep 实证 tests/ 零 child_process /
-      # electron 引用来），故跳过约 100MB 二进制下载——CI 分钟数本来就几乎全在 npm ci。
+      # 跳过约 100MB 的 Electron 二进制：CI 没有任何步骤启动 Electron。全仓唯一的 `from 'electron'`
+      # 在 app-desktop/electron/main.ts:10，它的类型来自 npm 包自带的 electron.d.ts（package.json
+      # types 字段，与二进制无关）；tests/ 里唯一沾 electron 的 platform.test.ts:18 引的是
+      # ../electron/platform（只用 node 内置），全仓 packages 内 child_process 零引用。
+      # 如实记录生效机制：本机 npm 11.6.2 会照跑 postinstall，而 runner 的 npm 11.19 已把
+      # electron@38.8.6 的 postinstall 判为「install scripts not yet covered by allowScripts」而不执行
+      # （见 run 35429320188 的 Install 步日志）。所以这条 env 当前是第二道保险，不是拦下下载的那一道。
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
     steps:
       - uses: actions/checkout@v7.0.1
