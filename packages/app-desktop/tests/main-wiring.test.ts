@@ -4,9 +4,13 @@
  *
  * 判据本身另有 navGuard / fatal 两个单测覆盖；本文件量的是**接线**：空菜单是否真
  * 被置、权限 handler 是否真的一律回调 false、will-navigate 是否把判据接成了
- * preventDefault、成就 id 的门是否真在 IPC 口上、崩溃 handler 是否真的挂在 process。
+ * preventDefault、成就 id 的门是否真在 IPC 口上、崩溃与加载失败两条兜底是否真接上。
  * 这些没有第二种观测手段——真机窗口不归 CI 管，而 main.ts 在本仓从未被任何用例执行
  * 过（electron 目录里此前只有零依赖的 platform.ts 进过 vitest，主进程入口没有）。
+ *
+ * 假面的形状按 electron.d.ts 38.8.6 对齐（穷举复审的变异矩阵抓到过两处双盲：
+ * will-navigate 的位参已 @deprecated、setPermissionRequestHandler 实为四参），
+ * 并且**记下 BrowserWindow 的构造参数**——webPreferences 三件套不记就等于没钉。
  *
  * 分支固定：删掉 VITE_DEV_SERVER_URL 之后才 import（main.ts 在模块求值期读它，
  * 事后改无效），走的是打包态 loadFile 分支。
@@ -19,29 +23,38 @@ import { pathToFileURL } from 'node:url';
 
 /* ---------- 假 electron：只立 main.ts 用到的面（缺面即抛，比默默可用更接近真相） ---------- */
 
+type NavEvent = { url: string; preventDefault(): void };
+
 const calls: string[] = [];
 const ipcHandlers = new Map<string, (event: { returnValue?: unknown }, ...a: unknown[]) => void>();
-const winHandlers = new Map<string, (event: { preventDefault(): void }, url: string) => void>();
+const winHandlers = new Map<string, (event: NavEvent) => void>();
 const dialogs: Array<[string, string]> = [];
 let menuArg: unknown = 'setApplicationMenu-never-called';
 let permissionHandler:
-  | ((win: unknown, permission: string, callback: (granted: boolean) => void) => void)
+  | ((win: unknown, permission: string, callback: (granted: boolean) => void, details: unknown) => void)
   | undefined;
 let windowOpenHandler: (() => unknown) | undefined;
+let windowOptions: Record<string, unknown> = {};
 let loadFileArg = '';
 let userDataDir = '';
+let loadFileRejects = false;
+let getPathThrows = false;
 
 vi.mock('electron', () => {
   class FakeBrowserWindow {
     static getAllWindows(): unknown[] {
       return [];
     }
+    /** 记下构造参数：否则 `sandbox:false` 这类回退在此文件里无声通过。 */
+    constructor(options: Record<string, unknown>) {
+      windowOptions = options;
+    }
     readonly webContents = {
       setWindowOpenHandler: (handler: () => unknown) => {
         windowOpenHandler = handler;
         calls.push('window-open-handler');
       },
-      on: (event: string, handler: (e: { preventDefault(): void }, url: string) => void) => {
+      on: (event: string, handler: (e: NavEvent) => void) => {
         winHandlers.set(event, handler);
       },
       openDevTools: () => calls.push('open-devtools'),
@@ -49,7 +62,9 @@ vi.mock('electron', () => {
     loadFile(path: string): Promise<void> {
       loadFileArg = path;
       calls.push('load-file');
-      return Promise.resolve();
+      return loadFileRejects
+        ? Promise.reject(new Error('ERR_FILE_NOT_FOUND'))
+        : Promise.resolve();
     }
     loadURL(url: string): Promise<void> {
       calls.push(`load-url:${url}`);
@@ -68,6 +83,7 @@ vi.mock('electron', () => {
       exit: (code: number) => calls.push(`app.exit:${code}`),
       getPath: (name: string) => {
         if (name !== 'userData') throw new Error(`unexpected getPath(${name})`);
+        if (getPathThrows) throw new Error('userData 不可得（启动链上抛的替身）');
         return userDataDir;
       },
       whenReady: () => Promise.resolve(),
@@ -91,7 +107,12 @@ vi.mock('electron', () => {
     session: {
       defaultSession: {
         setPermissionRequestHandler: (
-          handler: (win: unknown, permission: string, callback: (granted: boolean) => void) => void,
+          handler: (
+            win: unknown,
+            permission: string,
+            callback: (granted: boolean) => void,
+            details: unknown,
+          ) => void,
         ) => {
           permissionHandler = handler;
           calls.push('set-permission-request-handler');
@@ -101,15 +122,10 @@ vi.mock('electron', () => {
   };
 });
 
-/** 等 whenReady 链上的 then/catch 跑完（纯微任务）。 */
-async function flush(times = 6): Promise<void> {
-  for (let i = 0; i < times; i++) await Promise.resolve();
-}
-
-const savedListeners = {
-  uncaughtException: [] as unknown[],
-  unhandledRejection: [] as unknown[],
-};
+const savedListeners: {
+  uncaughtException: unknown[];
+  unhandledRejection: unknown[];
+} = { uncaughtException: [], unhandledRejection: [] };
 
 beforeAll(() => {
   savedListeners.uncaughtException = process.listeners('uncaughtException');
@@ -120,6 +136,7 @@ beforeAll(() => {
 afterEach(() => {
   // main.ts 每被重新求值一次就多挂一对 process handler；不清会把假 handler 留给
   // 同 worker 的其它用例（真抛错时它们按 #71 的口径是要 exit 的）。
+  // 清空后按基线原序装回（removeListener 的重载不接受这个联合 kind）。
   for (const kind of ['uncaughtException', 'unhandledRejection'] as const) {
     process.removeAllListeners(kind);
     for (const listener of savedListeners[kind]) {
@@ -132,9 +149,12 @@ afterEach(() => {
   winHandlers.clear();
   ipcHandlers.clear();
   windowOpenHandler = undefined;
+  windowOptions = {};
   loadFileArg = '';
   menuArg = 'setApplicationMenu-never-called';
   permissionHandler = undefined;
+  loadFileRejects = false;
+  getPathThrows = false;
 });
 
 /** 装一份全新的 main.ts（假 electron + 独立 userData 目录）。 */
@@ -142,7 +162,9 @@ async function bootMain(): Promise<void> {
   userDataDir = mkdtempSync(join(tmpdir(), 'wendao-main-'));
   vi.resetModules();
   await import('../electron/main');
-  await flush();
+  // 等真实信号而不是猜微任务数：装配走完的标志是 loadFile 被登记。
+  // （穷举复审抓到过 flush(n) 这种写法在并发负载下把已装好的面读成未装好。）
+  await vi.waitFor(() => expect(calls).toContain('load-file'), { timeout: 2000 });
 }
 
 function logText(): string {
@@ -156,10 +178,21 @@ describe('#71 · 启动接线', () => {
     await bootMain();
     expect(calls).toContain('single-instance-lock');
     expect(calls).toContain('load-file');
+    expect(calls).not.toContain('load-url:http://localhost:5173');
     expect(loadFileArg).toMatch(/[/\\]dist[/\\]index\.html$/);
     const text = logText();
     expect(text).toContain('[platform] adapter=mock');
     expect(text).toContain('[updater] placeholder');
+  });
+
+  it('webPreferences 三件套 + preload 在位（假窗口记构造参数，否则这项等于没测）', async () => {
+    await bootMain();
+    const wp = windowOptions['webPreferences'] as Record<string, unknown>;
+    expect(wp['contextIsolation']).toBe(true);
+    expect(wp['nodeIntegration']).toBe(false);
+    expect(wp['sandbox']).toBe(true);
+    expect(String(wp['preload'])).toMatch(/preload\.cjs$/);
+    expect(windowOptions['autoHideMenuBar']).toBe(true);
   });
 
   it('项 3：应用菜单置空、权限与 window-open handler 齐备且先于窗口加载，全程无人开 DevTools', async () => {
@@ -185,18 +218,29 @@ describe('#71 项 1 · will-navigate 判据已接到事件上', () => {
     const selfUrl = pathToFileURL(loadFileArg).href;
     const other = pathToFileURL(join(loadFileArg, '..', 'other.html')).href;
     let prevented = 0;
-    const event = {
-      preventDefault: () => {
-        prevented += 1;
-      },
-    };
-    handler?.(event, 'file:///C:/evil.html');
-    handler?.(event, other);
+    const fire = (url: string): void =>
+      handler?.({ url, preventDefault: () => void (prevented += 1) });
+    fire('file:///C:/evil.html');
+    fire(other);
     expect(prevented).toBe(2);
     expect(logText()).toContain('navigation blocked: file:///C:/evil.html');
 
-    handler?.(event, selfUrl);
+    fire(selfUrl);
     expect(prevented).toBe(2); // 自身不拦（放行面，防「全拒」也能过）
+  });
+
+  it('被拒 URL 里的换行不另起一行：伪造条目被并回本行', async () => {
+    await bootMain();
+    const handler = winHandlers.get('will-navigate');
+    handler?.({
+      url: 'file:///C:/evil.html\n[fake] 这是伪造的第二行',
+      preventDefault: () => {},
+    });
+    const line = logText()
+      .split('\n')
+      .find((l) => l.includes('这是伪造的第二行'));
+    // 正对照：剥换行失效时，这段文字会自成一列、行首不含 navigation blocked。
+    expect(line ?? '').toContain('navigation blocked');
   });
 });
 
@@ -206,7 +250,12 @@ describe('#71 项 5 · 权限一律拒', () => {
     expect(permissionHandler).toBeTypeOf('function');
     const granted: boolean[] = [];
     for (const permission of ['clipboard-read', 'notifications', 'media']) {
-      permissionHandler?.({}, permission, (ok) => granted.push(ok));
+      // 第四参 details 按真签名喂足（electron.d.ts 38.8.6 为四参）：
+      // 日后按 permission 加白名单要用它，缺这一参就是本文件与产品代码的双盲。
+      permissionHandler?.({}, permission, (ok) => granted.push(ok), {
+        requestingUrl: 'file:///app/index.html',
+        isMainFrame: true,
+      });
     }
     expect(granted).toEqual([false, false, false]);
     expect(logText()).toContain('permission denied: notifications');
@@ -235,7 +284,13 @@ describe('#71 项 6 · 成就 id 的门在 IPC 口上', () => {
 describe('#71 项 4 · 崩溃兜底真的挂在 process 上', () => {
   it('uncaughtException：落 FATAL 日志 + 弹一次提示 + app.exit(1)', async () => {
     await bootMain();
-    expect(process.listeners('uncaughtException').length).toBeGreaterThan(0);
+    // 比基线多一个而不是「大于 0」：vitest 自己就挂着处理器，>0 恒真（审计抓的空断言）。
+    expect(process.listeners('uncaughtException').length).toBe(
+      savedListeners.uncaughtException.length + 1,
+    );
+    expect(process.listeners('unhandledRejection').length).toBe(
+      savedListeners.unhandledRejection.length + 1,
+    );
     process.emit('uncaughtException', new Error('probe-crash'));
     const text = logText();
     expect(text).toContain('FATAL uncaughtException');
@@ -248,10 +303,44 @@ describe('#71 项 4 · 崩溃兜底真的挂在 process 上', () => {
   it('unhandledRejection：只记一行，不弹提示也不退出', async () => {
     await bootMain();
     process.emit('unhandledRejection', new Error('probe-rejection'), Promise.resolve());
-    await flush();
     expect(logText()).toContain('unhandledRejection');
     expect(logText()).not.toContain('FATAL');
     expect(dialogs).toHaveLength(0);
     expect(calls).not.toContain('app.exit:1');
+  });
+
+  it('loadFile reject：接上 onLoadFailure（弹窗点名 URL 并退出）', async () => {
+    loadFileRejects = true;
+    userDataDir = mkdtempSync(join(tmpdir(), 'wendao-main-'));
+    vi.resetModules();
+    await import('../electron/main');
+    await vi.waitFor(() => expect(dialogs.length).toBe(1), { timeout: 2000 });
+    expect(logText()).toContain('FATAL load failed');
+    expect(logText()).toContain('ERR_FILE_NOT_FOUND');
+    expect(dialogs[0]?.[1]).toContain('ERR_FILE_NOT_FOUND');
+    expect(calls).toContain('app.exit:1');
+  });
+
+  it('whenReady 链上抛：走 startup 兜底，且早期 stderr 出口确实把消息送了出去', async () => {
+    const seen: string[] = [];
+    const realWrite = process.stderr.write.bind(process.stderr);
+    // 必须在 import 之前换掉：main.ts 在模块求值期就 bind 走 stderr.write。
+    process.stderr.write = ((chunk: string) => {
+      seen.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+    getPathThrows = true;
+    userDataDir = mkdtempSync(join(tmpdir(), 'wendao-main-'));
+    try {
+      vi.resetModules();
+      await import('../electron/main');
+      await vi.waitFor(() => expect(dialogs.length).toBe(1), { timeout: 2000 });
+    } finally {
+      process.stderr.write = realWrite;
+    }
+    // whenReady 前没有文件日志器可写——这一行就是「启动早期崩溃零痕迹」的对照组。
+    expect(seen.join('')).toContain('FATAL startup failed');
+    expect(dialogs[0]?.[1]).toContain('userData 不可得');
+    expect(calls).toContain('app.exit:1');
   });
 });

@@ -160,11 +160,14 @@ function createWindow(): void {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   const indexPath = join(here, '../dist/index.html');
   const selfUrl = DEV_SERVER_URL ?? pathToFileURL(indexPath).href;
-  win.webContents.on('will-navigate', (event, url) => {
-    if (isSelfNavigation(url, selfUrl)) return;
+  // URL 取自 event.url：Electron 38 起 will-navigate 的那串位参（url/isInPlace/
+  // isMainFrame/…）在 electron.d.ts 里全标了 @deprecated，读位参在 #67 升版后会静默
+  // 拿到 undefined → 判据把一切导航都拒掉（fail-closed，但坏得毫无声响）。
+  win.webContents.on('will-navigate', (event) => {
+    if (isSelfNavigation(event.url, selfUrl)) return;
     // 原串入日志前剥换行：`\n` 在 URL 里合法（WHATWG 解析时静默删掉，不影响拒判），
     // 直接入日志就等于允许伪造日志条目。
-    log(`[main] navigation blocked: ${url.replace(/[\r\n]+/g, ' ')}`);
+    log(`[main] navigation blocked: ${event.url.replace(/[\r\n]+/g, ' ')}`);
     event.preventDefault();
   });
   // 加载失败不许静默（#71 项 4）：reject 的是窗口内容本身，留着窗口 = 一块白板

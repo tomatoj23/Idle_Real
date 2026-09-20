@@ -7,7 +7,15 @@
  * - steam 平台：云存档读写 + 成就上报（假客户端断言调用面）。
  */
 import { describe, expect, it } from 'vitest';
-import { mkdirSync, mkdtempSync, rmSync, existsSync, readFileSync, statSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  statSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ContentPack } from '@wendao/content';
@@ -16,6 +24,7 @@ import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
 import {
   createMockPlatform,
   createSteamPlatform,
+  errMsg,
   isSafeId,
   resolvePlatform,
   type SteamClient,
@@ -454,5 +463,69 @@ describe('#71 项 6 · 键域格式 isSafeId', () => {
       expect(isSafeId(id)).toBe(false);
     }
     expect(isSafeId('x'.repeat(128))).toBe(true); // 上限是放行值：差一即误拒（128 为壳自定界）
+  });
+
+  it('格式门放过 Object.prototype 的成员名（复审实测：普通对象账本会静默吞这些上报）', () => {
+    for (const id of ['constructor', 'toString', 'hasOwnProperty', '__proto__']) {
+      expect(isSafeId(id)).toBe(true);
+    }
+  });
+});
+
+/* ---------- #71 复审：继承属性名不得被「已解锁」判定静默吞 ---------- */
+
+describe('#71 复审 · mock 成就账本的键域', () => {
+  it('constructor/toString/__proto__ 各自入账并出声，且仍一次且仅一次', () => {
+    const root = tempRoot();
+    const logs: string[] = [];
+    const platform = createMockPlatform(root, (m) => logs.push(m));
+    for (const id of ['constructor', 'toString', '__proto__', 'kill_100']) {
+      platform.unlockAchievement(id);
+      platform.unlockAchievement(id); // 幂等：每个名字都只记一次
+    }
+    const unlocked = logs.filter((m) => m.includes('achievement unlocked'));
+    expect(unlocked).toHaveLength(4); // 旧实现下这三类名字一条都不出声
+    const record = JSON.parse(
+      readFileSync(join(root, 'achievements.json'), 'utf8'),
+    ) as { achievements: Record<string, string> };
+    expect(Object.keys(record.achievements).sort()).toEqual([
+      '__proto__',
+      'constructor',
+      'kill_100',
+      'toString',
+    ]);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('账本文件被塞进非字符串值：坏值不入库，也不喂给 Steam', () => {
+    const root = tempRoot();
+    mkdirSync(root, { recursive: true });
+    writeFileSync(
+      join(root, 'achievements.json'),
+      '{"achievements":{"good":"2026-01-01T00:00:00.000Z","bad":{"nested":1}}}',
+      'utf8',
+    );
+    const platform = createMockPlatform(root);
+    platform.unlockAchievement('another');
+    const record = JSON.parse(
+      readFileSync(join(root, 'achievements.json'), 'utf8'),
+    ) as { achievements: Record<string, unknown> };
+    expect(Object.keys(record.achievements).sort()).toEqual(['another', 'good']);
+    expect(record.achievements['bad']).toBeUndefined();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('坏键的抛出消息只报形状不回显原串（含换行的键不能伪造日志行）', () => {
+    const root = tempRoot();
+    const platform = createMockPlatform(root);
+    let message = '';
+    try {
+      platform.loadSlot('evil\n[fake] 注入一行');
+    } catch (err) {
+      message = errMsg(err);
+    }
+    expect(message).toContain('bad save slot key (len=');
+    expect(message).not.toContain('[fake]');
+    rmSync(root, { recursive: true, force: true });
   });
 });

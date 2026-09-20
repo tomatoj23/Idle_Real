@@ -135,17 +135,33 @@ export function createMockPlatform(rootDir: string, log: Logger = () => {}): Pla
   const achievementPath = join(rootDir, 'achievements.json');
   const hold = createSlotHold(log);
 
+  /**
+   * 本地成就账本（null 原型）。
+   *
+   * 为什么不是普通对象：这里的键域是 renderer/内容可控的任意串，而 `constructor`、
+   * `toString`、`__proto__` 这些名字在普通对象上会命中 Object.prototype 的**继承成员**，
+   * 被 unlockAchievement 那句 `book[id] !== undefined` 当成「已解锁」→ 上报被静默吞掉，
+   * 零日志零落盘，「一次且仅一次」当场失效（#71 穷举复审拿编译产物实测到）。null 原型下
+   * 每个键都是自有属性，继承面为零。
+   */
   const readAchievements = (): Record<string, string> => {
+    const book: Record<string, string> = Object.create(null);
     try {
       const raw = JSON.parse(readFileSync(achievementPath, 'utf8')) as {
-        achievements?: Record<string, string>;
+        achievements?: Record<string, unknown>;
       };
-      return raw.achievements && typeof raw.achievements === 'object'
-        ? { ...raw.achievements }
-        : {};
+      if (raw.achievements && typeof raw.achievements === 'object') {
+        // 逐项拷自有键（不用 spread）：值只认 string，坏值宁可不记也不喂给 Steam。
+        for (const [key, value] of Object.entries(raw.achievements)) {
+          if (typeof value === 'string') book[key] = value;
+        }
+      }
     } catch {
-      return {}; // 无记录文件/坏档 = 空账本（记账文件非存档，不救）
+      // 无记录文件/坏档 = 空账本（记账文件非存档，不救）。返回同一个 null 原型对象：
+      // 这里若退回 `{}`，继承键的静默吞就在那一条路径上复活。
+      return book;
     }
+    return book;
   };
 
   return {

@@ -27,6 +27,14 @@ describe('#71 项 1 · 打包态（self = file:///…/dist/index.html）', () =>
     }
   });
 
+  it('拒「自身路径加后缀」的形：pathname 要全等，不是前缀', () => {
+    // 变异测试抓到的空转：把 === 换成 startsWith，本文件其余各例全绿。
+    for (const url of [`${PACKAGED}.evil`, `${PACKAGED}x`, `${PACKAGED}%2eevil`]) {
+      expect(url.startsWith(PACKAGED)).toBe(true); // 前缀式比对这些全放行
+      expect(isSelfNavigation(url, PACKAGED)).toBe(false);
+    }
+  });
+
   it('file://localhost/… 形态归一后仍算自身（同一份文件的另一种写法）', () => {
     expect(isSelfNavigation('file://localhost/D:/games/wendao/dist/index.html', PACKAGED)).toBe(
       true,

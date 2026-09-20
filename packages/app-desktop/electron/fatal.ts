@@ -46,7 +46,20 @@ export function createFatalHandler(deps: FatalDeps): FatalHandler {
   /** where = 出事的所在（如加载失败的 URL），两边出口都带上。 */
   function die(kind: string, err: unknown, where?: string): void {
     const at = where === undefined ? kind : `${kind} (${where})`;
-    deps.log(`[main] FATAL ${at}: ${describe(err)}`);
+    // 取现场与写日志都不许连累收尾：抛出的对象可能自带会炸的 toString，日志面也可能
+    // 已经是死通道（stdout/文件都算）。这两处若把 die 自己打断，就退回到本模块要治的
+    // 那个病——「记下后带未知状态继续跑」，所以 exit 必须无条件到达。
+    let detail: string;
+    try {
+      detail = describe(err);
+    } catch {
+      detail = '<异常现场不可读>';
+    }
+    try {
+      deps.log(`[main] FATAL ${at}: ${detail}`);
+    } catch {
+      // 日志挂了：不重试、不再抛（正在收尾的路上）。
+    }
     if (!dying) {
       dying = true;
       try {

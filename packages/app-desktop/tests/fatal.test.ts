@@ -50,6 +50,41 @@ describe('#71 项 4 · uncaughtException', () => {
     expect(exit).toHaveBeenCalledWith(1);
   });
 
+  it('日志面自己抛：出声与退出照做（变异测试抓到过 exit 被一起跳过）', () => {
+    const show = vi.fn();
+    const exit = vi.fn();
+    const handler = createFatalHandler({
+      log: () => {
+        throw new Error('stdout 是死通道');
+      },
+      showError: show,
+      exit,
+    });
+    expect(() => handler.onUncaughtException(new Error('boom'))).not.toThrow();
+    expect(show).toHaveBeenCalledTimes(1);
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it('抛出的对象连 toString 都炸：收尾不中断，exit 照到', () => {
+    const exit = vi.fn();
+    const handler = createFatalHandler({
+      log: () => {
+        throw new Error('log 也挂了');
+      },
+      showError: () => {
+        throw new Error('dialog 也挂了');
+      },
+      exit,
+    });
+    const hostile = {
+      toString(): string {
+        throw new Error('不可读');
+      },
+    };
+    expect(() => handler.onUncaughtException(hostile)).not.toThrow();
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
   it('收尾途中再炸（二次致命）：不再弹第二个模态框，但仍然要求结束进程', () => {
     const show = vi.fn();
     const { exit, handler } = harness(show);
