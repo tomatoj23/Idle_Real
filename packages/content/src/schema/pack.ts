@@ -321,16 +321,21 @@ function indexIds(entries: ReadonlyArray<{ readonly id: string }>): Map<string, 
 }
 
 /**
- * 内容 id 撞名黑名单（#75 项 12 根治）：这三个 Object.prototype 方法名恰好
- * 匹配 id 形态 pattern，一旦成 id 就会遮蔽状态表的属性读（#69 恢复期
+ * 内容 id 撞名黑名单（#75 项 12 根治，复审扩围全集）：Object.prototype 的
+ * 全部成员名（constructor/hasOwnProperty/toString/valueOf/…，含访问器）
+ * 恰好都过 id 形态 pattern，一旦成 id 就遮蔽状态表的属性读（#69 恢复期
  * 「静默丢数据 vs 容忍方法遮蔽」两难的源头）。导入期在此大声拒绝，包作者
  * 当场改名——schema pattern 表达不了名字黑名单（负向断言不进 draft-07
- * 子集），语义层单点收口。'__proto__' 前导下划线本就过不了 id pattern。
+ * 子集），语义层单点收口。
+ *
+ * 名单**运行时派生**（Object.getOwnPropertyNames(Object.prototype)）而非
+ * 手抄三名：同族名一个不漏、不随口误漂移；另加 'prototype'（非
+ * Object.prototype 成员，但票面点名的同族误用名一并拒）。'__proto__' 在
+ * 派生集内（前导下划线本也过不了 id pattern，双保险）。
  */
 const UNSAFE_CONTENT_IDS: ReadonlySet<string> = new Set([
-  'constructor',
+  ...Object.getOwnPropertyNames(Object.prototype),
   'prototype',
-  'hasOwnProperty',
 ]);
 
 /**

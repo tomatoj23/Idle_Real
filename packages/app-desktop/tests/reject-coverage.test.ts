@@ -65,18 +65,27 @@ for (const [packName, load] of [
  * 泛型签名），行 → 点此前无守卫——行内冗余码（emit 点已删/改）会留永不触发
  * 的死码与陪葬文案。TS 类型运行期擦除，清单守卫必须读源码（protocolGuard
  * 先例）：扫引擎源码的 reject 调用点字面量码，与矩阵全码集两向比对。
+ *
+ * 粒度与局限（复审勘定）：按**平铺码集**对照——跨行搬码（码仍在别处发）
+ * 本测试不红，由上方包键反向对照兜（包键须命中矩阵 (action, reason) 对，
+ * 行搬走即哑键红）；扫描先剥注释再匹配（防文档示例污染）；引擎 src 目录
+ * 布局耦合（子目录新增即漏扫 → 行→点误红，响亮失败非静默）。
  */
 describe('REJECT_MATRIX ↔ emit 点对拍（源码扫描）', () => {
   const engineSrcDir = fileURLToPath(new URL('../../engine/src/', import.meta.url));
   const src = readdirSync(engineSrcDir)
     .filter((f) => f.endsWith('.ts'))
     .map((f) => readFileSync(engineSrcDir + f, 'utf8'))
-    .join('\n');
-  // reject/emitReject/rejectUnknown 的第二参字面量 = 该调用点发的码。
+    .join('\n')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/[^\n]*/g, '');
+  // 码的两种字面量形态：reject() 调用第二参（逐动作位）+ 拒绝事件构造的
+  // reason: '...'（rejectUnknown 唯一松口出口的固定码）。
   const emitted = new Set(
-    [...src.matchAll(/\b(?:reject|emitReject|rejectUnknown)\s*\(\s*[^,()]+,\s*'([a-z-]+)'/g)].map(
-      (m) => m[1] as string,
-    ),
+    [
+      ...[...src.matchAll(/\breject\s*\(\s*[^,()]+,\s*'([a-z-]+)'/g)].map((m) => m[1] as string),
+      ...[...src.matchAll(/\breason:\s*'([a-z-]+)'/g)].map((m) => m[1] as string),
+    ],
   );
 
   it('行 → 点：矩阵每码都有真实 emit 点（冗余死码 = 红）', () => {

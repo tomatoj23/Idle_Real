@@ -1,6 +1,6 @@
 import { EventBus, type EventBusErrorHandler } from './events.js';
 import { MAX_TICK_STEPS } from './limits.js';
-import type { RejectAction, StrictRejectReasonOf } from './reject.js';
+import type { RejectAction, RejectReason, StrictRejectReasonOf } from './reject.js';
 import { realClock } from './clock.js';
 import { createRng } from './rng.js';
 import { levelFromXp, maxHpForLevel } from './progression.js';
@@ -660,30 +660,37 @@ export function createGame(options: CreateGameOptions): Game {
     return grantExpExact(skill, perCycle * cycles, quiet, ledger);
   }
 
-  /** 拒绝事件出口：展示文案由 texts 节按 action+reason 解析（#019），协议 code 保留。 */
-  function emitReject(action: string, reason: string, vars?: Readonly<Record<string, string>>): void {
+  /**
+   * 拒绝（#75 项 4 编译收口）：reason 过 REJECT_MATRIX 逐动作闭集——越动作
+   * 发码/码拼错 = 编译错（矩阵即引擎枚举单一声明面，包键对照测试的对拍源）。
+   * 展示文案由 texts 节按 action+reason 解析（#019），协议 code 保留。
+   */
+  function reject<A extends RejectAction>(
+    actionType: A,
+    reason: StrictRejectReasonOf<A> & RejectReason,
+    vars?: Readonly<Record<string, string>>,
+  ): void {
     events.emit({
       type: 'reject',
       time,
-      data: { action, reason, message: rejectText(action, reason, vars) },
+      data: { action: actionType, reason, message: rejectText(actionType, reason, vars) },
     });
   }
 
   /**
-   * 拒绝（#75 项 4 编译收口）：reason 过 REJECT_MATRIX 逐动作闭集——越动作
-   * 发码/码拼错 = 编译错（矩阵即引擎枚举单一声明面，包键对照测试的对拍源）。
+   * 协议外动作收口（unknown-action，#75 项 4）：type 不在 GameAction 联合，
+   * 码固定——拒绝事件的**唯一**松口出口（无类型网外的直调面不存在）。
    */
-  function reject<A extends RejectAction>(
-    actionType: A,
-    reason: StrictRejectReasonOf<A>,
-    vars?: Readonly<Record<string, string>>,
-  ): void {
-    emitReject(actionType, reason, vars);
-  }
-
-  /** 协议外动作收口（unknown-action，#75 项 4）：type 不在 GameAction 联合，码固定。 */
   function rejectUnknown(actionType: string): void {
-    emitReject(actionType, 'unknown-action');
+    events.emit({
+      type: 'reject',
+      time,
+      data: {
+        action: actionType,
+        reason: 'unknown-action',
+        message: rejectText(actionType, 'unknown-action'),
+      },
+    });
   }
 
   function emitLoot(item: string, count: number, source: LootEventSource): void {
@@ -702,11 +709,12 @@ export function createGame(options: CreateGameOptions): Game {
 
   /**
    * bag:sell / shop:buy 共用的载荷解析；非法返回 null。
-   * 载荷类型面已收口（#75 项 2），typeof 守卫仍留——注入面（DOM/测试）不可信。
+   * 载荷类型面已收口（#75 项 2），typeof 守卫与 ?. 兜底仍留——注入面
+   *（DOM/测试）不可信，缺载荷/null 载荷必须走 bad-payload 而非 TypeError。
    */
-  function readItemPayload(payload: ItemStackPayload): { itemId: string; count: number } | null {
-    const itemId = payload.item;
-    const count = payload.count === undefined ? 1 : payload.count;
+  function readItemPayload(payload: ItemStackPayload | undefined): { itemId: string; count: number } | null {
+    const itemId = payload?.item;
+    const count = payload?.count === undefined ? 1 : payload.count;
     if (
       typeof itemId !== 'string' ||
       typeof count !== 'number' ||
@@ -718,9 +726,9 @@ export function createGame(options: CreateGameOptions): Game {
     return { itemId, count };
   }
 
-  /** gear:equip / gear:sell 共用的 uid 载荷解析（uid 必须 +arg 转数字，旧版教训）。 */
-  function readUidPayload(payload: GearUidPayload): number | undefined {
-    const uid = payload.uid;
+  /** gear:equip / gear:sell 共用的 uid 载荷解析（uid 必须 +arg 转数字，旧版教训；缺载荷 ?. 兜底同上）。 */
+  function readUidPayload(payload: GearUidPayload | undefined): number | undefined {
+    const uid = payload?.uid;
     if (typeof uid !== 'number' || !Number.isInteger(uid) || uid <= 0) return undefined;
     return uid;
   }
@@ -1409,10 +1417,11 @@ export function createGame(options: CreateGameOptions): Game {
     },
 
     dispatch(action: GameAction): void {
-      // 协议外 type 的收口面（unknown-action）：switch 前取字面量字符串
-      //（default 分支的 action 已窄化为 never，穷尽断言同址）。
-      const rawType: string = action.type;
       try {
+        // 协议外 type 的收口面（unknown-action）：switch 前取字面量字符串
+        //（default 分支的 action 已窄化为 never，穷尽断言同址）。放 try 内：
+        // 契约外输入（dispatch(null) 等）的异常路径同样走 finally 收尾。
+        const rawType: string = action.type;
         switch (action.type) {
         case 'activity:start': {
           // 战斗与采集互斥：开修行即收势离战。

@@ -5,16 +5,17 @@ import { xiuxianPackJson } from '../src/packs/xiuxian.js';
 import { expectError, minimalPack } from './fixtures.js';
 
 /**
- * 内容 id 撞名导入期拒绝（#75 项 12 根治 #69 恢复期两难）：Object.prototype
- * 方法名（constructor/prototype/hasOwnProperty）恰好过 id 形态 pattern，一旦
- * 成 id 就遮蔽状态表的属性读（state.skills['constructor'] 撞内置方法）。此前
- * 只能二选一——静默丢数据或容忍方法遮蔽；现在导入期在 checkIds 单点大声拒。
+ * 内容 id 撞名导入期拒绝（#75 项 12 根治 #69 恢复期两难，复审扩围派生全集）：
+ * Object.prototype 成员名（constructor/hasOwnProperty/toString/valueOf/…）
+ * 恰好过 id 形态 pattern，一旦成 id 就遮蔽状态表的属性读（state.skills
+ * ['constructor'] 撞内置方法）。此前只能二选一——静默丢数据或容忍方法遮蔽；
+ * 现在导入期在 checkIds 单点大声拒（名单运行时派生，同族名一个不漏）。
  *
  * - 正对照：撞名 id 逐个断言 reserved 报错。构造法 = 克隆官方包注入撞名条目
  *   （语义检查以 schema 干净为前提，须用全须全尾的包做底）；元素 id 域为
- *   camelCase pattern，三名全可达；物品等严格小写域 hasOwnProperty 先被
- *   pattern 拦（同为导入即拒，不在此列）。
- * - 反对照：官方双题材包原样加载零影响（判据不误伤）。
+ *   camelCase pattern，全集名皆可达；物品等严格小写域 hasOwnProperty/toString
+ *   先被 pattern 拦（同为导入即拒，不在此列）。
+ * - 反对照：官方双题材包与既有夹具原样加载零影响（判据不误伤）。
  */
 
 function cloneXiuxian(): Record<string, any> {
@@ -22,8 +23,8 @@ function cloneXiuxian(): Record<string, any> {
 }
 
 describe('内容 id 撞名导入期拒绝（#75 项 12）', () => {
-  for (const bad of ['constructor', 'prototype', 'hasOwnProperty']) {
-    it(`id "${bad}" 导入即拒（camelCase id 域三名全可达）`, () => {
+  for (const bad of ['constructor', 'prototype', 'hasOwnProperty', 'toString', 'valueOf']) {
+    it(`id "${bad}" 导入即拒（camelCase id 域全集名皆可达）`, () => {
       const pack = cloneXiuxian();
       pack.elements = [{ id: bad, name: '撞名系' }];
       expectError(validateContentPack(pack), '/elements/0', 'reserved');

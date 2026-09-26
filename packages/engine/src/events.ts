@@ -30,14 +30,16 @@ export class EventBus {
   #overflow = 0;
 
   constructor(limit = 256, onError: EventBusErrorHandler = defaultOnError) {
-    this.limit = limit;
+    // 上限归一为非负整数（#75 复审）：小数/负限下丢弃计数与 splice 行为不失真。
+    this.limit = Math.max(0, Math.floor(limit));
     this.#onError = onError;
   }
 
   /**
    * 超限丢弃计数（#75 项 5）：队列满时丢最旧、此处累计被丢事件数（正常
    * 节奏每溢出一次恰丢一件 = "计数一次"），只增不清——UI drain 慢丢战斗
-   * 日志帧时的零诊断面补丁。
+   * 日志帧时的零诊断面补丁。当前消费面 = 测试断言；壳层诊断 UI 挂接时消费
+   *（协议预留，LEDGER_CURRENCIES 同处置）。
    */
   get overflow(): number {
     return this.#overflow;
@@ -54,7 +56,13 @@ export class EventBus {
         listener(event);
       } catch (error) {
         // 监听器异常不得阻断引擎主循环（契约不变）；诊断面收口（#75 项 1）。
-        this.#onError(error, event);
+        // 诊断面自身也不得成为新阻断源（#75 复审）：钩子抛错就地吞掉，
+        // 不递归上报、不放大，其余监听器照常收事件。
+        try {
+          this.#onError(error, event);
+        } catch {
+          // 诊断面异常静默兜底。
+        }
       }
     }
   }

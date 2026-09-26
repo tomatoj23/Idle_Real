@@ -10,7 +10,8 @@
  * 引擎枚举 ↔ 包键——typo 键静默回落键名回显的补丁）。跨包纪律不变：
  * content 不引 engine，包键对照在装配层测试做。
  *
- * '*' 行 = 协议外动作（type 不在 GameAction 联合）的通用码域。
+ * '*' 行 = 协议外动作（type 不在 GameAction 联合）的通用码域；文本解析侧
+ *（rejectText 命中序）它还是跨动作兜底映射——行码与包键 '*' 行两义并存。
  */
 
 import type { GameAction } from './types.js';
@@ -60,12 +61,15 @@ export type StrictRejectReasonOf<A extends RejectAction> =
     ? R & string
     : never;
 
-/** 全码平铺（守卫/测试对照用）。 */
+/**
+ * 全码平铺。**协议预留**（#75 复审定性：当前零消费点）：reject 码域的平铺
+ * 引用面（外部守卫/文案工具对照用），与 LEDGER_CURRENCIES 同处置——标注保留。
+ */
 export type RejectReason = RejectReasonOf<RejectAction>;
 
 /** reject 出口签名（dungeon.ts 窄门回调持此型，game.ts 装配侧满足之）。 */
 export type RejectFn = <A extends RejectAction>(
   actionType: A,
-  reason: StrictRejectReasonOf<A>,
+  reason: StrictRejectReasonOf<A> & RejectReason,
   vars?: Readonly<Record<string, string>>,
 ) => void;

@@ -49,6 +49,29 @@ describe('EventBus · 诊断面（#75 项 1/5）', () => {
     expect(bus.overflow).toBe(4); // 8 顶掉 6：再丢一件
   });
 
+  it('诊断面钩子自身抛错也不阻断主循环与其余监听器（#75 复审加固）', () => {
+    const seen: string[] = [];
+    const bus = new EventBus(256, () => {
+      throw new Error('onError-blown');
+    });
+    bus.subscribe(() => {
+      throw new Error('listener-blown');
+    });
+    bus.subscribe((event) => seen.push(event.type));
+
+    expect(() => bus.emit(tick(1))).not.toThrow();
+    expect(seen).toEqual(['tick']); // 其余监听器照常收事件
+    expect(bus.drain()).toHaveLength(1); // 事件照发不丢
+  });
+
+  it('limit 归一为非负整数：小数限下丢弃与计数不失真（#75 复审加固）', () => {
+    const bus = new EventBus(2.5);
+    expect(bus.limit).toBe(2);
+    for (let i = 1; i <= 3; i++) bus.emit(tick(i));
+    expect(bus.overflow).toBe(1);
+    expect(bus.drain().map((event) => event.time)).toEqual([2, 3]);
+  });
+
   it('createGame 的 onEventError 覆盖内置/外部订阅者异常（丢账不再无声）', () => {
     const errors: unknown[] = [];
     const game = createGame({
