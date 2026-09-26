@@ -91,7 +91,7 @@ export const KEYWORD_MATRIX: Readonly<Record<string, KeywordRow>> = {
   minLength: {
     enforce: {
       pick: (s) => s.minLength,
-      violated: (v, b) => (v as string).length < (b as number),
+      violated: (v, b) => typeof v === 'string' && v.length < (b as number), // 类型短路（#75 项 9）：型错归 validateNode，此处不判违
       message: (b) => `长度不得少于 ${b}`,
     },
     formAttr: { family: 'string', attr: 'minLength', read: (s) => s.minLength },
@@ -100,7 +100,7 @@ export const KEYWORD_MATRIX: Readonly<Record<string, KeywordRow>> = {
   maxLength: {
     enforce: {
       pick: (s) => s.maxLength,
-      violated: (v, b) => (v as string).length > (b as number),
+      violated: (v, b) => typeof v === 'string' && v.length > (b as number),
       message: (b) => `长度不得超过 ${b}`,
     },
     formAttr: { family: 'string', attr: 'maxLength', read: (s) => s.maxLength },
@@ -109,7 +109,7 @@ export const KEYWORD_MATRIX: Readonly<Record<string, KeywordRow>> = {
   pattern: {
     enforce: {
       pick: (s) => s.pattern,
-      violated: (v, b) => !new RegExp(b as string).test(v as string),
+      violated: (v, b) => typeof v === 'string' && !new RegExp(b as string).test(v),
       message: (b) => `不匹配模式 ${b}`,
     },
     formAttr: { family: 'string', attr: 'pattern', read: (s) => s.pattern },
@@ -118,7 +118,7 @@ export const KEYWORD_MATRIX: Readonly<Record<string, KeywordRow>> = {
   minimum: {
     enforce: {
       pick: (s) => s.minimum,
-      violated: (v, b) => (v as number) < (b as number),
+      violated: (v, b) => typeof v === 'number' && v < (b as number),
       message: (b) => `不得小于 ${b}`,
     },
     formAttr: { family: 'number', attr: 'min', read: (s) => s.minimum },
@@ -127,7 +127,7 @@ export const KEYWORD_MATRIX: Readonly<Record<string, KeywordRow>> = {
   maximum: {
     enforce: {
       pick: (s) => s.maximum,
-      violated: (v, b) => (v as number) > (b as number),
+      violated: (v, b) => typeof v === 'number' && v > (b as number),
       message: (b) => `不得大于 ${b}`,
     },
     formAttr: { family: 'number', attr: 'max', read: (s) => s.maximum },
@@ -136,7 +136,7 @@ export const KEYWORD_MATRIX: Readonly<Record<string, KeywordRow>> = {
   exclusiveMinimum: {
     enforce: {
       pick: (s) => s.exclusiveMinimum,
-      violated: (v, b) => (v as number) <= (b as number),
+      violated: (v, b) => typeof v === 'number' && v <= (b as number),
       message: (b) => `必须大于 ${b}`,
     },
     formAttr: { family: 'number', attr: 'exclMin', read: (s) => s.exclusiveMinimum },
@@ -145,7 +145,7 @@ export const KEYWORD_MATRIX: Readonly<Record<string, KeywordRow>> = {
   exclusiveMaximum: {
     enforce: {
       pick: (s) => s.exclusiveMaximum,
-      violated: (v, b) => (v as number) >= (b as number),
+      violated: (v, b) => typeof v === 'number' && v >= (b as number),
       message: (b) => `必须小于 ${b}`,
     },
     formAttr: { family: 'number', attr: 'exclMax', read: (s) => s.exclusiveMaximum },
@@ -154,7 +154,7 @@ export const KEYWORD_MATRIX: Readonly<Record<string, KeywordRow>> = {
   minItems: {
     enforce: {
       pick: (s) => s.minItems,
-      violated: (v, b) => (v as unknown[]).length < (b as number),
+      violated: (v, b) => Array.isArray(v) && v.length < (b as number),
       message: (b) => `至少需要 ${b} 项`,
     },
     formAttr: { family: 'array', attr: 'minItems', read: (s) => s.minItems },
@@ -163,7 +163,7 @@ export const KEYWORD_MATRIX: Readonly<Record<string, KeywordRow>> = {
   maxItems: {
     enforce: {
       pick: (s) => s.maxItems,
-      violated: (v, b) => (v as unknown[]).length > (b as number),
+      violated: (v, b) => Array.isArray(v) && v.length > (b as number),
       message: (b) => `至多允许 ${b} 项`,
     },
     formAttr: { family: 'array', attr: 'maxItems', read: (s) => s.maxItems },

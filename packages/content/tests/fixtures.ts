@@ -19,6 +19,8 @@
  * 值刻意极短——形态合法性由本夹具承载；语义正确性由修仙/魔幻包装配用例
  * （xiuxianPack.test.ts / fantasyPack.test.ts）承载。
  */
+import { expect } from 'vitest';
+import type { ValidationResult } from '../src/index.js';
 import textsSchemaJson from '../src/schema/texts.schema.json';
 import { textsSample } from '../src/schema/textsSample.js';
 
@@ -217,4 +219,22 @@ export function minimalPack(): Record<string, unknown> {
     },
     shop: [{ item: 'herb1', price: 10 }],
   };
+}
+
+/**
+ * 语义断言共享助手（#75 复审收口）：断言校验结果含指定 path+keyword 的错误。
+ * 失败时倾倒完整错误清单便于定位。存量测试各持局部副本（5 种变体），逐步
+ * 收拢至此；新测试一律走本导出。
+ */
+export function expectError(
+  result: ValidationResult,
+  path: string,
+  keyword: string,
+): void {
+  expect(result.ok).toBe(false);
+  if (result.ok) {
+    return;
+  }
+  const hit = result.errors.find((e) => e.path === path && e.keyword === keyword);
+  expect(hit, `期望 ${path} [${keyword}]，实际：${JSON.stringify(result.errors)}`).toBeDefined();
 }

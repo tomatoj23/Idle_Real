@@ -2,7 +2,12 @@ export { createGame } from './game.js';
 export type { CreateGameOptions, Game } from './game.js';
 export { ManualClock, realClock } from './clock.js';
 export { EventBus } from './events.js';
-export type { EventListener } from './events.js';
+export type { EventBusErrorHandler, EventListener } from './events.js';
+
+// reject 码域注册表（#75 项 4）：引擎 reject(action,reason) 枚举单一声明面，
+// emit 点逐动作编译收口，包键覆盖对照测试的对拍源。
+export { REJECT_MATRIX } from './reject.js';
+export type { RejectAction, RejectFn, RejectReason, RejectReasonOf } from './reject.js';
 
 // 进度曲线（issue #3；参数化 #020：BASE_PROGRESSION + 可选参数位）
 export {
@@ -114,7 +119,7 @@ export type {
   SlotView,
   StackView,
 } from './contentView.js';
-export { cloneState, initialState, restoreState } from './state.js';
+export { cloneState, initialState, restoreState, KEEP_KEYS, RESET_KEYS } from './state.js';
 // 存档格式版本（#69）：写侧 snapshot 与读侧门禁的单一事实源。
 export { SAVE_VERSION } from './types.js';
 export type {
@@ -128,6 +133,7 @@ export type {
 
 export type {
   Clock,
+  CombatEntryAction,
   CombatMinionProjection,
   GameAction,
   GameContent,

@@ -18,6 +18,7 @@
  * （#52，dungeon.ts 一侧），此处仅窄门回调。
  */
 
+import { MAX_TICK_STEPS } from './limits.js';
 import {
   affinityMultiplier,
   calcDmg,
@@ -616,7 +617,7 @@ export function createCombatRun(deps: CombatRunDeps): CombatRun {
   function step(dt: number): void {
     let remaining = dt;
     let guard = 0;
-    while (remaining > 0 && deps.combat.get() && guard++ < 1_000_000) {
+    while (remaining > 0 && deps.combat.get() && guard++ < MAX_TICK_STEPS) {
       const c = deps.combat.get()!;
       const enemy = resolveEnemy(c.enemyId);
       if (!enemy) {
@@ -690,14 +691,14 @@ export function createCombatRun(deps: CombatRunDeps): CombatRun {
       }
       // 召唤物有效间隔（#30）：攻击间隔随内容定义（缺省 = 玩家间隔），不受
       // 水·滞缓影响（滞缓签名作用于主敌人；召唤物威胁量归 summon mult 调参）。
-      const minionIntervals = c.summons.map((minion) => {
-        const view = minionViewOf(minion)!;
-        return Math.max(1, view.attackInterval ?? cparams.playerAttackInterval);
-      });
+      // 投影失效槽位不参与间隔（#75 项 6 防御改写：不依赖 minionViewOf 与
+      // isLiveSummon 判定面永一致的分叉假设，残影跳过而非断言炸裂）。
       let stepMs = Math.min(remaining, pInterval - c.pt, eInterval - c.et);
-      c.summons.forEach((minion, i) => {
-        stepMs = Math.min(stepMs, minionIntervals[i]! - minion.et);
-      });
+      for (const minion of c.summons) {
+        const view = minionViewOf(minion);
+        if (!view) continue;
+        stepMs = Math.min(stepMs, Math.max(1, view.attackInterval ?? cparams.playerAttackInterval) - minion.et);
+      }
       stepMs = Math.max(0, stepMs);
       c.pt += stepMs;
       c.et += stepMs;

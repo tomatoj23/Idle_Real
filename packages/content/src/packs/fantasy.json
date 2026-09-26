@@ -425,17 +425,52 @@
   "texts": {
     "basicName": "bare hands",
     "reject": {
-      "combat:start": {
-        "locked": "Reach combat level {level} to challenge this foe."
-      },
       "activity:start": {
-        "locked": "Requires level {level} for {activity}."
-      },
-      "shop:buy": {
-        "poor": "Not enough gold: need {cost}, you have {gold}."
+        "not-found": "No such art is known.",
+        "level": "Requires level {level} for {activity}.",
+        "rebirth-locked": "You need {daoYun} lifetime attunement to learn this art.",
+        "no-materials": "You lack the materials for {activity}."
       },
       "bag:sell": {
-        "bad-payload": "Cannot sell that."
+        "bad-payload": "Cannot sell that.",
+        "not-found": "No such item is known.",
+        "no-item": "You hold only {owned} × {item}."
+      },
+      "shop:buy": {
+        "not-in-shop": "The shop does not stock that.",
+        "no-gold": "Not enough gold: need {cost}, you have {gold}."
+      },
+      "combat:start": {
+        "not-found": "No such foe is known.",
+        "level": "Reach combat level {level} to challenge this foe.",
+        "rebirth-locked": "You need {daoYun} lifetime attunement to face this foe.",
+        "in-dungeon": "Leave the delve before picking a fight.",
+        "low-hp": "Too hurt — recover before fighting."
+      },
+      "consumable:eat": {
+        "not-consumable": "That is no potion.",
+        "no-item": "You have none left.",
+        "full-hp": "You are already at full health."
+      },
+      "gear:equip": {
+        "not-found": "No such piece of gear.",
+        "not-wearable": "That cannot be worn."
+      },
+      "gear:sell": {
+        "not-found": "No such piece of gear.",
+        "worn": "Unequip it before selling."
+      },
+      "gear:smelt": {
+        "not-found": "No such piece of gear.",
+        "worn": "Unequip it before smelting.",
+        "not-available": "This realm knows no smelting."
+      },
+      "gear:reforge": {
+        "not-found": "No such piece of gear.",
+        "worn": "Unequip it before reforging.",
+        "no-inscription": "This piece bears no inscription to reforge.",
+        "not-available": "This realm knows no reforging.",
+        "no-shard": "Not enough shards: need {cost}, you have {owned}."
       },
       "rebirth:perform": {
         "not-available": "Rebirth is not part of this realm.",
@@ -454,10 +489,12 @@
         "in-combat": "Finish the fight before entering the delve.",
         "locked": "The delve gate needs {daoYun} lifetime attunement.",
         "no-key": "You lack the {item} required to enter.",
+        "no-layer": "This delve holds no challenge yet.",
         "low-hp": "Too hurt — recover before delving."
       },
       "*": {
-        "bad-payload": "That action cannot be performed."
+        "bad-payload": "That action cannot be performed.",
+        "unknown-action": "Unknown command."
       }
     },
     "shell": {

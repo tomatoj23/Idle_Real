@@ -6,7 +6,7 @@
  * 换成就表 = 换 content 包 achievements 节，统计语义不随包变。
  *
  * 消费方式：createGame 内部订阅自身事件总线，emit 即同步累积到
- * state.stats（监听器异常由 EventBus 吞掉，不阻断主循环）；
+ * state.stats（监听器异常走 EventBus 诊断面，不阻断主循环）；
  * 累积规则与在线/离线语义对称（offline-settled 的轮数并入 cycles）。
  */
 

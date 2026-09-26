@@ -11,6 +11,14 @@ export {
   formatContentErrors,
   sectionSchemas,
 } from './schema/index.js';
+// 注册表镜像（#75 项 3 对拍面）：与 engine 同名注册表同值闭集；导出面守卫
+// （protocolGuard）钉两清单一致。
+export {
+  ELEMENT_COMBAT_PRIMITIVES,
+  REBIRTH_KEEP_KEYS,
+  REBIRTH_RESET_KEYS,
+  STAT_KEYS,
+} from './schema/index.js';
 export type {
   ContentError,
   ValidationResult,

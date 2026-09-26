@@ -19,7 +19,8 @@
  * 离线/兵解的整态清置归 game.ts 生命周期（同 state.combat 先例）。
  */
 
-import type { GameContent, GameEvent } from './types.js';
+import type { CombatEntryAction, GameContent, GameEvent } from './types.js';
+import type { RejectFn } from './reject.js';
 import type { DungeonState } from './state.js';
 import { findEnemy, type EnemyView } from './contentView.js';
 import { weightedPick } from './rng.js';
@@ -228,16 +229,12 @@ export interface DungeonRunDeps {
   readonly emit: (event: GameEvent) => void;
   /** 系统 note 文案读取器（顶层通关 note；池缺失回显键，#019）。 */
   readonly note: (key: string, vars?: Readonly<Record<string, string>>) => string;
-  /** 拒绝事件出口（enterFloor low-hp 复查代发；文案与 dispatch 面同源）。 */
-  readonly reject: (
-    actionType: string,
-    reason: string,
-    vars?: Readonly<Record<string, string>>,
-  ) => void;
+  /** 拒绝事件出口（enterFloor low-hp 复查代发；文案与 dispatch 面同源，#75 项 4 逐动作编译收口）。 */
+  readonly reject: RejectFn;
   /** low-hp 血线读取器（与入场门控同一条线，#44 isLowHp 单一谓词）。 */
   readonly lowHp: () => boolean;
   /** 开战单序列窄门（enterCombat：low-hp 复查/清活动/建战斗态/开战 note）。 */
-  readonly beginCombat: (enemy: EnemyView, actionType?: string) => 'ok' | 'low-hp';
+  readonly beginCombat: (enemy: EnemyView, actionType?: CombatEntryAction) => 'ok' | 'low-hp';
   /** 停战序列窄门（顶层通关/防御离境：撤退 note + 清战斗态 + 离境）。 */
   readonly stopCombat: (note?: string) => void;
   /** 攻略指针存取句柄：GameState.dungeon 的导航读写门（离线/兵解整态清置
@@ -272,7 +269,7 @@ export interface DungeonRun {
    * 无声改变后续随机流，ADR-013）→ 加权抽敌 → 层倍率投影 → 开战单序列。
    * 层表空/敌人全缺失 = 'no-layer'（防御路径，包校验已拦）。
    */
-  enterFloor(dungeon: DungeonView, floor: number, actionType?: string): 'ok' | 'no-layer' | 'low-hp';
+  enterFloor(dungeon: DungeonView, floor: number, actionType?: CombatEntryAction): 'ok' | 'no-layer' | 'low-hp';
   /** 离境（幂等）：清攻略 + dungeon:leave 事件（最高层已随进层实时登记）。 */
   leave(): void;
   /**
@@ -301,7 +298,7 @@ export function createDungeonRun(deps: DungeonRunDeps): DungeonRun {
   function enterFloor(
     dungeon: DungeonView,
     floor: number,
-    actionType?: string,
+    actionType?: CombatEntryAction,
   ): 'ok' | 'no-layer' | 'low-hp' {
     if (deps.lowHp()) {
       if (actionType !== undefined) deps.reject(actionType, 'low-hp');

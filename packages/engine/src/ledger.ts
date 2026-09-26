@@ -32,7 +32,12 @@ export type LedgerSource = (typeof LEDGER_SOURCES)[number];
 /** 账本条目 kind 判别（D8）：物品 / 装备实例 / 货币 / 修为。 */
 export type LedgerKind = 'item' | 'gear' | 'currency' | 'exp';
 
-/** 引擎货币键闭集：状态树资产字段名即键（#24 中性化后的引擎自有词汇）。 */
+/**
+ * 引擎货币键闭集：状态树资产字段名即键（#24 中性化后的引擎自有词汇）。
+ * **协议预留**（#75 项 10 定性：全仓零消费点）：kind=currency 账目行的 id
+ * 键域声明（LedgerData.id 注释即引用本表），#33 修行录按币种聚合时在此
+ * 收口——协议面声明删了要补回来更贵，故标注保留而非删除。
+ */
 export const LEDGER_CURRENCIES = ['gold', 'daoYun'] as const;
 
 export type LedgerCurrency = (typeof LEDGER_CURRENCIES)[number];

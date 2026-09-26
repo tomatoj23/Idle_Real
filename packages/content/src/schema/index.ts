@@ -29,7 +29,17 @@ export type {
   StringFormAttrs,
 } from './keywords.js';
 
-export { validateContentPack, formatContentErrors, sectionSchemas } from './pack.js';
+// 注册表镜像（#75 项 3 对拍面导出）：与 engine 同名注册表同值闭集，
+// 镜像同值由 app-desktop 装配层对拍测试钉死（content 不引 engine 纪律不动）。
+export {
+  ELEMENT_COMBAT_PRIMITIVES,
+  REBIRTH_KEEP_KEYS,
+  REBIRTH_RESET_KEYS,
+  STAT_KEYS,
+  validateContentPack,
+  formatContentErrors,
+  sectionSchemas,
+} from './pack.js';
 export type { PackValidationResult, SectionSchemas } from './pack.js';
 
 export type {

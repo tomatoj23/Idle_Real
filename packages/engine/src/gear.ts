@@ -14,6 +14,7 @@
  * 值（round(基础 × 倍率)，沿用旧版 gearStats 基线）——装备产出方只有
  * flat 一种区，不存在第二条直算路径。
  */
+import { MAX_AFFIX_ROLLS, MAX_INSCRIPTION_ROLLS } from './limits.js';
 import type { GameContent } from './types.js';
 import {
   BASE_GEAR_PARAMS,
@@ -184,7 +185,7 @@ export function makeGear(
     const pool = affixPoolOf(content);
     const used = new Set<string>();
     let guard = 0;
-    while (affixes.length < affixCount && guard++ < 20) {
+    while (affixes.length < affixCount && guard++ < MAX_AFFIX_ROLLS) {
       const entry = pool[Math.floor(random() * pool.length) % pool.length];
       if (!entry || used.has(entry.stat)) continue;
       used.add(entry.stat);
@@ -249,7 +250,7 @@ function drawInscriptions(
   const chosen: GearInscription[] = [];
   const used = new Set<string>();
   let guard = 0;
-  while (chosen.length < count && guard++ < 50) {
+  while (chosen.length < count && guard++ < MAX_INSCRIPTION_ROLLS) {
     const candidates = pool.filter((def) => !used.has(def.id));
     if (candidates.length === 0) break;
     const weights = candidates.map((def) => {

@@ -22,10 +22,170 @@ export interface Clock {
   now(): number;
 }
 
-/** 玩家动作。骨架期仅定义协议外形，语义由后续票据补充。 */
-export interface GameAction {
-  readonly type: string;
-  readonly payload?: unknown;
+/* ---------- 玩家动作缝（#75 项 2 判别收口，#47 同法）：type 携带自己的载荷类型 ---------- */
+
+/**
+ * 玩家动作：判别联合收口（#47 方法复用）——载荷按 type 窄化，构造点载荷
+ * 键拼错/值型错 = 编译错，dispatch 侧读载荷零断言。载荷字段按**注入面实态**
+ * 收型（DOM dataset 恒可 undefined）：形状合法性仍由 dispatch 运行时守卫
+ * 把关（bad-payload 拒绝语义不变，注入面不可信——测试直发畸形载荷不受
+ * 编译面拦截）。无载荷动作不带 payload 键。协议外 type（unknown-action
+ * 收口）不在联合内，dispatch default 穷尽断言同址把守。
+ */
+export type GameAction =
+  | ActivityStartAction
+  | ActivityStopAction
+  | BagSellAction
+  | ShopBuyAction
+  | CombatStartAction
+  | CombatStopAction
+  | CombatAutoAction
+  | CombatAutoEatAction
+  | VisitBeginAction
+  | VisitEndAction
+  | DungeonEnterAction
+  | DungeonLeaveAction
+  | ConsumableEatAction
+  | GearEquipAction
+  | GearUnequipAction
+  | GearSellAction
+  | GearSmeltAction
+  | GearReforgeAction
+  | RebirthPerformAction
+  | TalentBuyAction
+  | JournalAnchorAction;
+
+/** 战斗入场来源动作域（enterCombat/enterFloor 的 actionType 参数，#44 入场单序列）。 */
+export type CombatEntryAction = 'combat:start' | 'dungeon:enter';
+
+/** 物品数量载荷（bag:sell / shop:buy 共用形态）：count 缺省 1（readItemPayload 归一）。 */
+export interface ItemStackPayload {
+  readonly item?: string;
+  readonly count?: number;
+}
+
+/** 装备实例载荷（uid = state.gear 实例序号）：gear:equip/sell/smelt 共用形态。 */
+export interface GearUidPayload {
+  readonly uid?: number;
+}
+
+/** 开工（采集/炼制）：skillId + 活动下标（craft 类 = 包内 recipes 下标）。 */
+export interface ActivityStartAction {
+  readonly type: 'activity:start';
+  readonly payload: { readonly skillId?: string; readonly index?: number };
+}
+
+/** 收功（幂等）。 */
+export interface ActivityStopAction {
+  readonly type: 'activity:stop';
+}
+
+/** 乾坤袋出售。 */
+export interface BagSellAction {
+  readonly type: 'bag:sell';
+  readonly payload: ItemStackPayload;
+}
+
+/** 坊市购入。 */
+export interface ShopBuyAction {
+  readonly type: 'shop:buy';
+  readonly payload: ItemStackPayload;
+}
+
+/** 野战开战。 */
+export interface CombatStartAction {
+  readonly type: 'combat:start';
+  readonly payload: { readonly enemyId?: string };
+}
+
+/** 收势离战。 */
+export interface CombatStopAction {
+  readonly type: 'combat:stop';
+}
+
+/** 自动斗法开关（无载荷，翻转）。 */
+export interface CombatAutoAction {
+  readonly type: 'combat:auto';
+}
+
+/** 自动服药开关（无载荷，翻转）。 */
+export interface CombatAutoEatAction {
+  readonly type: 'combat:auto-eat';
+}
+
+/** 访问段开始（#39 D9 壳层段信号，引擎纯转发）。 */
+export interface VisitBeginAction {
+  readonly type: 'visit:begin';
+  readonly payload: { readonly page?: string };
+}
+
+/** 访问段结束（同上）。 */
+export interface VisitEndAction {
+  readonly type: 'visit:end';
+  readonly payload: { readonly page?: string };
+}
+
+/** 入秘境（自第 1 层起攻）。 */
+export interface DungeonEnterAction {
+  readonly type: 'dungeon:enter';
+  readonly payload: { readonly dungeonId?: string };
+}
+
+/** 离开秘境（未在秘境 = 幂等）。 */
+export interface DungeonLeaveAction {
+  readonly type: 'dungeon:leave';
+}
+
+/** 服丹。 */
+export interface ConsumableEatAction {
+  readonly type: 'consumable:eat';
+  readonly payload: { readonly item?: string };
+}
+
+/** 佩器（uid 必须整正，运行时守卫把关）。 */
+export interface GearEquipAction {
+  readonly type: 'gear:equip';
+  readonly payload: GearUidPayload;
+}
+
+/** 脱器（slot → 槽位 id；空槽幂等）。 */
+export interface GearUnequipAction {
+  readonly type: 'gear:unequip';
+  readonly payload: { readonly slot?: string };
+}
+
+/** 卖器。 */
+export interface GearSellAction {
+  readonly type: 'gear:sell';
+  readonly payload: GearUidPayload;
+}
+
+/** 熔炼（分解装备得器屑）。 */
+export interface GearSmeltAction {
+  readonly type: 'gear:smelt';
+  readonly payload: GearUidPayload;
+}
+
+/** 重铸铭纹：uid + 铭纹下标。 */
+export interface GearReforgeAction {
+  readonly type: 'gear:reforge';
+  readonly payload: { readonly uid?: number; readonly index?: number };
+}
+
+/** 兵解转生。 */
+export interface RebirthPerformAction {
+  readonly type: 'rebirth:perform';
+}
+
+/** 点亮天赋。 */
+export interface TalentBuyAction {
+  readonly type: 'talent:buy';
+  readonly payload: { readonly nodeId?: string };
+}
+
+/** 修行录锚点重设（#33，幂等可随时重设）。 */
+export interface JournalAnchorAction {
+  readonly type: 'journal:anchor';
 }
 
 /* ---------- 引擎事件缝（#47 判别联合）：每个 type 携带自己的载荷类型 ---------- */

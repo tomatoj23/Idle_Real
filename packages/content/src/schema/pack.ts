@@ -246,11 +246,11 @@ function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
   const skillIndex = indexIds(pack.skills);
   const enemyIndex = indexIds(pack.enemies);
 
-  pushDuplicates(pack.items, '/items', errors);
-  pushDuplicates(pack.skills, '/skills', errors);
-  pushDuplicates(pack.enemies, '/enemies', errors);
-  pushDuplicates(pack.rarities, '/rarities', errors);
-  pushDuplicates(pack.elements, '/elements', errors);
+  checkIds(pack.items, '/items', errors);
+  checkIds(pack.skills, '/skills', errors);
+  checkIds(pack.enemies, '/enemies', errors);
+  checkIds(pack.rarities, '/rarities', errors);
+  checkIds(pack.elements, '/elements', errors);
   const slotIds = checkConfig(pack.config, itemIndex, pack.items, errors);
 
   // 武器语义槽位（#14 role 放宽，与引擎 weaponSlotOf 同律）：role === 'weapon'
@@ -320,13 +320,39 @@ function indexIds(entries: ReadonlyArray<{ readonly id: string }>): Map<string, 
   return map;
 }
 
-function pushDuplicates(
+/**
+ * 内容 id 撞名黑名单（#75 项 12 根治）：这三个 Object.prototype 方法名恰好
+ * 匹配 id 形态 pattern，一旦成 id 就会遮蔽状态表的属性读（#69 恢复期
+ * 「静默丢数据 vs 容忍方法遮蔽」两难的源头）。导入期在此大声拒绝，包作者
+ * 当场改名——schema pattern 表达不了名字黑名单（负向断言不进 draft-07
+ * 子集），语义层单点收口。'__proto__' 前导下划线本就过不了 id pattern。
+ */
+const UNSAFE_CONTENT_IDS: ReadonlySet<string> = new Set([
+  'constructor',
+  'prototype',
+  'hasOwnProperty',
+]);
+
+/**
+ * id 域检查单点（#75 项 12）：重复 id + Object.prototype 撞名黑名单。
+ * 所有 id 制声明节（items/skills/enemies/rarities/elements/slots/dungeons/
+ * achievements/talents）皆经此收口。
+ */
+function checkIds(
   entries: ReadonlyArray<{ readonly id: string }>,
   basePath: string,
   errors: ContentError[],
 ): void {
   const firstSeen = new Map<string, number>();
   entries.forEach((entry, index) => {
+    if (UNSAFE_CONTENT_IDS.has(entry.id)) {
+      errors.push({
+        path: `${basePath}/${index}`,
+        keyword: 'reserved',
+        message: `id "${entry.id}" 是 Object.prototype 方法名（会遮蔽状态表属性读），禁用`,
+      });
+      return;
+    }
     const first = firstSeen.get(entry.id);
     if (first === undefined) {
       firstSeen.set(entry.id, index);
@@ -357,7 +383,7 @@ function checkConfig(
   if (config === undefined) {
     return undefined;
   }
-  pushDuplicates(config.slots, '/config/slots', errors);
+  checkIds(config.slots, '/config/slots', errors);
   const combat = config.combat;
   if (
     combat?.tierLightMax !== undefined &&
@@ -967,7 +993,7 @@ function checkElementRefs(
  * （ADR-012：宁 4 真系勿 7 假系），加载期大声拒绝；
  * 火/木 DoT 原语第二波另票，届时两侧镜像同步扩展。
  */
-const ELEMENT_COMBAT_PRIMITIVES: ReadonlySet<string> = new Set(['defenseBreak', 'slow', 'swift']);
+export const ELEMENT_COMBAT_PRIMITIVES: ReadonlySet<string> = new Set(['defenseBreak', 'slow', 'swift']);
 
 /**
  * 系别机制签名检查（#15，可选字段，声明才查）：
@@ -1024,7 +1050,7 @@ function checkDungeons(
   items: ReadonlyMap<string, number>,
   errors: ContentError[],
 ): void {
-  pushDuplicates(dungeons, '/dungeons', errors);
+  checkIds(dungeons, '/dungeons', errors);
   dungeons.forEach((dungeon, i) => {
     const at = (field: string) => `/dungeons/${i}/${field}`;
     if (dungeon.entry?.key !== undefined && !items.has(dungeon.entry.key)) {
@@ -1217,7 +1243,7 @@ function checkBosses(
  * REBIRTH_RESET_KEYS 先例：schema 只钉键形态，键域合法性在语义层收口）。
  * 条件 stat 引用未登记键 = 死条件（引擎永不累积该键），加载期大声拒绝。
  */
-const STAT_KEYS: ReadonlySet<string> = new Set([
+export const STAT_KEYS: ReadonlySet<string> = new Set([
   'kills',
   'deaths',
   'rebirths',
@@ -1241,7 +1267,7 @@ function checkAchievements(
   itemDefs: readonly Item[],
   errors: ContentError[],
 ): void {
-  pushDuplicates(achievements, '/achievements', errors);
+  checkIds(achievements, '/achievements', errors);
   achievements.forEach((achievement, i) => {
     const at = (field: string) => `/achievements/${i}/${field}`;
     if (!STAT_KEYS.has(achievement.condition.stat)) {
@@ -1290,8 +1316,8 @@ function checkAchievements(
  * 佩戴表与 uid 序列器随动）；瞬态（活动/战斗/气血）由引擎一律清空回满，
  * 不进清单。协议文档：docs/agents/content.md「rebirth 转生节」。
  */
-const REBIRTH_RESET_KEYS: ReadonlySet<string> = new Set(['skills', 'items', 'gold', 'buffs', 'lastEncounter']);
-const REBIRTH_KEEP_KEYS: ReadonlySet<string> = new Set(['gear']);
+export const REBIRTH_RESET_KEYS: ReadonlySet<string> = new Set(['skills', 'items', 'gold', 'buffs', 'lastEncounter']);
+export const REBIRTH_KEEP_KEYS: ReadonlySet<string> = new Set(['gear']);
 
 /**
  * 转生节语义检查（#6，可选节，存在才查）：
@@ -1342,7 +1368,7 @@ function checkRebirth(
 
   // —— 天赋树：id 去重 + requires xref + 查环 + 效果修饰符区约束。
   const talents: readonly TalentNode[] = section.talents;
-  pushDuplicates(talents, '/rebirth/talents', errors);
+  checkIds(talents, '/rebirth/talents', errors);
   const talentIds = new Set(talents.map((node) => node.id));
   talents.forEach((node, i) => {
     const at = (field: string) => `/rebirth/talents/${i}/${field}`;

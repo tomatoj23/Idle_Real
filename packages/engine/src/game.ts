@@ -1,4 +1,6 @@
-import { EventBus } from './events.js';
+import { EventBus, type EventBusErrorHandler } from './events.js';
+import { MAX_TICK_STEPS } from './limits.js';
+import type { RejectAction, StrictRejectReasonOf } from './reject.js';
 import { realClock } from './clock.js';
 import { createRng } from './rng.js';
 import { levelFromXp, maxHpForLevel } from './progression.js';
@@ -59,8 +61,11 @@ import {
 import { SAVE_VERSION } from './types.js';
 import type {
   Clock,
+  CombatEntryAction,
   GameAction,
   GameContent,
+  GearUidPayload,
+  ItemStackPayload,
   LootEventSource,
   PlayerStatsView,
   SaveData,
@@ -123,6 +128,12 @@ export interface CreateGameOptions {
    * 缺省 no-op（零行为差异）；规则本体（阈值表/互斥/UI）归 #35/#36。
    */
   readonly autoFold?: AutoFoldRule;
+  /**
+   * 监听器异常诊断面（#75 项 1）：引擎内置订阅者（stats/journal）或外部
+   * 订阅者的异常不阻断主循环，但不再无声吞掉——缺省 console.error 面，
+   * 壳层/测试可注入收诊断。
+   */
+  readonly onEventError?: EventBusErrorHandler;
 }
 
 export interface Game {
@@ -152,7 +163,7 @@ export interface Game {
 export function createGame(options: CreateGameOptions): Game {
   const clock = options.clock ?? realClock();
   const content = options.content;
-  const events = new EventBus();
+  const events = new EventBus(256, options.onEventError);
 
   // 玩法参数一次解析（#020 批 3，ADR-016 裁决 ① 分策）：
   // config 缺省字段逐项回落引擎基线，改参数 = 纯 JSON 改动。
@@ -183,7 +194,7 @@ export function createGame(options: CreateGameOptions): Game {
     return value;
   };
   // 统计累积（#9）：订阅自身事件总线，emit 即同步累积到 state.stats
-  //（监听器异常由 EventBus 吞掉；成就评估在 tick/dispatch/settleOffline 末尾统一进行）。
+  //（监听器异常走 EventBus 诊断面，不阻断主循环；成就评估在 tick/dispatch/settleOffline 末尾统一进行）。
   events.subscribe((event) => applyStatsEvent(state.stats, event));
   // 修行录段落账（#33）：同式订阅（emit 即聚合）；条目墙钟走注入钟（仅记录
   // 元数据，不参与机制解算——ADR-013 纪律边界，五轮审计 B）。
@@ -649,13 +660,30 @@ export function createGame(options: CreateGameOptions): Game {
     return grantExpExact(skill, perCycle * cycles, quiet, ledger);
   }
 
-  /** 拒绝事件：展示文案由 texts 节按 action+reason 解析（#019），协议 code 保留。 */
-  function reject(actionType: string, reason: string, vars?: Readonly<Record<string, string>>): void {
+  /** 拒绝事件出口：展示文案由 texts 节按 action+reason 解析（#019），协议 code 保留。 */
+  function emitReject(action: string, reason: string, vars?: Readonly<Record<string, string>>): void {
     events.emit({
       type: 'reject',
       time,
-      data: { action: actionType, reason, message: rejectText(actionType, reason, vars) },
+      data: { action, reason, message: rejectText(action, reason, vars) },
     });
+  }
+
+  /**
+   * 拒绝（#75 项 4 编译收口）：reason 过 REJECT_MATRIX 逐动作闭集——越动作
+   * 发码/码拼错 = 编译错（矩阵即引擎枚举单一声明面，包键对照测试的对拍源）。
+   */
+  function reject<A extends RejectAction>(
+    actionType: A,
+    reason: StrictRejectReasonOf<A>,
+    vars?: Readonly<Record<string, string>>,
+  ): void {
+    emitReject(actionType, reason, vars);
+  }
+
+  /** 协议外动作收口（unknown-action，#75 项 4）：type 不在 GameAction 联合，码固定。 */
+  function rejectUnknown(actionType: string): void {
+    emitReject(actionType, 'unknown-action');
   }
 
   function emitLoot(item: string, count: number, source: LootEventSource): void {
@@ -672,11 +700,13 @@ export function createGame(options: CreateGameOptions): Game {
     return gearName(content, findItem(content, gear.itemId)?.name ?? gear.itemId, gear.rarity);
   }
 
-  /** bag:sell / shop:buy 共用的载荷解析；非法返回 null。 */
-  function readItemPayload(payload: unknown): { itemId: string; count: number } | null {
-    const p = payload as { item?: unknown; count?: unknown } | undefined;
-    const itemId = p?.item;
-    const count = p?.count === undefined ? 1 : p.count;
+  /**
+   * bag:sell / shop:buy 共用的载荷解析；非法返回 null。
+   * 载荷类型面已收口（#75 项 2），typeof 守卫仍留——注入面（DOM/测试）不可信。
+   */
+  function readItemPayload(payload: ItemStackPayload): { itemId: string; count: number } | null {
+    const itemId = payload.item;
+    const count = payload.count === undefined ? 1 : payload.count;
     if (
       typeof itemId !== 'string' ||
       typeof count !== 'number' ||
@@ -689,9 +719,8 @@ export function createGame(options: CreateGameOptions): Game {
   }
 
   /** gear:equip / gear:sell 共用的 uid 载荷解析（uid 必须 +arg 转数字，旧版教训）。 */
-  function readUidPayload(payload: unknown): number | undefined {
-    const p = payload as { uid?: unknown } | undefined;
-    const uid = p?.uid;
+  function readUidPayload(payload: GearUidPayload): number | undefined {
+    const uid = payload.uid;
     if (typeof uid !== 'number' || !Number.isInteger(uid) || uid <= 0) return undefined;
     return uid;
   }
@@ -741,7 +770,7 @@ export function createGame(options: CreateGameOptions): Game {
       gatherSpeedOf(playerContributions()),
     );
     let guard = 0;
-    while (active.progress >= interval && guard++ < 1_000_000) {
+    while (active.progress >= interval && guard++ < MAX_TICK_STEPS) {
       active.progress -= interval;
       completeActivityOnce(found.skill, found.activity);
     }
@@ -828,7 +857,7 @@ export function createGame(options: CreateGameOptions): Game {
     }
     active.progress += dt;
     let guard = 0;
-    while (active.progress >= recipe.interval && guard++ < 1_000_000) {
+    while (active.progress >= recipe.interval && guard++ < MAX_TICK_STEPS) {
       if (craftMissingOf(recipe, state.items).length > 0) break;
       active.progress -= recipe.interval;
       completeCraftOnce(skill, recipe);
@@ -916,7 +945,7 @@ export function createGame(options: CreateGameOptions): Game {
    * 不传——血线已由 combatRun.step 的退避判定先行担保，此处复查恒过。
    * 返回 'low-hp' = 未成战（dispatch 面已代发 reject，调用侧直接收尾）。
    */
-  function enterCombat(enemy: EnemyView, actionType?: string): 'ok' | 'low-hp' {
+  function enterCombat(enemy: EnemyView, actionType?: CombatEntryAction): 'ok' | 'low-hp' {
     if (isLowHp()) {
       if (actionType !== undefined) reject(actionType, 'low-hp');
       return 'low-hp';
@@ -1380,12 +1409,15 @@ export function createGame(options: CreateGameOptions): Game {
     },
 
     dispatch(action: GameAction): void {
+      // 协议外 type 的收口面（unknown-action）：switch 前取字面量字符串
+      //（default 分支的 action 已窄化为 never，穷尽断言同址）。
+      const rawType: string = action.type;
       try {
         switch (action.type) {
         case 'activity:start': {
           // 战斗与采集互斥：开修行即收势离战。
           if (state.combat) stopCombat(noteFrom('retreatToGather'));
-          const payload = action.payload as { skillId?: unknown; index?: unknown } | undefined;
+          const payload = action.payload;
           if (
             !payload ||
             typeof payload.skillId !== 'string' ||
@@ -1567,7 +1599,7 @@ export function createGame(options: CreateGameOptions): Game {
         }
 
         case 'combat:start': {
-          const payload = action.payload as { enemyId?: unknown } | undefined;
+          const payload = action.payload;
           const enemyId = payload?.enemyId;
           if (typeof enemyId !== 'string') {
             reject(action.type, 'bad-payload');
@@ -1622,7 +1654,7 @@ export function createGame(options: CreateGameOptions): Game {
         case 'visit:end': {
           // 访问段信号（#39 D9）：壳层交互页切进/切出时派发，引擎纯转发
           // EventBus 事件、不持段状态（段开闭与配对归壳层，段状态归 #33）。
-          const payload = action.payload as { page?: unknown } | undefined;
+          const payload = action.payload;
           const page = payload?.page;
           if (typeof page !== 'string' || page.length === 0) {
             reject(action.type, 'bad-payload');
@@ -1641,7 +1673,7 @@ export function createGame(options: CreateGameOptions): Game {
           // 秘境入门（#7）：定义 → 幂等/互斥 → 门控（道韵/钥匙，判定与 UI 同源
           // dungeonGateOf）→ 自第 1 层走 enterCombat 入场单序列（low-hp 退避/
           // 清活动/建战斗态/开战 note，#44）→ 进层即登记最高层 + dungeon:enter。
-          const payload = action.payload as { dungeonId?: unknown } | undefined;
+          const payload = action.payload;
           const dungeonId = payload?.dungeonId;
           if (typeof dungeonId !== 'string') {
             reject(action.type, 'bad-payload');
@@ -1699,7 +1731,7 @@ export function createGame(options: CreateGameOptions): Game {
         }
 
         case 'consumable:eat': {
-          const payload = action.payload as { item?: unknown } | undefined;
+          const payload = action.payload;
           if (typeof payload?.item !== 'string') {
             reject(action.type, 'bad-payload');
             return;
@@ -1739,7 +1771,7 @@ export function createGame(options: CreateGameOptions): Game {
         }
 
         case 'gear:unequip': {
-          const payload = action.payload as { slot?: unknown } | undefined;
+          const payload = action.payload;
           const slot = payload?.slot;
           if (typeof slot !== 'string') {
             reject(action.type, 'bad-payload');
@@ -1839,7 +1871,7 @@ export function createGame(options: CreateGameOptions): Game {
           // 重铸铭纹（#14）：消耗器屑重随单条铭纹的纹阶（数值随内容纹阶表
           // tiers[结果阶-1] 变化），天花板由器胚 tierRange 与铭纹表长数据锁死；
           // 仅器胚实例可重铸，佩戴中不可（与卖出同律）。
-          const payload = action.payload as { uid?: unknown; index?: unknown } | undefined;
+          const payload = action.payload;
           const uid = readUidPayload(payload);
           const index = payload?.index;
           if (uid === undefined || typeof index !== 'number' || !Number.isInteger(index) || index < 0) {
@@ -1879,9 +1911,11 @@ export function createGame(options: CreateGameOptions): Game {
           const [tierMin, tierMax] = tierBoundsOf(blank, inscriptionDef);
           const tier = tierMin + Math.floor(random() * (tierMax - tierMin + 1));
           ledgerItem(gparams.shardItem, -cost, 'reforge', META_USER);
-          const inscriptions = gear.inscriptions!.map((insc, i) =>
+          // 防御改写（#75 项 6）：inscriptions 缺失不可达（上文 no-inscription
+          // 已拦），不再靠可达性假设撑非空断言。
+          const inscriptions = (gear.inscriptions?.map((insc, i) =>
             i === index ? { ...insc, tier } : insc,
-          );
+          ) ?? []);
           state.gear = state.gear.map((entry) =>
             entry.uid === uid ? { ...entry, inscriptions } : entry,
           );
@@ -1941,7 +1975,7 @@ export function createGame(options: CreateGameOptions): Game {
             reject(action.type, 'not-available');
             return;
           }
-          const payload = action.payload as { nodeId?: unknown } | undefined;
+          const payload = action.payload;
           const nodeId = payload?.nodeId;
           if (typeof nodeId !== 'string') {
             reject(action.type, 'bad-payload');
@@ -1981,8 +2015,14 @@ export function createGame(options: CreateGameOptions): Game {
           return;
         }
 
-        default:
-          reject(action.type, 'unknown-action');
+        default: {
+          // 穷尽断言（#75 项 2，#47 同法）：GameAction 新增成员而 dispatch
+          // 漏 case = never 赋值编译错。协议外动作（测试/手写注入）运行时
+          // 仍收口 unknown-action——类型面不可达 ≠ 运行时不存在。
+          const unhandled: never = action;
+          void unhandled;
+          rejectUnknown(rawType);
+        }
       }
       } finally {
         // 早退路径（各 case 的 return）同样评估：finally 保证出口全覆盖（#9）。

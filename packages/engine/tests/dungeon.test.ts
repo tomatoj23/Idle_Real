@@ -9,6 +9,7 @@ import {
   pickDungeonEnemyOf,
   powerOf,
   powerParamsOf,
+  type GameAction,
   type GameContent,
   type GameEvent,
   type SaveData,
@@ -379,7 +380,7 @@ describe('#7 · 进入门控与互斥（dungeonGateOf 单一来源）', () => {
     const game = createGame({ content: makeDungeonPack(), clock: new ManualClock(), save: strongSave(), seed: 7 });
     game.dispatch({ type: 'dungeon:enter', payload: { dungeonId: 'ghost' } });
     expect(reasonOf(game)).toBe('not-found');
-    game.dispatch({ type: 'dungeon:enter' });
+    game.dispatch({ type: 'dungeon:enter' } as unknown as GameAction); // 故意缺载荷：bad-payload 收口
     expect(reasonOf(game)).toBe('bad-payload');
 
     // 采集进行中入门：活动清空（与 combat:start 同律）。

@@ -97,19 +97,28 @@ export interface ShopEntryView {
   readonly price: number;
 }
 
+/**
+ * 数组节读取器单点（#75 项 7 收敛）：`(source as {...}).x; Array.isArray(x) ? x : []`
+ * 同形十份收拢于此——缺节/形状非法一律空表（安全兜底纪律不变）。
+ */
+function sectionOf<T>(source: unknown, key: string): readonly T[] {
+  const section =
+    source !== null && typeof source === 'object'
+      ? (source as Record<string, unknown>)[key]
+      : undefined;
+  return Array.isArray(section) ? (section as T[]) : [];
+}
+
 export function skillsOf(content: GameContent): readonly SkillView[] {
-  const skills = (content as { skills?: unknown }).skills;
-  return Array.isArray(skills) ? (skills as SkillView[]) : [];
+  return sectionOf<SkillView>(content, 'skills');
 }
 
 export function itemsOf(content: GameContent): readonly ItemView[] {
-  const items = (content as { items?: unknown }).items;
-  return Array.isArray(items) ? (items as ItemView[]) : [];
+  return sectionOf<ItemView>(content, 'items');
 }
 
 export function shopOf(content: GameContent): readonly ShopEntryView[] {
-  const shop = (content as { shop?: unknown }).shop;
-  return Array.isArray(shop) ? (shop as ShopEntryView[]) : [];
+  return sectionOf<ShopEntryView>(content, 'shop');
 }
 
 export function findSkill(content: GameContent, skillId: string): SkillView | undefined {
@@ -158,8 +167,7 @@ export interface RecipeView {
 
 /** 配方列表：缺节/形状非法 → 空表（安全兜底，绝不因内容缺失崩溃）。 */
 export function recipesOf(content: GameContent): readonly RecipeView[] {
-  const recipes = (content as { recipes?: unknown }).recipes;
-  return Array.isArray(recipes) ? (recipes as RecipeView[]) : [];
+  return sectionOf<RecipeView>(content, 'recipes');
 }
 
 /** 按包内下标取配方；越界返回 undefined。 */
@@ -181,8 +189,7 @@ export interface SlotView {
  * 缺省安全兜底：无 config 节 / 无 slots / 形状非法 → 空列表。
  */
 export function slotsOf(content: GameContent): readonly SlotView[] {
-  const slots = (content as { config?: { slots?: unknown } }).config?.slots;
-  return Array.isArray(slots) ? (slots as SlotView[]) : [];
+  return sectionOf<SlotView>((content as { config?: unknown }).config, 'slots');
 }
 
 /**
@@ -245,8 +252,7 @@ export interface EnemyView {
 }
 
 export function enemiesOf(content: GameContent): readonly EnemyView[] {
-  const enemies = (content as { enemies?: unknown }).enemies;
-  return Array.isArray(enemies) ? (enemies as EnemyView[]) : [];
+  return sectionOf<EnemyView>(content, 'enemies');
 }
 
 export function findEnemy(content: GameContent, enemyId: string): EnemyView | undefined {
@@ -278,8 +284,7 @@ export interface ElementView {
 
 /** 系别列表：缺节/形状非法 → 空表（安全兜底，无系别玩法）。 */
 export function elementsOf(content: GameContent): readonly ElementView[] {
-  const elements = (content as { elements?: unknown }).elements;
-  return Array.isArray(elements) ? (elements as ElementView[]) : [];
+  return sectionOf<ElementView>(content, 'elements');
 }
 
 /** 按系别键取定义；未注册返回 undefined。 */
@@ -313,8 +318,7 @@ export interface GearDropView {
 }
 
 export function gearDropsOf(content: GameContent): readonly GearDropView[] {
-  const drops = (content as { gearDrops?: unknown }).gearDrops;
-  return Array.isArray(drops) ? (drops as GearDropView[]) : [];
+  return sectionOf<GearDropView>(content, 'gearDrops');
 }
 
 export function findGearDrop(content: GameContent, enemyId: string): GearDropView | undefined {
@@ -355,14 +359,12 @@ export interface AffixPoolView {
  * 引擎按中性值降级，绝不因内容缺失崩溃。
  */
 export function raritiesOf(content: GameContent): readonly RarityView[] {
-  const rarities = (content as { rarities?: unknown }).rarities;
-  return Array.isArray(rarities) ? (rarities as RarityView[]) : [];
+  return sectionOf<RarityView>(content, 'rarities');
 }
 
 /** 随机词条池：同上，缺节 → 空池。 */
 export function affixPoolOf(content: GameContent): readonly AffixPoolView[] {
-  const pool = (content as { affixPool?: unknown }).affixPool;
-  return Array.isArray(pool) ? (pool as AffixPoolView[]) : [];
+  return sectionOf<AffixPoolView>(content, 'affixPool');
 }
 
 /**
@@ -409,10 +411,21 @@ export interface InscriptionView {
   readonly tags?: readonly string[];
 }
 
+/**
+ * 最小形状过滤（#75 项 7）：type 判别 + 载荷键实判——换皮双重断言
+ * （`as unknown as`）改实判收窄；坏形状条目落表外（防御路径，不崩不参战）。
+ */
+function isBlankView(item: ItemView): item is ItemView & BlankView {
+  return item.type === 'blank' && typeof item.slot === 'string';
+}
+
+function isInscriptionView(item: ItemView): item is ItemView & InscriptionView {
+  return item.type === 'inscription' && Array.isArray((item as { tiers?: unknown }).tiers);
+}
+
 /** 器胚列表：items 节 type=blank 条目（换包增减器胚 = 纯 JSON 改动）。 */
 export function blanksOf(content: GameContent): readonly BlankView[] {
-  const blanks = itemsOf(content).filter((item) => item.type === 'blank');
-  return blanks as unknown as readonly BlankView[];
+  return itemsOf(content).filter(isBlankView);
 }
 
 export function findBlank(content: GameContent, blankId: string): BlankView | undefined {
@@ -421,8 +434,7 @@ export function findBlank(content: GameContent, blankId: string): BlankView | un
 
 /** 铭纹池：items 节 type=inscription 条目（扩池 = 纯 JSON 改动，引擎零改动）。 */
 export function inscriptionsOf(content: GameContent): readonly InscriptionView[] {
-  const inscriptions = itemsOf(content).filter((item) => item.type === 'inscription');
-  return inscriptions as unknown as readonly InscriptionView[];
+  return itemsOf(content).filter(isInscriptionView);
 }
 
 export function findInscription(content: GameContent, inscriptionId: string): InscriptionView | undefined {

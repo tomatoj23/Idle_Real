@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ManualClock } from '../src/clock.js';
-import { createGame, type GameState, type SaveData } from '../src/index.js';
+import { createGame, type GameAction, type GameState, type SaveData } from '../src/index.js';
 import { CYCLES_60S, makePack } from './fixtures.js';
 
 function stateOf(save: SaveData): GameState {
@@ -216,7 +216,7 @@ describe('挂机采集（issue #3 验收）', () => {
 
   it('未知动作被拒', () => {
     const game = createGame({ content: makePack(), clock: new ManualClock() });
-    game.dispatch({ type: 'nonsense' });
+    game.dispatch({ type: 'nonsense' } as unknown as GameAction); // 故意协议外 type：unknown-action 收口
     expect(game.events.drain()[0]?.data).toMatchObject({ reason: 'unknown-action' });
   });
 });

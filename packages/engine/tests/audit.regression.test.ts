@@ -43,7 +43,7 @@ describe('自查 · 修为口径：xpMult 每循环舍入（在线/离线恒等�
     items: [{ id: 'ore', name: '灵砂', icon: '砂', type: 'mat', sell: 2 }],
   } as unknown as GameContent;
 
-  it('gather：xpMult=1.15 时在线 3 轮 = 36（round(11.5)×3），离线同值（旧整批口径 35 分叉）', () => {
+  it('gather：xpMult=1.15 时在线 20 轮 = 240（round(11.5)×20），离线同值（旧整批口径 230 分叉）', () => {
     const run = (offline: boolean) => {
       const clock = new ManualClock();
       const game = createGame({ content: pack, clock, rng: () => 0.9, contributions: xpMultContribs(1.15) });
@@ -61,7 +61,7 @@ describe('自查 · 修为口径：xpMult 每循环舍入（在线/离线恒等�
     expect(run(true)).toBe(run(false));
   });
 
-  it('craft 全成：xpMult=1.15 时在线/离线 = 36（单轮实发 round(11.5)=12 聚合）', () => {
+  it('craft 全成：xpMult=1.15 时在线/离线 = 240（单轮实发 round(11.5)=12 聚合 ×20 轮）', () => {
     const pack = {
       skills: [{ id: 'smith', name: '炼器', icon: '器', kind: 'craft' }],
       items: [
@@ -105,7 +105,7 @@ describe('自查 · 修为口径：xpMult 每循环舍入（在线/离线恒等�
     expect(run(true)).toBe(run(false));
   });
 
-  it('craft 全败：失败返还按单轮 round(exp×refund)=3 聚合 = 9（旧整批口径 round(7.5)=8 分叉）', () => {
+  it('craft 全败：失败返还按单轮 round(exp×refund)=3 聚合 = 60（3×20；旧整批口径 round(50)=50 分叉）', () => {
     const pack = {
       skills: [{ id: 'smith', name: '炼器', icon: '器', kind: 'craft' }],
       items: [

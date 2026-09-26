@@ -509,6 +509,7 @@
       "activity:start": {
         "not-found": "查无此法",
         "level": "修为不足，需 {level} 层方可「{activity}」",
+        "rebirth-locked": "道韵未足（需累计 {daoYun}），此法尚不可参",
         "no-materials": "材料不齐，巧妇难为无米之炊"
       },
       "bag:sell": {
@@ -522,6 +523,8 @@
       "combat:start": {
         "not-found": "查无此妖",
         "level": "境界太低（需 {level} 层斗法），恐有性命之虞",
+        "rebirth-locked": "道韵未足（需累计 {daoYun}），此妖非尔所能敌",
+        "in-dungeon": "秘境未出，岂可另寻敌手？",
         "low-hp": "气血未复，先调息片刻"
       },
       "gear:equip": {
@@ -561,6 +564,7 @@
         "in-combat": "斗法未歇，先脱战再入秘境",
         "locked": "道韵不足（需 {daoYun}，累计可得），秘境之门未开",
         "no-key": "缺少「{item}」，不得其门而入",
+        "no-layer": "此秘境暂无应战之层",
         "low-hp": "气血未复，先调息片刻"
       }
     },
