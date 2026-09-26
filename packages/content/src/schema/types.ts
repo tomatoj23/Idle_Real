@@ -516,12 +516,13 @@ export interface ShellIcons {
   readonly unknown: string;
 }
 
-/** 跨页复用小模板：needLevel 槽位 {level}；needDaoYun 槽位 {daoYun}（#6）；compareWrap 槽位 {compare}；itemListSep 物品名分隔符。 */
+/** 跨页复用小模板：needLevel 槽位 {level}；needDaoYun 槽位 {daoYun}（#6）；compareWrap 槽位 {compare}；itemListSep 物品名分隔符；buffOnlineOnly 增益时长口径注明（#55）。 */
 export interface ShellCommon {
   readonly needLevel: string;
   readonly needDaoYun: string;
   readonly compareWrap: string;
   readonly itemListSep: string;
+  readonly buffOnlineOnly: string;
 }
 
 /** 事件流文案（键 = 引擎事件类型协议面，槽位见 schema 描述；craft 相关键随 #5 加入）。 */

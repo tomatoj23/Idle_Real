@@ -616,7 +616,8 @@
         "needLevel": "需 {level} 层",
         "needDaoYun": "需 {daoYun} 道韵（兵解可得）",
         "compareWrap": "（{compare}）",
-        "itemListSep": "、"
+        "itemListSep": "、",
+        "buffOnlineOnly": "仅在线计时，离线不消耗"
       },
       "events": {
         "lootGear": "妖物遗落【{name}】",

@@ -237,7 +237,9 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
   talents/achievements，#5 起五页、#6 起七页、#7 起八页、#9 起九页）；
   `units.*` 承载层级/时长读数的单位模板（`{v}` 数值、`{m}` 分、`{h}` 时）；
   `topbar.*Sigil` 承载顶栏资源图章字；`common.itemListSep` 为物品名列表
-  分隔符（掉落预览/离线产出共用）；`pages.combat.selfStats` 的属性行数值
+  分隔符（掉落预览/离线产出共用）；`common.buffOnlineOnly` 为增益条剩余
+  时长口径注明（#55 裁决：buff 到期只随在线 time 流逝，离线不消耗；chip
+  悬停提示）；`pages.combat.selfStats` 的属性行数值
   槽（{atk}/{def}/{crit}）由壳按 statLabels 量纲填入，模板不写字面 `%`。
 - **footer.versionLine（#12）**：页脚版本行模板，槽位 `{name}`（brand.name）、
   `{content}`（包顶层 `version`）、`{engine}`（引擎 `ENGINE_VERSION`，
