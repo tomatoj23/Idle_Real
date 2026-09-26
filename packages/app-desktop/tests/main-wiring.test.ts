@@ -23,11 +23,17 @@ import { pathToFileURL } from 'node:url';
 
 /* ---------- 假 electron：只立 main.ts 用到的面（缺面即抛，比默默可用更接近真相） ---------- */
 
-type NavEvent = { url: string; preventDefault(): void };
+/**
+ * webContents.on 的登记面（#71 三轮放宽）：will-navigate 是单参 NavEvent 形，
+ * render-process-gone 是 (event, details) 两参形——统一收成 unknown 链、按事件名
+ * 取用后再窄化，别为此把两个事件塞进同一个键（同名第二个 handler 会静默覆盖，
+ * 已记 #76；本批新增的事件名均不与既有重名）。
+ */
+type WinHandler = (event: unknown, ...args: unknown[]) => void;
 
 const calls: string[] = [];
 const ipcHandlers = new Map<string, (event: { returnValue?: unknown }, ...a: unknown[]) => void>();
-const winHandlers = new Map<string, (event: NavEvent) => void>();
+const winHandlers = new Map<string, WinHandler>();
 const dialogs: Array<[string, string]> = [];
 let menuArg: unknown = 'setApplicationMenu-never-called';
 let permissionHandler:
@@ -39,6 +45,8 @@ let loadFileArg = '';
 let userDataDir = '';
 let loadFileRejects = false;
 let getPathThrows = false;
+let windowDestroyed = false;
+let reloadCount = 0;
 
 vi.mock('electron', () => {
   class FakeBrowserWindow {
@@ -54,11 +62,17 @@ vi.mock('electron', () => {
         windowOpenHandler = handler;
         calls.push('window-open-handler');
       },
-      on: (event: string, handler: (e: NavEvent) => void) => {
+      on: (event: string, handler: WinHandler) => {
         winHandlers.set(event, handler);
       },
       openDevTools: () => calls.push('open-devtools'),
+      reload: () => {
+        reloadCount += 1;
+      },
     };
+    isDestroyed(): boolean {
+      return windowDestroyed;
+    }
     loadFile(path: string): Promise<void> {
       loadFileArg = path;
       calls.push('load-file');
@@ -155,6 +169,8 @@ afterEach(() => {
   permissionHandler = undefined;
   loadFileRejects = false;
   getPathThrows = false;
+  windowDestroyed = false;
+  reloadCount = 0;
 });
 
 /** 装一份全新的 main.ts（假 electron + 独立 userData 目录）。 */
@@ -342,5 +358,70 @@ describe('#71 项 4 · 崩溃兜底真的挂在 process 上', () => {
     expect(seen.join('')).toContain('FATAL startup failed');
     expect(dialogs[0]?.[1]).toContain('userData 不可得');
     expect(calls).toContain('app.exit:1');
+  });
+});
+
+describe('#71 三轮 · 渲染进程崩溃恢复真的接上了', () => {
+  it('crashed：reload 1 次、落一行 renderer gone、无弹窗无退出', async () => {
+    await bootMain();
+    const gone = winHandlers.get('render-process-gone');
+    expect(gone).toBeTypeOf('function');
+    gone?.({}, { reason: 'crashed', exitCode: 1 });
+    expect(reloadCount).toBe(1);
+    expect(logText()).toContain('renderer gone (reason=crashed, exitCode=1) → reload 1/3');
+    expect(dialogs).toHaveLength(0);
+    expect(calls).not.toContain('app.exit:1');
+  });
+
+  it('崩环界：连报 4 次（中间无 dom-ready）→ reload 共 3 次，第 4 次弹窗点名存档 + app.exit(1)', async () => {
+    await bootMain();
+    const gone = winHandlers.get('render-process-gone');
+    for (let i = 0; i < 4; i += 1) gone?.({}, { reason: 'crashed', exitCode: 1 });
+    expect(reloadCount).toBe(3);
+    expect(logText()).toContain('renderer gone (reason=crashed, exitCode=1) → escalate');
+    expect(dialogs).toHaveLength(1);
+    expect(dialogs[0]?.[1]).toContain('存档');
+    expect(calls).toContain('app.exit:1');
+  });
+
+  it('dom-ready 清零：崩溃→重载成功→再崩溃仍是 reload 1/3（承重例的接线半边）', async () => {
+    await bootMain();
+    const gone = winHandlers.get('render-process-gone');
+    const loaded = winHandlers.get('dom-ready');
+    expect(loaded).toBeTypeOf('function');
+    gone?.({}, { reason: 'crashed', exitCode: 1 });
+    loaded?.({});
+    gone?.({}, { reason: 'crashed', exitCode: 1 });
+    expect(reloadCount).toBe(2);
+    expect(dialogs).toHaveLength(0);
+    // 两行都得是 1/3：按行数出来，防「第一行残留」造成的假对照。
+    const reloadLines = logText()
+      .split('\n')
+      .filter((line) => line.includes('→ reload'));
+    expect(reloadLines).toHaveLength(2);
+    expect(reloadLines.every((line) => line.includes('reload 1/3'))).toBe(true);
+  });
+
+  it('对照例：clean-exit 零重载（僵尸窗口那个回归）', async () => {
+    await bootMain();
+    const gone = winHandlers.get('render-process-gone');
+    expect(gone).toBeTypeOf('function'); // 无实现时 `gone?.()` 空转也会让下面全绿，先钉 handler 在场
+    gone?.({}, { reason: 'clean-exit', exitCode: 0 });
+    expect(reloadCount).toBe(0);
+    expect(dialogs).toHaveLength(0);
+    expect(calls).not.toContain('app.exit:1');
+  });
+
+  it('unresponsive 只记不杀：一行日志，零 reload 零弹窗零退出；responsive 同事件对也接上', async () => {
+    await bootMain();
+    const unresponsive = winHandlers.get('unresponsive');
+    expect(unresponsive).toBeTypeOf('function');
+    unresponsive?.({});
+    expect(logText()).toContain('renderer unresponsive');
+    expect(reloadCount).toBe(0);
+    expect(dialogs).toHaveLength(0);
+    expect(calls).not.toContain('app.exit:1');
+    winHandlers.get('responsive')?.({});
+    expect(logText()).toContain('renderer responsive');
   });
 });

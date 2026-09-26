@@ -9,6 +9,12 @@
  * 为什么不自动 relaunch：崩在启动路径上时 relaunch = 崩环（新进程的日志里全是同一栈），
  * 且新进程同样无从判断状态是否干净。把「要不要再来一次」交给玩家，是本壳唯一不撒谎的选择。
  *
+ * 两个崩溃面的相反规则（#71 三轮，两条要同一个出处，后人勿当不一致）：
+ * 主进程崩 = 走本模块这套直接退（上一段的理由）；**渲染进程崩 = 重载不退**——
+ * 主进程对游戏态无状态（main.ts 头注），重载只是让 renderer 重来，回到最近一次
+ * 自动保存为止，安全。渲染进程那条不进本收尾，除非重载连续到界或完整性失效
+ * （onRendererUnrecoverable，判据见 rendererRecovery.ts）。
+ *
  * unhandledRejection 只记不退：它是没人在场的 Promise 失败（IPC 抖动、异步副作用抛错），
  * 主进程状态未必已坏；为一个「可能没事」的异步失败杀进程，是把小事故升级成丢现场。
  *
@@ -20,6 +26,7 @@
  * 包的 texts 节（那节归 renderer）；要让玩家看到内容包措辞的崩溃提示，得走 renderer 面。
  */
 import { errMsg, type Logger } from './platform.js';
+import type { GoneReason } from './rendererRecovery.js';
 
 export interface FatalDeps {
   readonly log: Logger;
@@ -37,6 +44,8 @@ export interface FatalHandler {
   onLoadFailure(err: unknown, url: string): void;
   /** whenReady 链上任一步上抛：窗口从未出现，进程却活着。 */
   onStartupFailure(err: unknown): void;
+  /** 渲染进程不可恢复（重载到界 / 完整性失效）：与主进程崩同一条收尾。 */
+  onRendererUnrecoverable(reason: GoneReason, exitCode: number): void;
 }
 
 export function createFatalHandler(deps: FatalDeps): FatalHandler {
@@ -83,6 +92,16 @@ export function createFatalHandler(deps: FatalDeps): FatalHandler {
     },
     onStartupFailure(err: unknown): void {
       die('startup failed', err);
+    },
+    onRendererUnrecoverable(reason: GoneReason, exitCode: number): void {
+      // 文案分叉（写死在壳层的理由见头注划界段）：integrity-failure = asar 完整性
+      // 校验失败（文件可能被改动），重载没用，报「反复崩溃」是误导；其余 = 连续
+      // 重载耗尽，点名存档——一份让渲染进程启动期崩坏的存档就是这个形态。
+      const message =
+        reason === 'integrity-failure'
+          ? '应用完整性校验失败（文件可能已损坏或被改动），请重新安装后再试'
+          : '游戏界面反复崩溃，可能是存档问题';
+      die('renderer unrecoverable', message, `reason=${reason}, exitCode=${exitCode}`);
     },
   };
 }

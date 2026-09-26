@@ -144,3 +144,27 @@ describe('#71 项 4 · unhandledRejection', () => {
     expect(lines[0]).toContain('[object Object]');
   });
 });
+
+describe('#71 三轮 · onRendererUnrecoverable（渲染进程不可恢复）', () => {
+  it('重载耗尽：复用 die 收尾（日志 → 至多一次弹窗 → 无条件 exit），提示点名存档', () => {
+    const show = vi.fn();
+    const { lines, exit, handler } = harness(show);
+    handler.onRendererUnrecoverable('crashed', 1);
+    expect(lines[0]).toContain('FATAL renderer unrecoverable (reason=crashed, exitCode=1)');
+    expect(lines[0]).toContain('存档');
+    expect(show).toHaveBeenCalledTimes(1);
+    expect(show.mock.calls[0]?.[1]).toContain('反复崩溃');
+    expect(show.mock.calls[0]?.[1]).toContain('自动保存'); // 承诺仍只到最近一次自动保存
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it('integrity-failure：文案分叉到完整性（asar 被动过，重载没用），不当「反复崩溃」报', () => {
+    const show = vi.fn();
+    const { lines, exit, handler } = harness(show);
+    handler.onRendererUnrecoverable('integrity-failure', 0);
+    expect(lines[0]).toContain('reason=integrity-failure');
+    expect(show.mock.calls[0]?.[1]).toContain('完整性');
+    expect(show.mock.calls[0]?.[1]).not.toContain('反复崩溃');
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+});

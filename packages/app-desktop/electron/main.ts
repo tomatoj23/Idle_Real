@@ -6,7 +6,8 @@
  * - 关闭即保存：周期自动保存（renderer attachAutoSave）+ renderer beforeunload
  *   的同步 flush（sendSync 保证退离前送达）；主进程侧无状态，只落平台槽位。
  * - 自动更新占位：见 updater.ts（票面「自动更新占位」，依赖待渠道定版）。
- * - 安全纵深（#71）：导航精确同源 + 空应用菜单 + 权限 deny 兜底 + 崩溃兜底。
+ * - 安全纵深（#71）：导航精确同源 + 空应用菜单 + 权限 deny 兜底 + 崩溃兜底
+ *   （主进程崩走 fatal 退、渲染进程崩走重载恢复——两条相反规则见 fatal.ts 头注）。
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu, session } from 'electron';
 import { appendFileSync, statSync, writeFileSync } from 'node:fs';
@@ -15,6 +16,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { errMsg, isSafeId, resolvePlatform, type Platform } from './platform.js';
 import { isSelfNavigation } from './navGuard.js';
 import { createFatalHandler } from './fatal.js';
+import { createRendererRecovery, RELOAD_LIMIT } from './rendererRecovery.js';
 import { initAutoUpdate } from './updater.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -47,6 +49,12 @@ const fatal = createFatalHandler({
 });
 
 let platform: Platform | undefined;
+
+/**
+ * 正在退出（rendererRecovery 的退出筛）：`app.isQuitting()` 在 electron 38.8.6
+ * 并不存在（d.ts 无命中，勿按训练数据写），自置一份最小状态喂给判据谓词。
+ */
+let quitting = false;
 
 /** 日志上限：放置游戏长跑防 wendao.log 无界增长吃满磁盘（超限整体截断重写）。 */
 const LOG_MAX_BYTES = 1024 * 1024;
@@ -170,6 +178,40 @@ function createWindow(): void {
     log(`[main] navigation blocked: ${event.url.replace(/[\r\n]+/g, ' ')}`);
     event.preventDefault();
   });
+  // 渲染进程崩溃恢复（#71 三轮）：菜单置空后默认菜单里的 Reload 加速键一并没了
+  // （机制推断；活体 Ctrl+R 探针见票评），渲染进程崩 = 白窗永挂、零日志、无从恢复。
+  // 判据（reason 分类 / 上限 / dom-ready 清零）在 rendererRecovery.ts，这里只接线。
+  const recovery = createRendererRecovery({
+    isQuitting: () => quitting,
+    isDestroyed: () => win.isDestroyed(),
+  });
+  win.webContents.on('render-process-gone', (_event, details) => {
+    const act = recovery.decide(details.reason);
+    const where = `reason=${details.reason}, exitCode=${details.exitCode}`;
+    if (act.action === 'reload') {
+      // 设计 c：可恢复路径只落日志不弹模态——dialog.showErrorBox 阻塞主进程事件
+      // 循环，挂机一夜回来是个卡住 save-flush 同步 ack 的模态框，比安静重载更坏。
+      log(`[main] renderer gone (${where}) → reload ${act.attempt}/${RELOAD_LIMIT}`);
+      win.webContents.reload();
+      return;
+    }
+    if (act.action === 'escalate') {
+      log(`[main] renderer gone (${where}) → escalate`);
+      fatal.onRendererUnrecoverable(details.reason, details.exitCode);
+      return;
+    }
+    log(`[main] renderer gone (${where}) → ignored`);
+  });
+  // 重载成功的唯一清零信号（设计 b：不按时间衰减，对「秒崩」形态无效的是时间窗）。
+  win.webContents.on('dom-ready', () => recovery.markLoaded());
+  // 设计 d：unresponsive 只记不杀——放置游戏一次长同步 tick 就能误报，杀掉
+  // 「卡但会自己好」的渲染进程，丢的正是下一次自动保存本该落下的进度。
+  win.webContents.on('unresponsive', () => {
+    log('[main] renderer unresponsive (logged only, not killed)');
+  });
+  win.webContents.on('responsive', () => {
+    log('[main] renderer responsive');
+  });
   // 加载失败不许静默（#71 项 4）：reject 的是窗口内容本身，留着窗口 = 一块白板
   // 挂在玩家屏幕上。旧写法 `void load…()` 把这条 rejection 丢进了虚空。
   const load = DEV_SERVER_URL ? win.loadURL(DEV_SERVER_URL) : win.loadFile(indexPath);
@@ -228,6 +270,10 @@ if (!gotLock) {
 
   app.on('window-all-closed', () => {
     app.quit();
+  });
+  // 退出筛（rendererRecovery 设计 a）：退出链上渲染进程的消失不是故障，不重载。
+  app.on('before-quit', () => {
+    quitting = true;
   });
 }
 
