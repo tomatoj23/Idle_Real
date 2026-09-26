@@ -67,7 +67,7 @@ export const textsSample: TextsSection = {
       needDaoYun: '需 {daoYun} 道韵',
       compareWrap: '（{compare}）',
       itemListSep: '、',
-      buffOnlineOnly: '仅在线计时，离线不消耗',
+      buffTimerOnlineOnly: '仅在线计时，离线不消耗',
     },
     events: {
       lootGear: '妖物遗落【{name}】',

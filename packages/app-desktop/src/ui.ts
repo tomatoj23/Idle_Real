@@ -725,7 +725,7 @@ export function buildUi(
       buffbarEl.innerHTML = entries
         .map(([id]) => {
           const item = itemById.get(id);
-          return `<span class="buff-chip" data-buff="${id}" title="${esc(T('common.buffOnlineOnly'))}">${esc(item?.icon ?? T('icons.buff'))} ${esc(item?.name ?? id)} <b></b></span>`;
+          return `<span class="buff-chip" data-buff="${id}" title="${esc(T('common.buffTimerOnlineOnly'))}">${esc(item?.icon ?? T('icons.buff'))} ${esc(item?.name ?? id)} <b></b></span>`;
         })
         .join('');
     }

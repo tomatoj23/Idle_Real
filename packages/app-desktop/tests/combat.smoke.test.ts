@@ -162,6 +162,10 @@ describe('UI 烟测（issue #4 战斗切片）', () => {
 
     // 先有 buff A
     expect(root.querySelector('.buff-chip[data-buff="consumable_atk"]')).not.toBeNull();
+    // 悬停提示 = 文本协议值（#55 裁决口径：计时仅在线流逝；禁硬编码文案）
+    expect(root.querySelector('.buff-chip[data-buff="consumable_atk"]')!.getAttribute('title')).toBe(
+      content.texts.shell.common.buffTimerOnlineOnly,
+    );
     // 同数量换 buff：A 到期 + B 服下——childElementCount 判据对此失明，chip 必须换新
     (save.state as { buffs: Record<string, number> }).buffs = { consumable_def: 600000 };
     ui.render();

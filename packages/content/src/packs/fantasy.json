@@ -553,7 +553,7 @@
         "needDaoYun": "Requires {daoYun} attunement (lifetime)",
         "compareWrap": "({compare})",
         "itemListSep": ", ",
-        "buffOnlineOnly": "Offline won't consume the buff"
+        "buffTimerOnlineOnly": "Timer runs online only"
       },
       "events": {
         "lootGear": "You obtain {name}!",

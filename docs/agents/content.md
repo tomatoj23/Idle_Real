@@ -207,7 +207,7 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 | `basicName` | string（1~18 字，#027 按 CJK 密度假设放宽） | 无佩戴武器时的兵刃展示名（weaponName 槽兜底值） |
 | `reject` | 动作协议键 → 理由 code → 文案模板 | 展示文案映射。动作键域 schema 钉死：activity:start / bag:sell / shop:buy / combat:start / consumable:eat / dungeon:enter（#7）/ gear:equip / gear:sell / rebirth:perform / talent:buy（#6）/ `'*'`（跨动作兜底，bad-payload 等通用文案）；理由 code 键域开放 |
 | `reject` 槽位 | `{level}` `{activity}` `{item}` `{owned}` `{cost}` `{gold}` `{daoYun}` `{need}` `{xp}` | 由引擎按协议语境填入； combat:start 的 `{level}` = `enemy.level − 门控偏移`（偏移量只在引擎判定处单一来源，文案侧零副本——N1 文案侧裁决）；rebirth:perform 的 no-progress 带 `{need}/{xp}`、rebirth-locked 与 talent:buy 的 no-daoyun 带 `{daoYun}`/`{cost}`；dungeon:enter 的 locked 带 `{daoYun}`、no-key 带 `{item}`（#7） |
-| `shell`（#26） | ShellTexts 结构化节 | **壳层全部题材文案**（ADR-017 裁决 9：壳零题材字符串）：brand（sigil/name/locale/bootError）、topbar、tabs、side、stats.labels、units、icons、common、events（40 键，#9 起含 achievementToast/achievementLog）、pages（skills/craft/combat/dungeon/bag/shop/rebirth/talents/achievements，#9 起九页）。schema required + additionalProperties:false 全程钉死 |
+| `shell`（#26） | ShellTexts 结构化节 | **壳层全部题材文案**（ADR-017 裁决 9：壳零题材字符串）：brand（sigil/name/locale/bootError）、topbar、tabs、side、stats.labels、units、icons、common、events（46 键，#9 起含 achievementToast/achievementLog）、pages（skills/craft/combat/dungeon/bag/shop/rebirth/talents/achievements/journal，#9 起九页、#33 起十页）。schema required + additionalProperties:false 全程钉死 |
 
 - 命中序：精确动作 → `'*'` → **键名回显**（`{action}/{reason}`，防御可见）。
 - 协议 code 本体归引擎，本节只承载展示文案；code 未命中/缺节绝不崩，toast
@@ -234,12 +234,13 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
   clear/leave 事件的 dungeonEnter/dungeonFloor/dungeonDaoYun/dungeonClear/
   dungeonLeave）；
   `pages.*` 键 = 壳 TabId 协议面（skills/craft/combat/dungeon/bag/shop/rebirth/
-  talents/achievements，#5 起五页、#6 起七页、#7 起八页、#9 起九页）；
+  talents/achievements/journal，#5 起五页、#6 起七页、#7 起八页、#9 起九页、
+  #33 起十页）；
   `units.*` 承载层级/时长读数的单位模板（`{v}` 数值、`{m}` 分、`{h}` 时）；
   `topbar.*Sigil` 承载顶栏资源图章字；`common.itemListSep` 为物品名列表
-  分隔符（掉落预览/离线产出共用）；`common.buffOnlineOnly` 为增益条剩余
-  时长口径注明（#55 裁决：buff 到期只随在线 time 流逝，离线不消耗；chip
-  悬停提示）；`pages.combat.selfStats` 的属性行数值
+  分隔符（掉落预览/离线产出共用）；`common.buffTimerOnlineOnly` 为增益条
+  剩余时长口径注明（#55 裁决：buff 计时只随在线 time 流逝，离线不消耗剩
+  余时长；chip 悬停提示）；`pages.combat.selfStats` 的属性行数值
   槽（{atk}/{def}/{crit}）由壳按 statLabels 量纲填入，模板不写字面 `%`。
 - **footer.versionLine（#12）**：页脚版本行模板，槽位 `{name}`（brand.name）、
   `{content}`（包顶层 `version`）、`{engine}`（引擎 `ENGINE_VERSION`，

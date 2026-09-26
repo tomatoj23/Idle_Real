@@ -12,7 +12,8 @@ import { makeCombatPack } from './fixtures.js';
 /**
  * 2026-09-14 全维度自查回归批：离线/在线修为口径（xpMult 每循环舍入）、
  * 离线入口防御（NaN/Infinity）、战斗中离线回满、秘境拒绝路径零副作用、
- * 消耗品/上限/时钟运行时兜底。每例先钉修复前可观察的错误行为，再钉修复后
+ * 消耗品/上限/时钟运行时兜底、#55 buff 时钟语义裁决钉（离线不消耗时长）。
+ * 每例先钉修复前可观察的错误行为，再钉修复后
  * 的正确行为——回归时红 = 口径或防御被回退。
  */
 
@@ -26,6 +27,32 @@ const xpMultContribs = (value: number): Contribution[] => [
     source: { id: 'audit', kind: 'test', name: '自查' },
   },
 ];
+
+describe('自查 · buff 时钟语义（#55 ADR-013 裁决钉）', () => {
+  it('离线不消耗 buff 时长、不推进 time（到期清理只随在线 tick）', () => {
+    const clock = new ManualClock();
+    const seedGame = createGame({ content: makeCombatPack(), clock, rng: () => 0.9 });
+    seedGame.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
+    const base = seedGame.snapshot();
+    const game = createGame({
+      content: makeCombatPack(),
+      clock,
+      rng: () => 0.9,
+      save: {
+        ...base,
+        state: {
+          ...(base.state as Record<string, unknown>),
+          buffs: { consumable_atk: 600000 } as Record<string, number>,
+        },
+      } as SaveData,
+    });
+    const before = game.snapshot();
+    game.settleOffline(60000); // ≥60s（OFFLINE_MIN_MS 门槛）
+    const after = game.snapshot();
+    expect(stateOf(after).buffs).toEqual({ consumable_atk: 600000 }); // 剩余时长原样：离线不流逝
+    expect(after.time).toBe(before.time); // time 只随 tick 推进
+  });
+});
 
 describe('自查 · 修为口径：xpMult 每循环舍入（在线/离线恒等）', () => {
   const pack = {
