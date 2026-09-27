@@ -37,6 +37,7 @@ import {
   rebirthOf,
   type GameAction,
   type GameEvent,
+  type GameSnapshot,
   type GameState,
   type Modifier,
   type ProgressionParams,
@@ -59,7 +60,8 @@ export interface Ui {
   toast(text: string, kind?: 'gold' | 'red'): void;
 }
 
-const MAX_FLOG = 60;
+/** 战斗日志环形容量（真实 DOM 环形删头上限）。导出为测试真源（D5：禁测试自钉拷贝）。 */
+export const MAX_FLOG = 60;
 /** 档二聚合窗口（C7：同类 3 秒短窗聚合，窗口可调）：同名获取行在窗口内合并计数。 */
 const FLOAT_WINDOW_MS = 3000;
 /** 档二堆叠限高（AC5：挂机连杀场景不无限堆积）。 */
@@ -83,7 +85,8 @@ const VISIT_PAGES: ReadonlySet<string> = new Set(['shop', 'bag']);
 export function buildUi(
   root: HTMLElement,
   content: ContentPack,
-  getSnapshot: () => SaveData,
+  // #50 类型化快照：读数面取 GameSnapshot（state = Readonly<GameState>）。
+  getSnapshot: () => GameSnapshot,
   events: EventBus,
 ): Ui {
   const itemById = new Map(content.items.map((item) => [item.id, item]));
@@ -787,10 +790,11 @@ export function buildUi(
       st.combat
         ? [
             st.combat.enemyId,
-            Math.floor(st.combat.ehp),
             st.combat.respT > 0,
-            // 召唤物槽位（#30）：入场/击杀/掉血随签名重绘。
-            st.combat.summons.map((m) => [m.enemyId, Math.floor(m.hp)]),
+            // Boss 阶段徽标随阶段下标重绘（#50 瘦身后保留的结构项）。
+            // hp 类项（ehp/summons/自血）已移出：实况值归页级 update 定点
+            // 补丁（refreshCombatLive），战斗中逐击不再整页重建。
+            st.combat.bossPhase,
           ]
         : null,
       Object.entries(st.equips),
@@ -809,10 +813,11 @@ export function buildUi(
       Object.entries(st.stats ?? {}).sort(),
       [...(st.achievements ?? [])].sort(),
       snap.stats ?? null,
-      // 引擎视图投影（#40）：投影任何变化（Boss 阶段修正/召唤入场/interval
-      // 缩放）都触发页面重建——漏加 = 签名不变 → 静默 stale render。
+      // 引擎视图投影（#40）：敌生效视图/有效 interval 进签名——Boss 阶段修正
+      // 与 interval 缩放触发重建，漏加 = 签名不变 → 静默 stale render。
+      // 召唤行投影（minions）自 #50 移出签名：行内 hp 是逐击活值，行组结构
+      //（入场/阵亡/换阶段）归页级 update 定点补丁（refreshCombatLive）。
       snap.enemy ?? null,
-      snap.minions ?? null,
       snap.activityIntervals ?? null,
       // 注：页面自持 UI 状态（技能选中/兵解 arm）不进签名——其变化路径
       // 均经 env.render() 强制重绘（lastSig=''），等价搬迁前行为（#46 D2/D8）。
@@ -820,7 +825,8 @@ export function buildUi(
 
   function render(): void {
     const snap = getSnapshot();
-    const st = snap.state as unknown as GameState;
+    // 类型化快照（#50 D2）：state 即 Readonly<GameState>，壳层零 cast。
+    const st = snap.state;
 
     goldEl.textContent = Math.floor(st.gold).toLocaleString(locale);
     const cap = snap.stats?.maxHp ?? Math.max(1, Math.floor(st.hp));

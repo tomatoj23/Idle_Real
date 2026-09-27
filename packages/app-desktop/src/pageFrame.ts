@@ -16,7 +16,7 @@ import {
   type ProgressionParams,
   type SaveData,
 } from '@wendao/engine';
-import type { ShellText } from './pages/types';
+import type { PageCtx, ShellText } from './pages/types';
 
 export const esc = (text: string): string =>
   text.replace(/[&<>"']/g, (ch) =>
@@ -219,7 +219,7 @@ export const minionsHtml = (T: ShellText, snap: SaveData): string =>
               <span class="sigil sigil-sm">${esc(view.icon)}</span>
               <b>${esc(view.name)}</b>
               ${index === 0 ? `<em class="act-badge">${esc(T('pages.combat.engagedBadge'))}</em>` : ''}
-              <span class="minion-hp">${esc(T('pages.combat.enemyHp', { ehp: Math.max(0, Math.ceil(minion.hp)), hp: view.hp }))}</span>
+              <span class="minion-hp">${esc(ehpTextOf(T, minion.hp, view.hp))}</span>
               <div class="bar bar-red bar-thin minion-bar"><i data-bar="minion" style="width:${pct}%"></i></div>
             </div>`;
     })
@@ -240,7 +240,21 @@ export const selfStatsTextOf = (
     crit: statValueText('crit', snap.stats?.crit ?? '—'),
   });
 
-/** 交战敌卡骨架：头部徽标/操作区由页面组装（斗法=休整+逃跑，秘境=撤退）。 */
+/** 敌血读数文案（{ehp}/{hp} 填槽）：render 与补丁两路同式同源的单一拼装式（#50）。 */
+export const ehpTextOf = (T: ShellText, ehp: number, hpMax: number): string =>
+  T('pages.combat.enemyHp', { ehp: Math.max(0, Math.ceil(ehp)), hp: hpMax });
+
+/**
+ * 自血条百分比单一来源（#50 复审收口：斗法/秘境两 render 旧兜底口径分叉——
+ * `?? enemy.hp` vs `?? 1`，补丁再取其一必有一侧首帧跳变）。上限 = 属性面板
+ * maxHp（运行时恒在）；缺失走 pctClamped 的 total≤0 → 1 兜底。
+ */
+export const selfHpPctOf = (st: Readonly<GameState>, snap: SaveData): number =>
+  pctClamped(st.hp, snap.stats?.maxHp ?? 1);
+
+/** 交战敌卡骨架：头部徽标/操作区由页面组装（斗法=休整+逃跑，秘境=撤退）。
+ *  血条/读数行带 data 锚点（data-bar/…-text/…-stats），供 refreshCombatLive
+ *  定点补丁（#50 D3）——实况值不再经整页重建携带。 */
 export function fightingEnemyCardHtml(parts: {
   readonly T: ShellText;
   readonly icon: string;
@@ -264,10 +278,10 @@ export function fightingEnemyCardHtml(parts: {
             <div class="enemy-main">
               <div class="enemy-head"><b>${esc(p.name)}</b><span class="enemy-lv">${esc(p.T('units.level', { v: p.level }))}</span>${p.headBadges}</div>
               <div class="bar bar-red">${p.decoTicks}<i data-bar="enemy" style="width:${p.ehpPct}%"></i></div>
-              <div class="enemy-sub">${esc(p.ehpText)}</div>
+              <div class="enemy-sub" data-ehp-text>${esc(p.ehpText)}</div>
               <div class="minion-rows">${p.minions}</div>
-              <div class="bar bar-jade"><i style="width:${p.hpPct}%"></i></div>
-              <div class="enemy-sub">${esc(p.selfStatsText)}</div>
+              <div class="bar bar-jade"><i data-bar="self" style="width:${p.hpPct}%"></i></div>
+              <div class="enemy-sub" data-self-stats>${esc(p.selfStatsText)}</div>
             </div>
             <div class="enemy-ops">${p.opsHtml}</div>
           </article>`;
@@ -309,11 +323,85 @@ export const refreshActivityBars = (pageEl: HTMLElement, st: GameState, snap: Sa
   }
 };
 
-/** 敌方血条每帧刷新（斗法/秘境页 update 委托此实现；读引擎快照投影，#40）。 */
-export const refreshEnemyBar = (pageEl: HTMLElement, st: GameState, snap: SaveData): void => {
-  const bar = pageEl.querySelector<HTMLElement>('[data-bar="enemy"]');
-  if (!bar || !st.combat) return;
+/**
+ * 交战敌卡实况补丁（#50 D3：updateEnemyBar 模式推广为页级 update，斗法/秘境
+ * 页 update 共用单一实现）：敌血宽+读数 / 自血宽+属性行 / 召唤行组——全部定点
+ * 补丁。签名已移除 ehp/summons/hp 项，实况值由本函数每帧轻刷，页面不再靠
+ * 敌血逐击重建（旧「签名漏 st.hp、自血条搭敌血便车」的隐式契约在此了结）。
+ * 补丁读数与 render 同式同源，重建后首帧零跳变。
+ */
+export const refreshCombatLive = (parts: {
+  readonly pageEl: HTMLElement;
+  readonly st: Readonly<GameState>;
+  readonly snap: SaveData;
+  readonly T: ShellText;
+  readonly statValueText: (stat: string, value: number | string) => string;
+}): void => {
+  const { pageEl, st, snap, T, statValueText } = parts;
+  const combat = st.combat;
   const enemy = snap.enemy;
-  if (!enemy) return;
-  bar.style.width = `${pctClamped(st.combat.ehp, enemy.hp)}%`;
+  if (!combat || !enemy) return;
+  const ehpPct = pctClamped(combat.ehp, enemy.hp);
+  const enemyBar = pageEl.querySelector<HTMLElement>('[data-bar="enemy"]');
+  if (enemyBar) enemyBar.style.width = `${ehpPct}%`;
+  const ehpText = pageEl.querySelector<HTMLElement>('[data-ehp-text]');
+  if (ehpText) {
+    ehpText.textContent = ehpTextOf(T, combat.ehp, enemy.hp);
+  }
+  const selfBar = pageEl.querySelector<HTMLElement>('[data-bar="self"]');
+  if (selfBar) selfBar.style.width = `${selfHpPctOf(st, snap)}%`;
+  const selfStats = pageEl.querySelector<HTMLElement>('[data-self-stats]');
+  if (selfStats) selfStats.textContent = selfStatsTextOf(T, statValueText, st, snap);
+  refreshMinionRows(pageEl, snap, T);
 };
+
+/**
+ * 召唤行组结构键（#50）：槽位身份（敌 id + 阶段 + 投影上限）按集火序拼装；
+ * 血量是逐击活值不进键——键稳时行组节点存活，只补丁读数（行身份不变）。
+ */
+const minionRowsKeyOf = (snap: SaveData): string =>
+  (snap.minions ?? [])
+    .map(({ minion, view }) => `${minion.enemyId}:${minion.phase}:${view.hp}`)
+    .join(',');
+
+/** 召唤行组定点补丁：结构键变（入场/阵亡/换阶段）→ 整组重挂；键稳 → 逐行补丁。 */
+const refreshMinionRows = (pageEl: HTMLElement, snap: SaveData, T: ShellText): void => {
+  const box = pageEl.querySelector<HTMLElement>('.minion-rows');
+  if (!box) return;
+  const key = minionRowsKeyOf(snap);
+  if (box.dataset.minionRows !== key) {
+    box.dataset.minionRows = key;
+    box.innerHTML = minionsHtml(T, snap);
+    return;
+  }
+  const rows = box.querySelectorAll<HTMLElement>('.minion-row');
+  (snap.minions ?? []).forEach(({ minion, view }, index) => {
+    const row = rows[index];
+    if (!row) return;
+    const bar = row.querySelector<HTMLElement>('[data-bar="minion"]');
+    if (bar) bar.style.width = `${pctClamped(minion.hp, view.hp)}%`;
+    const text = row.querySelector<HTMLElement>('.minion-hp');
+    if (text) {
+      text.textContent = ehpTextOf(T, minion.hp, view.hp);
+    }
+  });
+};
+
+/**
+ * 页级 update 单一实现（#50 复审收口：斗法/秘境两页 update 体曾逐字节重复）：
+ * 补丁零件组装的唯一入口，页面侧一行接线 `update: combatLiveUpdater(env)`。
+ */
+export const combatLiveUpdater =
+  (env: {
+    readonly pageEl: HTMLElement;
+    readonly statValueText: (stat: string, value: number | string) => string;
+  }) =>
+  (ctx: PageCtx): void => {
+    refreshCombatLive({
+      pageEl: env.pageEl,
+      st: ctx.st,
+      snap: ctx.snap,
+      T: ctx.T,
+      statValueText: env.statValueText,
+    });
+  };

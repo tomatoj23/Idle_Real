@@ -319,7 +319,8 @@ describe('#30 · 中途存档往返（召唤物态随战斗态恢复）', () => 
     game.dispatch({ type: 'combat:start', payload: { enemyId: 'e1' } });
     for (let i = 0; i < 60 && cap.summons.length === 0; i++) game.tick(1000);
     const save = game.snapshot();
-    const raw = save.state as { combat: { summons: Array<Record<string, unknown>> } };
+    // 故意写坏快照造畸形档（守卫被测面）：经 unknown 宽转（#50 后 state 有类型面）。
+    const raw = save.state as unknown as { combat: { summons: Array<Record<string, unknown>> } };
     raw.combat.summons = [
       { enemyId: 'ghost', phase: 1, hp: 45, et: 0 }, // 敌不存在
       { enemyId: 'e3', phase: 9, hp: 45, et: 0 }, // 阶段越界
@@ -350,7 +351,8 @@ describe('#30 · 中途存档往返（召唤物态随战斗态恢复）', () => 
     game.dispatch({ type: 'combat:start', payload: { enemyId: 'e1' } });
     for (let i = 0; i < 60 && cap.summons.length === 0; i++) game.tick(1000);
     const save = game.snapshot();
-    const raw = save.state as { combat: { summons: Array<Record<string, unknown>> } };
+    // 故意写坏快照造畸形档（守卫被测面）：经 unknown 宽转（#50 后 state 有类型面）。
+    const raw = save.state as unknown as { combat: { summons: Array<Record<string, unknown>> } };
     raw.combat.summons = [
       { enemyId: 'efatal', phase: 1, hp: 50, et: 0 }, // 池外槽（敌存在、阶段在界内）
       { enemyId: 'e3', phase: 1, hp: 45, et: 0 }, // 池内合法槽位

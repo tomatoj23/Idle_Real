@@ -113,7 +113,13 @@ export interface DungeonState {
   floor: number;
 }
 
-export interface GameState {
+/**
+ * 引擎状态树（#50 类型化快照的使能位：声明为 type 而非 interface——TS 对
+ * interface 不给隐式索引签名，type 对象字面量有；只有 type 形态才能让
+ * `Readonly<GameState>` 结构化赋给存档面的 `Readonly<Record<string, unknown>>`
+ * （snapshot 入袋/适配器序列化零 cast）。属性读写的拼错防护不受影响。
+ */
+export type GameState = {
   /** 灵石。 */
   gold: number;
   /** 当前气血（上限由斗法修为推导，见 playerMaxHp，不落盘上限值）。 */

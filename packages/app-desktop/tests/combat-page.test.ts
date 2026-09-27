@@ -53,7 +53,7 @@ describe('斗法页 · 战斗中信息面', () => {
   it('战斗中渲染敌人列表：其余敌人可挑战，当前目标徽标化且无挑战按钮', () => {
     const { root, game } = mountFighting('e1');
     expect(root.querySelector('.enemy-card.fighting')).not.toBeNull();
-    expect((game.snapshot().state as { combat?: { enemyId: string } }).combat?.enemyId).toBe('e1');
+    expect(game.snapshot().state.combat?.enemyId).toBe('e1');
 
     // 本诉求核心：战斗不打断，列表照常看
     const grid = root.querySelector('.enemy-grid');
@@ -72,7 +72,7 @@ describe('斗法页 · 战斗中信息面', () => {
     root.querySelector<HTMLButtonElement>('[data-act="fight"][data-enemy="e2"]')!.click();
     ui.render();
     expect(actions.some((a) => a.type === 'combat:stop')).toBe(false);
-    expect((game.snapshot().state as { combat?: { enemyId: string } }).combat?.enemyId).toBe('e2');
+    expect(game.snapshot().state.combat?.enemyId).toBe('e2');
     expect(root.querySelector('.enemy-card.fighting')!.textContent).toContain('赤尾妖蝎');
     // 换敌后列表跟随：e1 回归可挑战位，e2 变当前目标
     expect(root.querySelector('.enemy-grid [data-act="fight"][data-enemy="e1"]')).not.toBeNull();

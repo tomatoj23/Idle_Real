@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
-import { createGame, ManualClock, type GameAction, type GameState, type SaveData } from '@wendao/engine';
+import { createGame, ManualClock, type GameAction, type SaveData } from '@wendao/engine';
 import { buildUi } from '../src/ui';
 
 /** 带修为与道韵的存档：herb 20000 修为（可得 4 道韵）、余 2 道韵、少量家当。 */
@@ -81,7 +81,7 @@ describe('#6 · 兵解确认页', () => {
     // #34 侧栏平移：结算明细行（含世次）入轻量飘字。
     expect(root.querySelector('#float-stack')?.textContent).toContain('第 1 世');
 
-    const st = game.snapshot().state as unknown as GameState;
+    const st = game.snapshot().state;
     expect(st.skills.herb?.xp).toBe(0);
     expect(st.items).toEqual({});
     expect(st.gold).toBe(0);

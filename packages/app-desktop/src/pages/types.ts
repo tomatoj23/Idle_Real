@@ -32,9 +32,9 @@ export type TabId =
 /** texts.shell 取词 + {slot} 填槽（缺键回显键名，防御可见）。 */
 export type ShellText = (key: string, vars?: Readonly<Record<string, string | number>>) => string;
 
-/** 渲染上下文（D2）：每次渲染现建，页面不自持快照。 */
+/** 渲染上下文（D2）：每次渲染现建，页面不自持快照（st 为只读快照面，#50）。 */
 export interface PageCtx {
-  readonly st: GameState;
+  readonly st: Readonly<GameState>;
   readonly snap: SaveData;
   readonly content: ContentPack;
   readonly T: ShellText;

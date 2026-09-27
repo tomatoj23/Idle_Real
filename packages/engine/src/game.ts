@@ -64,6 +64,7 @@ import type {
   CombatEntryAction,
   GameAction,
   GameContent,
+  GameSnapshot,
   GearUidPayload,
   ItemStackPayload,
   LootEventSource,
@@ -150,7 +151,7 @@ export interface Game {
   /** 事件流：drain() 拉取积压事件，subscribe() 订阅推送。 */
   readonly events: EventBus;
   /** 导出存档快照（含 savedAt 墙钟，离线补偿结算基准）。 */
-  snapshot(): SaveData;
+  snapshot(): GameSnapshot;
 }
 
 /**
@@ -2039,13 +2040,13 @@ export function createGame(options: CreateGameOptions): Game {
       }
     },
 
-    snapshot(): SaveData {
-      // GameState 无索引签名，与 GameContent 同理放宽为透明 Record（#2 先例）。
+    snapshot(): GameSnapshot {
       return {
         version: SAVE_VERSION,
         time,
         savedAt: clock.now(),
-        state: cloneState(state) as unknown as Readonly<Record<string, unknown>>,
+        // #50 类型化快照：state 直出 Readonly<GameState>，Record 放宽与双重 cast 退役。
+        state: cloneState(state),
         // 属性面板（#4 验收：佩戴稀有度武器 → snapshot 反映倍率+词条）。
         stats: playerStats(),
         // 战斗/活动视图投影（#40 D1/D2：字段恒在，壳层零公式复算；一次取值

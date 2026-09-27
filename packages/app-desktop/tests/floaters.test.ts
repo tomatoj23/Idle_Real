@@ -324,3 +324,21 @@ describe('#34 · 补盲（复核收口批）', () => {
     }
   });
 });
+
+describe('#50 · toast 自动消失（D5 fake timers 补盲）', () => {
+  it('toast 到点自动移除：驻留期内在场、期满自动消', () => {
+    vi.useFakeTimers();
+    try {
+      const { root, ui } = mount();
+      ui.toast('浮生一叹');
+      const el = () => root.querySelector('#toasts .toast');
+      expect(el()?.textContent).toBe('浮生一叹');
+      vi.advanceTimersByTime(1); // 短于驻留：仍在场
+      expect(el()).not.toBeNull();
+      vi.advanceTimersByTime(10000); // 远超驻留（3200ms）：自动移除
+      expect(el()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

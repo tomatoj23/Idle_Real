@@ -138,6 +138,7 @@ export type {
   GameAction,
   GameContent,
   GameEvent,
+  GameSnapshot,
   PlayerStatsView,
   SaveData,
 } from './types.js';

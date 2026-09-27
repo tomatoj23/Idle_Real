@@ -6,10 +6,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
-import { createGame, ManualClock, type GameAction, type GameState, type SaveData } from '@wendao/engine';
-import { buildUi } from '../src/ui';
-
-const MAX_FLOG = 60;
+import { createGame, ManualClock, type GameAction, type GameSnapshot, type SaveData } from '@wendao/engine';
+import { buildUi, MAX_FLOG } from '../src/ui';
 
 describe('UI 烟测（issue #4 战斗切片）', () => {
   it('斗法：挑战青鬃狼 → 战斗中视图 → 挂机胜利 → 战斗日志受控', () => {
@@ -56,6 +54,71 @@ describe('UI 烟测（issue #4 战斗切片）', () => {
     expect(flog.children.length).toBeLessThanOrEqual(MAX_FLOG);
     // 日志滚动跟随到底（旧版踩坑回归；happy-dom 支持 scrollTop 记账）
     expect(flog.scrollTop).toBe(flog.scrollHeight);
+  });
+
+  it('两次 tick 间日志节点身份不变（追加式）：战斗页不因逐击重建，实况值走定点补丁', () => {
+    const clock = new ManualClock();
+    const content = loadXiuxianPack();
+    // 预置高位 maxHit 封顶：破纪录会经 st.stats 走签名（D3 口径的低频结构
+    // 变化，接受重建），本用例钉「逐击不重建」不变量——把破纪录变量隔离掉。
+    const base = createGame({ content, clock, seed: 11 }).snapshot();
+    const save: GameSnapshot = {
+      ...base,
+      state: { ...base.state, stats: { ...base.state.stats, maxHit: 999999 } },
+    };
+    const game = createGame({ content, clock, save, seed: 11 });
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const ui = buildUi(root, content, () => game.snapshot(), game.events);
+    ui.bindActions((action: GameAction) => game.dispatch(action));
+    ui.render();
+    root.querySelector<HTMLButtonElement>('.tab[data-tab="combat"]')!.click();
+    ui.render();
+    root.querySelector<HTMLButtonElement>('[data-act="fight"][data-enemy="e1"]')!.click();
+    ui.render();
+
+    // 开战 note 落战斗日志（持久体）：采样锚点。页面骨架打标记（重建判据）。
+    const flog = root.querySelector<HTMLElement>('#flog')!;
+    expect(flog.firstElementChild).not.toBeNull();
+    const lineBefore = flog.firstElementChild!;
+    root.querySelector<HTMLElement>('.enemy-card.fighting')!.dataset.mark = 'keep';
+    const ehpElBefore = root.querySelector<HTMLElement>('[data-ehp-text]')!;
+    const ehpTextBefore = ehpElBefore.textContent;
+
+    // 逐步推进到下一次命中（敌血下降）：命中窗口自证，不赌步长。
+    const ehpOf = (): number => game.snapshot().state.combat?.ehp ?? -1;
+    const tickToHit = (): boolean => {
+      let last = ehpOf();
+      for (let i = 0; i < 30; i++) {
+        clock.advance(1000);
+        game.tick(1000);
+        ui.render();
+        const now = ehpOf();
+        if (now >= 0 && now < last) return true;
+        last = now;
+      }
+      return false;
+    };
+
+    const selfStatsBefore = root.querySelector('[data-self-stats]')?.textContent ?? '';
+    expect(tickToHit()).toBe(true); // 命中①
+    const countBefore = flog.children.length;
+    expect(tickToHit()).toBe(true); // 命中②
+
+    // 追加式钉住：旧日志节点存活为前缀（身份不变），只增不换。
+    expect(flog.firstElementChild).toBe(lineBefore);
+    expect(flog.children.length).toBeGreaterThanOrEqual(countBefore);
+    // 战斗页不因逐击重建：骨架标记存活、敌血读数节点身份不变。
+    expect(root.querySelector<HTMLElement>('.enemy-card.fighting')!.dataset.mark).toBe('keep');
+    expect(root.querySelector('[data-ehp-text]')).toBe(ehpElBefore);
+    // 实况值经定点补丁更新：读数变了、节点没换（旧「签名漏 st.hp」在此了结）。
+    expect(ehpElBefore.textContent).not.toBe(ehpTextBefore);
+    // 自血补丁反映快照现值（{hp}/{max} 槽 = floor(st.hp)），且全窗至少随受击变过一次。
+    const hpNow = Math.floor(game.snapshot().state.hp);
+    expect(root.querySelector('[data-self-stats]')?.textContent).toContain(`${hpNow}/`);
+    expect(root.querySelector('[data-self-stats]')?.textContent).not.toBe(selfStatsBefore);
+    // 窗口内无击杀：胜负级变化才允许重建。
+    expect(game.snapshot().state.combat).not.toBeNull();
   });
 
   it('乾坤袋：装备卡佩戴/卸下 → 顶栏属性反映倍率+词条', () => {
@@ -140,7 +203,7 @@ describe('UI 烟测（issue #4 战斗切片）', () => {
     expect(root.querySelector('#res-hp-text')!.textContent).toContain('84/');
     // 血条 fill 元素存在性（进度条被删后 innerText 断言仍绿的历史教训）
     expect(root.querySelector('#res-hp')).not.toBeNull();
-    expect((game.snapshot().state as unknown as GameState).items['consumable_heal']).toBeUndefined();
+    expect(game.snapshot().state.items['consumable_heal']).toBeUndefined();
   });
 
   it('增益条：同数量换 buff（A 到期 + B 服下）chip 跟随换新', () => {
@@ -148,13 +211,10 @@ describe('UI 烟测（issue #4 战斗切片）', () => {
     const content = loadXiuxianPack();
     const game = createGame({ content, clock, seed: 3 });
     const base = game.snapshot();
-    const save = {
+    const save: GameSnapshot = {
       ...base,
-      state: {
-        ...(base.state as Record<string, unknown>),
-        buffs: { consumable_atk: 600000 } as Record<string, number>,
-      },
-    } as SaveData;
+      state: { ...base.state, buffs: { consumable_atk: 600000 } },
+    };
     const root = document.createElement('div');
     document.body.appendChild(root);
     const ui = buildUi(root, content, () => save, game.events);

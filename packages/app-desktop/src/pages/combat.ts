@@ -14,14 +14,16 @@ import {
 } from '@wendao/engine';
 import {
   bossDecoOf,
+  combatLiveUpdater,
   consumablesHtml,
   dungeonLockMsgOf,
+  ehpTextOf,
   esc,
   fightingEnemyCardHtml,
   levelLockMsgOf,
   minionsHtml,
   pctClamped,
-  refreshEnemyBar,
+  selfHpPctOf,
   selfStatsTextOf,
   xpReadOf,
 } from '../pageFrame';
@@ -100,7 +102,7 @@ export function createCombatPage(env: PageEnv): PageView {
       const deco = bossDecoOf(content, st);
       const ehpPct = pctClamped(combat.ehp, enemy.hp);
       const resting = combat.respT > 0;
-      const hpPct = pctClamped(st.hp, snap.stats?.maxHp ?? enemy.hp);
+      const hpPct = selfHpPctOf(st, snap);
       // 斗法修为条（战斗中信息面）：读数与修炼页同式同源（expToNext/expBase）。
       const cread = xpReadOf(st.skills[env.combatSkillId]?.xp ?? 0, env.prog);
       return `
@@ -114,7 +116,7 @@ export function createCombatPage(env: PageEnv): PageView {
             headBadges: `${resting ? `<em class="act-badge">${esc(T('pages.combat.resting'))}</em>` : ''}${deco.badge}`,
             decoTicks: deco.ticks,
             ehpPct,
-            ehpText: T('pages.combat.enemyHp', { ehp: Math.max(0, Math.ceil(combat.ehp)), hp: enemy.hp }),
+            ehpText: ehpTextOf(T, combat.ehp, enemy.hp),
             minions: minionsHtml(T, snap),
             hpPct,
             selfStatsText: selfStatsTextOf(T, env.statValueText, st, snap),
@@ -167,10 +169,8 @@ export function createCombatPage(env: PageEnv): PageView {
       </section>`;
   };
 
-  const update = (ctx: PageCtx): void => {
-    // 敌方血条实况刷新 = 页框共用体单一实现（D3；本页拥有 update 入口）。
-    refreshEnemyBar(env.pageEl, ctx.st, ctx.snap);
-  };
+  // 交战敌卡实况补丁 = 页框共用体单一实现（#50 D3；本页拥有 update 入口）。
+  const update = combatLiveUpdater(env);
 
   return {
     id: 'combat',

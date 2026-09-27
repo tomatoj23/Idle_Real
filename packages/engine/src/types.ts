@@ -6,7 +6,7 @@
  */
 
 import type { EnemyView } from './contentView.js';
-import type { CombatSummonState } from './state.js';
+import type { CombatSummonState, GameState } from './state.js';
 import type { DamageTier, EncounterRecord } from './combat.js';
 import type { LedgerData } from './ledger.js';
 
@@ -663,7 +663,11 @@ export interface SaveData {
    * 离线补偿结算（ADR-013）的基准：重开时以 now - savedAt 折算欠账。
    */
   readonly savedAt?: number;
-  /** 引擎扩展的透明状态区：引擎写入，UI 只读。 */
+  /**
+   * 引擎扩展的透明状态区：引擎写入，UI 只读。存档面维持宽松 Record——
+   * 部分/畸形档是恢复守卫的合法输入（createGame({save}) 缺字段补缺省、
+   * 非法弃置，restoreState 契约）；typed 读数面见 GameSnapshot（#50）。
+   */
   readonly state: Readonly<Record<string, unknown>>;
   /** 玩家属性面板（#4）：应用层展示用，非存档必需。 */
   readonly stats?: PlayerStatsView;
@@ -687,6 +691,19 @@ export interface SaveData {
    * 取代旧单值 activityInterval（同一事实单一真相）。非存档必需。
    */
   readonly activityIntervals?: Readonly<Record<string, number>>;
+}
+
+/**
+ * 运行时读数面（#50 类型化快照，D2）：`game.snapshot()` 的返回类型——
+ * `state` 收紧为 `Readonly<GameState>`，壳层读数零 cast（旧 `as unknown as
+ * GameState` 双重 cast 退役）。快照零公式义务不变（类型收紧不是加公式，
+ * 不做访问器集合）。与 SaveData 的分工：SaveData 是**存档面**（JSON 读入，
+ * 部分/畸形档合法、恢复守卫把关），本类型是**快照面**（引擎活态深拷直出，
+ * 字段恒在）；快照落袋走 SaveData 同构兼容（GameState 为 type 声明，隐式
+ * 索引签名成立，见 state.ts）。
+ */
+export interface GameSnapshot extends SaveData {
+  readonly state: Readonly<GameState>;
 }
 
 /**

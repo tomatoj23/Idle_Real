@@ -7,13 +7,15 @@
 import { dungeonGateOf, dungeonLayerOf, findDungeon, powerOf, powerParamsOf } from '@wendao/engine';
 import {
   bossDecoOf,
+  combatLiveUpdater,
   consumablesHtml,
   dungeonLockMsgOf,
+  ehpTextOf,
   esc,
   fightingEnemyCardHtml,
   minionsHtml,
   pctClamped,
-  refreshEnemyBar,
+  selfHpPctOf,
   selfStatsTextOf,
 } from '../pageFrame';
 import type { PageCtx, PageEnv, PageView } from './types';
@@ -35,7 +37,7 @@ export function createDungeonPage(env: PageEnv): PageView {
       const enemy = snap.enemy;
       const deco = bossDecoOf(content, st);
       const ehpPct = enemy && st.combat ? pctClamped(st.combat.ehp, enemy.hp) : 0;
-      const hpPct = pctClamped(st.hp, snap.stats?.maxHp ?? 1);
+      const hpPct = selfHpPctOf(st, snap);
       const best = st.dungeonBest[dungeon.id] ?? 0;
       const rec = dungeonLayerOf(dungeon, run.floor)?.recommendedPower;
       // 战力 = 引擎单一来源合成（config.power 参数现读内容包，#61 边界收口：
@@ -54,7 +56,7 @@ export function createDungeonPage(env: PageEnv): PageView {
             headBadges: deco.badge,
             decoTicks: deco.ticks,
             ehpPct,
-            ehpText: T('pages.combat.enemyHp', { ehp: st.combat ? Math.max(0, Math.ceil(st.combat.ehp)) : 0, hp: enemy?.hp ?? 0 }),
+            ehpText: ehpTextOf(T, st.combat ? st.combat.ehp : 0, enemy?.hp ?? 0),
             minions: minionsHtml(T, snap),
             hpPct,
             selfStatsText: selfStatsTextOf(T, env.statValueText, st, snap),
@@ -95,10 +97,8 @@ export function createDungeonPage(env: PageEnv): PageView {
       </section>`;
   };
 
-  const update = (ctx: PageCtx): void => {
-    // 敌方血条实况刷新 = 页框共用体单一实现（D3；本页拥有 update 入口）。
-    refreshEnemyBar(env.pageEl, ctx.st, ctx.snap);
-  };
+  // 交战敌卡实况补丁 = 页框共用体单一实现（#50 D3；本页拥有 update 入口）。
+  const update = combatLiveUpdater(env);
 
   return {
     id: 'dungeon',
