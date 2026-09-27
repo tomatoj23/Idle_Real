@@ -306,6 +306,7 @@ body {
   right: 18px;
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
   gap: 8px;
   align-items: flex-end;
   z-index: 50;
@@ -347,6 +348,7 @@ body {
   position: fixed;
   inset: 0;
   pointer-events: none;
+  overflow: hidden;
   z-index: 45;
 }
 
@@ -363,6 +365,10 @@ body {
   color: var(--ink);
   animation: float-in 0.16s ease, float-out 0.45s ease var(--float-out-delay, 1.95s) forwards;
 }
+.float-combat.t-sys { color: var(--muted); }
+.float-combat.t-gold { color: var(--gold); }
+.float-combat.t-jade { color: var(--jade); }
+.float-combat.t-red { color: var(--red); }
 
 @keyframes float-in {
   from { opacity: 0; transform: translateY(6px); }

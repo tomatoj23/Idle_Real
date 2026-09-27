@@ -523,14 +523,14 @@ export interface ShellCommon {
 /**
  * 事件流文案（键 = 引擎事件类型协议面，槽位见 schema 描述；craft 相关键随 #5 加入）。
  * 键名冻结（#47 运行时协议面）；各键归宿（飘字/浮提示/战斗日志）见 #34 反馈
- * 枢纽——侧栏退役后原「修行录行」注释口径 = 飘字行（轻量档），勿再指侧栏。
+ * 枢纽——侧栏退役后原「飘字行」注释口径 = 飘字行（轻量档），勿再指侧栏。
  */
 export interface ShellEvents {
   readonly lootGearLog: string;
   readonly lootShowcase: string;
   readonly lootByproduct: string;
   readonly lootDrop: string;
-  /** 炼制产出修行录行（#5，loot source=craft）。 */
+  /** 炼制产出飘字行（#5，loot source=craft）。 */
   readonly lootCraft: string;
   readonly victoryFlog: string;
   /** 胜利战利品段（拼入 victoryFlog 的 {spoil} 槽，#62 保真收口）。 */
@@ -550,33 +550,33 @@ export interface ShellEvents {
   readonly offlineLog: string;
   /** 离线达上限浮提示（offlineCap 钳制时替代 offlineToast；#60）。 */
   readonly offlineCappedToast: string;
-  /** 离线达上限修行录行；槽位 {away}离开/{settled}结算。 */
+  /** 离线达上限飘字行；槽位 {away}离开/{settled}结算。 */
   readonly offlineCappedLog: string;
   readonly offlineNoYield: string;
   readonly offlineExpSuffix: string;
-  /** 炼制失败修行录行（#5，craft-fail 事件）。 */
+  /** 炼制失败飘字行（#5，craft-fail 事件）。 */
   readonly craftFail: string;
   /** 缺料停炉提示（#5，craft-halt 事件）。 */
   readonly craftHalt: string;
   /** 兵解功成浮提示（#6，rebirth 事件；槽位 {daoYun}）。 */
   readonly rebirthToast: string;
-  /** 兵解修行录行（#6；槽位 {xp}/{daoYun}/{count}）。 */
+  /** 兵解飘字行（#6；槽位 {xp}/{daoYun}/{count}）。 */
   readonly rebirthLog: string;
   /** 天赋点亮浮提示（#6，talent:buy 事件；槽位 {name}/{cost}）。 */
   readonly talentBuyToast: string;
-  /** 天赋点亮修行录行（#6；槽位 {name}/{daoYun}）。 */
+  /** 天赋点亮飘字行（#6；槽位 {name}/{daoYun}）。 */
   readonly talentBuyLog: string;
   /** 踏入秘境浮提示（#7，dungeon:enter 事件；槽位 {name}/{floor}/{floors}）。 */
   readonly dungeonEnter: string;
-  /** 层奖励修行录行（#7，dungeon:floor 事件；槽位 {floor}/{floors}/{gold}/{items}）。 */
+  /** 层奖励飘字行（#7，dungeon:floor 事件；槽位 {floor}/{floors}/{gold}/{items}）。 */
   readonly dungeonFloor: string;
-  /** 层奖励道韵修行录行（#7，daoYun > 0 时随层奖励行；槽位 {daoYun}）。 */
+  /** 层奖励道韵飘字行（#7，daoYun > 0 时随层奖励行；槽位 {daoYun}）。 */
   readonly dungeonDaoYun: string;
   /** 通关浮提示（#7，dungeon:clear 事件；槽位 {name}/{floors}）。 */
   readonly dungeonClear: string;
-  /** 离境修行录行（#7，dungeon:leave 事件；槽位 {name}/{floor}/{best}）。 */
+  /** 离境飘字行（#7，dungeon:leave 事件；槽位 {name}/{floor}/{best}）。 */
   readonly dungeonLeave: string;
-  /** Boss 阶段转场修行录行（#8，boss:phase 事件；槽位 {name}/{phase}）。 */
+  /** Boss 阶段转场浮提示（#8，boss:phase 事件；槽位 {name}/{phase}）。 */
   readonly bossPhase: string;
   /** Boss 召唤入场战斗日志行（#30 事件缝 #47；槽位 {enemy}/{count}）。 */
   readonly bossSummon: string;

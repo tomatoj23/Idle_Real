@@ -62,6 +62,8 @@ export interface PageEnv {
   readonly statBonusText: (stat: string, value: number | string) => string;
   /** 秒时长读数（units.seconds 模板）。 */
   readonly fmtSeconds: (ms: number) => string;
+  /** 时长读数（时/分/秒三级 units 模板链）。 */
+  readonly fmtDuration: (seconds: number) => string;
   /** 系别展示名（elements 注册表数据直出）。 */
   readonly elementNameOf: (id: string) => string;
   /** 铭纹修饰符行文本。 */

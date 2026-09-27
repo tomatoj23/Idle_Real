@@ -192,7 +192,8 @@ describe('#10 · 事件流 → 成就上报管道', () => {
     bus.emit({ type: 'achievement:unlock', time: 2 } as unknown as GameEvent); // 缺 id：不上报
     expect(bridge.reports).toEqual(['cycles_100']);
     unsubscribe();
-    bus.emit({ type: 'achievement:unlock', time: 3, data: { id: 'first_kill' } } as GameEvent);
+    // 合法形状直发（#47 哑雷排雷：不再 as 收窄缺必填 name 的字面量）。
+    bus.emit({ type: 'achievement:unlock', time: 3, data: { id: 'first_kill', name: 'First Kill' } });
     expect(bridge.reports).toEqual(['cycles_100']);
   });
 });

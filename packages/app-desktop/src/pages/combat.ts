@@ -3,7 +3,7 @@
  *
  * 页框零件消费：交战敌卡（件5：bossDeco/minions/selfStats 同框）、
  * 双门锁定句（件4）、xp 头（件3）；敌血条实况刷新住本页 update（D3）。
- * 战斗日志容器（#flog）由本页渲染，内容重放归壳核（日志缓冲是壳层事件接线）。
+ * 战斗日志槽（#flog）两视图常驻：内容体是壳核持久体重挂（#34，重建杀不到）。
  */
 import {
   dungeonGateOf,
@@ -163,6 +163,7 @@ export function createCombatPage(env: PageEnv): PageView {
         ${dungeonEntries}
         <div class="enemy-grid">${enemyCardsHtml()}</div>
         <div class="consumable-bar">${consumables || ''}</div>
+        <div class="flog" id="flog"></div>
       </section>`;
   };
 

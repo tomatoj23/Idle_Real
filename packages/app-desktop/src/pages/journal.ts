@@ -116,14 +116,6 @@ export function createJournalPage(env: PageEnv): PageView {
     return t0 === t1 ? fmt(t0) : `${fmt(t0)} – ${fmt(t1)}`;
   }
 
-  function formatDuration(seconds: number): string {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    if (h > 0) return T('units.hourMinute', { h, m });
-    if (m > 0) return T('units.minute', { m });
-    return T('units.seconds', { v: seconds });
-  }
-
   function badgeOf(rec: JournalRecord): string {
     const key = (k: string): string => T(`pages.journal.${k}`);
     switch (rec.kind) {
@@ -207,8 +199,8 @@ export function createJournalPage(env: PageEnv): PageView {
         // 离线上限钳制时双口径区分（awaySeconds=真实离开 / seconds=结算时长）。
         const capped = rec.capped
           ? jt('offlineCapped', {
-              away: formatDuration(rec.awaySeconds ?? rec.seconds),
-              settled: formatDuration(rec.seconds),
+              away: env.fmtDuration(rec.awaySeconds ?? rec.seconds),
+              settled: env.fmtDuration(rec.seconds),
             })
           : '';
         return {

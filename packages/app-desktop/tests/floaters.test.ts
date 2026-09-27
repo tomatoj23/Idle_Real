@@ -12,6 +12,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import type { ContentPack } from '@wendao/content';
+import { sectionSchemas } from '@wendao/content';
 import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
 import { createGame, ManualClock, type GameAction, type SaveData } from '@wendao/engine';
 import { buildUi } from '../src/ui';
@@ -111,7 +112,8 @@ describe('#34 · 右侧栏与 log() sink 完全退场', () => {
 
 describe('#34 · 档一战斗飘字（既有 flog 改造）', () => {
   it('attack 逐击不聚合：两条 attack → 两个敌卡锚定飘字，不入战斗日志', () => {
-    const { root, game } = mount();
+    // 真开战语境（P0 收口：无锚点不入层——挂机连杀在其他页签静默）。
+    const { root, game } = mountFight();
     game.events.emit({
       type: 'attack',
       time: 0,
@@ -223,6 +225,18 @@ describe('#34 · 修为读数口径（AC4：只在升级飘，普通周期无飘
 });
 
 describe('#34 · 战斗日志持久体重挂（重放缓冲/滚动恢复 hack 退役）', () => {
+  it('P0 固定：无锚点（他页挂机连杀）attack 不入层——不堆顶栏不乱锚', () => {
+    const { root, game } = mountFight();
+    // 切离斗法页 = 无交战卡锚点。
+    root.querySelector<HTMLButtonElement>('.tab[data-tab="skills"]')!.click();
+    game.events.emit({
+      type: 'attack',
+      time: 0,
+      data: { side: 'player', enemyId: 'e1', enemyName: '狼', text: '一击 5 点', dmg: 5, crit: false, tier: 'light' },
+    });
+    expect(root.querySelectorAll('#combat-floats .float-combat')).toHaveLength(0);
+  });
+
   it('换页往返后 #flog 内容存活（节点身份延续，非缓冲重放）', () => {
     const { root, ui, game } = mountFight();
     game.events.emit({ type: 'combat-note', time: 0, data: { text: '开战叙事' } });
@@ -238,5 +252,75 @@ describe('#34 · 战斗日志持久体重挂（重放缓冲/滚动恢复 hack �
     const again = root.querySelector<HTMLElement>('#flog')!;
     expect(again.lastElementChild).toBe(line);
     expect(again.textContent).toContain('开战叙事');
+  });
+});
+
+describe('#34 · 补盲（复核收口批）', () => {
+  it('聚合窗过期：同名 3 秒后起新窗新行，旧行走完淡出不硬摘', () => {
+    vi.useFakeTimers();
+    try {
+      const { root, game } = mount();
+      const emit = () =>
+        game.events.emit({
+          type: 'loot',
+          time: 0,
+          data: { item: 'ore', itemName: '铁矿石', count: 1, source: 'drop' },
+        });
+      emit();
+      vi.advanceTimersByTime(3100); // 过 3s 聚合窗、未到 3.15s 淡出起点
+      emit();
+      const rows = () => Array.from(root.querySelectorAll('#float-stack .float-acq'));
+      // 新窗新行；旧行不被窗界硬摘（满不透明行被闪摘 = 修复前行为）。
+      const texts = rows().map((el) => el.textContent);
+      expect(texts).toHaveLength(2);
+      expect(texts[0]).toBe('得 铁矿石×1');
+      expect(texts[1]).toBe('得 铁矿石×1');
+      vi.advanceTimersByTime(700); // 旧行 3.6s 驻留到点自行移除
+      expect(rows()).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('首事件 count>1 走单形模板原值（不切聚合形）', () => {
+    const { root, game } = mount();
+    game.events.emit({
+      type: 'loot',
+      time: 0,
+      data: { item: 'ore', itemName: '铁矿石', count: 3, source: 'drop' },
+    });
+    const rows = root.querySelectorAll('#float-stack .float-acq');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.textContent).toBe('得 铁矿石×3');
+  });
+
+  it('levelup 无前置 exp 缓冲 → 不飘修为读数（防陈旧/undefined）', () => {
+    const { root, game } = mount();
+    game.events.emit({ type: 'levelup', time: 0, data: { skillId: 'fight', skillName: '斗法', level: 3 } });
+    const texts = Array.from(root.querySelectorAll('#float-stack .float-acq')).map((el) => el.textContent);
+    expect(texts.some((t) => (t ?? '').includes('修为'))).toBe(false);
+  });
+
+  it('离页期间 flog 追加入持久体（detached 缓冲），回页重挂可见', () => {
+    const { root, ui, game } = mountFight();
+    // 切到修炼页（无 #flog 槽 = 持久体脱离文档继续收行）。
+    root.querySelector<HTMLButtonElement>('.tab[data-tab="skills"]')!.click();
+    ui.render();
+    game.events.emit({ type: 'combat-note', time: 0, data: { text: '离页叙事' } });
+    root.querySelector<HTMLButtonElement>('.tab[data-tab="combat"]')!.click();
+    ui.render();
+    expect(root.querySelector('#flog')?.textContent).toContain('离页叙事');
+  });
+
+  it('夹具 shell events 键面 ⊆ schema events 键（防键名漂移哑雷）', () => {
+    const pack = makePack();
+    const schema = sectionSchemas.texts as {
+      definitions?: { shellTexts?: { properties?: { events?: { properties?: Record<string, unknown> } } } };
+    };
+    const legal = new Set(Object.keys(schema.definitions?.shellTexts?.properties?.events?.properties ?? {}));
+    expect(legal.size).toBeGreaterThan(0);
+    for (const key of Object.keys(pack.texts!.shell.events)) {
+      expect(legal.has(key), `夹具键 ${key} 不在 schema events 键面`).toBe(true);
+    }
   });
 });

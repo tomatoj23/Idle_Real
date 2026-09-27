@@ -91,6 +91,7 @@ export function createDungeonPage(env: PageEnv): PageView {
         <h2 class="page-title">${esc(T('pages.dungeon.title'))}</h2>
         <p class="page-sub">${esc(T('pages.dungeon.subtitle'))}</p>
         <div class="enemy-grid">${cards}</div>
+        <div class="flog" id="flog"></div>
       </section>`;
   };
 

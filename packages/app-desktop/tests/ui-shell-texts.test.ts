@@ -30,7 +30,7 @@ interface Overrides {
   readonly price?: number;
   /** 卖出行文案模板。 */
   readonly sellLog?: string;
-  /** 离线结算修行录模板。 */
+  /** 离线结算飘字行模板（#34 平移行）。 */
   readonly offlineLog?: string;
 }
 

@@ -220,6 +220,12 @@ export function buildUi(
 
   const nameOf = (id: unknown): string => itemById.get(String(id))?.name ?? String(id);
 
+  /** 物品栈拼装行（{name}×{n} 经 itemListSep 连接；层奖励/离线明细共用一式）。 */
+  const itemsLine = (items: Readonly<Record<string, number>>): string =>
+    Object.entries(items)
+      .map(([id, n]) => `${nameOf(id)}×${n}`)
+      .join(T('common.itemListSep'));
+
   /* ---------- 页面注册表装配（#46 D6） ---------- */
 
   const pages = createPages({
@@ -233,6 +239,7 @@ export function buildUi(
     statValueText,
     statBonusText,
     fmtSeconds,
+    fmtDuration,
     elementNameOf,
     inscModText,
     rarityClass,
@@ -257,6 +264,13 @@ export function buildUi(
   function fmtSeconds(ms: number): string {
     const s = ms / 1000;
     return T('units.seconds', { v: Number.isInteger(s) ? String(s) : s.toFixed(1) });
+  }
+
+  /** 时长读数（时/分/秒三级 units 模板链；离线明细与修行录页共用一式）。 */
+  function fmtDuration(seconds: number): string {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    return h > 0 ? T('units.hourMinute', { h, m }) : m > 0 ? T('units.minute', { m }) : T('units.seconds', { v: seconds });
   }
 
   function rarityClass(rarity: string): string {
@@ -328,29 +342,34 @@ export function buildUi(
    * 页面重绘后按锚点重查询刷新位置。flogBuffer 重放 hack 与滚动恢复 hack
    * 随之退役（flog 内容体改持久重挂）。 */
 
-  /** 档一战斗飘字（C7：既有 flog 改造）：伤害/暴击/受击锚定敌卡，逐击不聚合。 */
+  /** 档一战斗飘字（C7：既有 flog 改造）：伤害/暴击/受击锚定敌卡，逐击不聚合。
+   * 无锚点（用户在其他页挂机连杀）不入层——战斗反馈归战斗语境，防 (0,0) 堆顶栏。 */
   function combatFloat(text: string, cls: string): void {
+    if (combatAnchor() === null) return;
     pushFloat(combatFloatsEl, `float-combat ${cls}`, text, FLOAT_COMBAT_MS);
     while (combatFloatsEl.children.length > MAX_FLOAT_COMBAT) combatFloatsEl.firstElementChild?.remove();
     positionCombatFloats();
   }
 
-  /** 档一位置刷新：按锚点（交战敌卡）重查询；无锚点（离页）回落层内缺省位。 */
-  function positionCombatFloats(): void {
-    const anchor =
+  /** 档一锚点：交战敌卡优先，列表视图回落交战徽标卡；无 = 不在战斗语境。 */
+  function combatAnchor(): HTMLElement | null {
+    return (
       pageEl.querySelector<HTMLElement>('.enemy-card.fighting') ??
-      pageEl.querySelector<HTMLElement>('.enemy-card');
-    const rect = anchor?.getBoundingClientRect();
+      pageEl.querySelector<HTMLElement>('.enemy-card.running')
+    );
+  }
+
+  /** 档一位置刷新：按锚点重查询；锚点消失（战罢换列表）保留现位走完淡出，不乱锚。 */
+  function positionCombatFloats(): void {
+    const anchor = combatAnchor();
+    if (anchor === null) return;
+    const rect = anchor.getBoundingClientRect();
+    const viewW = document.documentElement.clientWidth;
     const floats = Array.from(combatFloatsEl.children) as HTMLElement[];
     floats.forEach((el, i) => {
-      if (rect !== undefined && rect.width > 0) {
-        // 右缘锚定（向左延伸覆盖敌卡缘）：窄屏不出屏，锚点右上角起漂、逐条下压。
-        el.style.right = `${Math.round(window.innerWidth - rect.right + FLOAT_ANCHOR_INSET)}px`;
-        el.style.top = `${Math.round(rect.top + FLOAT_ANCHOR_INSET + i * FLOAT_LINE_STEP)}px`;
-      } else {
-        el.style.right = '';
-        el.style.top = '';
-      }
+      // 右缘锚定（向左延伸覆盖敌卡缘）：窄屏不出屏，锚点右上角起漂、逐条下压。
+      el.style.right = `${Math.round(viewW - rect.right + FLOAT_ANCHOR_INSET)}px`;
+      el.style.top = `${Math.round(Math.max(0, rect.top) + FLOAT_ANCHOR_INSET + i * FLOAT_LINE_STEP)}px`;
     });
   }
 
@@ -405,10 +424,10 @@ export function buildUi(
         live.count > 1 ? T('events.floatSum', { name: live.name, count: live.count }) : live.single;
       return;
     }
-    // 新窗/首条：单形起漂；旧窗行已淡出则清表起新行。
+    // 新窗/首条：单形起漂。旧窗行未到淡出点（窗 3s < 淡出起点 3.15s）不硬摘
+    // ——只清聚合表让其走完淡出，驻留计时自然移除。
     if (live !== undefined) {
       clearTimeout(live.timer);
-      live.el.remove();
       acqFloats.delete(name);
     }
     const el = pushFloat(floatStackEl, 'float-acq', single, FLOAT_ACQ_MS);
@@ -440,7 +459,10 @@ export function buildUi(
    * Record 全键穷尽：引擎新增事件类型而壳层漏接 = 编译错（#47 never 穷尽
    * 断言的表化升级，比 switch 尾断言更强——漏接在类型层即红）。路由口径：
    * attack→档一战斗飘字 / 获取流水→档二获取飘字 / 重要事件→醒目 toast /
-   * 战斗叙事→战斗日志 / 其余→无（activity 心跳、tick、visit 信号不呈现）。 */
+   * 战斗叙事→战斗日志 / 其余→无（activity 心跳、tick、visit 信号不呈现）。
+   * 载荷类型经 Extract 从 GameEvent 联合派生——#47 遗留④的导出策略定案：
+   * engine barrel 维持只导 GameEvent 判别联合、不导成员接口，消费侧按判别键
+   * 自取载荷（多一重 barrel 面 = 多一份同形漂移点）。 */
   type Handlers = {
     [K in GameEvent['type']]: (event: Extract<GameEvent, { type: K }>) => void;
   };
@@ -459,19 +481,19 @@ export function buildUi(
       // AC2：胜利只入修行录与战斗日志、不飘字（防连杀刷屏）——战利品段
       //（#62 保真收口）随叙事行留在战斗日志，侧栏汇总行随侧栏退场。
       const data = event.data;
-      const compare = data.compare ? T('common.compareWrap', { compare: String(data.compare) }) : '';
-      const spoilNames = ((data.drops as readonly string[] | undefined) ?? []).map((id) => nameOf(id));
+      const compare = data.compare ? T('common.compareWrap', { compare: data.compare }) : '';
+      const spoilNames = data.drops.map((id) => nameOf(id));
       if (typeof data.gearDropName === 'string' && data.gearDropName) {
         spoilNames.push(`【${data.gearDropName}】`);
       }
       const spoil = T('events.victorySpoil', {
-        gold: String(data.gold ?? 0),
+        gold: String(data.gold),
         loot: spoilNames.join(T('common.itemListSep')) || T('events.offlineNoYield'),
       });
       flog(
         T('events.victoryFlog', {
-          name: String(data.enemyName ?? ''),
-          summary: String(data.summary ?? ''),
+          name: data.enemyName,
+          summary: data.summary,
           compare,
           spoil,
         }),
@@ -481,7 +503,7 @@ export function buildUi(
     defeat: (event) => {
       // AC2：战败保留红 toast（要紧的是败不是胜）。
       const data = event.data;
-      flog(T('events.defeatFlog', { name: String(data.enemyName ?? '') }), 't-red');
+      flog(T('events.defeatFlog', { name: data.enemyName }), 't-red');
       toast(T('events.defeatToast'), 'red');
     },
     'boss:summon': (event) => {
@@ -506,8 +528,8 @@ export function buildUi(
       // 侧栏获取行平移档二（AC1）：同类 3 秒短窗聚合；showcase 掉落仍醒目
       // toast（AC3）；战斗来源不再回战斗日志（旧 lootGear 行随侧栏退场）。
       const data = event.data;
-      const name = data.source === 'gear' || data.source === 'craft' ? String(data.itemName ?? '') : nameOf(data.item);
-      const count = Number(data.count ?? 0);
+      const name = data.source === 'gear' || data.source === 'craft' ? data.itemName : nameOf(data.item);
+      const count = data.count;
       if (data.source === 'gear') {
         acquireFloat(T('events.lootGearLog', { name }), name, 1);
       } else if (data.source === 'byproduct') {
@@ -520,7 +542,7 @@ export function buildUi(
         acquireFloat(T('events.lootCraft', { name, count }), name, count);
       }
       // 天降异宝特判由内容 def 的 showcase bool 驱动（ADR-016 裁决 ④）。
-      if ((data.source === 'gear' || data.source === 'craft') && rarityDefOf(String(data.rarity))?.showcase) {
+      if ((data.source === 'gear' || data.source === 'craft') && data.rarity !== undefined && rarityDefOf(data.rarity)?.showcase) {
         toast(T('events.lootShowcase', { name }));
       }
     },
@@ -532,73 +554,71 @@ export function buildUi(
     /* —— 角色操作流（买卖/佩戴/熔炼等侧栏流水平移档二）—— */
     sell: (event) => {
       const data = event.data;
-      flowFloat(T('events.sellLog', { name: String(data.itemName ?? ''), gained: Number(data.gained ?? 0) }));
+      flowFloat(T('events.sellLog', { name: data.itemName, gained: data.gained }));
     },
     buy: (event) => {
       const data = event.data;
       flowFloat(
         T('events.buyLog', {
-          name: String(data.itemName ?? ''),
-          count: Number(data.count ?? 0),
-          cost: Number(data.cost ?? 0),
+          name: data.itemName,
+          count: data.count,
+          cost: data.cost,
         }),
       );
     },
     'consumable:eat': (event) => {
       const data = event.data;
       if (data.kind === 'heal') {
-        flog(T('events.eatHeal', { name: String(data.itemName ?? ''), healed: Number(data.healed ?? 0) }), 't-sys');
+        flog(T('events.eatHeal', { name: data.itemName, healed: data.healed }), 't-sys');
       } else {
-        flowFloat(T('events.eatBuffLog', { name: String(data.itemName ?? ''), minutes: Number(data.minutes ?? 0) }));
+        flowFloat(T('events.eatBuffLog', { name: data.itemName, minutes: data.minutes }));
       }
     },
     'equip:wear': (event) => {
       // 佩戴（AC1）：轻量飘字短暂显示；旧醒目 toast 退场（常规动作非要紧事）。
       const data = event.data;
-      flowFloat(T('events.equipWearLog', { name: String(data.name ?? '') }));
+      flowFloat(T('events.equipWearLog', { name: data.name }));
     },
     'equip:remove': (event) => {
       const data = event.data;
-      flowFloat(T('events.equipRemoveLog', { name: String(data.name ?? '') }));
+      flowFloat(T('events.equipRemoveLog', { name: data.name ?? '' }));
     },
     'gear:smelt': (event) => {
       // 熔炼（#14）：{shard} 槽 = 器屑物品展示名（content 数据直出）。
       const data = event.data;
       flowFloat(
         T('events.gearSmelt', {
-          name: String(data.name ?? ''),
+          name: data.name,
           shard: nameOf(data.item),
-          count: Number(data.shards ?? 0),
+          count: data.shards,
         }),
       );
     },
     'gear:reforge': (event) => {
       const data = event.data;
-      flowFloat(T('events.gearReforge', { name: String(data.name ?? ''), tier: Number(data.tier ?? 0) }));
+      flowFloat(T('events.gearReforge', { name: data.name, tier: data.tier }));
     },
     'craft-fail': (event) => {
       const data = event.data;
-      flowFloat(T('events.craftFail', { name: String(data.recipeName ?? ''), exp: Number(data.exp ?? 0) }));
+      flowFloat(T('events.craftFail', { name: data.recipeName, exp: data.exp }));
     },
     'craft-halt': (event) => {
       // 缺料停炉：要紧中断保留红 toast；同文侧栏行退场（toast 化收口）。
       const data = event.data;
-      toast(T('events.craftHalt', { name: String(data.recipeName ?? '') }), 'red');
+      toast(T('events.craftHalt', { name: data.recipeName }), 'red');
     },
     'dungeon:floor': (event) => {
       // 层奖励行（侧栏平移）：{items} 槽由壳按 nameOf + itemListSep 拼装；
       // 道韵后缀（events.dungeonDaoYun）仅在实际入账时拼接。
       const data = event.data;
-      const items = Object.entries((data.items ?? {}) as Record<string, number>)
-        .map(([id, n]) => `${nameOf(id)}×${n}`)
-        .join(T('common.itemListSep'));
+      const items = itemsLine(data.items);
       const daoYunSuffix =
-        Number(data.daoYun ?? 0) > 0 ? T('events.dungeonDaoYun', { daoYun: Number(data.daoYun) }) : '';
+        data.daoYun > 0 ? T('events.dungeonDaoYun', { daoYun: Number(data.daoYun) }) : '';
       flowFloat(
         T('events.dungeonFloor', {
-          floor: Number(data.floor ?? 0),
-          floors: Number(data.floors ?? 0),
-          gold: Number(data.gold ?? 0),
+          floor: data.floor,
+          floors: data.floors,
+          gold: data.gold,
           items,
         }) + daoYunSuffix,
       );
@@ -607,9 +627,9 @@ export function buildUi(
       const data = event.data;
       flowFloat(
         T('events.dungeonLeave', {
-          name: String(data.dungeonName ?? ''),
-          floor: Number(data.floor ?? 0),
-          best: Number(data.best ?? 0),
+          name: data.dungeonName,
+          floor: data.floor,
+          best: data.best,
         }),
       );
     },
@@ -618,8 +638,8 @@ export function buildUi(
     levelup: (event) => {
       // AC3 升级保留醒目 toast；AC4 修为读数随升级飘出（普通周期不飘）。
       const data = event.data;
-      toast(T('events.levelupToast', { name: String(data.skillName ?? ''), level: Number(data.level ?? 0) }));
-      flowFloat(T('events.levelupLog', { name: String(data.skillName ?? ''), level: Number(data.level ?? 0) }));
+      toast(T('events.levelupToast', { name: data.skillName, level: data.level }));
+      flowFloat(T('events.levelupLog', { name: data.skillName, level: data.level }));
       const amount = pendingExp.get(data.skillId);
       if (amount !== undefined) {
         flowFloat(T('events.expGain', { amount }));
@@ -628,7 +648,7 @@ export function buildUi(
     },
     exp: (event) => {
       // AC4：修为读数只在升级与离线汇总出现——本事件只缓冲不呈现。
-      pendingExp.set(event.data.skillId, Number(event.data.amount ?? 0));
+      pendingExp.set(event.data.skillId, event.data.amount);
     },
     'achievement:unlock': (event) => {
       // AC3 成就保留醒目 toast（同文侧栏行退场）；奖励入账归引擎/修行录。
@@ -637,19 +657,19 @@ export function buildUi(
     },
     rebirth: (event) => {
       const data = event.data;
-      toast(T('events.rebirthToast', { daoYun: Number(data.daoYun ?? 0) }));
+      toast(T('events.rebirthToast', { daoYun: data.daoYun }));
       flowFloat(
         T('events.rebirthLog', {
-          xp: Number(data.totalXp ?? 0),
-          daoYun: Number(data.daoYun ?? 0),
-          count: Number(data.rebirths ?? 0),
+          xp: data.totalXp,
+          daoYun: data.daoYun,
+          count: data.rebirths,
         }),
       );
     },
     'talent:buy': (event) => {
       const data = event.data;
-      toast(T('events.talentBuyToast', { name: String(data.name ?? ''), cost: Number(data.cost ?? 0) }));
-      flowFloat(T('events.talentBuyLog', { name: String(data.name ?? ''), daoYun: Number(data.daoYun ?? 0) }));
+      toast(T('events.talentBuyToast', { name: data.name, cost: data.cost }));
+      flowFloat(T('events.talentBuyLog', { name: data.name, daoYun: data.daoYun }));
     },
 
     /* —— 秘境与离线流 —— */
@@ -657,45 +677,34 @@ export function buildUi(
       const data = event.data;
       toast(
         T('events.dungeonEnter', {
-          name: String(data.dungeonName ?? ''),
-          floor: Number(data.floor ?? 0),
-          floors: Number(data.floors ?? 0),
+          name: data.dungeonName,
+          floor: data.floor,
+          floors: data.floors,
         }),
       );
     },
     'dungeon:clear': (event) => {
       const data = event.data;
-      toast(T('events.dungeonClear', { name: String(data.dungeonName ?? ''), floors: Number(data.floors ?? 0) }));
+      toast(T('events.dungeonClear', { name: data.dungeonName, floors: data.floors }));
     },
     'offline-settled': (event) => {
       // AC3 离线汇总保留醒目 toast（摘要）；结算明细（含修为读数——AC4 离线
       // 汇总口径）平移档二。离线上限钳制时引擎双报（awaySeconds=真实离开 /
       // seconds=实际结算）：切 offlineCapped* 模板区分展示（#60）。
       const data = event.data;
-      const seconds = Math.max(0, Math.floor(Number(data.seconds) || 0));
+      const seconds = Math.max(0, Math.floor(data.seconds));
       const capped = data.capped === true;
-      const awaySeconds = Math.max(0, Math.floor(Number(data.awaySeconds) || 0)) || seconds;
-      const fmtDuration = (v: number): string => {
-        const h = Math.floor(v / 3600);
-        const m = Math.floor((v % 3600) / 60);
-        return h > 0
-          ? T('units.hourMinute', { h, m })
-          : m > 0
-            ? T('units.minute', { m })
-            : T('units.seconds', { v });
-      };
+      const awaySeconds = Math.max(0, Math.floor(data.awaySeconds)) || seconds;
       const away = fmtDuration(capped ? awaySeconds : seconds);
       const settled = fmtDuration(seconds);
-      const items = Object.entries((data.items ?? {}) as Record<string, number>)
-        .map(([id, n]) => `${nameOf(id)}×${n}`)
-        .join(T('common.itemListSep'));
+      const items = itemsLine(data.items);
       if (capped) {
         toast(
           T('events.offlineCappedToast', {
             away,
             settled,
-            activity: String(data.activityName ?? ''),
-            cycles: Number(data.cycles ?? 0),
+            activity: data.activityName,
+            cycles: data.cycles,
           }),
         );
         flowFloat(
@@ -703,22 +712,22 @@ export function buildUi(
             away,
             settled,
             items: items || T('events.offlineNoYield'),
-            exp: data.exp ? T('events.offlineExpSuffix', { exp: Number(data.exp) }) : '',
+            exp: data.exp > 0 ? T('events.offlineExpSuffix', { exp: data.exp }) : '',
           }),
         );
       } else {
         toast(
           T('events.offlineToast', {
             away,
-            activity: String(data.activityName ?? ''),
-            cycles: Number(data.cycles ?? 0),
+            activity: data.activityName,
+            cycles: data.cycles,
           }),
         );
         flowFloat(
           T('events.offlineLog', {
             away,
             items: items || T('events.offlineNoYield'),
-            exp: data.exp ? T('events.offlineExpSuffix', { exp: Number(data.exp) }) : '',
+            exp: data.exp > 0 ? T('events.offlineExpSuffix', { exp: data.exp }) : '',
           }),
         );
       }
@@ -737,11 +746,21 @@ export function buildUi(
   };
 
   events.subscribe((event) => {
-    // 分发点（#34）：handler 形参按判别键对齐、映射类型全键穷尽——引擎新增
-    // 事件类型而壳层漏接 = 编译错（比旧 switch 尾 never 断言更强）。联合入口
-    // 调用处统一切宽一处（异构事件表分发的 TS 常态），各 handler 内
-    // event.data 自动窄化（与旧 switch case 同律，载荷键拼错 = 编译错）。
-    (handlers[event.type] as (e: GameEvent) => void)(event);
+    // 订阅口守卫（#47 锐边①裁决，#34 收口）：类型纪律负责字段存在（死防御已随
+    // handler 表重写清理，#47 遗留②），运行期只兜两类契约外输入——未知 type 键
+    //（旧档/未来事件）与 handler 抛错（缺字段等畸形载荷）。二者都不许中断重绘
+    // 循环：warn 后收下该条，与 desktop.ts 缺-data 静默不上报同策略（两侧守卫
+    // 口径一致）。
+    const run = handlers[event.type as GameEvent['type']] as ((e: GameEvent) => void) | undefined;
+    if (run === undefined) {
+      console.warn(`[wendao] unhandled event type: ${String((event as { type?: unknown }).type)}`);
+    } else {
+      try {
+        run(event);
+      } catch (err) {
+        console.warn(`[wendao] event handler failed: ${String((event as { type?: unknown }).type)}`, err);
+      }
+    }
     scheduleRender();
   });
 
@@ -832,10 +851,14 @@ export function buildUi(
         // 页面挂载（D1：注册表查找分发，if/else 与坊市兜底退役）。
         pageEl.innerHTML = pages[activeTab].render({ st, snap, content, T });
         // 战斗日志持久体重挂（#34 持久层机制）：内容体自持于壳层，重建后按
-        // 锚点（页内 #flog 槽）replaceWith 重挂——flogBuffer 重放与滚动恢复
-        // hack 随之退役（节点身份延续 = 内容/滚动位自然存活）。
+        // 锚点（页内 #flog 槽）replaceWith 重挂——flogBuffer 重放 hack 退役。
+        // 换血会脱离文档流使真实浏览器 scrollTop 归零（happy-dom 不模拟滚动，
+        // 测试盲区），重挂即恢复滚底语义（日志跟随到底，非旧"滚动恢复 hack"）。
         const slot = pageEl.querySelector<HTMLElement>('#flog');
-        if (slot && slot !== flogBox) slot.replaceWith(flogBox);
+        if (slot && slot !== flogBox) {
+          slot.replaceWith(flogBox);
+          flogBox.scrollTop = flogBox.scrollHeight;
+        }
       }
     }
     // 实况区差量刷新（D3）：进度条/血条归所在页 update（#50 渲染管线的落点）。
