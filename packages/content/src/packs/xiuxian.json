@@ -714,7 +714,11 @@
           "dropsSuffix": " · 掉落 {drops}",
           "fightBtn": "挑战",
         "expSub": "修为 {into}/{need} · 距下一层还需 {left}",
-        "engagedBadge": "交战中"
+        "engagedBadge": "交战中",
+        "autoNone": "不处理",
+        "autoSell": "自动售卖",
+        "autoSmelt": "自动熔炼",
+        "autoCap": "≤{rarity}"
         },
         "bag": {
           "title": "乾坤袋",

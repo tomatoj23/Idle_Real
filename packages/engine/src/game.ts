@@ -105,7 +105,7 @@ import type {
   LedgerOrigin,
   LedgerSource,
 } from './ledger.js';
-import { AUTO_MODES, recipeAutoRuleOf } from './ledger.js';
+import { AUTO_MODES, enemyAutoRuleOf, recipeAutoRuleOf } from './ledger.js';
 
 export interface CreateGameOptions {
   /** 由 content 包校验过的内容包；引擎零内容感知，仅透明持有。 */
@@ -440,6 +440,9 @@ export function createGame(options: CreateGameOptions): Game {
     via: String(index),
   });
 
+  /** 战斗掉落的挂点 meta（#36）：via = 敌 id（规则表键），掉落恒出自主敌。 */
+  const combatMetaOf = (via: string): LedgerMeta => ({ origin: 'idle', via });
+
   function emitLedger(data: LedgerData): void {
     events.emit({ type: 'ledger', time, data });
   }
@@ -452,11 +455,11 @@ export function createGame(options: CreateGameOptions): Game {
   });
 
   /**
-   * 统一入账判定接缝（#35）：「来源→规则→入账转化」单一判定。只有挂规则的
-   * 来源过判定——配方（craft 产出，本票）与敌人（combat 掉落，#36 复用本
-   * 接缝）两类；采集/坊市购买/成就奖励/兵解保留资产等无挂点来源直接入袋，
-   * 不过判定。规则本体 = 玩家设置的配方规则表（state.recipeAuto）；命中即
-   * 「入账即折」，产出不进乾坤袋直接折算并发成对事件（D10）。
+   * 统一入账判定接缝（#35/#36）：「来源→规则→入账转化」单一判定。只有挂规则的
+   * 来源过判定——配方（craft 产出）与敌人（combat 掉落）两类；采集/坊市购买/
+   * 成就奖励/兵解保留资产等无挂点来源直接入袋，不过判定。规则本体 = 玩家设置
+   * 的规则表（craft = state.recipeAuto 配方下标键 / combat = state.enemyAuto
+   * 敌 id 键）；命中即「入账即折」，产出不进乾坤袋直接折算并发成对事件（D10）。
    */
   function foldDecisionOf(
     source: LedgerSource,
@@ -465,13 +468,13 @@ export function createGame(options: CreateGameOptions): Game {
   ): LedgerAuto | undefined {
     if (source !== 'craft' && source !== 'combat') return undefined;
     if (via === undefined) return undefined;
-    // 敌人规则表（combat 挂点，键 = 敌人 id）归 #36 填充；本票只有配方挂点。
-    const rule =
-      source === 'craft' && Object.hasOwn(state.recipeAuto, via) ? state.recipeAuto[via] : undefined;
+    // 挂点两表一键一义（#36 落地）：秘境/斗法同一敌人共用敌 id 键，场景无关。
+    const table = source === 'craft' ? state.recipeAuto : state.enemyAuto;
+    const rule = Object.hasOwn(table, via) ? table[via] : undefined;
     if (!rule) return undefined; // 缺省不处理 / 未知挂点安全回退
     if (rarity === undefined) {
-      // 普通产出（无稀有度，丹药/材料配方）：售卖态该来源全部产出折灵石；
-      // 熔炼态无装备语义（器屑按稀有度档位）——照常入袋。
+      // 普通产出（无稀有度：丹药/材料配方产出、敌人材料掉落）：售卖态该来源
+      // 全部产出折灵石；熔炼态无装备语义（器屑按稀有度档位）——照常入袋。
       return rule.mode === 'sell' ? 'sell' : undefined;
     }
     // 装备产出：稀有度阈值门（≤所选档；档位序 = 包内 rarities 数组序，低→高）。
@@ -1094,8 +1097,8 @@ export function createGame(options: CreateGameOptions): Game {
     },
     ledger: {
       gold: (delta, source) => ledgerGold(delta, source, META_IDLE),
-      item: (itemId, count, source) => ledgerItem(itemId, count, source, META_IDLE),
-      gearIncome: (gear, source) => ledgerGearIncome(gear, source, META_IDLE),
+      item: (itemId, count, source, via) => ledgerItem(itemId, count, source, combatMetaOf(via)),
+      gearIncome: (gear, source, via) => ledgerGearIncome(gear, source, combatMetaOf(via)),
       exp: (skill, amount) => grantExp(skill, amount, false, { source: 'combat', meta: META_IDLE }),
       daoYun: (delta, source) => ledgerDaoYun(delta, source, META_IDLE),
     },
@@ -2063,7 +2066,7 @@ export function createGame(options: CreateGameOptions): Game {
         case 'craft:auto': {
           // 配方自动化规则设置（#35）：三态互斥单选 + 稀有度阈值。mode='none'
           // = 清除该配方规则（回缺省不处理）。玩家设置变更非资产收支——不入
-          // 咽喉、不记修行录、不发事件（与 combat:auto 同律）。
+          // 咽喉、不记修行录、不发事件（与自动斗法开关 combat:auto 同律）。
           const payload = action.payload;
           const index = payload?.index;
           // 三态经注册表收窄（AUTO_MODES）：注入面 mode 非法 = find 落空 → bad-payload。
@@ -2104,6 +2107,43 @@ export function createGame(options: CreateGameOptions): Game {
           }
           // 稳定引用名随写入冻结（ADR-015）：恢复按「下标在册 + 对名一致」双校验。
           state.recipeAuto[key] = recipeAutoRuleOf(mode, isGear ? maxRarity : undefined, recipe.name);
+          return;
+        }
+
+        case 'enemy:auto': {
+          // 敌人自动化规则设置（#36）：三态互斥单选 + 稀有度阈值。mode='none'
+          // = 清除该敌人规则（回缺省不处理）。玩家设置变更非资产收支——不入
+          // 咽喉、不记修行录、不发事件（与 craft:auto 同律）。
+          const payload = action.payload;
+          const enemyId = payload?.enemyId;
+          // 三态经注册表收窄（AUTO_MODES）：注入面 mode 非法 = find 落空 → bad-payload。
+          const mode = AUTO_MODES.find((m) => m === payload?.mode);
+          if (
+            typeof enemyId !== 'string' ||
+            findEnemy(content, enemyId) === undefined ||
+            mode === undefined
+          ) {
+            reject(action.type, 'bad-payload');
+            return;
+          }
+          // 存在性走 rarityRankOf 精确匹配（findRarity 未命中回退第一档，会放行坏键）。
+          const maxRarity = payload?.maxRarity;
+          if (maxRarity !== undefined && rarityRankOf(content, maxRarity) === undefined) {
+            reject(action.type, 'bad-payload');
+            return;
+          }
+          if (mode === 'none') {
+            delete state.enemyAuto[enemyId];
+            return;
+          }
+          // 规则域一致性（与恢复面同律）：非 none 态恒带在册阈值（UI 恒补最低档；
+          // 缺失 = bad-payload）——「阈值缺失的规则」在合法路径不可构造（决策侧的
+          // 安全回退仍留作防御纵深）。
+          if (maxRarity === undefined) {
+            reject(action.type, 'bad-payload');
+            return;
+          }
+          state.enemyAuto[enemyId] = enemyAutoRuleOf(mode, maxRarity);
           return;
         }
 

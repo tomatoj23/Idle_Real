@@ -12,7 +12,10 @@ import {
   expToNext,
   findBossOf,
   levelFromXp,
+  AUTO_MODES,
+  type AutoMode,
   type GameState,
+  type LedgerAuto,
   type ProgressionParams,
   type SaveData,
 } from '@wendao/engine';
@@ -301,6 +304,86 @@ export const consumablesHtml = (content: ContentPack, st: GameState): string =>
         `<button class="btn btn-consumable" data-act="eat" data-item="${item.id}">${esc(item.icon)} ${esc(item.name)} ×${st.items[item.id]}</button>`,
     )
     .join('');
+
+/* ---------- 自动化规则控件行（#35 炼制 / #36 敌人共用零件） ---------- */
+
+/** 三态选项文案键（Record<AutoMode> 穷尽：注册表加态漏文案 = 编译错）。 */
+const AUTO_LABEL_KEYS: Record<AutoMode, string> = {
+  none: 'autoNone',
+  sell: 'autoSell',
+  smelt: 'autoSmelt',
+};
+
+/**
+ * 自动化规则控件行：三态单选（不处理/自动售卖/自动熔炼，互斥，选项值遍历
+ * AUTO_MODES 注册表禁手拼）+ 稀有度阈值（≤所选档）。两态退化：无装备面
+ * （gearFace=false，丹药/材料产出配方）不渲染熔炼项与阈值项；无器屑经济的包
+ * （canSmelt=false）熔炼项不可选——注入存量的不可选态保留选中态回显（disabled
+ * 选项），防选择器静默换态谎报。定位键随页而异（craft=data-index 配方下标 /
+ * combat=data-enemy 敌 id），派发进当页 handleAction 的 'autorule' 同名动作
+ *（change 委托路由，解析共用 autoRulePayloadOf）。
+ */
+export function autoRuleHtml(parts: {
+  T: ShellText;
+  /** 文本键命名空间前缀（pages.craft / pages.combat），消费 autoNone/autoSell/autoSmelt/autoCap 四键。 */
+  ns: string;
+  /** 定位键属性与值（data-<keyAttr>="<keyVal>"，当页 handler 回读）。 */
+  keyAttr: 'index' | 'enemy';
+  keyVal: string | number;
+  /** 当前规则（undefined = 缺省不处理）。 */
+  rule: { readonly mode?: LedgerAuto; readonly maxRarity?: string } | undefined;
+  /** 装备面（产出/掉落有稀有度语义）：熔炼项与阈值项的渲染门。 */
+  gearFace: boolean;
+  /** 熔炼可选（器屑经济在案，PageEnv.canSmelt）。 */
+  canSmelt: boolean;
+  rarities: readonly { readonly id: string; readonly name: string }[];
+}): string {
+  const { T, ns, keyAttr, keyVal, rule, gearFace, canSmelt, rarities } = parts;
+  const mode = rule?.mode ?? 'none';
+  const smeltPickable = gearFace && canSmelt;
+  const options = AUTO_MODES.filter((m) => m !== 'smelt' || smeltPickable || mode === 'smelt').map(
+    (m) => {
+      const pickable = m !== 'smelt' || smeltPickable;
+      return `<option value="${m}"${mode === m ? ' selected' : ''}${pickable ? '' : ' disabled'}>${esc(T(`${ns}.${AUTO_LABEL_KEYS[m]}`))}</option>`;
+    },
+  );
+  const cap0 = rarities[0]?.id ?? '';
+  const selects = [
+    `<select class="auto-mode" data-act="autorule" data-${keyAttr}="${esc(String(keyVal))}">${options.join('')}</select>`,
+  ];
+  if (gearFace && mode !== 'none') {
+    const cap = rule?.maxRarity ?? cap0;
+    const capOptions = rarities
+      .map(
+        (r) =>
+          `<option value="${esc(r.id)}"${r.id === cap ? ' selected' : ''}>${esc(T(`${ns}.autoCap`, { rarity: r.name }))}</option>`,
+      )
+      .join('');
+    selects.push(
+      `<select class="auto-cap" data-act="autorule" data-${keyAttr}="${esc(String(keyVal))}">${capOptions}</select>`,
+    );
+  }
+  return `<div class="auto-rule">${selects.join('')}</div>`;
+}
+
+/**
+ * 自动化规则派发解析（craft/combat 两页 'autorule' 动作共用）：读 .auto-rule
+ * 行内选择器得三态 + 阈值；三态经 AUTO_MODES 注册表收窄（非法值 = undefined
+ * 不派发），阈值缺选回退最低档（rarities 数组序首项——只折寻常，高品绝不误折；
+ * 存在性由引擎守卫把关）。
+ */
+export function autoRulePayloadOf(
+  target: HTMLElement,
+  rarities: readonly { readonly id: string }[],
+): { mode: AutoMode; maxRarity: string | undefined } | undefined {
+  const box = target.closest<HTMLElement>('.auto-rule');
+  const mode = AUTO_MODES.find(
+    (m) => m === box?.querySelector<HTMLSelectElement>('.auto-mode')?.value,
+  );
+  if (mode === undefined) return undefined;
+  const capEl = box?.querySelector<HTMLSelectElement>('.auto-cap');
+  return { mode, maxRarity: capEl?.value || rarities[0]?.id || undefined };
+}
 
 /* ---------- 实况刷新共用体（D3：页级 update 的单一实现） ---------- */
 

@@ -822,6 +822,8 @@ export function buildUi(
       // 配方自动化规则（#35）进签名：同类玩家设置（autoFight/autoEat）同律——
       // 规则变更必须触发重绘，否则下拉选中态静默 stale（不依赖派发路径的强刷兜底）。
       Object.entries(st.recipeAuto ?? {}).map(([k, r]) => [k, r.mode, r.maxRarity ?? '']).sort(),
+      // 敌人自动化规则（#36）同律进签名（键 + 三态 + 阈值摘要）。
+      Object.entries(st.enemyAuto ?? {}).map(([k, r]) => [k, r.mode, r.maxRarity]).sort(),
       Object.keys(st.lastEncounter).length,
       st.rebirths,
       st.daoYun,

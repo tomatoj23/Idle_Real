@@ -633,6 +633,14 @@ export interface ShellPageCombat {
   readonly expSub: string;
   /** 战斗中敌人列表·当前目标徽标（战斗不打断，换敌走 combat:start 替换语义）。 */
   readonly engagedBadge: string;
+  /** 敌人自动化三态选项·不处理（#36，缺省）。 */
+  readonly autoNone: string;
+  /** 敌人自动化三态选项·自动售卖（#36）。 */
+  readonly autoSell: string;
+  /** 敌人自动化三态选项·自动熔炼（#36；无器屑经济的包两态退化不可选——存量熔炼态仅回显为 disabled 选项防谎报）。 */
+  readonly autoSmelt: string;
+  /** 稀有度阈值选项（#36，≤所选档的装备掉落才折）；槽位 {rarity}（档名）。 */
+  readonly autoCap: string;
 }
 
 /** 乾坤袋页文案。 */

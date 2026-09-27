@@ -54,7 +54,8 @@ export type GameAction =
   | RebirthPerformAction
   | TalentBuyAction
   | JournalAnchorAction
-  | CraftAutoAction;
+  | CraftAutoAction
+  | EnemyAutoAction;
 
 /** 战斗入场来源动作域（enterCombat/enterFloor 的 actionType 参数，#44 入场单序列）。 */
 export type CombatEntryAction = 'combat:start' | 'dungeon:enter';
@@ -198,6 +199,21 @@ export interface CraftAutoAction {
   readonly type: 'craft:auto';
   readonly payload: {
     readonly index?: number;
+    readonly mode?: AutoMode;
+    readonly maxRarity?: string;
+  };
+}
+
+/**
+ * 敌人自动化规则设置（#36）：三态互斥单选 + 稀有度阈值（≤所选档）。
+ * mode='none' = 清除该敌人规则（回缺省不处理）；maxRarity 恒随非 none 态
+ * 在册（装备掉落阈值门）。enemyId = 包内 enemies id——同一敌人在秘境沿用
+ * 此规则（键 = 敌 id，场景无关）。
+ */
+export interface EnemyAutoAction {
+  readonly type: 'enemy:auto';
+  readonly payload: {
+    readonly enemyId?: string;
     readonly mode?: AutoMode;
     readonly maxRarity?: string;
   };

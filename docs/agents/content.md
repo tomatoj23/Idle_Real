@@ -235,6 +235,11 @@ schema 无 rank 字段）；validate 语义关卡保证 `mult` 随序单调不�
   `config.gear.shardItem`（器屑经济）时可选，无熔炼玩法的包两态退化（存量熔炼态
   仅回显为 disabled 选项防谎报）；阈值选项仅装备产出配方渲染（丹药/材料配方无
   稀有度）。
+- **敌人自动化控件**（#36）：`pages.combat` 同名四键——斗法页敌人列表每行
+  三态单选 + 稀有度阈值（阈值约束装备掉落：售卖态普通物品直接卖、装备≤阈值卖；
+  熔炼态仅装备≤阈值折器屑、普通物品照常入袋）；同一敌人（敌 id）在秘境沿用
+  斗法页配置；autoSmelt 门控与 craft 侧同律（shardItem + 存量熔炼态 disabled
+  回显）。
 - 键分组语义：`events.*` 键 = 引擎事件类型协议面（loot/victory/defeat/
   consumable:eat/equip:wear/levelup/sell/buy/reject/offline-settled；
   #5 起含 craft-fail/craft-halt 的 craftFail/craftHalt 与 loot source=craft

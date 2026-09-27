@@ -142,10 +142,10 @@ export interface CombatRunDeps {
   /** 入账咽喉窄面（#39）：灵石/物品/装备/修为/道韵五路，战斗侧恒 idle 归段。 */
   readonly ledger: {
     gold(delta: number, source: LedgerSource): void;
-    /** 物品入袋（折叠挂点在内）；返回是否实际入袋（旧 loot 门控，D10）。 */
-    item(itemId: string, count: number, source: LedgerSource): boolean;
-    /** 装备实例入账（折叠挂点在内）；返回是否实际入袋。 */
-    gearIncome(gear: GearInstance, source: LedgerSource): boolean;
+    /** 物品入袋（折叠挂点在内）；via = 敌 id（#36 规则表键）。返回是否实际入袋（旧 loot 门控，D10）。 */
+    item(itemId: string, count: number, source: LedgerSource, via: string): boolean;
+    /** 装备实例入账（折叠挂点在内）；via = 敌 id（#36 规则表键）。返回是否实际入袋。 */
+    gearIncome(gear: GearInstance, source: LedgerSource, via: string): boolean;
     /** 斗法修为实发（xpMult 消费在咽喉内；返回实发值）。 */
     exp(skill: SkillView, amount: number): number;
     daoYun(delta: number, source: LedgerSource): void;
@@ -292,14 +292,16 @@ export function createCombatRun(deps: CombatRunDeps): CombatRun {
   /**
    * 材料掉落掷定（victory 消费；enemy.drops 与 bosses[].drops 两池同式叠加，
    * 命中才入账 + 播报 + 计入事件载荷 drops 表；掷点次序与旧两段循环一致）。
+   * enemyId 透传为入账挂点（#36 敌人规则表键——折叠即不入袋不播报不入表）。
    */
   function rollDrops(
     entries: readonly { item?: string; chance: number }[] | undefined,
     drops: string[],
+    enemyId: string,
   ): void {
     for (const drop of entries ?? []) {
       if (drop.item && random() < drop.chance) {
-        if (deps.ledger.item(drop.item, 1, 'combat')) {
+        if (deps.ledger.item(drop.item, 1, 'combat', enemyId)) {
           emitLoot(drop.item, 1, 'drop');
           drops.push(drop.item);
         }
@@ -530,10 +532,10 @@ export function createCombatRun(deps: CombatRunDeps): CombatRun {
     deps.ledger.gold(goldGain, 'combat');
 
     const drops: string[] = [];
-    rollDrops(enemy.drops, drops);
+    rollDrops(enemy.drops, drops, enemy.id);
 
     // Boss 专属掉落（#8）：与 enemy.drops 同机制叠加掷点（bosses[].drops）。
-    rollDrops(findBossOf(content, enemy.id)?.drops, drops);
+    rollDrops(findBossOf(content, enemy.id)?.drops, drops, enemy.id);
 
     let gearDropName: string | undefined;
     const gearDrop = findGearDrop(content, enemy.id);
@@ -546,7 +548,7 @@ export function createCombatRun(deps: CombatRunDeps): CombatRun {
       });
       if (gear) {
         deps.gearSeq.commit(gear.uid);
-        if (deps.ledger.gearIncome(gear, 'combat')) {
+        if (deps.ledger.gearIncome(gear, 'combat', enemy.id)) {
           gearDropName = gearDisplayName(gear);
           emit({
             type: 'loot',

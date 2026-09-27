@@ -291,7 +291,7 @@
             },
             "combat": {
               "type": "object",
-              "required": ["title", "subtitle", "enemyMissing", "resting", "enemyHp", "selfStats", "fleeBtn", "autoFightOn", "autoFightOff", "autoEatOn", "autoEatOff", "noConsumables", "enemyStats", "enemyGold", "dropsSuffix", "fightBtn", "expSub", "engagedBadge"],
+              "required": ["title", "subtitle", "enemyMissing", "resting", "enemyHp", "selfStats", "fleeBtn", "autoFightOn", "autoFightOff", "autoEatOn", "autoEatOff", "noConsumables", "enemyStats", "enemyGold", "dropsSuffix", "fightBtn", "expSub", "engagedBadge", "autoNone", "autoSell", "autoSmelt", "autoCap"],
               "additionalProperties": false,
               "properties": {
                 "title": { "$ref": "#/definitions/line" },
@@ -311,7 +311,11 @@
                 "dropsSuffix": { "$ref": "#/definitions/template", "description": "敌人卡掉落后缀；槽位 {drops}" },
                 "fightBtn": { "$ref": "#/definitions/template", "description": "挑战按钮（无槽位）" },
                 "expSub": { "$ref": "#/definitions/template", "description": "斗法修为进度副行（战斗中信息面）；槽位 {into}/{need}/{left}" },
-                "engagedBadge": { "$ref": "#/definitions/template", "description": "战斗中敌人列表·当前目标徽标（无槽位）" }
+                "engagedBadge": { "$ref": "#/definitions/template", "description": "战斗中敌人列表·当前目标徽标（无槽位）" },
+                "autoNone": { "$ref": "#/definitions/line", "description": "敌人自动化三态选项·不处理（#36，缺省）" },
+                "autoSell": { "$ref": "#/definitions/line", "description": "敌人自动化三态选项·自动售卖（#36）" },
+                "autoSmelt": { "$ref": "#/definitions/line", "description": "敌人自动化三态选项·自动熔炼（#36；无器屑经济的包两态退化不可选——存量熔炼态仅回显为 disabled 选项防谎报）" },
+                "autoCap": { "$ref": "#/definitions/template", "description": "稀有度阈值选项（#36，≤所选档的装备掉落才折）；槽位 {rarity}（档名）" }
               }
             },
             "bag": {

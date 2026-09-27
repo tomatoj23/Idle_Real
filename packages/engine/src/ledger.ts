@@ -79,6 +79,15 @@ export const AUTO_MODES = ['none', 'sell', 'smelt'] as const;
 export type AutoMode = (typeof AUTO_MODES)[number];
 
 /**
+ * 规则条目可存三态收窄（注册表驱动，禁手拼三态值）：'none' = 缺省不落条目
+ * （回缺省不处理），非法值落空。恢复面（state.ts 两规则表）共用。
+ */
+export function ruleModeOf(value: unknown): LedgerAuto | undefined {
+  const mode = AUTO_MODES.find((m) => m === value);
+  return mode !== undefined && mode !== 'none' ? mode : undefined;
+}
+
+/**
  * 配方自动处理规则（#35 规则本体，原 D3 挂点的填充物）：键 = 配方下标
  * （canonical 数字串），值 = 三态之一 + 稀有度阈值。引擎状态（玩家设置
  * 非资产）：随档、云存档、兵解不清；缺省不处理。
@@ -89,7 +98,7 @@ export type AutoMode = (typeof AUTO_MODES)[number];
  * 阈值缺失/未知稀有度 = 安全回退不折。
  *
  * 判定与转化本体在 game.ts 入账咽喉（foldDecisionOf「来源→规则→入账
- * 转化」单一接缝）；敌人挂点（combat 掉落）的同构规则表归 #36 复用。
+ * 转化」单一接缝）；敌人挂点（combat 掉落）的同构规则表 = EnemyAutoRule。
  */
 export interface RecipeAutoRule {
   readonly mode: LedgerAuto;
@@ -99,6 +108,22 @@ export interface RecipeAutoRule {
   readonly name: string;
 }
 
+/**
+ * 敌人自动处理规则（#36）：键 = 敌人 id（ADR-015 id 发布即不可变，无需对名
+ * 守卫），值 = 三态之一 + 稀有度阈值。语义与配方规则同构：售卖态该怪全部
+ * 掉落折灵石（普通物品直接卖、装备≤阈值卖）；熔炼态仅装备≤阈值折器屑、
+ * 普通物品照常入袋（材料是炼丹经济上游，防误卖）。同一敌人在秘境沿用
+ * 斗法页配置（键 = 敌 id，场景无关）。缺省不处理；随档、兵解不清。
+ *
+ * 阈值域一致性（与配方侧同律）：规则条目恒带在册阈值（写入面缺阈值 =
+ * bad-payload、恢复面丢键），决策侧的缺阈值安全回退留作防御纵深。
+ */
+export interface EnemyAutoRule {
+  readonly mode: LedgerAuto;
+  /** 稀有度阈值键（≤该档折）；装备掉落消费。 */
+  readonly maxRarity: string;
+}
+
 /** 规则条目构造单一形状（写入面 game.ts craft:auto 与恢复面 state.ts 共用，防存档形状漂移）。 */
 export function recipeAutoRuleOf(
   mode: LedgerAuto,
@@ -106,4 +131,9 @@ export function recipeAutoRuleOf(
   name: string,
 ): RecipeAutoRule {
   return { mode, ...(maxRarity !== undefined ? { maxRarity } : {}), name };
+}
+
+/** 敌人规则条目构造单一形状（写入面 game.ts enemy:auto 与恢复面 state.ts 共用）。 */
+export function enemyAutoRuleOf(mode: LedgerAuto, maxRarity: string): EnemyAutoRule {
+  return { mode, maxRarity };
 }

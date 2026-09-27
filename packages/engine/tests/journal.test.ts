@@ -418,6 +418,128 @@ describe('#35 · 在线自动转化记账（AC1：逐项自动条目）', () => 
   });
 });
 
+describe('#36 · 战斗自动转化记账（AC1：修行录自动条目红线）', () => {
+  it('在线击杀自动售卖：战斗段明细行带 auto 标记（被折标记行 + 折得物聚合行），完全静默', () => {
+    const clock = new ManualClock();
+    const game = createGame({
+      content: makeCombatPack(),
+      clock,
+      rng: () => 0.1, // core1 材料掉中（<0.25）、器胚掉中（<0.5）、稀有度掷寻常（0.1×100=10<70）
+      save: {
+        version: 1,
+        time: 0,
+        state: {
+          gold: 0,
+          hp: 112,
+          items: {},
+          skills: { fight: { xp: 0 } },
+          activity: null,
+          autoFight: false,
+          enemyAuto: { e1: { mode: 'sell', maxRarity: 'common' } },
+        },
+      },
+    });
+    let victories = 0;
+    game.events.subscribe((e) => {
+      if (e.type === 'victory') victories += 1;
+    });
+    game.dispatch({ type: 'combat:start', payload: { enemyId: 'e1' } });
+    for (let i = 0; i < 3000 && victories < 1; i++) {
+      clock.advance(100);
+      game.tick(100);
+    }
+    expect(victories).toBe(1); // 防测试空转
+    clock.advance(3);
+    game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } }); // 闭战斗段成条
+
+    const records = recordsOf(game);
+    // 不逐件成条：零点条目（全部账目归战斗段）。
+    expect(records.filter((r) => r.kind === 'point')).toEqual([]);
+    const rec = records.find((r) => r.kind === 'combat');
+    expect(rec).toMatchObject({ kind: 'combat', wins: 1, losses: 0, exp: 16 });
+    if (rec?.kind !== 'combat') return;
+    // 明细行：胜利灵石 + 被折标记（count=0 会计不计，带 auto 标记）+ 折得物聚合行
+    //（两笔折得同键聚一行）+ 修为。折得灵石 25（core1 卖价）+ 25（器胚寻常卖价）。
+    expect(rec.lines).toEqual([
+      { source: 'combat', kind: 'currency', id: 'gold', count: 4, gold: 4 },
+      { source: 'combat', kind: 'item', id: 'core1', count: 0, gold: 0, auto: 'sell' },
+      { source: 'combat', kind: 'currency', id: 'gold', count: 50, gold: 50, auto: 'sell' },
+      {
+        source: 'combat',
+        kind: 'gear',
+        id: 'scorp_tail',
+        count: 0,
+        gold: 0,
+        rarity: 'common',
+        auto: 'sell',
+      },
+      { source: 'combat', kind: 'exp', id: 'fight', count: 16, gold: 0 },
+    ]);
+  });
+
+  it('在线击杀自动熔炼：普通物品行照常、装备折叠行带 auto:smelt 标记 + 折得物行（红线双模式）', () => {
+    const clock = new ManualClock();
+    const game = createGame({
+      // 熔炼折叠需器屑经济：makeCombatPack + shard 装配 + rarities 产屑数。
+      content: {
+        ...makeCombatPack(),
+        items: [
+          ...makeCombatPack().items,
+          { id: 'shard', name: '器屑', icon: '屑', type: 'mat', sell: 3 },
+        ],
+        rarities: makeCombatPack().rarities.map((r) => ({ ...r, smelt: 1 })),
+        config: { gear: { shardItem: 'shard', reforgeCost: 5 } },
+      } as GameContent,
+      clock,
+      rng: () => 0.1,
+      save: {
+        version: 1,
+        time: 0,
+        state: {
+          gold: 0,
+          hp: 112,
+          items: {},
+          skills: { fight: { xp: 0 } },
+          activity: null,
+          autoFight: false,
+          enemyAuto: { e1: { mode: 'smelt', maxRarity: 'common' } },
+        },
+      },
+    });
+    let victories = 0;
+    game.events.subscribe((e) => {
+      if (e.type === 'victory') victories += 1;
+    });
+    game.dispatch({ type: 'combat:start', payload: { enemyId: 'e1' } });
+    for (let i = 0; i < 3000 && victories < 1; i++) {
+      clock.advance(100);
+      game.tick(100);
+    }
+    expect(victories).toBe(1); // 防测试空转
+    clock.advance(3);
+    game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } }); // 闭战斗段成条
+
+    const rec = recordsOf(game).find((r) => r.kind === 'combat');
+    if (rec?.kind !== 'combat') return;
+    // 明细行：胜利灵石 + 材料照常入袋行 + 被折标记（auto:smelt）+ 折得器屑行 + 修为。
+    expect(rec.lines).toEqual([
+      { source: 'combat', kind: 'currency', id: 'gold', count: 4, gold: 4 },
+      { source: 'combat', kind: 'item', id: 'core1', count: 1, gold: 25 },
+      {
+        source: 'combat',
+        kind: 'gear',
+        id: 'scorp_tail',
+        count: 0,
+        gold: 0,
+        rarity: 'common',
+        auto: 'smelt',
+      },
+      { source: 'combat', kind: 'item', id: 'shard', count: 1, gold: 3, auto: 'smelt' },
+      { source: 'combat', kind: 'exp', id: 'fight', count: 16, gold: 0 },
+    ]);
+  });
+});
+
 describe('#33 · 流量计数器与锚点', () => {
   it('计数器独立开放键：不进 STAT_KEYS、成就判定读数不受其影响', () => {
     const clock = new ManualClock();

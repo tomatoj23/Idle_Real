@@ -13,6 +13,8 @@ import {
   rebirthGateOf,
 } from '@wendao/engine';
 import {
+  autoRuleHtml,
+  autoRulePayloadOf,
   bossDecoOf,
   combatLiveUpdater,
   consumablesHtml,
@@ -85,6 +87,18 @@ export function createCombatPage(env: PageEnv): PageView {
                 ? `<span class="act-lockmsg">${esc(lockMsg)}</span>`
                 : `<button class="btn" data-act="fight" data-enemy="${enemy.id}">${esc(T('pages.combat.fightBtn'))}</button>`
             }
+            ${autoRuleHtml({
+              T,
+              ns: 'pages.combat',
+              keyAttr: 'enemy',
+              keyVal: enemy.id,
+              rule: st.enemyAuto[enemy.id],
+              // 敌人掉落恒可含装备（物品+器胚双池）：三态+阈值每行齐备，
+              // 阈值只约束装备掉落（票面「每行控件(三态+阈值)」）。
+              gearFace: true,
+              canSmelt: env.canSmelt,
+              rarities: content.rarities,
+            })}
           </div>
         </article>`;
       })
@@ -201,6 +215,25 @@ export function createCombatPage(env: PageEnv): PageView {
         case 'eat':
           env.dispatch({ type: 'consumable:eat', payload: { item: target.dataset.item } });
           return;
+        case 'autorule': {
+          // 敌人自动化规则派发（#36）：三态单选/阈值共用本动作，整条规则重写
+          //（互斥单选 = 单字段覆盖；解析共用 autoRulePayloadOf）。非 none 态
+          // 恒带阈值（首启默认最低档 = 只折寻常，高品绝不误折）。
+          const parsed = autoRulePayloadOf(target, env.content.rarities);
+          if (!parsed) return;
+          env.dispatch({
+            type: 'enemy:auto',
+            payload: {
+              enemyId: target.dataset.enemy ?? '',
+              mode: parsed.mode,
+              ...(parsed.mode !== 'none' && parsed.maxRarity !== undefined
+                ? { maxRarity: parsed.maxRarity }
+                : {}),
+            },
+          });
+          env.render();
+          return;
+        }
       }
     },
   };

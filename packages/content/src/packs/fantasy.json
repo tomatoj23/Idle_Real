@@ -648,7 +648,11 @@
           "dropsSuffix": " Also drops: {drops}",
           "fightBtn": "Challenge",
           "expSub": "XP {into}/{need} · {left} to next level",
-          "engagedBadge": "In battle"
+          "engagedBadge": "In battle",
+          "autoNone": "Do nothing",
+          "autoSell": "Auto-sell",
+          "autoSmelt": "Auto-smelt",
+          "autoCap": "≤{rarity}"
         },
         "bag": {
           "title": "Bag",

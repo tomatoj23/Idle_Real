@@ -18,8 +18,8 @@
  * 节的嵌套层逐层剔键）；透传键在快照面逐键深拷，壳层改写不再写穿引擎态。
  */
 import type { GameContent, SaveData } from './types.js';
-import type { RecipeAutoRule } from './ledger.js';
-import { recipeAutoRuleOf } from './ledger.js';
+import type { EnemyAutoRule, RecipeAutoRule } from './ledger.js';
+import { enemyAutoRuleOf, recipeAutoRuleOf, ruleModeOf } from './ledger.js';
 import { saveRejection } from './save.js';
 import {
   combatParamsOf,
@@ -155,6 +155,12 @@ export type GameState = {
    * 随档、云存档、兵解不清（default-keep）。
    */
   recipeAuto: Record<string, RecipeAutoRule>;
+  /**
+   * 敌人自动处理规则表（#36）：敌人 id 键 → 三态+阈值（EnemyAutoRule）；
+   * 缺省不处理（无条目 = 不处理）。同一敌人在秘境沿用（键 = 敌 id，场景
+   * 无关）。玩家设置非资产：随档、云存档、兵解不清（default-keep）。
+   */
+  enemyAuto: Record<string, EnemyAutoRule>;
   /** 同对手上一战记录（对照语基准）。 */
   lastEncounter: Record<string, EncounterRecord>;
   /** 兵解次数（#6）。 */
@@ -653,8 +659,8 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
         const recipe = findRecipe(env.content, index);
         if (!recipe) continue; // 未注册配方键丢弃（内容包变更后未知 id 回退不处理）
         if (!isObj(entry)) continue;
-        const mode = entry.mode;
-        if (mode !== 'sell' && mode !== 'smelt') continue; // mode 非法丢弃该键
+        const mode = ruleModeOf(entry.mode);
+        if (mode === undefined) continue; // mode 非法/'none' 残键丢弃该键
         if (entry.name !== recipe.name) continue; // 稳定引用（ADR-015）：下标对名不符 = 重排/改名，宁弃不换目标
         const maxRarity = entry.maxRarity;
         // 规则域一致性（#35 复核收口，与写入面同律）：装备产出的规则必带在册阈值
@@ -673,6 +679,31 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
     },
     // 玩家设置非资产：不进内容声明式 reset/keep 表——default-keep 机制自动
     // 保留（兵解不清，票面裁决），与 autoFight/autoEat 同律。
+  },
+  enemyAuto: {
+    // —— 敌人自动化规则（#36）：显式消毒恢复（recipeAuto 同式纪律）——
+    // 规则表非对象 = 回退缺省空表；键按内容注册表过滤（在册敌人 id = 敌 id
+    // 恒稳无需对名守卫；未注册键/污染键直接丢弃），值按三态/阈值白名单收编。
+    def: () => ({}),
+    clone: (value) =>
+      Object.fromEntries(Object.entries(value).map(([key, rule]) => [key, { ...rule }])),
+    restore: (raw, state, env) => {
+      if (!isObj(raw.enemyAuto)) return;
+      for (const [key, entry] of rawEntries(raw.enemyAuto, CONTENT_ID_KEYS)) {
+        if (findEnemy(env.content, key) === undefined) continue; // 未注册敌人 id 丢弃（内容包变更后回退不处理）
+        if (!isObj(entry)) continue;
+        const mode = ruleModeOf(entry.mode);
+        if (mode === undefined) continue; // mode 非法/'none' 残键丢弃该键
+        // 规则域一致性（与写入面同律）：规则条目恒带在册阈值（缺失/非法 =
+        // 丢键，「阈值缺失的规则」不入活态，决策侧安全回退留作防御纵深）。
+        const maxRarity = entry.maxRarity;
+        if (typeof maxRarity !== 'string' || rarityRankOf(env.content, maxRarity) === undefined) {
+          continue;
+        }
+        state.enemyAuto[key] = enemyAutoRuleOf(mode, maxRarity);
+      }
+    },
+    // 玩家设置非资产：default-keep（兵解不清，票面裁决），与 recipeAuto 同律。
   },
   lastEncounter: {
     def: () => ({}),

@@ -88,3 +88,103 @@ describe('斗法页 · 战斗中信息面', () => {
     expect(exp!.textContent).toContain('修为'); // expSub 副行
   });
 });
+
+describe('#36 · 敌人卡自动化控件（三态单选 + 稀有度阈值）', () => {
+  /** 斗法列表视图挂载（可注入状态/裁包）。 */
+  function mountList(
+    extraState: Record<string, unknown> = {},
+    mutate?: (content: ReturnType<typeof loadXiuxianPack>) => void,
+  ) {
+    const clock = new ManualClock();
+    const content = loadXiuxianPack();
+    mutate?.(content);
+    const base = createGame({ content, clock, seed: 5 }).snapshot();
+    const save = {
+      ...base,
+      state: { ...(base.state as Record<string, unknown>), ...extraState },
+    } as unknown as SaveData;
+    const game = createGame({ content, clock, save });
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const ui = buildUi(root, content, () => game.snapshot(), game.events);
+    ui.bindActions((action: GameAction) => game.dispatch(action));
+    ui.render();
+    root.querySelector<HTMLButtonElement>('.tab[data-tab="combat"]')!.click();
+    ui.render();
+    return { root, ui, game };
+  }
+
+  /** 选择器设值后走真实 change 委托（#35 表单控件动作路由，壳级共用）。 */
+  function changeSelect(root: HTMLElement, selector: string, value: string): void {
+    const el = root.querySelector<HTMLSelectElement>(selector)!;
+    el.value = value;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  it('每行三态齐备（器屑经济在案）+ 缺省不处理无阈值项；启用后出阈值（autoCap 带档名）', () => {
+    const { root } = mountList();
+    // 八敌人每行控件齐备（票面「每行控件(三态+阈值)」）
+    expect(root.querySelectorAll('.enemy-card .auto-mode')).toHaveLength(8);
+    const mode = root.querySelector<HTMLSelectElement>('.auto-mode[data-enemy="e1"]')!;
+    expect(Array.from(mode.options).map((o) => o.value)).toEqual(['none', 'sell', 'smelt']);
+    expect(mode.value).toBe('none'); // 缺省不处理
+    expect(root.querySelector('.auto-cap[data-enemy="e1"]')).toBeNull();
+
+    // 启用自动售卖 → 阈值项出现（≤档名文案），每档一选项
+    changeSelect(root, '.auto-mode[data-enemy="e1"]', 'sell');
+    const cap = root.querySelector<HTMLSelectElement>('.auto-cap[data-enemy="e1"]')!;
+    expect(cap).not.toBeNull();
+    expect(cap.options).toHaveLength(4);
+    expect(cap.options[0]?.textContent).toContain('寻常');
+  });
+
+  it('动作派发：设自动售卖 → 规则入档（敌 id 键 + 默认阈值最低档）；阈值改写随动；回不处理删条目', () => {
+    const { root, game } = mountList();
+
+    // 启用自动售卖：整条规则重写，默认阈值 = rarities[0]（寻常）——高品绝不误折
+    changeSelect(root, '.auto-mode[data-enemy="e1"]', 'sell');
+    expect(game.snapshot().state.enemyAuto).toEqual({
+      e1: { mode: 'sell', maxRarity: 'common' },
+    });
+    // 显示态与引擎态同步：重绘后阈值选中值随规则
+    expect(root.querySelector<HTMLSelectElement>('.auto-cap[data-enemy="e1"]')!.value).toBe('common');
+
+    // 阈值改写随动（精良）
+    changeSelect(root, '.auto-cap[data-enemy="e1"]', 'fine');
+    expect(game.snapshot().state.enemyAuto.e1).toEqual({ mode: 'sell', maxRarity: 'fine' });
+    expect(root.querySelector<HTMLSelectElement>('.auto-cap[data-enemy="e1"]')!.value).toBe('fine');
+
+    // 三态互斥：改自动熔炼单字段覆盖（阈值保留）
+    changeSelect(root, '.auto-mode[data-enemy="e1"]', 'smelt');
+    expect(game.snapshot().state.enemyAuto.e1).toEqual({ mode: 'smelt', maxRarity: 'fine' });
+
+    // 回不处理 = 删条目（缺省）；阈值项随收
+    changeSelect(root, '.auto-mode[data-enemy="e1"]', 'none');
+    expect(game.snapshot().state.enemyAuto).toEqual({});
+    expect(root.querySelector('.auto-cap[data-enemy="e1"]')).toBeNull();
+  });
+
+  it('无器屑经济的包：熔炼态不可选（两态 UI）；存量熔炼态仅回显 disabled 选项防谎报', () => {
+    const noShard = (content: ReturnType<typeof loadXiuxianPack>): void => {
+      delete (content as { config?: { gear?: unknown } }).config?.gear;
+    };
+    // 缺省态两态：不渲染熔炼项
+    const { root } = mountList({}, noShard);
+    expect(
+      Array.from(root.querySelector<HTMLSelectElement>('.auto-mode[data-enemy="e1"]')!.options).map(
+        (o) => o.value,
+      ),
+    ).toEqual(['none', 'sell']);
+
+    // 注入存量熔炼规则：回显选中态但不可选（disabled），防选择器静默换态谎报。
+    // 断言钉 selected 属性而非 select.value——happy-dom 的 value 读取器跳过
+    // disabled 选项（真浏览器按属性显示 smelt），属性才是回显契约本体。
+    const { root: root2 } = mountList({ enemyAuto: { e1: { mode: 'smelt', maxRarity: 'fine' } } }, noShard);
+    const mode2 = root2.querySelector<HTMLSelectElement>('.auto-mode[data-enemy="e1"]')!;
+    const opts = Array.from(mode2.options);
+    expect(opts.map((o) => o.value)).toEqual(['none', 'sell', 'smelt']);
+    expect(opts[2]!.disabled).toBe(true); // 不可选（无器屑经济）
+    expect(opts[2]!.hasAttribute('selected')).toBe(true); // 存量态回显选中，不谎报
+    expect(opts[0]!.hasAttribute('selected')).toBe(false);
+  });
+});
