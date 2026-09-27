@@ -100,6 +100,7 @@ import { createJournalAggregator } from './journal.js';
 import { achievementConditionMet, achievementsOf } from './achievements.js';
 import { createCombatRun, makeCombatState } from './combatRun.js';
 import type {
+  AutoMode,
   LedgerAuto,
   LedgerData,
   LedgerOrigin,
@@ -553,7 +554,9 @@ export function createGame(options: CreateGameOptions): Game {
         emitLedger({ ...marker, auto });
         // 0 器屑档（rarities[].smelt=0 合法）折得为 0：不发零额折得物（与 sell
         // 路径「0 变化不入账」同律）——且折得物行必为 count>0，保住「count=0 行
-        // ⇔ 被折标记行」的协议不变量（修行录折叠补注判别依赖它）。
+        // ⇔ 被折标记行」的协议不变量（修行录折叠补注判别依赖它）。折叠照常
+        // 发生 = 装备按内容定价处置**不回袋**（定价为零即零补偿，#35 复核裁决
+        // ；与无器屑经济 smeltYieldOf 缺省的「存而不折」是两种语义）。
         if (smelt.shards > 0) {
           addItem(smelt.shardItem, smelt.shards);
           emitLedger({
@@ -766,6 +769,30 @@ export function createGame(options: CreateGameOptions): Game {
     const uid = payload?.uid;
     if (typeof uid !== 'number' || !Number.isInteger(uid) || uid <= 0) return undefined;
     return uid;
+  }
+
+  /**
+   * 自动化规则载荷解析（craft:auto / enemy:auto 共用前半，readItemPayload 同列）：
+   * 三态经 AUTO_MODES 注册表收窄（禁手拼，mode 非法 = 落空）；'none' 清除语义
+   * **先行**——none 的 maxRarity 无语义、垃圾阈值不阻断清除（清除契约不容被
+   * 无关字段破坏）；非 none 态阈值存在性/在册性收窄（rarityRankOf 精确匹配，
+   * findRarity 未命中回退第一档会放行坏键），缺省留给调用方按各自域一致性处置。
+   */
+  function readAutoRulePayload(payload: {
+    readonly mode?: AutoMode;
+    readonly maxRarity?: string;
+  }):
+    | { readonly clear: true }
+    | { readonly mode: LedgerAuto; readonly maxRarity: string | undefined }
+    | undefined {
+    const mode = AUTO_MODES.find((m) => m === payload?.mode);
+    if (mode === undefined) return undefined;
+    if (mode === 'none') return { clear: true };
+    const maxRarity = payload?.maxRarity;
+    if (maxRarity !== undefined && rarityRankOf(content, maxRarity) === undefined) {
+      return undefined;
+    }
+    return { mode, maxRarity };
   }
 
   /** 单轮采集完成：产出 → 副产出（掷点）→ 修为（采集类 buff 经管线加成）。 */
@@ -2068,14 +2095,14 @@ export function createGame(options: CreateGameOptions): Game {
           // = 清除该配方规则（回缺省不处理）。玩家设置变更非资产收支——不入
           // 咽喉、不记修行录、不发事件（与自动斗法开关 combat:auto 同律）。
           const payload = action.payload;
+          // 载荷解析共用 readAutoRulePayload：三态注册表收窄 + 阈值在册性 + none 清除先行。
+          const parsed = readAutoRulePayload(payload);
           const index = payload?.index;
-          // 三态经注册表收窄（AUTO_MODES）：注入面 mode 非法 = find 落空 → bad-payload。
-          const mode = AUTO_MODES.find((m) => m === payload?.mode);
           if (
+            parsed === undefined ||
             typeof index !== 'number' ||
             !Number.isInteger(index) ||
-            index < 0 ||
-            mode === undefined
+            index < 0
           ) {
             reject(action.type, 'bad-payload');
             return;
@@ -2085,10 +2112,9 @@ export function createGame(options: CreateGameOptions): Game {
             reject(action.type, 'bad-payload');
             return;
           }
-          // 存在性走 rarityRankOf 精确匹配（findRarity 未命中回退第一档，会放行坏键）。
-          const maxRarity = payload?.maxRarity;
-          if (maxRarity !== undefined && rarityRankOf(content, maxRarity) === undefined) {
-            reject(action.type, 'bad-payload');
+          const key = String(index);
+          if ('clear' in parsed) {
+            delete state.recipeAuto[key];
             return;
           }
           // 规则域一致性（#35 复核收口）：装备产出的规则必带在册阈值（UI 恒补最低档；
@@ -2096,17 +2122,16 @@ export function createGame(options: CreateGameOptions): Game {
           // 的丢键/剥离同律，「阈值缺失的装备规则」在合法路径不可构造（决策侧的
           // 安全回退仍留作防御纵深）。
           const isGear = findItem(content, recipe.output.item)?.type === 'equip';
-          if (isGear && mode !== 'none' && maxRarity === undefined) {
+          if (isGear && parsed.maxRarity === undefined) {
             reject(action.type, 'bad-payload');
             return;
           }
-          const key = String(index);
-          if (mode === 'none') {
-            delete state.recipeAuto[key];
-            return;
-          }
           // 稳定引用名随写入冻结（ADR-015）：恢复按「下标在册 + 对名一致」双校验。
-          state.recipeAuto[key] = recipeAutoRuleOf(mode, isGear ? maxRarity : undefined, recipe.name);
+          state.recipeAuto[key] = recipeAutoRuleOf(
+            parsed.mode,
+            isGear ? parsed.maxRarity : undefined,
+            recipe.name,
+          );
           return;
         }
 
@@ -2115,35 +2140,29 @@ export function createGame(options: CreateGameOptions): Game {
           // = 清除该敌人规则（回缺省不处理）。玩家设置变更非资产收支——不入
           // 咽喉、不记修行录、不发事件（与 craft:auto 同律）。
           const payload = action.payload;
+          // 载荷解析共用 readAutoRulePayload：三态注册表收窄 + 阈值在册性 + none 清除先行。
+          const parsed = readAutoRulePayload(payload);
           const enemyId = payload?.enemyId;
-          // 三态经注册表收窄（AUTO_MODES）：注入面 mode 非法 = find 落空 → bad-payload。
-          const mode = AUTO_MODES.find((m) => m === payload?.mode);
           if (
+            parsed === undefined ||
             typeof enemyId !== 'string' ||
-            findEnemy(content, enemyId) === undefined ||
-            mode === undefined
+            findEnemy(content, enemyId) === undefined
           ) {
             reject(action.type, 'bad-payload');
             return;
           }
-          // 存在性走 rarityRankOf 精确匹配（findRarity 未命中回退第一档，会放行坏键）。
-          const maxRarity = payload?.maxRarity;
-          if (maxRarity !== undefined && rarityRankOf(content, maxRarity) === undefined) {
-            reject(action.type, 'bad-payload');
-            return;
-          }
-          if (mode === 'none') {
+          if ('clear' in parsed) {
             delete state.enemyAuto[enemyId];
             return;
           }
           // 规则域一致性（与恢复面同律）：非 none 态恒带在册阈值（UI 恒补最低档；
           // 缺失 = bad-payload）——「阈值缺失的规则」在合法路径不可构造（决策侧的
           // 安全回退仍留作防御纵深）。
-          if (maxRarity === undefined) {
+          if (parsed.maxRarity === undefined) {
             reject(action.type, 'bad-payload');
             return;
           }
-          state.enemyAuto[enemyId] = enemyAutoRuleOf(mode, maxRarity);
+          state.enemyAuto[enemyId] = enemyAutoRuleOf(parsed.mode, parsed.maxRarity);
           return;
         }
 

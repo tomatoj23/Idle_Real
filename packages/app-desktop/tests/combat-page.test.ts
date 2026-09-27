@@ -17,20 +17,18 @@ import {
 } from '@wendao/engine';
 import { buildUi } from '../src/ui';
 
-/** 高斗法修为存档：clv 8（e2 门控需 ≥6 放行）。恢复侧 hp 按收编后的修为
- *  推 cap 满血（#41 正序；注入 hp 9999 超顶钳回 maxHp(8)=196），low-hp
- *  门控自然放行，层数不再受血线配平约束。 */
-function mountFighting(enemyId: string) {
+/** 壳挂载共用（列表/战斗两形态）：可注入状态 / 裁包（mutate）。 */
+function mountShell(
+  extraState: Record<string, unknown> = {},
+  mutate?: (content: ReturnType<typeof loadXiuxianPack>) => void,
+) {
   const clock = new ManualClock();
   const content = loadXiuxianPack();
+  mutate?.(content);
   const base = createGame({ content, clock, seed: 5 }).snapshot();
   const save = {
     ...base,
-    state: {
-      ...(base.state as Record<string, unknown>),
-      skills: { combat: { xp: expBase(8, progressionParamsOf(content)) } },
-      hp: 9999,
-    },
+    state: { ...(base.state as Record<string, unknown>), ...extraState },
   } as unknown as SaveData;
   const game = createGame({ content, clock, save });
   const root = document.createElement('div');
@@ -44,9 +42,21 @@ function mountFighting(enemyId: string) {
   ui.render();
   root.querySelector<HTMLButtonElement>('.tab[data-tab="combat"]')!.click();
   ui.render();
-  root.querySelector<HTMLButtonElement>(`[data-act="fight"][data-enemy="${enemyId}"]`)!.click();
-  ui.render();
   return { root, ui, game, actions };
+}
+
+/** 高斗法修为存档：clv 8（e2 门控需 ≥6 放行）。恢复侧 hp 按收编后的修为
+ *  推 cap 满血（#41 正序；注入 hp 9999 超顶钳回 maxHp(8)=196），low-hp
+ *  门控自然放行，层数不再受血线配平约束。 */
+function mountFighting(enemyId: string) {
+  const mounted = mountShell({
+    // progressionParams 纯装载派生，二次装载与挂载实例同参。
+    skills: { combat: { xp: expBase(8, progressionParamsOf(loadXiuxianPack())) } },
+    hp: 9999,
+  });
+  mounted.root.querySelector<HTMLButtonElement>(`[data-act="fight"][data-enemy="${enemyId}"]`)!.click();
+  mounted.ui.render();
+  return mounted;
 }
 
 describe('斗法页 · 战斗中信息面', () => {
@@ -90,30 +100,6 @@ describe('斗法页 · 战斗中信息面', () => {
 });
 
 describe('#36 · 敌人卡自动化控件（三态单选 + 稀有度阈值）', () => {
-  /** 斗法列表视图挂载（可注入状态/裁包）。 */
-  function mountList(
-    extraState: Record<string, unknown> = {},
-    mutate?: (content: ReturnType<typeof loadXiuxianPack>) => void,
-  ) {
-    const clock = new ManualClock();
-    const content = loadXiuxianPack();
-    mutate?.(content);
-    const base = createGame({ content, clock, seed: 5 }).snapshot();
-    const save = {
-      ...base,
-      state: { ...(base.state as Record<string, unknown>), ...extraState },
-    } as unknown as SaveData;
-    const game = createGame({ content, clock, save });
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-    const ui = buildUi(root, content, () => game.snapshot(), game.events);
-    ui.bindActions((action: GameAction) => game.dispatch(action));
-    ui.render();
-    root.querySelector<HTMLButtonElement>('.tab[data-tab="combat"]')!.click();
-    ui.render();
-    return { root, ui, game };
-  }
-
   /** 选择器设值后走真实 change 委托（#35 表单控件动作路由，壳级共用）。 */
   function changeSelect(root: HTMLElement, selector: string, value: string): void {
     const el = root.querySelector<HTMLSelectElement>(selector)!;
@@ -122,7 +108,7 @@ describe('#36 · 敌人卡自动化控件（三态单选 + 稀有度阈值）', 
   }
 
   it('每行三态齐备（器屑经济在案）+ 缺省不处理无阈值项；启用后出阈值（autoCap 带档名）', () => {
-    const { root } = mountList();
+    const { root } = mountShell();
     // 八敌人每行控件齐备（票面「每行控件(三态+阈值)」）
     expect(root.querySelectorAll('.enemy-card .auto-mode')).toHaveLength(8);
     const mode = root.querySelector<HTMLSelectElement>('.auto-mode[data-enemy="e1"]')!;
@@ -139,7 +125,7 @@ describe('#36 · 敌人卡自动化控件（三态单选 + 稀有度阈值）', 
   });
 
   it('动作派发：设自动售卖 → 规则入档（敌 id 键 + 默认阈值最低档）；阈值改写随动；回不处理删条目', () => {
-    const { root, game } = mountList();
+    const { root, game } = mountShell();
 
     // 启用自动售卖：整条规则重写，默认阈值 = rarities[0]（寻常）——高品绝不误折
     changeSelect(root, '.auto-mode[data-enemy="e1"]', 'sell');
@@ -169,7 +155,7 @@ describe('#36 · 敌人卡自动化控件（三态单选 + 稀有度阈值）', 
       delete (content as { config?: { gear?: unknown } }).config?.gear;
     };
     // 缺省态两态：不渲染熔炼项
-    const { root } = mountList({}, noShard);
+    const { root } = mountShell({}, noShard);
     expect(
       Array.from(root.querySelector<HTMLSelectElement>('.auto-mode[data-enemy="e1"]')!.options).map(
         (o) => o.value,
@@ -179,7 +165,7 @@ describe('#36 · 敌人卡自动化控件（三态单选 + 稀有度阈值）', 
     // 注入存量熔炼规则：回显选中态但不可选（disabled），防选择器静默换态谎报。
     // 断言钉 selected 属性而非 select.value——happy-dom 的 value 读取器跳过
     // disabled 选项（真浏览器按属性显示 smelt），属性才是回显契约本体。
-    const { root: root2 } = mountList({ enemyAuto: { e1: { mode: 'smelt', maxRarity: 'fine' } } }, noShard);
+    const { root: root2 } = mountShell({ enemyAuto: { e1: { mode: 'smelt', maxRarity: 'fine' } } }, noShard);
     const mode2 = root2.querySelector<HTMLSelectElement>('.auto-mode[data-enemy="e1"]')!;
     const opts = Array.from(mode2.options);
     expect(opts.map((o) => o.value)).toEqual(['none', 'sell', 'smelt']);

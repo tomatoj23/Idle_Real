@@ -160,8 +160,8 @@ describe('#36 · 敌人自动化规则：三态互斥 + 缺省不处理', () => 
     game.dispatch({ type: 'enemy:auto', payload: { enemyId: 'e1', mode: 'smelt', maxRarity: 'fine' } });
     expect(stateOf(game.snapshot()).enemyAuto).toEqual({ e1: { mode: 'smelt', maxRarity: 'fine' } });
 
-    // mode=none = 清除规则（回缺省不处理）
-    game.dispatch({ type: 'enemy:auto', payload: { enemyId: 'e1', mode: 'none' } });
+    // mode=none = 清除规则（回缺省不处理；垃圾阈值不阻断清除——清除契约，复核收口）
+    game.dispatch({ type: 'enemy:auto', payload: { enemyId: 'e1', mode: 'none', maxRarity: 'ghost' } });
     expect(stateOf(game.snapshot()).enemyAuto).toEqual({});
     fightWins(game, clock, victories, 3);
     st = stateOf(game.snapshot());
@@ -300,6 +300,75 @@ describe('#36 · 入账即折：击杀掉落（AC1/AC2）', () => {
     st = stateOf(game2.snapshot());
     expect(st.gear).toEqual([]);
     expect(st.gold).toBe(9 + 25 + 50);
+  });
+
+  it('熔炼阈值双侧：>阈值装备照常入袋、≤阈值按档折屑（精良产屑 2，AC2）', () => {
+    // 精良器胚（0.85 掷点）> 阈值寻常 → 照常入袋；材料在熔炼态恒入袋
+    const clock = new ManualClock();
+    const game = createGame({
+      content: makeEnemyAutoPack(),
+      clock,
+      save: saveWith({ enemyAuto: { e1: { mode: 'smelt', maxRarity: 'common' } } }),
+      ...roll(0.85),
+    });
+    const victories = victoryCounter(game);
+    fightWins(game, clock, victories, 1);
+    let st = stateOf(game.snapshot());
+    expect(st.gear).toHaveLength(1);
+    expect(st.gear[0]).toMatchObject({ itemId: 'scorp_tail', rarity: 'fine' });
+    expect(st.items.core1).toBe(1); // 普通物品照常入袋
+    expect(st.items.shard).toBeUndefined(); // >阈值不折
+
+    // 阈值提到精良 → 同掷点折屑：精良档产屑 2（夹具 rarities smelt 映射）
+    const clock2 = new ManualClock();
+    const game2 = createGame({
+      content: makeEnemyAutoPack(),
+      clock: clock2,
+      save: saveWith({ enemyAuto: { e1: { mode: 'smelt', maxRarity: 'fine' } } }),
+      ...roll(0.85),
+    });
+    const victories2 = victoryCounter(game2);
+    fightWins(game2, clock2, victories2, 1);
+    st = stateOf(game2.snapshot());
+    expect(st.gear).toEqual([]);
+    expect(st.items.shard).toBe(2);
+    expect(st.items.core1).toBe(1);
+  });
+
+  it('boss 专属掉落随主敌规则折叠（申报口径：「该怪全部掉落」含 bosses[].drops）', () => {
+    // 归属隔离：e1 材料池掏空、器胚池摘除，core1 只出 boss 池。
+    const base = makeEnemyAutoPack() as unknown as {
+      enemies: Array<Record<string, unknown>>;
+    };
+    const pack = {
+      ...base,
+      enemies: base.enemies.map((e) => (e.id === 'e1' ? { ...e, drops: [] } : e)),
+      gearDrops: [],
+      bosses: [
+        {
+          enemy: 'e1',
+          drops: [{ item: 'core1', chance: 0.99 }],
+          phases: [{ threshold: 0, name: '凶性' }],
+        },
+      ],
+    } as unknown as GameContent;
+    const clock = new ManualClock();
+    const game = createGame({
+      content: pack,
+      clock,
+      save: saveWith({ enemyAuto: { e1: { mode: 'sell', maxRarity: 'common' } } }),
+      ...roll(0.1),
+    });
+    const victories = victoryCounter(game);
+    fightWins(game, clock, victories, 1);
+    const st = stateOf(game.snapshot());
+    expect(st.items.core1).toBeUndefined(); // boss 池掉落照折、不落袋
+    expect(st.gold).toBe(4 + 25);
+    const entries = ledgerEntries(game.events.drain());
+    expect(entries.filter((e) => e.auto === 'sell')).toEqual([
+      { kind: 'item', source: 'combat', origin: 'idle', id: 'core1', count: 0, value: 0, auto: 'sell' },
+      { kind: 'currency', source: 'combat', origin: 'idle', id: 'gold', count: 25, value: 1, auto: 'sell' },
+    ]);
   });
 });
 

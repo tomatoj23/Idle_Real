@@ -18,7 +18,7 @@
  * 节的嵌套层逐层剔键）；透传键在快照面逐键深拷，壳层改写不再写穿引擎态。
  */
 import type { GameContent, SaveData } from './types.js';
-import type { EnemyAutoRule, RecipeAutoRule } from './ledger.js';
+import type { EnemyAutoRule, LedgerAuto, RecipeAutoRule } from './ledger.js';
 import { enemyAutoRuleOf, recipeAutoRuleOf, ruleModeOf } from './ledger.js';
 import { saveRejection } from './save.js';
 import {
@@ -659,22 +659,19 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
         const recipe = findRecipe(env.content, index);
         if (!recipe) continue; // 未注册配方键丢弃（内容包变更后未知 id 回退不处理）
         if (!isObj(entry)) continue;
-        const mode = ruleModeOf(entry.mode);
-        if (mode === undefined) continue; // mode 非法/'none' 残键丢弃该键
         if (entry.name !== recipe.name) continue; // 稳定引用（ADR-015）：下标对名不符 = 重排/改名，宁弃不换目标
-        const maxRarity = entry.maxRarity;
+        const parsed = autoEntryOf(entry, env.content);
+        if (!parsed) continue; // mode 非法/'none' 残键/阈值垃圾 → 丢弃该键
         // 规则域一致性（#35 复核收口，与写入面同律）：装备产出的规则必带在册阈值
-        // （缺失/非法 = 丢键——「阈值缺失的装备规则」不入活态，决策侧安全回退留作
+        // （缺失/垃圾 = 丢键——「阈值缺失的装备规则」不入活态，决策侧安全回退留作
         // 防御纵深）；普通产出阈值无语义，写入即剥离（垃圾字段不入活态）。
         const isGear = findItem(env.content, recipe.output.item)?.type === 'equip';
-        if (isGear) {
-          if (typeof maxRarity !== 'string' || rarityRankOf(env.content, maxRarity) === undefined) {
-            continue;
-          }
-          state.recipeAuto[key] = recipeAutoRuleOf(mode, maxRarity, recipe.name);
-        } else {
-          state.recipeAuto[key] = recipeAutoRuleOf(mode, undefined, recipe.name);
-        }
+        if (isGear && parsed.maxRarity === undefined) continue;
+        state.recipeAuto[key] = recipeAutoRuleOf(
+          parsed.mode,
+          isGear ? parsed.maxRarity : undefined,
+          recipe.name,
+        );
       }
     },
     // 玩家设置非资产：不进内容声明式 reset/keep 表——default-keep 机制自动
@@ -692,15 +689,11 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
       for (const [key, entry] of rawEntries(raw.enemyAuto, CONTENT_ID_KEYS)) {
         if (findEnemy(env.content, key) === undefined) continue; // 未注册敌人 id 丢弃（内容包变更后回退不处理）
         if (!isObj(entry)) continue;
-        const mode = ruleModeOf(entry.mode);
-        if (mode === undefined) continue; // mode 非法/'none' 残键丢弃该键
-        // 规则域一致性（与写入面同律）：规则条目恒带在册阈值（缺失/非法 =
+        const parsed = autoEntryOf(entry, env.content);
+        // 规则域一致性（与写入面同律）：非 none 态恒带在册阈值（缺失/垃圾 =
         // 丢键，「阈值缺失的规则」不入活态，决策侧安全回退留作防御纵深）。
-        const maxRarity = entry.maxRarity;
-        if (typeof maxRarity !== 'string' || rarityRankOf(env.content, maxRarity) === undefined) {
-          continue;
-        }
-        state.enemyAuto[key] = enemyAutoRuleOf(mode, maxRarity);
+        if (!parsed || parsed.maxRarity === undefined) continue;
+        state.enemyAuto[key] = enemyAutoRuleOf(parsed.mode, parsed.maxRarity);
       }
     },
     // 玩家设置非资产：default-keep（兵解不清，票面裁决），与 recipeAuto 同律。
@@ -962,6 +955,25 @@ function isObj(value: unknown): value is Record<string, unknown> {
 
 function safeNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+/**
+ * 规则条目共用收窄（recipeAuto/enemyAuto 恢复面共用前半）：三态经 ruleModeOf
+ * 注册表收窄（'none' 残键/非法丢弃）；阈值只收在册键（rarityRankOf 精确匹配
+ * ——findRarity 未命中回退第一档会放行坏键），缺失/垃圾归入 undefined 值域，
+ * 处置归调用方域一致性（配方·装备规则丢键 / 配方·普通产出剥离 / 敌侧丢键）。
+ */
+function autoEntryOf(
+  entry: Record<string, unknown>,
+  content: GameContent,
+): { mode: LedgerAuto; maxRarity: string | undefined } | undefined {
+  const mode = ruleModeOf(entry.mode);
+  if (mode === undefined) return undefined;
+  const raw = entry.maxRarity;
+  return {
+    mode,
+    maxRarity: typeof raw === 'string' && rarityRankOf(content, raw) !== undefined ? raw : undefined,
+  };
 }
 
 /** initialState：字段表逐行求值缺省（声明序 = 依赖序）。 */

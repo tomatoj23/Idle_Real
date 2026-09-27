@@ -419,6 +419,22 @@ describe('#35 · 在线自动转化记账（AC1：逐项自动条目）', () => 
 });
 
 describe('#36 · 战斗自动转化记账（AC1：修行录自动条目红线）', () => {
+  /** 开战打到 1 胜后切采集闭战斗段成条（假时钟 100ms 步进；防测试空转断言在内）。 */
+  function fightOne(game: ReturnType<typeof createGame>, clock: ManualClock): void {
+    let victories = 0;
+    game.events.subscribe((e) => {
+      if (e.type === 'victory') victories += 1;
+    });
+    game.dispatch({ type: 'combat:start', payload: { enemyId: 'e1' } });
+    for (let i = 0; i < 3000 && victories < 1; i++) {
+      clock.advance(100);
+      game.tick(100);
+    }
+    expect(victories).toBe(1); // 防测试空转
+    clock.advance(3);
+    game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } }); // 闭战斗段成条
+  }
+
   it('在线击杀自动售卖：战斗段明细行带 auto 标记（被折标记行 + 折得物聚合行），完全静默', () => {
     const clock = new ManualClock();
     const game = createGame({
@@ -439,18 +455,7 @@ describe('#36 · 战斗自动转化记账（AC1：修行录自动条目红线）
         },
       },
     });
-    let victories = 0;
-    game.events.subscribe((e) => {
-      if (e.type === 'victory') victories += 1;
-    });
-    game.dispatch({ type: 'combat:start', payload: { enemyId: 'e1' } });
-    for (let i = 0; i < 3000 && victories < 1; i++) {
-      clock.advance(100);
-      game.tick(100);
-    }
-    expect(victories).toBe(1); // 防测试空转
-    clock.advance(3);
-    game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } }); // 闭战斗段成条
+    fightOne(game, clock);
 
     const records = recordsOf(game);
     // 不逐件成条：零点条目（全部账目归战斗段）。
@@ -478,16 +483,14 @@ describe('#36 · 战斗自动转化记账（AC1：修行录自动条目红线）
   });
 
   it('在线击杀自动熔炼：普通物品行照常、装备折叠行带 auto:smelt 标记 + 折得物行（红线双模式）', () => {
+    const base = makeCombatPack();
     const clock = new ManualClock();
     const game = createGame({
       // 熔炼折叠需器屑经济：makeCombatPack + shard 装配 + rarities 产屑数。
       content: {
-        ...makeCombatPack(),
-        items: [
-          ...makeCombatPack().items,
-          { id: 'shard', name: '器屑', icon: '屑', type: 'mat', sell: 3 },
-        ],
-        rarities: makeCombatPack().rarities.map((r) => ({ ...r, smelt: 1 })),
+        ...base,
+        items: [...base.items, { id: 'shard', name: '器屑', icon: '屑', type: 'mat', sell: 3 }],
+        rarities: base.rarities.map((r) => ({ ...r, smelt: 1 })),
         config: { gear: { shardItem: 'shard', reforgeCost: 5 } },
       } as GameContent,
       clock,
@@ -506,20 +509,10 @@ describe('#36 · 战斗自动转化记账（AC1：修行录自动条目红线）
         },
       },
     });
-    let victories = 0;
-    game.events.subscribe((e) => {
-      if (e.type === 'victory') victories += 1;
-    });
-    game.dispatch({ type: 'combat:start', payload: { enemyId: 'e1' } });
-    for (let i = 0; i < 3000 && victories < 1; i++) {
-      clock.advance(100);
-      game.tick(100);
-    }
-    expect(victories).toBe(1); // 防测试空转
-    clock.advance(3);
-    game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } }); // 闭战斗段成条
+    fightOne(game, clock);
 
     const rec = recordsOf(game).find((r) => r.kind === 'combat');
+    expect(rec).toMatchObject({ kind: 'combat', wins: 1, exp: 16 }); // 段成条先决（防空转）
     if (rec?.kind !== 'combat') return;
     // 明细行：胜利灵石 + 材料照常入袋行 + 被折标记（auto:smelt）+ 折得器屑行 + 修为。
     expect(rec.lines).toEqual([

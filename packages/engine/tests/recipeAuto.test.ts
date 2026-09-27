@@ -114,8 +114,8 @@ describe('#35 · 配方自动化规则：三态互斥 + 缺省不处理', () => 
       '0': { mode: 'smelt', name: '炼制聚气丹' },
     });
 
-    // mode=none = 清除规则（回缺省不处理）
-    game.dispatch({ type: 'craft:auto', payload: { index: 0, mode: 'none' } });
+    // mode=none = 清除规则（回缺省不处理；垃圾阈值不阻断清除——清除契约，#36 复核收口）
+    game.dispatch({ type: 'craft:auto', payload: { index: 0, mode: 'none', maxRarity: 'ghost' } });
     expect(stateOf(game.snapshot()).recipeAuto).toEqual({});
     clock.advance(3000);
     game.tick(3000);
