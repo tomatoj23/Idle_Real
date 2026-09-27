@@ -84,7 +84,7 @@
     },
     "shellTexts": {
       "type": "object",
-      "required": ["brand", "topbar", "tabs", "side", "stats", "units", "icons", "common", "events", "pages", "footer"],
+      "required": ["brand", "topbar", "tabs", "stats", "units", "icons", "common", "events", "pages", "footer"],
       "additionalProperties": false,
       "properties": {
         "brand": {
@@ -126,14 +126,6 @@
             "dungeon": { "$ref": "#/definitions/line", "description": "秘境页签（#7；包无 dungeons 节时壳不渲染该页签）" },
             "achievements": { "$ref": "#/definitions/line", "description": "成就页签（#9；包无 achievements 节时壳不渲染该页签）" },
             "journal": { "$ref": "#/definitions/line", "description": "修行录页签（#33，随档记录页）" }
-          }
-        },
-        "side": {
-          "type": "object",
-          "required": ["title"],
-          "additionalProperties": false,
-          "properties": {
-            "title": { "$ref": "#/definitions/line" }
           }
         },
         "stats": {
@@ -187,11 +179,11 @@
         "events": {
           "type": "object",
           "required": [
-            "lootGear", "lootGearLog", "lootShowcase", "lootByproduct", "lootDrop", "lootCraft",
-            "victoryFlog", "victoryLog", "victorySpoil", "defeatFlog", "defeatToast",
-            "eatHeal", "eatBuffToast", "eatBuffLog",
-            "equipWearToast", "equipWearLog", "equipRemoveLog",
-            "expCombat", "levelupToast", "levelupLog",
+            "lootGearLog", "lootShowcase", "lootByproduct", "lootDrop", "lootCraft",
+            "victoryFlog", "victorySpoil", "defeatFlog", "defeatToast",
+            "eatHeal", "eatBuffLog",
+            "equipWearLog", "equipRemoveLog",
+            "levelupToast", "levelupLog",
             "sellLog", "buyLog", "rejectFallback",
             "offlineToast", "offlineLog", "offlineNoYield", "offlineExpSuffix",
             "offlineCappedToast", "offlineCappedLog",
@@ -199,12 +191,12 @@
             "rebirthToast", "rebirthLog", "talentBuyToast", "talentBuyLog",
             "dungeonEnter", "dungeonFloor", "dungeonDaoYun", "dungeonClear", "dungeonLeave",
             "bossPhase", "bossSummon",
-            "achievementToast", "achievementLog",
-            "gearSmelt", "gearReforge"
+            "achievementToast",
+            "gearSmelt", "gearReforge",
+            "floatSum", "expGain"
           ],
           "additionalProperties": false,
           "properties": {
-            "lootGear": { "$ref": "#/definitions/template", "description": "异宝掉落浮战报；槽位 {name}" },
             "lootGearLog": { "$ref": "#/definitions/template", "description": "异宝掉落修行录行；槽位 {name}" },
             "lootShowcase": { "$ref": "#/definitions/template", "description": "showcase 档掉落浮提示；槽位 {name}" },
             "lootByproduct": { "$ref": "#/definitions/template", "description": "副产出修行录行；槽位 {name}/{count}" },
@@ -212,16 +204,12 @@
             "lootCraft": { "$ref": "#/definitions/template", "description": "炼制产出修行录行（#5）；槽位 {name}/{count}" },
             "victoryFlog": { "$ref": "#/definitions/template", "description": "胜利浮战报；槽位 {name}/{spoil}/{summary}/{compare}" },
             "victorySpoil": { "$ref": "#/definitions/template", "description": "胜利战利品段（拼入 victoryFlog 的 {spoil} 槽，#62）；槽位 {gold}/{loot}" },
-            "victoryLog": { "$ref": "#/definitions/template", "description": "胜利修行录行；槽位 {name}/{summary}/{compare}" },
             "defeatFlog": { "$ref": "#/definitions/template", "description": "落败浮战报；槽位 {name}" },
             "defeatToast": { "$ref": "#/definitions/template", "description": "落败浮提示（无槽位）" },
             "eatHeal": { "$ref": "#/definitions/template", "description": "即时恢复浮战报；槽位 {name}/{healed}" },
-            "eatBuffToast": { "$ref": "#/definitions/template", "description": "增益丹浮提示；槽位 {name}" },
             "eatBuffLog": { "$ref": "#/definitions/template", "description": "增益丹修行录行；槽位 {name}/{minutes}" },
-            "equipWearToast": { "$ref": "#/definitions/template", "description": "佩戴浮提示；槽位 {name}" },
             "equipWearLog": { "$ref": "#/definitions/template", "description": "佩戴修行录行；槽位 {name}" },
             "equipRemoveLog": { "$ref": "#/definitions/template", "description": "卸下修行录行；槽位 {name}" },
-            "expCombat": { "$ref": "#/definitions/template", "description": "斗法修为浮战报；槽位 {amount}" },
             "levelupToast": { "$ref": "#/definitions/template", "description": "升级浮提示；槽位 {name}/{level}" },
             "levelupLog": { "$ref": "#/definitions/template", "description": "升级修行录行；槽位 {name}/{level}" },
             "sellLog": { "$ref": "#/definitions/template", "description": "卖出修行录行；槽位 {name}/{gained}" },
@@ -247,9 +235,10 @@
             "bossPhase": { "$ref": "#/definitions/template", "description": "Boss 阶段转场修行录行（#8，boss:phase 事件）；槽位 {name}/{phase}" },
             "bossSummon": { "$ref": "#/definitions/template", "description": "Boss 召唤入场战斗日志行（#30 事件缝 #47，boss:summon 事件）；槽位 {enemy}/{count}" },
             "achievementToast": { "$ref": "#/definitions/template", "description": "成就达成浮提示（#9，achievement:unlock 事件）；槽位 {name}" },
-            "achievementLog": { "$ref": "#/definitions/template", "description": "成就达成修行录行（#9）；槽位 {name}" },
-            "gearSmelt": { "$ref": "#/definitions/template", "description": "熔炼修行录行（#14，gear:smelt 事件）；槽位 {name}/{shard}/{count}（shard = 器屑物品展示名）" },
-            "gearReforge": { "$ref": "#/definitions/template", "description": "重铸修行录行（#14，gear:reforge 事件）；槽位 {name}/{tier}" }
+            "gearSmelt": { "$ref": "#/definitions/template", "description": "熔炼飘字行（#14，gear:smelt 事件；#34 侧栏平移）；槽位 {name}/{shard}/{count}（shard = 器屑物品展示名）" },
+            "gearReforge": { "$ref": "#/definitions/template", "description": "重铸飘字行（#14，gear:reforge 事件；#34 侧栏平移）；槽位 {name}/{tier}" },
+            "floatSum": { "$ref": "#/definitions/template", "description": "获取飘字聚合形（#34 档二：同类 3 秒短窗合并计数后切换本模板）；槽位 {name}/{count}" },
+            "expGain": { "$ref": "#/definitions/template", "description": "修为读数飘字（#34：仅升级与离线汇总出现）；槽位 {amount}" }
           }
         },
         "pages": {

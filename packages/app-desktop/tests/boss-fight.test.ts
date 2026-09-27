@@ -82,7 +82,6 @@ function makePack(): ContentPack {
         brand: { sigil: '道', name: '试炼', locale: 'zh-CN', bootError: '中止：{message}' },
         topbar: { statsTitle: '属', statsSigil: '斗', goldTitle: '灵石', goldSigil: '石', hpTitle: '气血', hpSigil: '血' },
         tabs: { skills: '修', combat: '斗', bag: '袋', shop: '市', rebirth: '转', talents: '韵', dungeon: '秘', craft: '炼' },
-        side: { title: '录' },
         stats: { labels: { atk: { label: '攻' }, def: { label: '防' }, crit: { label: '暴', percent: true } } },
         units: { level: '{v} 层', seconds: '{v} 秒', minute: '{m} 分', hourMinute: '{h} 时 {m} 分' },
         icons: { buff: '丹', gear: '器', unknown: '？' },
@@ -91,10 +90,8 @@ function makePack(): ContentPack {
           bossPhase: '【{enemy}】显露「{name}」之相！（阶段 {phase}）',
           bossSummon: '【{enemy}】怒啸震野，唤出 {count} 道援影！',
           victoryFlog: '【{name}】倒下！{summary}',
-          victoryLog: '击倒【{name}】',
           defeatFlog: '你不敌【{name}】',
           defeatToast: '落败',
-          expCombat: '斗法修为 +{amount}',
         },
         pages: {
           skills: {
@@ -164,7 +161,7 @@ describe('#8 · Boss 战壳呈现', () => {
     expect(root.querySelector('.boss-phase')).toBeNull(); // 未入脚本阶段
   });
 
-  it('跨阈值：阶段徽标出现（阶段名 content 直出）+ 事件文案入浮提示/修行录', () => {
+  it('跨阈值：阶段徽标出现（阶段名 content 直出）+ 事件文案入醒目 toast', () => {
     const { root, ui, game } = mount();
     const seen: GameEvent[] = [];
     game.events.subscribe((event) => seen.push(event));
@@ -176,8 +173,8 @@ describe('#8 · Boss 战壳呈现', () => {
     }
     expect(seen.some((e) => e.type === 'boss:phase')).toBe(true);
     expect(root.querySelector('.boss-phase')?.textContent).toBe('血目暴睁');
-    expect(root.querySelector('.toast')?.textContent).toContain('血目暴睁');
-    expect(root.querySelector('#log')?.textContent).toContain('显露「血目暴睁」之相');
+    // #34 侧栏退场：阶段转场只留醒目 toast（同文流水行删除）。
+    expect(root.querySelector('.toast')?.textContent).toContain('显露「血目暴睁」之相');
   });
 });
 

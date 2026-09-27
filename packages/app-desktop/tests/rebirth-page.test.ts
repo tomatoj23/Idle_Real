@@ -78,7 +78,8 @@ describe('#6 · 兵解确认页', () => {
     root.querySelector<HTMLButtonElement>('[data-act="rebirth-confirm"]')!.click();
     ui.render();
     expect(root.querySelector('.toast')?.textContent).toContain('兵解功成！得道韵 4');
-    expect(root.querySelector('#log')?.textContent).toContain('第 1 世');
+    // #34 侧栏平移：结算明细行（含世次）入轻量飘字。
+    expect(root.querySelector('#float-stack')?.textContent).toContain('第 1 世');
 
     const st = game.snapshot().state as unknown as GameState;
     expect(st.skills.herb?.xp).toBe(0);

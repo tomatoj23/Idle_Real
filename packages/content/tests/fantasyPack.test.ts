@@ -113,7 +113,7 @@ describe('西方魔幻迷你包 · 验收 tracer（#28）', () => {
     expect(byId['max_hit_20']!.reward).toEqual({ items: [{ item: 'crystal', count: 2 }] });
     expect(pack.texts.shell.tabs.achievements).toBe('Feats');
     expect(pack.texts.shell.pages.achievements.statLabels['maxHit']).toBe('Max Hit');
-    expect(pack.texts.shell.events.achievementLog).toContain('{name}');
+    expect(pack.texts.shell.events.achievementToast).toContain('{name}');
   });
 
   it('config 槽位节：weapon/body/accessory 三槽英语命名（#16 槽位数据化）', () => {

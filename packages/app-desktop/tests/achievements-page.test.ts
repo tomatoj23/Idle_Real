@@ -84,9 +84,8 @@ describe('#9 · 成就页', () => {
       (event) => event.type === 'achievement:unlock' && event.data?.['id'] === 'cycles_100',
     );
     expect(unlocks).toHaveLength(1);
-    // 壳反馈：浮提示（容器内多条并存，按容器全文断言）+ 修行录。
+    // 壳反馈：醒目 toast（#34 侧栏退场——同文流水行删除，修行录页落账）。
     expect(root.querySelector('#toasts')?.textContent).toContain('成就达成【百炼成艺】');
-    expect(root.querySelector('#log')?.textContent).toContain('成就达成【百炼成艺】');
     // 奖励入袋（回气丹 ×10）。
     expect((game.snapshot().state.items as Record<string, number>)['consumable_heal']).toBe(10);
     // 成就页：副标题 1/11 + 卡片已达成 + 奖励行直出。

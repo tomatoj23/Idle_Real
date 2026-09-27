@@ -94,7 +94,7 @@ describe('#5 · 炼制页（craft 页）渲染', () => {
 });
 
 describe('#5 · 开炉 → 停炉链路（真实点击路径）', () => {
-  it('开炉徽标 + 进度条 + 缺料停炉 toast/修行录（craft-halt 事件接线）', () => {
+  it('开炉徽标 + 进度条 + 缺料停炉红 toast（craft-halt 事件接线）', () => {
     const { root, ui, game, clock } = mount();
     root.querySelector<HTMLButtonElement>('.tab[data-tab="craft"]')!.click();
     ui.render();
@@ -117,7 +117,8 @@ describe('#5 · 开炉 → 停炉链路（真实点击路径）', () => {
     ui.render();
     expect(game.snapshot().state.activity).toBeNull(); // 自动停炉
     expect(root.querySelector('.toast-red')?.textContent).toContain('熄炉');
-    expect(root.querySelector('#log')?.textContent).toContain('材料告罄');
+    // #34 侧栏退场：停炉详情随红 toast（同文流水行删除）。
+    expect(root.querySelector('.toast-red')?.textContent).toContain('材料告罄');
   });
 
   it('材料不齐开炉被拒：已解锁但缺料 → reject 红字浮提示', () => {

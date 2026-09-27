@@ -104,7 +104,8 @@ body {
 
 /* ---------- 页签 ---------- */
 
-.tabs { display: flex; gap: 4px; margin-bottom: 14px; }
+/* 页签行可换行（#34 两档宽度首跑发现：十页签窄屏单行溢出横滚）。 */
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 14px; }
 
 .tab {
   appearance: none;
@@ -122,36 +123,9 @@ body {
 .tab:hover { color: var(--ink); }
 .tab.active { color: var(--gold); border-bottom-color: var(--gold); }
 
-/* ---------- 布局 ---------- */
+/* ---------- 布局（#34 侧栏退役后单栏：版面全宽让给主页面） ---------- */
 
-.layout { display: grid; grid-template-columns: 1fr 248px; gap: 16px; align-items: start; }
-
-.side {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 14px;
-  position: sticky;
-  top: 12px;
-}
-.side-title {
-  margin: 0 0 8px;
-  font-family: var(--serif);
-  font-size: 15px;
-  letter-spacing: 0.25em;
-  color: var(--gold-dim);
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 8px;
-}
-.log { list-style: none; margin: 0; padding: 0; max-height: 420px; overflow-y: auto; }
-.log li {
-  padding: 3px 0;
-  font-size: 12.5px;
-  color: var(--muted);
-  border-bottom: 1px dashed rgba(44, 52, 72, 0.5);
-}
-.log li.t-gold { color: var(--gold); }
-.log li.t-jade { color: var(--jade); }
+.page-root { max-width: 1200px; margin: 0 auto; }
 
 /* ---------- 页面通用 ---------- */
 
@@ -323,17 +297,80 @@ body {
 .bag-price { color: var(--gold); font-size: 12.5px; white-space: nowrap; }
 .bag-ops { display: flex; gap: 6px; }
 
-/* ---------- 浮提示 ---------- */
+/* ----------持久反馈层（#34）：醒目 toast 档 + 轻量飘字档（右上） ----------
+ * #toasts 先例推广为正式机制（C7）：整层固定在根节点，页面重建杀不到。 */
 
-.toasts {
+.floaters {
   position: fixed;
   top: 64px;
   right: 18px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  align-items: flex-end;
   z-index: 50;
   pointer-events: none;
+  max-height: calc(100vh - 96px);
+  overflow: hidden;
+}
+
+.toasts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.float-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+/* 轻量档（#34 AC1）：小号字、快速淡出、数秒即消、堆叠限高。 */
+.float-acq {
+  font-size: 12px;
+  color: var(--muted);
+  background: rgba(27, 32, 48, 0.82);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 10px;
+  max-width: 320px;
+  /* 淡出起点由 pushFloat 的 --float-out-delay 驱动（ui.ts 驻留常量单源）；
+     缺省值 = (FLOAT_ACQ_MS − FLOAT_FADE_MS)/1000，改常量须同步。 */
+  animation: float-in 0.18s ease, float-out 0.45s ease var(--float-out-delay, 3.15s) forwards;
+}
+
+/* 档一战斗飘字（#34 C7：既有 flog 改造）：锚定敌卡逐击起漂、逐击不聚合。 */
+.combat-floats {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 45;
+}
+
+.float-combat {
+  position: absolute;
+  max-width: 340px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: rgba(27, 32, 48, 0.8);
+  border: 1px solid var(--border);
+  font-family: var(--serif);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  animation: float-in 0.16s ease, float-out 0.45s ease var(--float-out-delay, 1.95s) forwards;
+}
+
+@keyframes float-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes float-out {
+  from { opacity: 1; }
+  to { opacity: 0; transform: translateY(-10px); }
 }
 
 /* ---------- 页脚版本行（#12 版本策略） ---------- */
@@ -392,8 +429,6 @@ body {
 /* ---------- 响应式 ---------- */
 
 @media (max-width: 880px) {
-  .layout { grid-template-columns: 1fr; }
-  .side { position: static; }
   .status-card { flex-wrap: wrap; }
   .status-act { width: 100%; }
   .bag-row { flex-wrap: wrap; }

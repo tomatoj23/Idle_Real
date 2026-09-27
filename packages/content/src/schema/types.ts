@@ -491,11 +491,6 @@ export interface ShellTabs {
   readonly journal: string;
 }
 
-/** 侧栏（修行录）文案。 */
-export interface ShellSide {
-  readonly title: string;
-}
-
 /** stat 展示标签表：键 = stat id（开放键域）。 */
 export interface ShellStats {
   readonly labels: Readonly<Record<string, StatLabelDef>>;
@@ -525,9 +520,12 @@ export interface ShellCommon {
   readonly buffTimerOnlineOnly: string;
 }
 
-/** 事件流文案（键 = 引擎事件类型协议面，槽位见 schema 描述；craft 相关键随 #5 加入）。 */
+/**
+ * 事件流文案（键 = 引擎事件类型协议面，槽位见 schema 描述；craft 相关键随 #5 加入）。
+ * 键名冻结（#47 运行时协议面）；各键归宿（飘字/浮提示/战斗日志）见 #34 反馈
+ * 枢纽——侧栏退役后原「修行录行」注释口径 = 飘字行（轻量档），勿再指侧栏。
+ */
 export interface ShellEvents {
-  readonly lootGear: string;
   readonly lootGearLog: string;
   readonly lootShowcase: string;
   readonly lootByproduct: string;
@@ -535,18 +533,14 @@ export interface ShellEvents {
   /** 炼制产出修行录行（#5，loot source=craft）。 */
   readonly lootCraft: string;
   readonly victoryFlog: string;
-  readonly victoryLog: string;
   /** 胜利战利品段（拼入 victoryFlog 的 {spoil} 槽，#62 保真收口）。 */
   readonly victorySpoil: string;
   readonly defeatFlog: string;
   readonly defeatToast: string;
   readonly eatHeal: string;
-  readonly eatBuffToast: string;
   readonly eatBuffLog: string;
-  readonly equipWearToast: string;
   readonly equipWearLog: string;
   readonly equipRemoveLog: string;
-  readonly expCombat: string;
   readonly levelupToast: string;
   readonly levelupLog: string;
   readonly sellLog: string;
@@ -586,14 +580,16 @@ export interface ShellEvents {
   readonly bossPhase: string;
   /** Boss 召唤入场战斗日志行（#30 事件缝 #47；槽位 {enemy}/{count}）。 */
   readonly bossSummon: string;
-  /** 成就达成浮提示（#9，achievement:unlock 事件；槽位 {name}）。 */
+  /** 成就达成浮提示（#9，achievement:unlock 事件；槽位 {name}；#34 同文流水行退场）。 */
   readonly achievementToast: string;
-  /** 成就达成修行录行（#9；槽位 {name}）。 */
-  readonly achievementLog: string;
-  /** 熔炼修行录行（#14，gear:smelt 事件；槽位 {name}/{shard}/{count}）。 */
+  /** 熔炼飘字行（#14，gear:smelt 事件；#34 侧栏平移；槽位 {name}/{shard}/{count}）。 */
   readonly gearSmelt: string;
-  /** 重铸修行录行（#14，gear:reforge 事件；槽位 {name}/{tier}）。 */
+  /** 重铸飘字行（#14，gear:reforge 事件；#34 侧栏平移；槽位 {name}/{tier}）。 */
   readonly gearReforge: string;
+  /** 获取飘字聚合形（#34 档二：同类 3 秒短窗合并计数后切换本模板；槽位 {name}/{count}）。 */
+  readonly floatSum: string;
+  /** 修为读数飘字（#34：仅升级与离线汇总出现；槽位 {amount}）。 */
+  readonly expGain: string;
 }
 
 /** 修炼页文案。 */
@@ -907,7 +903,6 @@ export interface ShellTexts {
   readonly brand: ShellBrand;
   readonly topbar: ShellTopbar;
   readonly tabs: ShellTabs;
-  readonly side: ShellSide;
   readonly stats: ShellStats;
   readonly units: ShellUnits;
   readonly icons: ShellIcons;

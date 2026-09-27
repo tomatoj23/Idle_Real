@@ -106,7 +106,8 @@ describe('#7 · 秘境页与推塔链路', () => {
     const seen: GameEvent[] = [];
     tickUntil(game, () => seen.some((e) => e.type === 'dungeon:floor'), seen);
     ui.render();
-    expect(root.querySelector('#log')!.textContent).toContain('第 1/10 层已通');
+    // #34 侧栏平移：层奖励行入轻量飘字。
+    expect(root.querySelector('#float-stack')!.textContent).toContain('第 1/10 层已通');
     // 层号推进（胜利休整到期自动进层）。
     tickUntil(game, () => (game.snapshot().state as unknown as GameState).dungeon?.floor === 2, seen);
     ui.render();

@@ -596,7 +596,6 @@
         "achievements": "成就",
         "journal": "修行录"
       },
-      "side": { "title": "修行录" },
       "stats": {
         "labels": {
           "atk": { "label": "攻" },
@@ -620,7 +619,6 @@
         "buffTimerOnlineOnly": "仅在线计时，离线不消耗"
       },
       "events": {
-        "lootGear": "妖物遗落【{name}】",
         "lootGearLog": "夺得【{name}】",
         "lootShowcase": "天降异宝！【{name}】",
         "lootByproduct": "偶得 {name}×{count}",
@@ -628,16 +626,12 @@
         "lootCraft": "炼得 {name}×{count}",
         "victoryFlog": "【{name}】轰然倒地！{spoil}{summary}{compare}",
         "victorySpoil": "得灵石 {gold}，缴获 {loot}。",
-        "victoryLog": "击倒【{name}】：{summary}{compare}",
         "defeatFlog": "你不敌【{name}】，真元耗尽，被同门救回",
         "defeatToast": "斗法落败，幸得同门相救",
         "eatHeal": "服下【{name}】，回气 {healed} 点",
-        "eatBuffToast": "服下【{name}】",
         "eatBuffLog": "服下【{name}】，药力{minutes}分",
-        "equipWearToast": "已佩【{name}】",
         "equipWearLog": "佩上【{name}】",
         "equipRemoveLog": "卸下【{name}】",
-        "expCombat": "斗法修为 +{amount}",
         "levelupToast": "【{name}】修为精进，升至 {level} 层",
         "levelupLog": "【{name}】升至 {level} 层",
         "sellLog": "卖出 {name}，得 {gained} 灵石",
@@ -663,9 +657,10 @@
         "bossPhase": "【{enemy}】显露「{name}」之相！（阶段 {phase}）",
         "bossSummon": "【{enemy}】怒啸震野，唤出 {count} 道援影！",
         "achievementToast": "成就达成【{name}】！",
-        "achievementLog": "成就达成【{name}】",
         "gearSmelt": "熔炼【{name}】，得 {shard}×{count}",
-        "gearReforge": "重铸【{name}】，铭纹升至 T{tier}"
+        "gearReforge": "重铸【{name}】，铭纹升至 T{tier}",
+        "floatSum": "{name} +{count}",
+        "expGain": "修为 +{amount}"
       },
       "pages": {
         "skills": {

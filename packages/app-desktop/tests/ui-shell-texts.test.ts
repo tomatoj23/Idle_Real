@@ -55,7 +55,6 @@ function makePack(overrides: Overrides = {}): ContentPack {
         brand: { sigil: '道', name: '试炼', locale: 'zh-CN', bootError: '中止：{message}' },
         topbar: { statsTitle: '属', statsSigil: '斗', goldTitle: '灵石', goldSigil: '石', hpTitle: '气血', hpSigil: '血' },
         tabs: { skills: '修', combat: '斗', bag: '袋', shop: '市' },
-        side: { title: '录' },
         stats: { labels: { atk: { label: overrides.atkLabel ?? '攻' }, crit: critLabel } },
         units: { level: '{v} 层', seconds: '{v} 秒', minute: '{m} 分', hourMinute: '{h} 时 {m} 分' },
         icons: { buff: '丹', gear: '器', unknown: '？' },
@@ -174,7 +173,7 @@ describe('#26 · 购买力走引擎 shopAffordOf（与判定同源）', () => {
 });
 
 describe('#26 · 事件文案随 texts.shell 模板走', () => {
-  it('改 sellLog 模板 → 卖出行跟随（改文案 = 纯 JSON 改动）', () => {
+  it('改 sellLog 模板 → 卖出飘字行跟随（改文案 = 纯 JSON 改动）', () => {
     const content = makePack({ sellLog: '售出 {name} 得 {gained} 文' });
     const game = createGame({ content, clock: new ManualClock(), save: makeSave(0) });
     const root = document.createElement('div');
@@ -182,10 +181,10 @@ describe('#26 · 事件文案随 texts.shell 模板走', () => {
     const ui = buildUi(root, content, () => game.snapshot(), game.events);
     ui.bindActions((action: GameAction) => game.dispatch(action));
     game.dispatch({ type: 'bag:sell', payload: { item: 'heal', count: 1 } });
-    expect(root.querySelector('#log')?.textContent).toContain('售出 回气丹 得 18 文');
+    expect(root.querySelector('#float-stack')?.textContent).toContain('售出 回气丹 得 18 文');
   });
 
-  it('offline-settled → toast/log 按模板填充（时长单位模板 + 物品列表分隔符 + 修为后缀）', () => {
+  it('offline-settled → toast/飘字按模板填充（时长单位模板 + 物品列表分隔符 + 修为后缀）', () => {
     const content = makePack({ offlineLog: '离线 {away}：{items}{exp}' });
     const game = createGame({ content, clock: new ManualClock(), save: makeSave(0) });
     const root = document.createElement('div');
@@ -210,7 +209,7 @@ describe('#26 · 事件文案随 texts.shell 模板走', () => {
     });
     // away 走 units.hourMinute；items 走 nameOf + itemListSep；exp 后缀按 exp 有无拼接
     expect(root.querySelector('.toast')?.textContent).toBe('离线 1 时 30 分归来：采青灵草 ×3');
-    expect(root.querySelector('#log')?.textContent).toContain('离线 1 时 30 分：回气丹×2，修为 +18');
+    expect(root.querySelector('#float-stack')?.textContent).toContain('离线 1 时 30 分：回气丹×2，修为 +18');
   });
 
   it('offline-settled 无产出 → items 槽填 offlineNoYield；无 exp → 后缀整段跳过', () => {
@@ -236,7 +235,7 @@ describe('#26 · 事件文案随 texts.shell 模板走', () => {
         levels: [],
       },
     });
-    expect(root.querySelector('#log')?.textContent).toContain('离线修行 1 分：无所获');
-    expect(root.querySelector('#log')?.textContent).not.toContain('修为');
+    expect(root.querySelector('#float-stack')?.textContent).toContain('离线修行 1 分：无所获');
+    expect(root.querySelector('#float-stack')?.textContent).not.toContain('修为');
   });
 });

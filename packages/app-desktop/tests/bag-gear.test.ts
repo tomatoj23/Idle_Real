@@ -85,7 +85,6 @@ function makePack(withEconomy = true): ContentPack {
         brand: { sigil: '道', name: '试炼', locale: 'zh-CN', bootError: '中止：{message}' },
         topbar: { statsTitle: '属', statsSigil: '斗', goldTitle: '灵石', goldSigil: '石', hpTitle: '气血', hpSigil: '血' },
         tabs: { skills: '修', combat: '斗', bag: '袋', shop: '市' },
-        side: { title: '录' },
         stats: { labels: { atk: { label: '攻' }, def: { label: '防' } } },
         units: { level: '{v} 层', seconds: '{v} 秒', minute: '{m} 分', hourMinute: '{h} 时 {m} 分' },
         icons: { buff: '丹', gear: '器', unknown: '？' },
