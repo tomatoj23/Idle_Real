@@ -199,3 +199,53 @@ export function makeCombatPack() {
     },
   };
 }
+
+/**
+ * 炼制/自动化夹具核心（#39/#35 共用——#35 复核收口从 makeLedgerPack/makeAutoPack
+ * 两份拷贝抽取）：smith 双配方（index 0 丹药=无稀有度产出 / index 1 器胚=装备产出，
+ * 名字是稳定引用守卫的对名面勿轻改）+ 器屑经济。场景差异（rarities 权重表/shop/
+ * 成就）由调用方覆盖；**掷点映射随覆盖的权重表走**（rollRarity 常量掷点对
+ * 70/20/8 表：0.4→common、0.8→fine、0.95→rare）。
+ */
+export function smithCraftCore() {
+  return {
+    skills: [{ id: 'smith', name: '炼器', icon: '器', kind: 'craft' }],
+    items: [
+      { id: 'herb1', name: '青灵草', icon: '青', type: 'mat', sell: 4 },
+      {
+        id: 'pill1',
+        name: '聚气丹',
+        icon: '聚',
+        type: 'consumable',
+        sell: 50,
+        effect: { duration: 300000, multipliers: { atk: 1.1 } },
+      },
+      { id: 'shard', name: '器屑', icon: '屑', type: 'mat', sell: 3 },
+      { id: 'sword1', name: '青锋剑', icon: '剑', type: 'equip', slot: 'weapon', sell: 30, bonuses: { atk: 6 } },
+    ],
+    recipes: [
+      {
+        name: '炼制聚气丹',
+        skill: 'smith',
+        unlockLevel: 1,
+        output: { item: 'pill1', count: 1 },
+        materials: { herb1: 2 },
+        successRate: 1,
+        interval: 3000,
+        exp: 8,
+      },
+      {
+        name: '锻青锋剑',
+        skill: 'smith',
+        unlockLevel: 1,
+        output: { item: 'sword1', count: 1 },
+        materials: { herb1: 1 },
+        successRate: 1,
+        interval: 2000,
+        exp: 10,
+      },
+    ],
+    affixPool: [{ name: '锐锋', stat: 'atk', scale: 0.3 }],
+    config: { gear: { shardItem: 'shard', reforgeCost: 5 } },
+  };
+}

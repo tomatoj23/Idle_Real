@@ -657,14 +657,18 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
         if (mode !== 'sell' && mode !== 'smelt') continue; // mode 非法丢弃该键
         if (entry.name !== recipe.name) continue; // 稳定引用（ADR-015）：下标对名不符 = 重排/改名，宁弃不换目标
         const maxRarity = entry.maxRarity;
-        if (maxRarity !== undefined) {
-          // 阈值非法/未知稀有度 = 丢弃该键（未知稀有度安全回退，不折好过错折）。
-          // 存在性走 rarityRankOf 精确匹配——findRarity 未命中回退第一档，会放行坏键。
+        // 规则域一致性（#35 复核收口，与写入面同律）：装备产出的规则必带在册阈值
+        // （缺失/非法 = 丢键——「阈值缺失的装备规则」不入活态，决策侧安全回退留作
+        // 防御纵深）；普通产出阈值无语义，写入即剥离（垃圾字段不入活态）。
+        const isGear = findItem(env.content, recipe.output.item)?.type === 'equip';
+        if (isGear) {
           if (typeof maxRarity !== 'string' || rarityRankOf(env.content, maxRarity) === undefined) {
             continue;
           }
+          state.recipeAuto[key] = recipeAutoRuleOf(mode, maxRarity, recipe.name);
+        } else {
+          state.recipeAuto[key] = recipeAutoRuleOf(mode, undefined, recipe.name);
         }
-        state.recipeAuto[key] = recipeAutoRuleOf(mode, maxRarity, recipe.name);
       }
     },
     // 玩家设置非资产：不进内容声明式 reset/keep 表——default-keep 机制自动

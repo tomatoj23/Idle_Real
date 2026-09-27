@@ -4,7 +4,7 @@
  * 页框零件消费与修炼页同框（statusCard/act 卡/xp 头+chips/锁定句/activity-pct）；
  * 实况刷新（配方进度条）住本页 update（D3）。
  */
-import { craftMissingOf, craftSuccessRateOf, levelFromXp, rebirthGateOf } from '@wendao/engine';
+import { craftMissingOf, craftSuccessRateOf, levelFromXp, rebirthGateOf, AUTO_MODES } from '@wendao/engine';
 import type { GameState, RecipeView } from '@wendao/engine';
 import {
   actBarHtml,
@@ -32,9 +32,9 @@ export function createCraftPage(env: PageEnv): PageView {
   /**
    * 配方自动化控件行（#35）：三态单选（不处理/自动售卖/自动熔炼，互斥）+
    * 稀有度阈值（≤所选档）。两态退化：丹药/材料配方（产出无稀有度）不渲染
-   * 熔炼项与阈值项；无器屑经济的包（canSmelt=false）不渲染熔炼项。
-   * 注入存量的不可选态（无器屑包的熔炼规则/普通产出的熔炼规则）保留选中态
-   * 展示（disabled 选项），防选择器静默换态谎报。
+   * 熔炼项与阈值项；无器屑经济的包（canSmelt=false）熔炼项不可选——注入存量
+   * 的不可选态（无器屑包的熔炼规则/普通产出的熔炼规则）保留选中态回显
+   * （disabled 选项），防选择器静默换态谎报。
    */
   const autoRowHtml = (st: Readonly<GameState>, index: number, isGear: boolean, T: ShellText): string => {
     const rule = st.recipeAuto[String(index)];
@@ -207,10 +207,12 @@ export function createCraftPage(env: PageEnv): PageView {
         case 'autorule': {
           // 配方自动化规则派发（#35）：三态单选/阈值共用本动作，整条规则重写
           //（互斥单选 = 单字段覆盖）。装备产出必带阈值（首启默认最低档 = 只折
-          // 寻常，高品绝不误折）；普通产出无阈值语义不带。
+          // 寻常，高品绝不误折）；普通产出无阈值语义不带。三态经注册表收窄。
           const box = target.closest<HTMLElement>('.craft-auto');
-          const mode = box?.querySelector<HTMLSelectElement>('.auto-mode')?.value;
-          if (mode !== 'none' && mode !== 'sell' && mode !== 'smelt') return;
+          const mode = AUTO_MODES.find(
+            (m) => m === box?.querySelector<HTMLSelectElement>('.auto-mode')?.value,
+          );
+          if (mode === undefined) return;
           const index = Number(target.dataset.index);
           const recipe = env.content.recipes[index];
           const isGear = recipe !== undefined && env.itemById.get(recipe.output.item)?.type === 'equip';

@@ -55,7 +55,9 @@ export type LedgerData = {
   origin: LedgerOrigin;
   /** 物品键 / 货币键（LEDGER_CURRENCIES）/ 技能键（kind=exp）。 */
   id: string;
-  /** 全 kind 带符号：增正减负；折叠标记事件恒 0。 */
+  /** 全 kind 带符号：增正减负；折叠标记事件恒 0。**协议不变量**：count=0 行 ⇔ 被折
+   * 标记行（折得物必为正额——0 额折得物不发，「0 变化不入账」；修行录折叠补注
+   * 的标记/折得物判别依赖本不变量）。 */
   count: number;
   /** 入账时冻结的灵石等价单价（恒正；exp/道韵 = 0）；折叠标记事件恒 0。 */
   value: number;
@@ -68,10 +70,13 @@ export type LedgerData = {
 };
 
 /**
- * 自动处理三态（#35，互斥单选）：'none' = 不处理（缺省，规则表无条目）。
- * 规则条目只存非 none 态（在场即生效），'none' = 删除条目。
+ * 自动处理三态注册表（#35，互斥单选，同 LEDGER_SOURCES 注册表形态）：
+ * 'none' = 不处理（缺省，规则表无条目）；规则条目只存非 none 态（在场即生效），
+ * 'none' = 删除条目。校验/文案遍历共用此表，禁各处手拼三态值。
  */
-export type AutoMode = 'none' | LedgerAuto;
+export const AUTO_MODES = ['none', 'sell', 'smelt'] as const;
+
+export type AutoMode = (typeof AUTO_MODES)[number];
 
 /**
  * 配方自动处理规则（#35 规则本体，原 D3 挂点的填充物）：键 = 配方下标

@@ -679,7 +679,19 @@ function checkRecipes(
   maxLevel: number | undefined,
   errors: ContentError[],
 ): void {
+  const recipeNames = new Set<string>();
   recipes.forEach((recipe, i) => {
+    // 配方名唯一（#35 复核收口）：recipes 无 id，下标+名是唯二身份（activity 恢复
+    // 与配方自动化规则的 ADR-015 对名守卫皆以此为前提）——重名会让守卫对
+    // 「重排+重名」失明、规则静默换目标。
+    if (recipeNames.has(recipe.name)) {
+      errors.push({
+        path: `/recipes/${i}/name`,
+        keyword: 'duplicate',
+        message: `配方名 "${recipe.name}" 重复：配方无 id，下标+名是唯二身份（恢复期对名守卫的前提）`,
+      });
+    }
+    recipeNames.add(recipe.name);
     // 层数上限单一来源（#021 批 4，P2-1）：同 checkSkills。
     if (maxLevel !== undefined && recipe.unlockLevel > maxLevel) {
       errors.push({

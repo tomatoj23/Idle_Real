@@ -105,7 +105,7 @@ import type {
   LedgerOrigin,
   LedgerSource,
 } from './ledger.js';
-import { recipeAutoRuleOf } from './ledger.js';
+import { AUTO_MODES, recipeAutoRuleOf } from './ledger.js';
 
 export interface CreateGameOptions {
   /** 由 content 包校验过的内容包；引擎零内容感知，仅透明持有。 */
@@ -547,16 +547,21 @@ export function createGame(options: CreateGameOptions): Game {
     if (auto === 'smelt') {
       const smelt = smeltYieldOf(gear.rarity);
       if (smelt) {
-        addItem(smelt.shardItem, smelt.shards);
         emitLedger({ ...marker, auto });
-        emitLedger({
-          ...ledgerBase(source, meta),
-          kind: 'item',
-          id: smelt.shardItem,
-          count: smelt.shards,
-          value: Math.max(0, findItem(content, smelt.shardItem)?.sell ?? 0),
-          auto,
-        });
+        // 0 器屑档（rarities[].smelt=0 合法）折得为 0：不发零额折得物（与 sell
+        // 路径「0 变化不入账」同律）——且折得物行必为 count>0，保住「count=0 行
+        // ⇔ 被折标记行」的协议不变量（修行录折叠补注判别依赖它）。
+        if (smelt.shards > 0) {
+          addItem(smelt.shardItem, smelt.shards);
+          emitLedger({
+            ...ledgerBase(source, meta),
+            kind: 'item',
+            id: smelt.shardItem,
+            count: smelt.shards,
+            value: Math.max(0, findItem(content, smelt.shardItem)?.sell ?? 0),
+            auto,
+          });
+        }
         return false;
       }
       // 无器屑经济（config.gear.shardItem 未配置）：防御性保持原样入袋。
@@ -2061,12 +2066,13 @@ export function createGame(options: CreateGameOptions): Game {
           // 咽喉、不记修行录、不发事件（与 combat:auto 同律）。
           const payload = action.payload;
           const index = payload?.index;
-          const mode = payload?.mode;
+          // 三态经注册表收窄（AUTO_MODES）：注入面 mode 非法 = find 落空 → bad-payload。
+          const mode = AUTO_MODES.find((m) => m === payload?.mode);
           if (
             typeof index !== 'number' ||
             !Number.isInteger(index) ||
             index < 0 ||
-            (mode !== 'none' && mode !== 'sell' && mode !== 'smelt')
+            mode === undefined
           ) {
             reject(action.type, 'bad-payload');
             return;
@@ -2076,9 +2082,18 @@ export function createGame(options: CreateGameOptions): Game {
             reject(action.type, 'bad-payload');
             return;
           }
-          const maxRarity = payload?.maxRarity;
           // 存在性走 rarityRankOf 精确匹配（findRarity 未命中回退第一档，会放行坏键）。
+          const maxRarity = payload?.maxRarity;
           if (maxRarity !== undefined && rarityRankOf(content, maxRarity) === undefined) {
+            reject(action.type, 'bad-payload');
+            return;
+          }
+          // 规则域一致性（#35 复核收口）：装备产出的规则必带在册阈值（UI 恒补最低档；
+          // 缺失 = bad-payload），普通产出阈值无语义不收（写入即剥离）——与恢复面
+          // 的丢键/剥离同律，「阈值缺失的装备规则」在合法路径不可构造（决策侧的
+          // 安全回退仍留作防御纵深）。
+          const isGear = findItem(content, recipe.output.item)?.type === 'equip';
+          if (isGear && mode !== 'none' && maxRarity === undefined) {
             reject(action.type, 'bad-payload');
             return;
           }
@@ -2088,7 +2103,7 @@ export function createGame(options: CreateGameOptions): Game {
             return;
           }
           // 稳定引用名随写入冻结（ADR-015）：恢复按「下标在册 + 对名一致」双校验。
-          state.recipeAuto[key] = recipeAutoRuleOf(mode, maxRarity, recipe.name);
+          state.recipeAuto[key] = recipeAutoRuleOf(mode, isGear ? maxRarity : undefined, recipe.name);
           return;
         }
 

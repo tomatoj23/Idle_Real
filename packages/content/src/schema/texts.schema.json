@@ -285,7 +285,7 @@
                 "recipeMeta": { "$ref": "#/definitions/template", "description": "配方元信息行（#5）；槽位 {interval}/{exp}/{level}" },
                 "autoNone": { "$ref": "#/definitions/line", "description": "配方自动化三态选项·不处理（#35，缺省）" },
                 "autoSell": { "$ref": "#/definitions/line", "description": "配方自动化三态选项·自动售卖（#35）" },
-                "autoSmelt": { "$ref": "#/definitions/line", "description": "配方自动化三态选项·自动熔炼（#35；无器屑经济的包两态退化不渲染此选项）" },
+                "autoSmelt": { "$ref": "#/definitions/line", "description": "配方自动化三态选项·自动熔炼（#35；无器屑经济的包两态退化不可选——存量熔炼态仅回显为 disabled 选项防谎报）" },
                 "autoCap": { "$ref": "#/definitions/template", "description": "稀有度阈值选项（#35，≤所选档才折；仅装备产出配方渲染）；槽位 {rarity}（档名）" }
               }
             },

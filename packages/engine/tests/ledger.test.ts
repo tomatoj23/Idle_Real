@@ -9,7 +9,7 @@ import {
   type LedgerData,
   type SaveData,
 } from '../src/index.js';
-import { makeCombatPack, makePack } from './fixtures.js';
+import { makeCombatPack, makePack, smithCraftCore } from './fixtures.js';
 
 function stateOf(save: SaveData): GameState {
   return save.state as unknown as GameState;
@@ -29,51 +29,14 @@ function aggregate(entries: LedgerData[]): Map<string, number> {
   return out;
 }
 
-/** 炼制夹具（双必得配方：丹药产出 + 装备产出；器屑经济已配置）。 */
+/** 炼制夹具（双必得配方：丹药产出 + 装备产出；器屑经济已配置；两档稀有度 70/30）。 */
 function makeLedgerPack(): GameContent {
   return {
-    skills: [{ id: 'smith', name: '炼器', icon: '器', kind: 'craft' }],
-    items: [
-      { id: 'herb1', name: '青灵草', icon: '青', type: 'mat', sell: 4 },
-      {
-        id: 'pill1',
-        name: '聚气丹',
-        icon: '聚',
-        type: 'consumable',
-        sell: 50,
-        effect: { duration: 300000, multipliers: { atk: 1.1 } },
-      },
-      { id: 'shard', name: '器屑', icon: '屑', type: 'mat', sell: 3 },
-      { id: 'sword1', name: '青锋剑', icon: '剑', type: 'equip', slot: 'weapon', sell: 30, bonuses: { atk: 6 } },
-    ],
-    recipes: [
-      {
-        name: '炼制聚气丹',
-        skill: 'smith',
-        unlockLevel: 1,
-        output: { item: 'pill1', count: 1 },
-        materials: { herb1: 2 },
-        successRate: 1,
-        interval: 3000,
-        exp: 8,
-      },
-      {
-        name: '锻青锋剑',
-        skill: 'smith',
-        unlockLevel: 1,
-        output: { item: 'sword1', count: 1 },
-        materials: { herb1: 1 },
-        successRate: 1,
-        interval: 2000,
-        exp: 10,
-      },
-    ],
+    ...smithCraftCore(),
     rarities: [
       { id: 'common', name: '寻常', weight: 70, mult: 1, affix: 0, sell: 1, smelt: 1 },
       { id: 'fine', name: '精良', weight: 30, mult: 1.15, affix: 1, sell: 2, smelt: 2 },
     ],
-    affixPool: [{ name: '锐锋', stat: 'atk', scale: 0.3 }],
-    config: { gear: { shardItem: 'shard', reforgeCost: 5 } },
   } as unknown as GameContent;
 }
 

@@ -279,7 +279,7 @@ export type { StatKey, StatSnapshot } from './stats.js';
 
 // 入账咽喉协议（#39：来源闭集/kind 判别；#35 自动化规则本体形状——咽喉
 // 本体与判定接缝在 game.ts）
-export { LEDGER_CURRENCIES, LEDGER_SOURCES } from './ledger.js';
+export { AUTO_MODES, LEDGER_CURRENCIES, LEDGER_SOURCES } from './ledger.js';
 export type {
   AutoMode,
   LedgerAuto,

@@ -232,8 +232,9 @@ schema 无 rank 字段）；validate 语义关卡保证 `mult` 随序单调不�
 - **配方自动化控件**（#35）：`pages.craft` 增 autoNone/autoSell/autoSmelt/autoCap
   四键——配方卡「开炉」旁三态单选（不处理/自动售卖/自动熔炼）+ 稀有度阈值选项
   （autoCap 槽位 `{rarity}`，≤所选档才折）；autoSmelt 仅在包配置
-  `config.gear.shardItem`（器屑经济）时渲染，无熔炼玩法的包两态退化；阈值选项仅
-  装备产出配方渲染（丹药/材料配方无稀有度）。
+  `config.gear.shardItem`（器屑经济）时可选，无熔炼玩法的包两态退化（存量熔炼态
+  仅回显为 disabled 选项防谎报）；阈值选项仅装备产出配方渲染（丹药/材料配方无
+  稀有度）。
 - 键分组语义：`events.*` 键 = 引擎事件类型协议面（loot/victory/defeat/
   consumable:eat/equip:wear/levelup/sell/buy/reject/offline-settled；
   #5 起含 craft-fail/craft-halt 的 craftFail/craftHalt 与 loot source=craft

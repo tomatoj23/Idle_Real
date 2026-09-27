@@ -9,6 +9,7 @@ import {
   type LedgerData,
   type SaveData,
 } from '../src/index.js';
+import { smithCraftCore } from './fixtures.js';
 
 function stateOf(save: SaveData): GameState {
   return save.state as unknown as GameState;
@@ -20,55 +21,18 @@ function ledgerEntries(events: GameEvent[]): LedgerData[] {
 
 /**
  * #35 配方自动化规则夹具：丹药配方（index 0，无稀有度产出）+ 器胚配方
- * （index 1，装备产出）；rarities 三档（寻常/精良/罕见）；器屑经济已配置；
- * 成就奖励发丹药（挂点不可达反证用）。
+ * （index 1，装备产出）；rarities 三档（寻常/精良/罕见，70/20/8）；器屑经济
+ * 已配置；坊市可买丹药（挂点不可达反证用）。核心形状 = fixtures.smithCraftCore。
  */
 function makeAutoPack(): GameContent {
   return {
-    skills: [{ id: 'smith', name: '炼器', icon: '器', kind: 'craft' }],
-    items: [
-      { id: 'herb1', name: '青灵草', icon: '青', type: 'mat', sell: 4 },
-      {
-        id: 'pill1',
-        name: '聚气丹',
-        icon: '聚',
-        type: 'consumable',
-        sell: 50,
-        effect: { duration: 300000, multipliers: { atk: 1.1 } },
-      },
-      { id: 'shard', name: '器屑', icon: '屑', type: 'mat', sell: 3 },
-      { id: 'sword1', name: '青锋剑', icon: '剑', type: 'equip', slot: 'weapon', sell: 30, bonuses: { atk: 6 } },
-    ],
-    recipes: [
-      {
-        name: '炼制聚气丹',
-        skill: 'smith',
-        unlockLevel: 1,
-        output: { item: 'pill1', count: 1 },
-        materials: { herb1: 2 },
-        successRate: 1,
-        interval: 3000,
-        exp: 8,
-      },
-      {
-        name: '锻青锋剑',
-        skill: 'smith',
-        unlockLevel: 1,
-        output: { item: 'sword1', count: 1 },
-        materials: { herb1: 1 },
-        successRate: 1,
-        interval: 2000,
-        exp: 10,
-      },
-    ],
+    ...smithCraftCore(),
     rarities: [
       { id: 'common', name: '寻常', weight: 70, mult: 1, affix: 0, sell: 1, smelt: 1 },
       { id: 'fine', name: '精良', weight: 20, mult: 1.15, affix: 1, sell: 2, smelt: 2 },
       { id: 'rare', name: '罕见', weight: 8, mult: 1.3, affix: 2, sell: 4, smelt: 4 },
     ],
-    affixPool: [{ name: '锐锋', stat: 'atk', scale: 0.3 }],
     shop: [{ item: 'pill1', price: 30 }],
-    config: { gear: { shardItem: 'shard', reforgeCost: 5 } },
   } as unknown as GameContent;
 }
 
@@ -158,7 +122,7 @@ describe('#35 · 配方自动化规则：三态互斥 + 缺省不处理', () => 
     expect(stateOf(game.snapshot()).items.pill1).toBe(2);
   });
 
-  it('载荷守卫：坏载荷（非整下标/未知模式/未知稀有度/未注册配方）reject bad-payload', () => {
+  it('载荷守卫：坏载荷（非整下标/未知模式/未知稀有度/装备缺阈值/未注册配方）reject bad-payload', () => {
     const clock = new ManualClock();
     const game = createGame({ content: makeAutoPack(), clock, save: saveWith(PILL) });
     const bad: GameAction[] = [
@@ -168,11 +132,44 @@ describe('#35 · 配方自动化规则：三态互斥 + 缺省不处理', () => 
       ({ type: 'craft:auto', payload: { index: 0, mode: 'nonsense' } } as unknown) as GameAction,
       { type: 'craft:auto', payload: { index: 0, mode: 'sell', maxRarity: 'ghost' } },
       { type: 'craft:auto', payload: { index: 9, mode: 'sell' } },
+      // 域一致性（复核收口）：装备产出规则必带在册阈值（UI 恒补最低档）。
+      { type: 'craft:auto', payload: { index: 1, mode: 'sell' } },
     ];
     for (const action of bad) game.dispatch(action);
     const rejects = game.events.drain().filter((e) => e.type === 'reject');
-    expect(rejects).toHaveLength(5);
+    expect(rejects).toHaveLength(6);
     expect(stateOf(game.snapshot()).recipeAuto).toEqual({});
+  });
+
+  it('域一致性：普通产出规则的阈值写入即剥离；装备规则缺阈值恢复即丢键', () => {
+    // 普通产出 + 杂散阈值（仅坏档可达）→ 阈值剥离、mode 保留
+    const clock = new ManualClock();
+    const game = createGame({
+      content: makeAutoPack(),
+      clock,
+      save: saveWith(PILL, { recipeAuto: { '0': { mode: 'sell', maxRarity: 'fine', name: '炼制聚气丹' } } }),
+    });
+    expect(stateOf(game.snapshot()).recipeAuto).toEqual({ '0': { mode: 'sell', name: '炼制聚气丹' } });
+
+    // 装备规则缺阈值/阈值非串/阈值未知 → 丢键（「阈值缺失的装备规则」不入活态）
+    for (const rule of [{ mode: 'sell', name: '锻青锋剑' }, { mode: 'sell', maxRarity: 5, name: '锻青锋剑' }, { mode: 'sell', maxRarity: 'ghost', name: '锻青锋剑' }]) {
+      const g = createGame({
+        content: makeAutoPack(),
+        clock: new ManualClock(),
+        save: saveWith(SWORD, { recipeAuto: { '1': rule } }),
+      });
+      expect(stateOf(g.snapshot()).recipeAuto).toEqual({});
+    }
+
+    // mode='none' 残键（三态的缺省态不该落档）与非对象条目 → 丢键
+    const g2 = createGame({
+      content: makeAutoPack(),
+      clock: new ManualClock(),
+      save: saveWith(PILL, {
+        recipeAuto: { '0': { mode: 'none', name: '炼制聚气丹' }, '1': 'junk' },
+      }),
+    });
+    expect(stateOf(g2.snapshot()).recipeAuto).toEqual({});
   });
 });
 
@@ -263,8 +260,8 @@ describe('#35 · 稀有度阈值（≤所选档，rarities 数组序）', () => 
     expect(st.gear).toHaveLength(1);
   });
 
-  it('装备产出阈值缺失/未知稀有度 = 安全回退不折（高品绝不误折）', () => {
-    // 阈值缺失（仅 mode）→ 不折
+  it('装备产出阈值缺失/未知稀有度 = 不折（恢复期丢键 + 决策侧安全回退双防线）', () => {
+    // 阈值缺失（仅 mode）→ 恢复期丢键 → 不折（决策侧另有安全回退防身）
     const clock = new ManualClock();
     const game = createGame({
       content: makeAutoPack(),
@@ -272,6 +269,7 @@ describe('#35 · 稀有度阈值（≤所选档，rarities 数组序）', () => 
       save: saveWith(SWORD, { recipeAuto: { '1': { mode: 'sell', name: '锻青锋剑' } } }),
       ...roll(0.4),
     });
+    expect(stateOf(game.snapshot()).recipeAuto).toEqual({});
     clock.advance(2000);
     game.tick(2000);
     expect(stateOf(game.snapshot()).gear).toHaveLength(1);
@@ -309,6 +307,30 @@ describe('#35 · 熔炼可用性门控（AC4）', () => {
     expect(st.gear).toHaveLength(1); // 不转化：照常入袋
     expect(entries.every((e) => e.auto === undefined)).toBe(true); // 不记自动账
     expect(entries.find((e) => e.kind === 'gear')).toMatchObject({ count: 1, id: 'sword1' });
+  });
+
+  it('0 器屑档（rarities[].smelt=0 合法）：折得为 0 不发零额折得物——count=0 行⇔标记行不变量', () => {
+    const pack = makeAutoPack();
+    (pack as { rarities: Array<{ smelt: number }> }).rarities[0]!.smelt = 0; // 寻常档 0 产屑
+    const clock = new ManualClock();
+    const game = createGame({
+      content: pack,
+      clock,
+      save: saveWith(SWORD, { recipeAuto: { '1': { mode: 'smelt', maxRarity: 'fine', name: '锻青锋剑' } } }),
+      ...roll(0.4), // 寻常
+    });
+    clock.advance(2000);
+    game.tick(2000);
+    const st = stateOf(game.snapshot());
+    const entries = ledgerEntries(game.events.drain());
+    expect(st.gear).toHaveLength(0); // 折叠照常发生（0 器屑档 = 内容定价为零）
+    expect(st.items.shard).toBeUndefined();
+    expect(entries).toEqual([
+      { kind: 'item', source: 'craft', origin: 'idle', id: 'herb1', count: -1, value: 4 },
+      // 仅标记行；零额器屑行不发（与 sell 路径「0 变化不入账」同律）。
+      { kind: 'gear', source: 'craft', origin: 'idle', id: 'sword1', uid: 1, rarity: 'common', count: 0, value: 0, auto: 'smelt' },
+      { kind: 'exp', source: 'craft', origin: 'idle', id: 'smith', count: 10, value: 0 },
+    ]);
   });
 });
 
@@ -354,7 +376,18 @@ describe('#35 · 判定只挂配方产出来源（AC5）', () => {
   it('兵解保留资产不入自动判定：袋内装备实例原样保留、零自动账', () => {
     const clock = new ManualClock();
     const game = createGame({
-      content: makeAutoPack(),
+      // 兵解可用 = 包带 rebirth 节（否则 not-available 拒发，本测空转）。
+      content: {
+        ...makeAutoPack(),
+        rebirth: {
+          reset: ['skills', 'items', 'gold', 'buffs', 'lastEncounter'],
+          keep: ['gear'],
+          formula: { base: 0, coef: 0.001, exp: 1, minProgress: 100 },
+          talents: [],
+          unlocks: [],
+          realms: [],
+        },
+      } as unknown as GameContent,
       clock,
       save: {
         version: 1,
@@ -363,7 +396,8 @@ describe('#35 · 判定只挂配方产出来源（AC5）', () => {
           gold: 50,
           hp: 50,
           items: {},
-          skills: { smith: { xp: 500 } },
+          // 总修为 20000 → daoYunGain = floor(0.001 × 20000) = 20 → 兵解确有道韵入账行可验。
+          skills: { smith: { xp: 20000 } },
           activity: null,
           gear: [{ uid: 1, itemId: 'sword1', rarity: 'common', affixes: [] }],
           recipeAuto: { '1': { mode: 'smelt', maxRarity: 'fine', name: '锻青锋剑' } },
@@ -372,11 +406,13 @@ describe('#35 · 判定只挂配方产出来源（AC5）', () => {
     });
     game.dispatch({ type: 'rebirth:perform' });
     const st = stateOf(game.snapshot());
+    expect(st.rebirths).toBe(1); // 兵解确实发生（防本测空转）
     expect(st.gear).toHaveLength(1); // 保留资产原样（不折不熔）
     const entries = ledgerEntries(game.events.drain());
-    expect(entries.every((e) => e.auto === undefined)).toBe(true); // 不记自动账
-    // 兵解入账只有道韵结算一笔（0 变化不入账 → 零笔或一笔，绝无自动折叠）。
-    expect(entries.every((e) => e.source === 'rebirth')).toBe(true);
+    expect(entries).toEqual([
+      // 兵解入账只有道韵结算一笔（#39 口径），绝无自动折叠账。
+      { kind: 'currency', source: 'rebirth', origin: 'user', id: 'daoYun', count: 20, value: 0 },
+    ]);
     expect(st.recipeAuto).toEqual({ '1': { mode: 'smelt', maxRarity: 'fine', name: '锻青锋剑' } }); // 规则兵解保留（AC6）
   });
 });
@@ -407,16 +443,16 @@ describe('#35 · 离线炼制同判（AC2）', () => {
 
 describe('#35 · 存档持久化纪律（AC7/AC8：显式消毒恢复，禁透明收编）', () => {
   it('存盘→重载规则存活；未知键/坏形条目逐键丢弃、非对象回退缺省、零崩溃', () => {
-    // 存盘→重载存活
+    // 存盘→重载存活（装备规则带阈值——阈值是装备规则的组成，随档存续）
     const clock = new ManualClock();
     const game = createGame({
       content: makeAutoPack(),
       clock,
-      save: saveWith(PILL, { recipeAuto: { '0': { mode: 'smelt', maxRarity: 'fine', name: '炼制聚气丹' } } }),
+      save: saveWith(PILL, { recipeAuto: { '1': { mode: 'smelt', maxRarity: 'fine', name: '锻青锋剑' } } }),
     });
     const reloaded = createGame({ content: makeAutoPack(), save: game.snapshot() });
     expect(stateOf(reloaded.snapshot()).recipeAuto).toEqual({
-      '0': { mode: 'smelt', maxRarity: 'fine', name: '炼制聚气丹' },
+      '1': { mode: 'smelt', maxRarity: 'fine', name: '锻青锋剑' },
     });
 
     // 坏档注入：规则表非对象 → 回退缺省空表
@@ -465,5 +501,19 @@ describe('#35 · 存档持久化纪律（AC7/AC8：显式消毒恢复，禁透�
     (renamed as { recipes: Array<{ name: string }> }).recipes[1]!.name = '锻新剑';
     const renamedGame = createGame({ content: renamed, save: game.snapshot() });
     expect(stateOf(renamedGame.snapshot()).recipeAuto).toEqual({});
+  });
+
+  it('快照克隆隔离：条目逐条复制不共享引用，改快照不写穿引擎态（clone 行有牙）', () => {
+    const clock = new ManualClock();
+    const game = createGame({
+      content: makeAutoPack(),
+      clock,
+      save: saveWith(PILL, { recipeAuto: { '0': { mode: 'sell', name: '炼制聚气丹' } } }),
+    });
+    const snap1 = stateOf(game.snapshot());
+    const snap2 = stateOf(game.snapshot());
+    expect(snap1.recipeAuto['0']).not.toBe(snap2.recipeAuto['0']); // 逐条复制，非共享引用
+    (snap1.recipeAuto['0'] as unknown as { mode: string }).mode = 'smelt'; // 写穿尝试
+    expect(stateOf(game.snapshot()).recipeAuto['0']).toEqual({ mode: 'sell', name: '炼制聚气丹' });
   });
 });

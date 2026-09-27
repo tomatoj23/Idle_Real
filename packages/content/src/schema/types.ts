@@ -698,7 +698,7 @@ export interface ShellPageCraft {
   readonly autoNone: string;
   /** 配方自动化三态选项·自动售卖（#35）。 */
   readonly autoSell: string;
-  /** 配方自动化三态选项·自动熔炼（#35；无器屑经济的包两态退化不渲染此选项）。 */
+  /** 配方自动化三态选项·自动熔炼（#35；无器屑经济的包两态退化不可选——存量熔炼态仅回显为 disabled 选项防谎报）。 */
   readonly autoSmelt: string;
   /** 稀有度阈值选项（#35，≤所选档才折；仅装备产出配方渲染）；槽位 {rarity}（档名）。 */
   readonly autoCap: string;

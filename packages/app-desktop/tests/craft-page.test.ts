@@ -181,7 +181,6 @@ describe('#35 · 配方卡自动化控件（三态单选 + 稀有度阈值）', 
   it('动作派发：设自动售卖 → 规则入档（装备默认阈值=最低档）；阈值改写随动；回不处理删条目', () => {
     const { root, ui, game } = mount();
     openCraft(root, ui, 'smith');
-    const swordCard = cardOf(root, '锻青锋剑');
 
     // 启用自动售卖：整条规则重写，默认阈值 = rarities[0]（寻常）——高品绝不误折
     changeSelect(root, '.act-card .auto-mode', 'sell');
@@ -224,5 +223,30 @@ describe('#35 · 配方卡自动化控件（三态单选 + 稀有度阈值）', 
     openCraft(root, ui, 'smith');
     const gearMode = cardOf(root, '锻青锋剑').querySelector<HTMLSelectElement>('.auto-mode')!;
     expect(Array.from(gearMode.options).map((o) => o.value)).toEqual(['none', 'sell']);
+  });
+});
+
+describe('#35 · 表单控件委托（点击 SELECT 不派发）', () => {
+  it('开合下拉的点击不派发动作、不触发重绘换血（change 委托专属）', () => {
+    const { root, ui, game } = mount();
+    root.querySelector<HTMLButtonElement>('.tab[data-tab="craft"]')!.click();
+    root.querySelector<HTMLButtonElement>('.chip[data-skill="smith"]')!.click();
+    ui.render();
+    const mode = root.querySelector<HTMLSelectElement>('.act-card .auto-mode')!;
+    mode.value = 'sell';
+    mode.dispatchEvent(new Event('change', { bubbles: true }));
+    const cardBefore = Array.from(root.querySelectorAll<HTMLElement>('.act-card')).find((c) =>
+      c.textContent?.includes('锻青锋剑'),
+    )!;
+    // 真实点击路径（浏览器里开合下拉）：若误派发 autorule，env.render() 会整卡换血
+    cardBefore.querySelector<HTMLSelectElement>('.auto-mode')!.click();
+    expect(
+      Array.from(root.querySelectorAll<HTMLElement>('.act-card')).find((c) =>
+        c.textContent?.includes('锻青锋剑'),
+      ),
+    ).toBe(cardBefore); // 节点身份存活 = 零重绘
+    expect(game.snapshot().state.recipeAuto).toEqual({
+      '5': { mode: 'sell', maxRarity: 'common', name: '锻青锋剑' },
+    });
   });
 });
