@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { REJECT_MATRIX } from '@wendao/engine';
@@ -96,5 +97,29 @@ describe('REJECT_MATRIX ↔ emit 点对拍（源码扫描）', () => {
   it('点 → 行：emit 点每码都在矩阵（越域散码 = 红；编译腿的运行期复核）', () => {
     const strays = [...emitted].filter((c) => !reasonSet.has(c));
     expect(strays, `emit 点越域码（矩阵未登记）：${strays.join(', ')}`).toEqual([]);
+  });
+});
+
+/**
+ * #50 AC2 防漂移：壳层读数面（GameSnapshot）零双重 cast 的源码钉。
+ * 复辟 `as unknown as GameState` = 读数面被绕过——check 不红、行为不变，
+ * 只有源码钉能抓（protocolGuard/矩阵对拍同款「TS 运行期擦除」前提）。
+ * 放 node 环境文件（import.meta.url 在 happy-dom 试块下非 file scheme）。
+ */
+describe('#50 · 类型化快照防漂移', () => {
+  it('壳层 src 零 as unknown as GameState 再现（AC2「清零」）', () => {
+    const srcDir = fileURLToPath(new URL('../src/', import.meta.url));
+    const offenders: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) walk(path);
+        else if (entry.name.endsWith('.ts') && readFileSync(path, 'utf8').includes('as unknown as GameState')) {
+          offenders.push(path);
+        }
+      }
+    };
+    walk(srcDir);
+    expect(offenders).toEqual([]);
   });
 });

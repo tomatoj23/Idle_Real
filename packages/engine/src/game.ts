@@ -2041,6 +2041,10 @@ export function createGame(options: CreateGameOptions): Game {
     },
 
     snapshot(): GameSnapshot {
+      // 面板先行求值：playerContributions 读时清理过期 buff（不落盘）——clone
+      // 随后收干净态，消除「过期键多活一帧（增益条 0 秒残留）」的快照内部时序
+      // 缝（#50 复核收口 P3）。键序不动（stats 键仍在 state 后落位）。
+      const stats = playerStats();
       return {
         version: SAVE_VERSION,
         time,
@@ -2048,7 +2052,7 @@ export function createGame(options: CreateGameOptions): Game {
         // #50 类型化快照：state 直出 Readonly<GameState>，Record 放宽与双重 cast 退役。
         state: cloneState(state),
         // 属性面板（#4 验收：佩戴稀有度武器 → snapshot 反映倍率+词条）。
-        stats: playerStats(),
+        stats,
         // 战斗/活动视图投影（#40 D1/D2：字段恒在，壳层零公式复算；一次取值
         // = 一帧完整视图，无独立 getter 的半新半旧帧问题）。展示投影非存档
         // 必需，恢复侧忽略。

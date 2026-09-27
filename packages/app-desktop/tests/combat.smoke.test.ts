@@ -56,6 +56,29 @@ describe('UI 烟测（issue #4 战斗切片）', () => {
     expect(flog.scrollTop).toBe(flog.scrollHeight);
   });
 
+  it('战斗日志环形上限作用于真实 DOM：超容删头、留存精确 = MAX_FLOG', () => {
+    const clock = new ManualClock();
+    const content = loadXiuxianPack();
+    const game = createGame({ content, clock, seed: 3 });
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const ui = buildUi(root, content, () => game.snapshot(), game.events);
+    ui.bindActions((action: GameAction) => game.dispatch(action));
+    ui.render();
+    root.querySelector<HTMLButtonElement>('.tab[data-tab="combat"]')!.click();
+    ui.render();
+    const flog = root.querySelector<HTMLElement>('#flog')!;
+    const total = MAX_FLOG + 10;
+    for (let i = 1; i <= total; i++) {
+      game.events.emit({ type: 'combat-note', time: 0, data: { text: `note ${i}` } });
+    }
+    // 环形删头：留存精确 MAX_FLOG 条（非仅「≤」——旧断言被删头循环绑死为近空），
+    // 首行 = 最旧留存（total−MAX_FLOG+1），钉「删头保尾」语义。
+    expect(flog.children.length).toBe(MAX_FLOG);
+    expect(flog.firstElementChild?.textContent).toBe(`note ${total - MAX_FLOG + 1}`);
+    expect(flog.lastElementChild?.textContent).toBe(`note ${total}`);
+  });
+
   it('两次 tick 间日志节点身份不变（追加式）：战斗页不因逐击重建，实况值走定点补丁', () => {
     const clock = new ManualClock();
     const content = loadXiuxianPack();

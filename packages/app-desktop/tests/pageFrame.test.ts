@@ -19,6 +19,7 @@ import {
   bossDecoOf,
   consumablesHtml,
   dungeonLockMsgOf,
+  ehpTextOf,
   fightingEnemyCardHtml,
   levelLockMsgOf,
   minionsHtml,
@@ -236,6 +237,11 @@ describe('#46 · 战斗敌卡（件5）', () => {
     expect(html).toContain('data-bar="minion"');
   });
 
+  it('ehpTextOf：ceil 口径 + 负值归 0（render/补丁两路同源的单一拼装式）', () => {
+    expect(ehpTextOf(T, 7.4, 40)).toBe('pages.combat.enemyHp?ehp=8&hp=40');
+    expect(ehpTextOf(T, -3, 40)).toBe('pages.combat.enemyHp?ehp=0&hp=40');
+  });
+
   it('selfStatsTextOf：hp/max/atk/def/crit 槽齐出（量纲由 statValueText 决定）', () => {
     expect(selfStatsTextOf(T, statValueText, st, snap)).toBe(
       'pages.combat.selfStats?hp=87&max=146&atk=25&def=8&crit=5%',
@@ -252,15 +258,17 @@ describe('#46 · 战斗敌卡（件5）', () => {
       headBadges: deco.badge,
       decoTicks: deco.ticks,
       ehpPct: pctClamped(30, 60),
-      ehpText: T('pages.combat.enemyHp', { ehp: 30, hp: 60 }),
+      ehpText: ehpTextOf(T, 30, 60),
       minions: minionsHtml(T, snap),
+      minionRowsKey: 'k1',
       hpPct: pctClamped(87, 146),
       selfStatsText: selfStatsTextOf(T, statValueText, st, snap),
       opsHtml: '<button data-act="flee">撤</button>',
     });
     expect(html).toContain('<article class="enemy-card fighting">');
     expect(html).toContain('<i data-bar="enemy" style="width:50%"></i>');
-    expect(html).toContain('<div class="minion-rows">');
+    // 行组结构键 render 即落 data（重建帧首帧走补丁路径，#50 复核收口）。
+    expect(html).toContain('<div class="minion-rows" data-minion-rows="k1">');
     // #50 定点补丁锚点（refreshCombatLive 写入面）：自血条 + 敌血读数 + 自属性行。
     expect(html).toContain('<i data-bar="self"');
     expect(html).toContain('data-ehp-text');
@@ -335,23 +343,28 @@ describe('#46 · 实况刷新共用体（update 单一实现，D3）', () => {
     document.body.innerHTML = `<div id="page"><div class="minion-rows"></div></div>`;
     const pageEl = document.querySelector<HTMLElement>('#page')!;
     const st = { hp: 50, combat: { enemyId: 'e1', ehp: 30 }, buffs: {} } as unknown as GameState;
-    const snapOf = (hp: number, max: number): SaveData =>
+    const snapOf = (hp: number, max: number, phase = 1): SaveData =>
       ({
         enemy: { hp: 40 },
-        minions: [{ minion: { enemyId: 'm1', phase: 1, hp }, view: { icon: '仆', name: '石俑', hp: max } }],
+        minions: [{ minion: { enemyId: 'm1', phase, hp }, view: { icon: '仆', name: '石俑', hp: max } }],
       }) as unknown as SaveData;
     refreshCombatLive({ pageEl, st, snap: snapOf(12, 40), T, statValueText });
     const box = pageEl.querySelector<HTMLElement>('.minion-rows')!;
     const row = box.querySelector<HTMLElement>('.minion-row')!;
     expect(row.textContent).toContain('pages.combat.enemyHp?ehp=12&hp=40');
     // 键稳（hp 是逐击活值不进键）：行节点身份不变，只补丁读数与血条宽。
-    refreshCombatLive({ pageEl, st, snap: snapOf(7, 40), T, statValueText });
+    // 小数血钉 ceil 口径（render/补丁同源 ehpTextOf：7.4 → ehp=8）。
+    refreshCombatLive({ pageEl, st, snap: snapOf(7.4, 40), T, statValueText });
     expect(box.querySelector('.minion-row')).toBe(row);
-    expect(row.textContent).toContain('pages.combat.enemyHp?ehp=7&hp=40');
-    expect(row.querySelector<HTMLElement>('[data-bar="minion"]')?.style.width).toBe('17.5%');
+    expect(row.textContent).toContain('pages.combat.enemyHp?ehp=8&hp=40');
+    expect(row.querySelector<HTMLElement>('[data-bar="minion"]')?.style.width).toBe('18.5%');
     // 键变（投影上限变 = 换阶段/换召唤物）：整组重挂、行节点换新。
-    refreshCombatLive({ pageEl, st, snap: snapOf(7, 80), T, statValueText });
+    refreshCombatLive({ pageEl, st, snap: snapOf(7.4, 80), T, statValueText });
     expect(box.querySelector('.minion-row')).not.toBe(row);
+    // 键变（阶段变、投影上限不动）：同样整组重挂（阶段进键，勿删）。
+    const row2 = box.querySelector<HTMLElement>('.minion-row')!;
+    refreshCombatLive({ pageEl, st, snap: snapOf(7.4, 80, 2), T, statValueText });
+    expect(box.querySelector('.minion-row')).not.toBe(row2);
     // 结构空集：行组清空（召唤物阵亡/离战）。
     refreshCombatLive({
       pageEl,

@@ -267,6 +267,9 @@ export function fightingEnemyCardHtml(parts: {
   /** 敌血行文案（pages.combat.enemyHp 填充结果）。 */
   readonly ehpText: string;
   readonly minions: string;
+  /** 召唤行组结构键（minionRowsKeyOf）：render 即落 data-minion-rows——
+   *  重建帧首帧 update 直走补丁路径，不再幂等重挂行组（#50 复核收口）。 */
+  readonly minionRowsKey: string;
   readonly hpPct: number;
   /** 自身属性行文案（selfStatsTextOf 填充结果）。 */
   readonly selfStatsText: string;
@@ -279,7 +282,7 @@ export function fightingEnemyCardHtml(parts: {
               <div class="enemy-head"><b>${esc(p.name)}</b><span class="enemy-lv">${esc(p.T('units.level', { v: p.level }))}</span>${p.headBadges}</div>
               <div class="bar bar-red">${p.decoTicks}<i data-bar="enemy" style="width:${p.ehpPct}%"></i></div>
               <div class="enemy-sub" data-ehp-text>${esc(p.ehpText)}</div>
-              <div class="minion-rows">${p.minions}</div>
+              <div class="minion-rows" data-minion-rows="${esc(p.minionRowsKey)}">${p.minions}</div>
               <div class="bar bar-jade"><i data-bar="self" style="width:${p.hpPct}%"></i></div>
               <div class="enemy-sub" data-self-stats>${esc(p.selfStatsText)}</div>
             </div>
@@ -358,11 +361,11 @@ export const refreshCombatLive = (parts: {
 /**
  * 召唤行组结构键（#50）：槽位身份（敌 id + 阶段 + 投影上限）按集火序拼装；
  * 血量是逐击活值不进键——键稳时行组节点存活，只补丁读数（行身份不变）。
+ * JSON 编码防歧义（敌 id 若含 ':'/',' 拼接串会撞键；引擎视内容包为不透明，
+ * 未过校验的包不受 schema id 字符集保护）——#50 复核收口 P3。
  */
-const minionRowsKeyOf = (snap: SaveData): string =>
-  (snap.minions ?? [])
-    .map(({ minion, view }) => `${minion.enemyId}:${minion.phase}:${view.hp}`)
-    .join(',');
+export const minionRowsKeyOf = (snap: SaveData): string =>
+  JSON.stringify((snap.minions ?? []).map(({ minion, view }) => [minion.enemyId, minion.phase, view.hp]));
 
 /** 召唤行组定点补丁：结构键变（入场/阵亡/换阶段）→ 整组重挂；键稳 → 逐行补丁。 */
 const refreshMinionRows = (pageEl: HTMLElement, snap: SaveData, T: ShellText): void => {

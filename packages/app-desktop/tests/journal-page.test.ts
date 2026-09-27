@@ -96,6 +96,30 @@ describe('#33 · 修行录页', () => {
     expect(row?.style.display).not.toBe('none'); // 切回全部恢复可见
   });
 
+  it('过滤缺口回归（#50 复核收口 P2）：过滤中来的新行恒在 DOM（隐藏），切回全部可见', () => {
+    const { root, ui, game } = mount();
+    root.querySelector<HTMLButtonElement>('.tab[data-tab="journal"]')!.click();
+    ui.render();
+    const list = root.querySelector<HTMLElement>('#jr-list')!;
+    const before = root.querySelector('[data-jr-count]')?.textContent ?? '';
+    // 切到「纪事」过滤，挂页期间一段采集闭段（craft 类条目，当前过滤不匹配）。
+    root.querySelector<HTMLButtonElement>('.jr-filters .chip[data-filter="milestone"]')!.click();
+    game.dispatch({ type: 'activity:start', payload: { skillId: 'qi', index: 0 } });
+    game.tick(2000);
+    game.dispatch({ type: 'activity:stop' });
+    ui.render();
+    // 行在场（渲染即隐藏）——修复前增量跳过不匹配行、切回全部永不出现。
+    const hidden = Array.from(list.querySelectorAll<HTMLElement>('.jr-row')).find(
+      (el) => el.style.display === 'none',
+    );
+    expect(hidden).not.toBeNull();
+    // 条数随增量跟走（修复前副标题计数冻结在挂载值）。
+    expect(root.querySelector('[data-jr-count]')?.textContent).not.toBe(before);
+    // 切回全部：同节点恢复可见（零重拼，行身份存活）。
+    root.querySelector<HTMLButtonElement>('.jr-filters .chip[data-filter="all"]')!.click();
+    expect(hidden!.style.display).not.toBe('none');
+  });
+
   it('锚点：设锚按钮 dispatch journal:anchor，净收获区随计数器轻刷', () => {
     const { root, ui, game } = mount();
     root.querySelector<HTMLButtonElement>('.tab[data-tab="journal"]')!.click();

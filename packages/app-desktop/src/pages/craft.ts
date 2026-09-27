@@ -101,7 +101,11 @@ export function createCraftPage(env: PageEnv): PageView {
             return `<span class="mat${missing.has(id) ? ' no' : ' ok'}">${esc(mat?.icon ?? T('icons.unknown'))} ${esc(T('pages.craft.matRow', { name: mat?.name ?? id, have, need: matNeed }))}</span>`;
           })
           .join('');
-        const pct = running && act ? actPctOf(act.progress, recipe.interval) : 0;
+        // 有效间隔单一来源 = 引擎快照映射（#40 口径：基础 interval 复算清退）。
+        // 本行曾直读 recipe.interval 与补丁侧（refreshActivityBars）双源——
+        // 炼制 interval 一旦被缩放即首帧跳变，#50 复核收口收敛与修炼卡同式。
+        const runInterval = running && act ? snap.activityIntervals?.[actKeyOf(act)] : undefined;
+        const pct = running && act ? actPctOf(act.progress, runInterval) : 0;
         return actCardHtml({
           title: recipe.name,
           running,

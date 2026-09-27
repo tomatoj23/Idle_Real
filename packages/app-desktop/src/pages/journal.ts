@@ -246,14 +246,20 @@ export function createJournalPage(env: PageEnv): PageView {
     }
   }
 
-  /** 单条条目 → 行 HTML（data-seq 供增量测试定位）。 */
+  /**
+   * 单条条目 → 行 HTML（data-seq 供增量测试定位）。行**恒在 DOM**：当前过滤
+   * 不匹配的行渲染即 display:none（#50 复核收口 P2——旧「增量跳过不匹配行 +
+   * 全量重建滤掉不匹配行」与过滤切换的显示/隐藏模型不相容：跳掉的行切回
+   * 全部永不出现，直到换页重建）。过滤切换=纯显示层（行节点身份存活）。
+   */
   function rowHtml(rec: JournalRecord): string {
     const { title, sub } = titleOf(rec);
     const lines = ('lines' in rec ? rec.lines : [])
       .map((line) => lineText(line))
       .filter((text) => text.length > 0);
     const linesHtml = lines.join(`<span class="jr-sep">${esc(T('common.itemListSep'))}</span>`);
-    return `<div class="jr-row" data-seq="${rec.seq}" data-kind="${filterKeyOf(rec)}">
+    const hidden = filter !== 'all' && filterKeyOf(rec) !== filter;
+    return `<div class="jr-row" data-seq="${rec.seq}" data-kind="${filterKeyOf(rec)}"${hidden ? ' style="display:none"' : ''}>
       <span class="jr-badge jr-${filterKeyOf(rec)}">${esc(badgeOf(rec))}</span>
       <div class="jr-body">
         <div class="jr-title">${title}${sub ? `<span class="jr-sub">${sub}</span>` : ''}</div>
@@ -314,12 +320,10 @@ export function createJournalPage(env: PageEnv): PageView {
 
   /* ---------- PageView ---------- */
 
-  /** 流水列表 HTML（render 全量与过滤切换共用一份拼装）。 */
+  /** 流水列表 HTML（render 全量与增量共用一份拼装；行全量在场，过滤=显示层）。
+   *  空态占位=零条目（「本过滤无匹配」只见隐藏行，不换文案——口径单一）。 */
   const renderList = (records: readonly JournalRecord[]): string => {
-    const rows = records
-      .filter((rec) => filter === 'all' || filterKeyOf(rec) === filter)
-      .map((rec) => rowHtml(rec))
-      .join('');
+    const rows = records.map((rec) => rowHtml(rec)).join('');
     return rows || `<p class="empty">${esc(T('pages.journal.empty'))}</p>`;
   };
 
@@ -343,7 +347,7 @@ export function createJournalPage(env: PageEnv): PageView {
     return `
       <section class="page">
         <h2 class="page-title">${esc(T('pages.journal.title'))}</h2>
-        <p class="page-sub">${esc(T('pages.journal.subtitle', { count: records.length }))}</p>
+        <p class="page-sub" data-jr-count>${esc(T('pages.journal.subtitle', { count: records.length }))}</p>
         <div class="jr-top">
           <div class="jr-net">
             <h3 class="group-title">${esc(T('pages.journal.netTitle'))}</h3>
@@ -371,7 +375,8 @@ export function createJournalPage(env: PageEnv): PageView {
       const emptyEl = list.querySelector('.empty');
       if (emptyEl) emptyEl.remove();
       for (const rec of fresh) {
-        if (filter !== 'all' && filterKeyOf(rec) !== filter) continue;
+        // 行恒在 DOM（rowHtml 按 filter 落 display）——旧「不匹配即跳过」会让
+        // 过滤中来的新行永久缺席（#50 复核收口 P2，见 rowHtml 注）。
         list.insertAdjacentHTML('beforeend', rowHtml(rec));
       }
       while (list.children.length > JOURNAL_CAP) list.firstElementChild?.remove();
@@ -379,7 +384,13 @@ export function createJournalPage(env: PageEnv): PageView {
       list.scrollTop = list.scrollHeight;
     }
 
-    // 轻刷区：净收获 / 进行中段 / 锚点按钮（文本 diff 才写 DOM）。
+    // 轻刷区：条数 / 净收获 / 进行中段 / 锚点按钮（文本 diff 才写 DOM）。
+    // 条数随增量跟走（#50 复核收口 P3：挂页增量期副标题计数曾冻结在挂载值）。
+    const countEl = env.pageEl.querySelector<HTMLElement>('[data-jr-count]');
+    if (countEl) {
+      const text = T('pages.journal.subtitle', { count: records.length });
+      if (countEl.textContent !== text) countEl.textContent = text;
+    }
     const net = netHtml(st);
     const netEl = env.pageEl.querySelector<HTMLElement>('#jr-net');
     if (netEl && net !== lastNetHtml) {
