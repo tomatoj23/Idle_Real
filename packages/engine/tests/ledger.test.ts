@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { ManualClock } from '../src/clock.js';
 import {
   createGame,
-  type AutoFoldRule,
   type Contribution,
   type GameContent,
   type GameEvent,
@@ -270,60 +269,13 @@ describe('#39 · 入账咽喉：统一账本事件（与旧形状并行发射）
   });
 });
 
-describe('#39 · 自动折叠挂点（D3/D10：缺省 no-op，规则形状归 #35/#36）', () => {
-  it('缺省 no-op：恒 undefined 挂点与无挂点零行为差异（状态 + 全量事件逐条相等）', () => {
-    const run = (autoFold?: AutoFoldRule) => {
-      const clock = new ManualClock();
-      const game = createGame({ content: makeCombatPack(), clock, rng: () => 0.4, autoFold });
-      game.dispatch({ type: 'combat:start', payload: { enemyId: 'e1' } });
-      for (let i = 0; i < 600 && stateOf(game.snapshot()).combat; i++) {
-        clock.advance(100);
-        game.tick(100);
-      }
-      game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
-      for (let i = 0; i < 5; i++) {
-        clock.advance(3000);
-        game.tick(3000);
-      }
-      game.dispatch({ type: 'bag:sell', payload: { item: 'herb1', count: 2 } });
-      return { st: stateOf(game.snapshot()), events: game.events.drain() };
-    };
-    const plain = run();
-    const noop = run(() => undefined);
-    expect(noop.st).toEqual(plain.st);
-    expect(noop.events).toEqual(plain.events);
-  });
-
-  it('挂点只挂配方/敌人两类（CONTEXT 词汇）：buy 等其余来源不咨询挂点', () => {
-    const clock = new ManualClock();
-    const consulted: string[] = [];
-    const game = createGame({
-      content: makePack(),
-      clock,
-      save: {
-        version: 1,
-        time: 0,
-        state: { gold: 100, hp: 50, items: { herb1: 4 }, skills: {}, activity: null },
-      },
-      autoFold: (c) => {
-        consulted.push(c.source);
-        return 'sell';
-      },
-    });
-    game.dispatch({ type: 'shop:buy', payload: { item: 'consumable_heal', count: 1 } });
-    const st = stateOf(game.snapshot());
-    expect(st.items.consumable_heal).toBe(1); // 未被折叠：买入入袋
-    expect(st.gold).toBe(55); // 100 − 45
-    expect(consulted).toEqual([]); // buy 挂点不可达
-  });
-
+describe('#39/#35 · 入账即折（D10 成对事件；规则本体 = 配方规则表）', () => {
   it('入账即折（sell）：物品不进袋、成对事件、旧 loot 静默', () => {
     const clock = new ManualClock();
     const game = createGame({
       content: makeLedgerPack(),
       clock,
       rng: () => 0.1,
-      autoFold: (c) => (c.source === 'craft' && c.itemId === 'pill1' ? 'sell' : undefined),
       save: {
         version: 1,
         time: 0,
@@ -333,6 +285,7 @@ describe('#39 · 自动折叠挂点（D3/D10：缺省 no-op，规则形状归 #3
           items: { herb1: 10 },
           skills: { smith: { xp: 0 } },
           activity: { skillId: 'smith', index: 0, name: '炼制聚气丹', progress: 0 },
+          recipeAuto: { '0': { mode: 'sell', name: '炼制聚气丹' } },
         },
       },
     });
@@ -365,7 +318,6 @@ describe('#39 · 自动折叠挂点（D3/D10：缺省 no-op，规则形状归 #3
       content: makeLedgerPack(),
       clock,
       rng: () => 0.4, // rarity roll → common（smelt 1）
-      autoFold: (c) => (c.source === 'craft' && c.itemId === 'sword1' ? 'smelt' : undefined),
       save: {
         version: 1,
         time: 0,
@@ -375,6 +327,7 @@ describe('#39 · 自动折叠挂点（D3/D10：缺省 no-op，规则形状归 #3
           items: { herb1: 10 },
           skills: { smith: { xp: 0 } },
           activity: { skillId: 'smith', index: 1, name: '锻青锋剑', progress: 0 },
+          recipeAuto: { '1': { mode: 'smelt', maxRarity: 'fine', name: '锻青锋剑' } },
         },
       },
     });
@@ -418,7 +371,6 @@ describe('#39 · 自动折叠挂点（D3/D10：缺省 no-op，规则形状归 #3
       content: pack,
       clock,
       rng: () => 0.5,
-      autoFold: (c) => (c.itemId === 'ash' ? 'sell' : undefined),
       save: {
         version: 1,
         time: 0,
@@ -428,6 +380,7 @@ describe('#39 · 自动折叠挂点（D3/D10：缺省 no-op，规则形状归 #3
           items: { herb1: 5 },
           skills: { smith: { xp: 0 } },
           activity: { skillId: 'smith', index: 0, name: '炼尘灰', progress: 0 },
+          recipeAuto: { '0': { mode: 'sell', name: '炼尘灰' } },
         },
       },
     });

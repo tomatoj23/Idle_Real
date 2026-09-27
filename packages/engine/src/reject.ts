@@ -41,6 +41,7 @@ export const REJECT_MATRIX = {
   'gear:reforge': ['bad-payload', 'not-found', 'worn', 'no-inscription', 'not-available', 'no-shard'],
   'rebirth:perform': ['not-available', 'in-combat', 'no-progress'],
   'talent:buy': ['not-available', 'bad-payload', 'not-found', 'prereq', 'no-daoyun'],
+  'craft:auto': ['bad-payload'],
   '*': ['unknown-action'],
 } as const satisfies Partial<Record<GameAction['type'] | '*', readonly string[]>>;
 

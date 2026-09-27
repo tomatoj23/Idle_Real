@@ -258,6 +258,22 @@ body {
 
 .act-card .btn { margin-top: 10px; align-self: flex-start; }
 
+/* 配方卡操作区（#35）：开炉按钮与自动化控件同排；选择器紧凑态。 */
+.act-op { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.act-op .btn { margin-top: 0; }
+.act-op .act-lockmsg { margin-top: 0; padding-top: 0; }
+.craft-auto { display: flex; align-items: center; gap: 6px; }
+.craft-auto select {
+  background: var(--panel);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.craft-auto select:focus { border-color: var(--border-gold); outline: none; }
+
 /* ---------- 按钮 ---------- */
 
 .btn {

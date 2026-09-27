@@ -18,6 +18,8 @@
  * 节的嵌套层逐层剔键）；透传键在快照面逐键深拷，壳层改写不再写穿引擎态。
  */
 import type { GameContent, SaveData } from './types.js';
+import type { RecipeAutoRule } from './ledger.js';
+import { recipeAutoRuleOf } from './ledger.js';
 import { saveRejection } from './save.js';
 import {
   combatParamsOf,
@@ -30,6 +32,7 @@ import {
   findSkill,
   playerMaxHp,
   raritiesOf,
+  rarityRankOf,
   skillsOf,
 } from './contentView.js';
 import { findBossOf, isLiveSummon } from './bosses.js';
@@ -146,6 +149,12 @@ export type GameState = {
   autoFight: boolean;
   /** 自动嗑丹（回气丹）。 */
   autoEat: boolean;
+  /**
+   * 配方自动处理规则表（#35）：配方下标键（canonical 数字串）→ 三态+阈值
+   * （RecipeAutoRule）；缺省不处理（无条目 = 不处理）。玩家设置非资产：
+   * 随档、云存档、兵解不清（default-keep）。
+   */
+  recipeAuto: Record<string, RecipeAutoRule>;
   /** 同对手上一战记录（对照语基准）。 */
   lastEncounter: Record<string, EncounterRecord>;
   /** 兵解次数（#6）。 */
@@ -625,6 +634,41 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
     restore: (raw, state) => {
       if (typeof raw.autoEat === 'boolean') state.autoEat = raw.autoEat;
     },
+  },
+  recipeAuto: {
+    // —— 配方自动化规则（#35）：显式消毒恢复（autoFight 同式纪律的 map 版，
+    // 禁透明收编）——规则表非对象 = 回退缺省空表；键按内容注册表过滤
+    //（canonical 数字串下标 + 在册配方 + 对名一致），值按三态/阈值白名单
+    // 收编，垃圾条目直接丢弃（防垃圾键累积）。嵌套 map 的原型污染向量
+    //（顶层 __proto__ 防护护不到嵌套）就此封死。
+    def: () => ({}),
+    clone: (value) =>
+      Object.fromEntries(Object.entries(value).map(([key, rule]) => [key, { ...rule }])),
+    restore: (raw, state, env) => {
+      if (!isObj(raw.recipeAuto)) return;
+      for (const [key, entry] of rawEntries(raw.recipeAuto, CONTENT_ID_KEYS)) {
+        if (!/^\d+$/.test(key)) continue; // 非数字串键（含污染键）直接丢弃
+        const index = Number(key);
+        if (String(index) !== key) continue; // 非 canonical 数字串（'03'）拒收，防一键多写
+        const recipe = findRecipe(env.content, index);
+        if (!recipe) continue; // 未注册配方键丢弃（内容包变更后未知 id 回退不处理）
+        if (!isObj(entry)) continue;
+        const mode = entry.mode;
+        if (mode !== 'sell' && mode !== 'smelt') continue; // mode 非法丢弃该键
+        if (entry.name !== recipe.name) continue; // 稳定引用（ADR-015）：下标对名不符 = 重排/改名，宁弃不换目标
+        const maxRarity = entry.maxRarity;
+        if (maxRarity !== undefined) {
+          // 阈值非法/未知稀有度 = 丢弃该键（未知稀有度安全回退，不折好过错折）。
+          // 存在性走 rarityRankOf 精确匹配——findRarity 未命中回退第一档，会放行坏键。
+          if (typeof maxRarity !== 'string' || rarityRankOf(env.content, maxRarity) === undefined) {
+            continue;
+          }
+        }
+        state.recipeAuto[key] = recipeAutoRuleOf(mode, maxRarity, recipe.name);
+      }
+    },
+    // 玩家设置非资产：不进内容声明式 reset/keep 表——default-keep 机制自动
+    // 保留（兵解不清，票面裁决），与 autoFight/autoEat 同律。
   },
   lastEncounter: {
     def: () => ({}),

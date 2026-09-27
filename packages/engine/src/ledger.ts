@@ -67,24 +67,38 @@ export type LedgerData = {
   rarity?: string;
 };
 
-/** 入账即折候选（D3 挂点入参）：炼制产出 / 战斗掉落的物品或装备实例。 */
-export interface AutoFoldCandidate {
-  readonly source: LedgerSource;
-  readonly itemId: string;
-  /** 装备实例的稀有度档位键；普通物品无。 */
-  readonly rarity?: string;
-}
-
-/** 挂点判定：'sell' 折灵石 / 'smelt' 折器屑 / undefined 保持原样入袋。 */
-export type AutoFoldDecision = LedgerAuto | undefined;
+/**
+ * 自动处理三态（#35，互斥单选）：'none' = 不处理（缺省，规则表无条目）。
+ * 规则条目只存非 none 态（在场即生效），'none' = 删除条目。
+ */
+export type AutoMode = 'none' | LedgerAuto;
 
 /**
- * 自动售卖/熔炼规则挂点（D3）：createGame 可选项，缺省 no-op（零行为
- * 差异）。规则本体（玩家设置的阈值表/互斥单选/UI）归 #35/#36——挂点形状
- * 收口在本票：命中即「入账即折」，物品不进乾坤袋直接折算并发成对事件
- * （D10）。挂点按 CONTEXT「自动售卖/熔炼」只对配方（craft 产出）与敌人
- * （combat 掉落）两类挂点咨询（引擎侧收窄）；装备熔炼需 content 配置
- * config.gear.shardItem（器屑经济），未配置 / 无稀有度的物品判 'smelt' =
- * 引擎防御性保持原样。
+ * 配方自动处理规则（#35 规则本体，原 D3 挂点的填充物）：键 = 配方下标
+ * （canonical 数字串），值 = 三态之一 + 稀有度阈值。引擎状态（玩家设置
+ * 非资产）：随档、云存档、兵解不清；缺省不处理。
+ *
+ * 阈值语义（票面裁决）：档位高低 = 包内 rarities 数组序（低→高），比较
+ * 严格按此序、不按 weight/mult 推断；「≤所选档」的产出才折。普通产出
+ * （无稀有度）不受阈值门约束（售卖态全折、熔炼态照常入袋）；装备产出的
+ * 阈值缺失/未知稀有度 = 安全回退不折。
+ *
+ * 判定与转化本体在 game.ts 入账咽喉（foldDecisionOf「来源→规则→入账
+ * 转化」单一接缝）；敌人挂点（combat 掉落）的同构规则表归 #36 复用。
  */
-export type AutoFoldRule = (candidate: AutoFoldCandidate) => AutoFoldDecision;
+export interface RecipeAutoRule {
+  readonly mode: LedgerAuto;
+  /** 稀有度阈值键（≤该档折）；仅装备产出消费。 */
+  readonly maxRarity?: string;
+  /** 写入时的配方名（ADR-015 稳定引用：恢复按「下标在册 + 对名一致」双校验，宁弃不换目标）。 */
+  readonly name: string;
+}
+
+/** 规则条目构造单一形状（写入面 game.ts craft:auto 与恢复面 state.ts 共用，防存档形状漂移）。 */
+export function recipeAutoRuleOf(
+  mode: LedgerAuto,
+  maxRarity: string | undefined,
+  name: string,
+): RecipeAutoRule {
+  return { mode, ...(maxRarity !== undefined ? { maxRarity } : {}), name };
+}

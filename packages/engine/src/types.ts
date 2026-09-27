@@ -8,7 +8,7 @@
 import type { EnemyView } from './contentView.js';
 import type { CombatSummonState, GameState } from './state.js';
 import type { DamageTier, EncounterRecord } from './combat.js';
-import type { LedgerData } from './ledger.js';
+import type { LedgerData, AutoMode } from './ledger.js';
 
 /** 召唤物投影行（#40 D4 纯数据）：槽位态（集火序）+ 生效视图，壳层直读零组合。 */
 export interface CombatMinionProjection {
@@ -53,7 +53,8 @@ export type GameAction =
   | GearReforgeAction
   | RebirthPerformAction
   | TalentBuyAction
-  | JournalAnchorAction;
+  | JournalAnchorAction
+  | CraftAutoAction;
 
 /** 战斗入场来源动作域（enterCombat/enterFloor 的 actionType 参数，#44 入场单序列）。 */
 export type CombatEntryAction = 'combat:start' | 'dungeon:enter';
@@ -186,6 +187,20 @@ export interface TalentBuyAction {
 /** 修行录锚点重设（#33，幂等可随时重设）。 */
 export interface JournalAnchorAction {
   readonly type: 'journal:anchor';
+}
+
+/**
+ * 配方自动化规则设置（#35）：三态互斥单选 + 稀有度阈值（≤所选档）。
+ * mode='none' = 清除该配方规则（回缺省不处理）；maxRarity 仅装备产出消费。
+ * index = 包内 recipes 下标（与 activity:start 同一配方身份）。
+ */
+export interface CraftAutoAction {
+  readonly type: 'craft:auto';
+  readonly payload: {
+    readonly index?: number;
+    readonly mode?: AutoMode;
+    readonly maxRarity?: string;
+  };
 }
 
 /* ---------- 引擎事件缝（#47 判别联合）：每个 type 携带自己的载荷类型 ---------- */

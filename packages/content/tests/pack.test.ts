@@ -365,6 +365,12 @@ describe('validateContentPack · 稀有度/词条池词表（#018，ADR-016 词�
     expectError(validateContentPack(pack), '/rarities/4', 'duplicate');
   });
 
+  it('倍率与数组序倒挂 → monotonic（#35 阈值档位序 = 数组序的排档约定守护）', () => {
+    const pack = makePack();
+    pack.rarities[1].mult = 0.5; // 低于第一档 → 高档低倍倒挂
+    expectError(validateContentPack(pack), '/rarities/1/mult', 'monotonic');
+  });
+
   it('词条 stat 违反键形态 → pattern（#021 批 4：键域开放后 schema 只钉形态）', () => {
     const pack = makePack();
     pack.affixPool[0].stat = 'Luck';

@@ -267,7 +267,7 @@
             },
             "craft": {
               "type": "object",
-              "required": ["title", "subtitle", "empty", "expSub", "expMax", "actNow", "idle", "stopBtn", "running", "startBtn", "successRate", "matRow", "recipeMeta"],
+              "required": ["title", "subtitle", "empty", "expSub", "expMax", "actNow", "idle", "stopBtn", "running", "startBtn", "successRate", "matRow", "recipeMeta", "autoNone", "autoSell", "autoSmelt", "autoCap"],
               "additionalProperties": false,
               "properties": {
                 "title": { "$ref": "#/definitions/line" },
@@ -282,7 +282,11 @@
                 "startBtn": { "$ref": "#/definitions/template", "description": "开炉按钮（无槽位）" },
                 "successRate": { "$ref": "#/definitions/template", "description": "成功率行（#5）；槽位 {rate}（数值来自引擎 craftSuccessRateOf × 100，量纲 %）" },
                 "matRow": { "$ref": "#/definitions/template", "description": "材料行（#5）；槽位 {name}/{have}/{need}（着色由壳按 craftMissingOf 结果驱动）" },
-                "recipeMeta": { "$ref": "#/definitions/template", "description": "配方元信息行（#5）；槽位 {interval}/{exp}/{level}" }
+                "recipeMeta": { "$ref": "#/definitions/template", "description": "配方元信息行（#5）；槽位 {interval}/{exp}/{level}" },
+                "autoNone": { "$ref": "#/definitions/line", "description": "配方自动化三态选项·不处理（#35，缺省）" },
+                "autoSell": { "$ref": "#/definitions/line", "description": "配方自动化三态选项·自动售卖（#35）" },
+                "autoSmelt": { "$ref": "#/definitions/line", "description": "配方自动化三态选项·自动熔炼（#35；无器屑经济的包两态退化不渲染此选项）" },
+                "autoCap": { "$ref": "#/definitions/template", "description": "稀有度阈值选项（#35，≤所选档才折；仅装备产出配方渲染）；槽位 {rarity}（档名）" }
               }
             },
             "combat": {

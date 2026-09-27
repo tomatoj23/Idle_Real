@@ -277,18 +277,18 @@ export type { BossPhaseView, BossSummonEntryView, BossSummonsView, BossView } fr
 export { STAT_KEYS, applyStatsEvent, restoreStats } from './stats.js';
 export type { StatKey, StatSnapshot } from './stats.js';
 
-// 入账咽喉协议（#39：来源闭集/kind 判别/自动折叠挂点形状；咽喉本体在 game.ts）
+// 入账咽喉协议（#39：来源闭集/kind 判别；#35 自动化规则本体形状——咽喉
+// 本体与判定接缝在 game.ts）
 export { LEDGER_CURRENCIES, LEDGER_SOURCES } from './ledger.js';
 export type {
-  AutoFoldCandidate,
-  AutoFoldDecision,
-  AutoFoldRule,
+  AutoMode,
   LedgerAuto,
   LedgerCurrency,
   LedgerData,
   LedgerKind,
   LedgerOrigin,
   LedgerSource,
+  RecipeAutoRule,
 } from './ledger.js';
 
 // 修行录记录资产（#33：行为段聚合账本/流量计数器/锚点）。对外仅协议类型 +

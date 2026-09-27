@@ -120,7 +120,10 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 | `showcase` | bool（可选） | **UI 特判开关（裁决 ④）**：true 时 UI 作「天降异宝」级特判；UI 不再用 id 字面量（如 `'epic'`）特判 |
 
 数组顺序即档位顺序：缺档回退取**第一项**；旧档位从词表移除后，存量存档的该档
-装备恢复时自动回退第一档（存档不炸，数值按第一档重投影）。
+装备恢复时自动回退第一档（存档不炸，数值按第一档重投影）。**档位高低 = 数组序
+（低→高，#35）**：配方自动化的稀有度阈值比较严格按此序（不按 weight/mult 推断，
+schema 无 rank 字段）；validate 语义关卡保证 `mult` 随序单调不减（「高档低倍」
+倒挂 = 排档约定被违反，加载期拒绝）。
 
 ### affixPool（随机词条池）
 
@@ -226,6 +229,11 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 - **brand.locale**：数字千分位格式化与文档 lang 的单一来源（`^[a-z]{2}(-[A-Z]{2})?$`）。
 - **brand.bootError**：启动失败兜底页模板，槽位 `{message}`；壳在内容包可用时
   读取，内容包缺失时降级键名回显。
+- **配方自动化控件**（#35）：`pages.craft` 增 autoNone/autoSell/autoSmelt/autoCap
+  四键——配方卡「开炉」旁三态单选（不处理/自动售卖/自动熔炼）+ 稀有度阈值选项
+  （autoCap 槽位 `{rarity}`，≤所选档才折）；autoSmelt 仅在包配置
+  `config.gear.shardItem`（器屑经济）时渲染，无熔炼玩法的包两态退化；阈值选项仅
+  装备产出配方渲染（丹药/材料配方无稀有度）。
 - 键分组语义：`events.*` 键 = 引擎事件类型协议面（loot/victory/defeat/
   consumable:eat/equip:wear/levelup/sell/buy/reject/offline-settled；
   #5 起含 craft-fail/craft-halt 的 craftFail/craftHalt 与 loot source=craft

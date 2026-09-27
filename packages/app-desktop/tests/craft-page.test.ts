@@ -141,3 +141,88 @@ describe('#5 · 开炉 → 停炉链路（真实点击路径）', () => {
     expect(toast?.textContent).toContain('材料不齐');
   });
 });
+
+describe('#35 · 配方卡自动化控件（三态单选 + 稀有度阈值）', () => {
+  /** 选择器设值后走真实 change 委托（#35 表单控件动作路由）。 */
+  function changeSelect(root: HTMLElement, selector: string, value: string): void {
+    const el = root.querySelector<HTMLSelectElement>(selector)!;
+    el.value = value;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function cardOf(root: HTMLElement, name: string): HTMLElement {
+    return Array.from(root.querySelectorAll<HTMLElement>('.act-card')).find((c) => c.textContent?.includes(name))!;
+  }
+
+  function openCraft(root: HTMLElement, ui: ReturnType<typeof buildUi>, skill: string): void {
+    root.querySelector<HTMLButtonElement>('.tab[data-tab="craft"]')!.click();
+    root.querySelector<HTMLButtonElement>(`.chip[data-skill="${skill}"]`)!.click();
+    ui.render();
+  }
+
+  it('两态/三态渲染：丹药配方（无稀有度产出）无熔炼项无阈值项；器胚配方三态齐备、启用后出阈值', () => {
+    const { root, ui } = mount();
+    openCraft(root, ui, 'alchemy');
+    const healCard = cardOf(root, '炼制回气丹');
+    const itemMode = healCard.querySelector<HTMLSelectElement>('.auto-mode')!;
+    // 两态退化：丹药/材料配方无稀有度 → 不渲染熔炼项与阈值项
+    expect(Array.from(itemMode.options).map((o) => o.value)).toEqual(['none', 'sell']);
+    expect(healCard.querySelector('.auto-cap')).toBeNull();
+
+    openCraft(root, ui, 'smith');
+    const swordCard = cardOf(root, '锻青锋剑');
+    const gearMode = swordCard.querySelector<HTMLSelectElement>('.auto-mode')!;
+    // 器胚配方三态（器屑经济已配置）；缺省不处理时不渲染阈值项
+    expect(Array.from(gearMode.options).map((o) => o.value)).toEqual(['none', 'sell', 'smelt']);
+    expect(gearMode.value).toBe('none');
+    expect(swordCard.querySelector('.auto-cap')).toBeNull();
+  });
+
+  it('动作派发：设自动售卖 → 规则入档（装备默认阈值=最低档）；阈值改写随动；回不处理删条目', () => {
+    const { root, ui, game } = mount();
+    openCraft(root, ui, 'smith');
+    const swordCard = cardOf(root, '锻青锋剑');
+
+    // 启用自动售卖：整条规则重写，默认阈值 = rarities[0]（寻常）——高品绝不误折
+    changeSelect(root, '.act-card .auto-mode', 'sell');
+    expect(game.snapshot().state.recipeAuto).toEqual({
+      '5': { mode: 'sell', maxRarity: 'common', name: '锻青锋剑' },
+    });
+
+    // 阈值选择出现（文案 autoCap 带档名），改精良 → 规则随动
+    const cap = cardOf(root, '锻青锋剑').querySelector<HTMLSelectElement>('.auto-cap')!;
+    expect(cap.options).toHaveLength(4);
+    expect(cap.options[0]?.textContent).toContain('寻常');
+    changeSelect(root, '.act-card .auto-cap', 'fine');
+    expect(game.snapshot().state.recipeAuto['5']).toEqual({
+      mode: 'sell',
+      maxRarity: 'fine',
+      name: '锻青锋剑',
+    });
+
+    // 三态互斥：改自动熔炼单字段覆盖；回不处理 = 删条目（缺省）
+    changeSelect(root, '.act-card .auto-mode', 'smelt');
+    expect(game.snapshot().state.recipeAuto['5']).toEqual({
+      mode: 'smelt',
+      maxRarity: 'fine',
+      name: '锻青锋剑',
+    });
+    changeSelect(root, '.act-card .auto-mode', 'none');
+    expect(game.snapshot().state.recipeAuto).toEqual({});
+    expect(cardOf(root, '锻青锋剑').querySelector('.auto-cap')).toBeNull();
+  });
+
+  it('无器屑经济的包：熔炼态不可选（两态 UI，受 canSmelt 门控）', () => {
+    const content = loadXiuxianPack();
+    delete (content as { config?: { gear?: unknown } }).config?.gear; // 摘除器屑经济
+    const clock = new ManualClock();
+    const game = createGame({ content, clock, save: makeSave() });
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const ui = buildUi(root, content, () => game.snapshot(), game.events);
+    ui.bindActions((action: GameAction) => game.dispatch(action));
+    openCraft(root, ui, 'smith');
+    const gearMode = cardOf(root, '锻青锋剑').querySelector<HTMLSelectElement>('.auto-mode')!;
+    expect(Array.from(gearMode.options).map((o) => o.value)).toEqual(['none', 'sell']);
+  });
+});

@@ -377,6 +377,17 @@ export function findRarity(content: GameContent, rarity: string): RarityView | u
   return table.find((def) => def.id === rarity) ?? table[0];
 }
 
+/**
+ * 稀有度档位序（#35 阈值排序定义）：档位高低 = 包内 rarities 数组序（低→高），
+ * 阈值比较严格按此序、不按 weight/mult 推断（schema 无 rank 字段，数组序是
+ * 内容包作者的排档约定）。未知稀有度 = undefined（调用方安全回退）——与
+ * findRarity 的「未命中回退第一档」语义相反，存在性判定勿混用。
+ */
+export function rarityRankOf(content: GameContent, rarity: string): number | undefined {
+  const index = raritiesOf(content).findIndex((def) => def.id === rarity);
+  return index >= 0 ? index : undefined;
+}
+
 /* ---------- 器胚与铭纹（#14：装备构筑循环的内容面） ---------- */
 
 /**

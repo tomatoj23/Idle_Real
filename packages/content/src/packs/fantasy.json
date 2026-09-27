@@ -624,7 +624,11 @@
           "startBtn": "Craft",
           "successRate": "Success {rate}%",
           "matRow": "{name} {have}/{need}",
-          "recipeMeta": "{interval} a try · {exp} exp · Lv {level}"
+          "recipeMeta": "{interval} a try · {exp} exp · Lv {level}",
+          "autoNone": "Leave as is",
+          "autoSell": "Auto-sell",
+          "autoSmelt": "Auto-smelt",
+          "autoCap": "≤ {rarity}"
         },
         "combat": {
           "title": "Combat",

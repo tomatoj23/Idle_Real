@@ -232,3 +232,52 @@ describe('#33 · 修行录页', () => {
     expect(seen).toEqual(['visit:begin:bag', 'visit:end:bag', 'visit:begin:shop', 'visit:end:shop']);
   });
 });
+
+describe('#35 · 自动折叠记账渲染（行级 auto 点亮）', () => {
+  it('折叠对渲染：被折标记行走折叠补注（已自动售卖 被折物），折得物走常觧行（灵石 +N）', () => {
+    const reloaded = createGame({
+      content: loadXiuxianPack(),
+      save: {
+        version: 1,
+        time: 0,
+        state: {
+          gold: 0,
+          hp: 50,
+          items: {},
+          skills: {},
+          activity: null,
+          journal: {
+            seq: 1,
+            records: [
+              {
+                seq: 1,
+                t0: 0,
+                t1: 0,
+                kind: 'craft',
+                skillId: 'alchemy',
+                activityName: '炼制回气丹',
+                cycles: 1,
+                fails: 0,
+                exp: 8,
+                lines: [
+                  { source: 'craft', kind: 'item', id: 'consumable_heal', count: 0, gold: 0, auto: 'sell' },
+                  { source: 'craft', kind: 'currency', id: 'gold', count: 45, gold: 45, auto: 'sell' },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    });
+    const root2 = document.createElement('div');
+    document.body.appendChild(root2);
+    const ui2 = buildUi(root2, loadXiuxianPack(), () => reloaded.snapshot(), reloaded.events);
+    ui2.bindActions((action: GameAction) => reloaded.dispatch(action));
+    root2.querySelector<HTMLButtonElement>('.tab[data-tab="journal"]')!.click();
+    ui2.render();
+    const row = root2.querySelector('#jr-list .jr-row');
+    expect(row?.textContent).toContain('已自动售卖 回气丹'); // 标记行 = 折叠补注
+    expect(row?.textContent).toContain('灵石 +45'); // 折得物行走常觧行（模板自带币名）
+    expect(row?.textContent).not.toContain('已自动售卖 gold'); // 币种不落裸 id
+  });
+});

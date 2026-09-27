@@ -317,9 +317,18 @@ export function buildUi(
     render();
   }
 
+  /** data-act 动作元素解析（click/change 两路委托共用）。 */
+  const actionElOf = (ev: Event): HTMLElement | undefined => {
+    const el = (ev.target as HTMLElement | null)?.closest<HTMLElement>('[data-act]');
+    return el && handler ? el : undefined;
+  };
+
   root.addEventListener('click', (ev) => {
-    const el = (ev.target as HTMLElement).closest<HTMLElement>('[data-act]');
-    if (!el || !handler) return;
+    const el = actionElOf(ev);
+    if (!el) return;
+    // 选择器动作走 change 委托（#35）：点击只开合下拉不派发——否则开合即整页
+    // 重绘，下拉当场被换血关死。
+    if (el.tagName === 'SELECT') return;
     const act = el.dataset.act ?? '';
     if (act === 'tab') {
       // 导航动作留壳核（D4）：页内渲染的指向按钮同走此路径。
@@ -328,6 +337,13 @@ export function buildUi(
     }
     // 本页动作委托注册表（D1/D4）：巨型 click switch 整体退役。
     pages[activeTab].handleAction?.(act, el);
+  });
+
+  // 表单控件动作委托（#35）：<select> 值变更即动作，与 click 同路由进当页 handleAction。
+  root.addEventListener('change', (ev) => {
+    const el = actionElOf(ev);
+    if (!el) return;
+    pages[activeTab].handleAction?.(el.dataset.act ?? '', el);
   });
 
   /* ---------- 反馈枢纽（#34）：飘字两档 + 醒目 toast + 战斗日志 ---------- */

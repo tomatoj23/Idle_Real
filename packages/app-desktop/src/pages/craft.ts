@@ -5,7 +5,7 @@
  * 实况刷新（配方进度条）住本页 update（D3）。
  */
 import { craftMissingOf, craftSuccessRateOf, levelFromXp, rebirthGateOf } from '@wendao/engine';
-import type { RecipeView } from '@wendao/engine';
+import type { GameState, RecipeView } from '@wendao/engine';
 import {
   actBarHtml,
   actCardHtml,
@@ -24,10 +24,48 @@ import {
   xpReadOf,
   xpSubTextOf,
 } from '../pageFrame';
-import type { PageCtx, PageEnv, PageView } from './types';
+import type { PageCtx, PageEnv, PageView, ShellText } from './types';
 
 export function createCraftPage(env: PageEnv): PageView {
   let selectedCraftSkillId = env.craftSkills[0]?.id ?? '';
+
+  /**
+   * 配方自动化控件行（#35）：三态单选（不处理/自动售卖/自动熔炼，互斥）+
+   * 稀有度阈值（≤所选档）。两态退化：丹药/材料配方（产出无稀有度）不渲染
+   * 熔炼项与阈值项；无器屑经济的包（canSmelt=false）不渲染熔炼项。
+   * 注入存量的不可选态（无器屑包的熔炼规则/普通产出的熔炼规则）保留选中态
+   * 展示（disabled 选项），防选择器静默换态谎报。
+   */
+  const autoRowHtml = (st: Readonly<GameState>, index: number, isGear: boolean, T: ShellText): string => {
+    const rule = st.recipeAuto[String(index)];
+    const mode = rule?.mode ?? 'none';
+    const rarities = env.content.rarities;
+    const smeltPickable = isGear && env.canSmelt;
+    const options = [
+      `<option value="none"${mode === 'none' ? ' selected' : ''}>${esc(T('pages.craft.autoNone'))}</option>`,
+      `<option value="sell"${mode === 'sell' ? ' selected' : ''}>${esc(T('pages.craft.autoSell'))}</option>`,
+    ];
+    if (smeltPickable || mode === 'smelt') {
+      options.push(
+        `<option value="smelt"${mode === 'smelt' ? ' selected' : ''}${smeltPickable ? '' : ' disabled'}>${esc(T('pages.craft.autoSmelt'))}</option>`,
+      );
+    }
+    const cap0 = rarities[0]?.id ?? '';
+    const parts = [
+      `<select class="auto-mode" data-act="autorule" data-index="${index}">${options.join('')}</select>`,
+    ];
+    if (isGear && mode !== 'none') {
+      const cap = rule?.maxRarity ?? cap0;
+      const capOptions = rarities
+        .map(
+          (r) =>
+            `<option value="${esc(r.id)}"${r.id === cap ? ' selected' : ''}>${esc(T('pages.craft.autoCap', { rarity: r.name }))}</option>`,
+        )
+        .join('');
+      parts.push(`<select class="auto-cap" data-act="autorule" data-index="${index}">${capOptions}</select>`);
+    }
+    return `<div class="craft-auto">${parts.join('')}</div>`;
+  };
 
   const render = (ctx: PageCtx): string => {
     const { st, snap, content, T } = ctx;
@@ -120,11 +158,13 @@ export function createCraftPage(env: PageEnv): PageView {
           <div class="craft-mats">${mats}</div>
           <div class="act-meta">${esc(T('pages.craft.recipeMeta', { interval: env.fmtSeconds(recipe.interval), exp: recipe.exp, level: recipe.unlockLevel }))}</div>
           ${actBarHtml(actKeyOf({ skillId: skill.id, index }), pct)}`,
-          op: unlocked
-            ? running
-              ? actStopBtnHtml(T('pages.craft.stopBtn'))
-              : actStartBtnHtml(skill.id, index, T('pages.craft.startBtn'))
-            : actLockHtml(lockMsg),
+          op: `<div class="act-op">${
+            unlocked
+              ? running
+                ? actStopBtnHtml(T('pages.craft.stopBtn'))
+                : actStartBtnHtml(skill.id, index, T('pages.craft.startBtn'))
+              : actLockHtml(lockMsg)
+          }${autoRowHtml(st, index, out?.type === 'equip', T)}</div>`,
         });
       })
       .join('');
@@ -164,6 +204,30 @@ export function createCraftPage(env: PageEnv): PageView {
         case 'stop':
           env.dispatch({ type: 'activity:stop' });
           return;
+        case 'autorule': {
+          // 配方自动化规则派发（#35）：三态单选/阈值共用本动作，整条规则重写
+          //（互斥单选 = 单字段覆盖）。装备产出必带阈值（首启默认最低档 = 只折
+          // 寻常，高品绝不误折）；普通产出无阈值语义不带。
+          const box = target.closest<HTMLElement>('.craft-auto');
+          const mode = box?.querySelector<HTMLSelectElement>('.auto-mode')?.value;
+          if (mode !== 'none' && mode !== 'sell' && mode !== 'smelt') return;
+          const index = Number(target.dataset.index);
+          const recipe = env.content.recipes[index];
+          const isGear = recipe !== undefined && env.itemById.get(recipe.output.item)?.type === 'equip';
+          const capEl = box?.querySelector<HTMLSelectElement>('.auto-cap');
+          // 阈值缺选 = 最低档（rarities 数组序首项）；存在性由引擎守卫把关。
+          const maxRarity = capEl?.value || env.content.rarities[0]?.id || undefined;
+          env.dispatch({
+            type: 'craft:auto',
+            payload: {
+              index,
+              mode,
+              ...(mode !== 'none' && isGear && maxRarity !== undefined ? { maxRarity } : {}),
+            },
+          });
+          env.render();
+          return;
+        }
       }
     },
   };

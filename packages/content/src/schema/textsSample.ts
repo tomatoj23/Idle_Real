@@ -141,6 +141,10 @@ export const textsSample: TextsSection = {
         successRate: '成功率 {rate}%',
         matRow: '{name} {have}/{need}',
         recipeMeta: '{interval} / 炉 · 修为 +{exp}',
+        autoNone: '不处理',
+        autoSell: '自动售卖',
+        autoSmelt: '自动熔炼',
+        autoCap: '≤{rarity}',
       },
       combat: {
         title: '斗法',

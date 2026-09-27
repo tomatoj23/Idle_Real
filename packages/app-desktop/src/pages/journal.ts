@@ -225,9 +225,9 @@ export function createJournalPage(env: PageEnv): PageView {
     }
   }
 
-  /** 明细行文案（auto 标记行 = 折叠补注「已自动售卖/熔炼 被折物」；折得物另行走常觧行）。 */
+  /** 明细行文案（auto 标记行 count=0 = 折叠补注「已自动售卖/熔炼 被折物」；折得物行带 auto 标记但仍走常觧行，#35 点亮口径）。 */
   function lineText(line: JournalLine): string {
-    if (line.auto !== undefined) {
+    if (line.auto !== undefined && line.count === 0) {
       const act = T(`pages.journal.${line.auto === 'sell' ? 'autoSell' : 'autoSmelt'}`);
       return esc(T('pages.journal.autoNote', { act, name: itemDisplayOf(line.id, line.rarity) }));
     }

@@ -250,6 +250,20 @@ function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
   checkIds(pack.skills, '/skills', errors);
   checkIds(pack.enemies, '/enemies', errors);
   checkIds(pack.rarities, '/rarities', errors);
+  // rarities 数组序 = 档位序（低→高，#35 阈值比较严格按此序）：schema 无 rank
+  // 字段，数组序是内容包作者的排档约定——倍率（mult）须随序单调不减，防「高档
+  // 低倍」倒挂让阈值语义与直觉相悖（排档约定的语义守护，三处同步口径见文档）。
+  for (let i = 1; i < pack.rarities.length; i++) {
+    const prev = pack.rarities[i - 1]!;
+    const cur = pack.rarities[i]!;
+    if (cur.mult < prev.mult) {
+      errors.push({
+        path: `/rarities/${i}/mult`,
+        keyword: 'monotonic',
+        message: `稀有度倍率与数组序倒挂：${cur.id}（mult ${cur.mult}）排在 ${prev.id}（mult ${prev.mult}）之后——档位序 = 数组序（低→高），mult 须单调不减`,
+      });
+    }
+  }
   checkIds(pack.elements, '/elements', errors);
   const slotIds = checkConfig(pack.config, itemIndex, pack.items, errors);
 

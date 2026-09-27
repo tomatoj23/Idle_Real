@@ -280,6 +280,8 @@ export interface GearDrop {
  * 稀有度档位（rarities 节条目）：档名/概率/倍率/词条数/卖价全部由内容包
  * 定义，引擎只保留掷点机制与缺档回退第一档的安全兜底（ADR-016）。
  * id 一经发布不可变（GearInstance.rarity 存档键 + UI r-* 着色类后缀）。
+ * **数组序 = 档位序（低→高，#35）**：自动化稀有度阈值比较严格按此序，
+ * mult 须随序单调不减（validate 语义关卡）。
  */
 export interface RarityDef {
   readonly id: string;
@@ -672,6 +674,7 @@ export interface ShellPageShop {
 /**
  * 炼制页文案（#5）：配方卡材料着色 + 成功率展示（数值来自引擎
  * craftSuccessRateOf）+ 进度条；成功率/材料缺口禁壳内另写公式。
+ * #35 起含配方自动化控件（三态单选 + 稀有度阈值）文案。
  */
 export interface ShellPageCraft {
   readonly title: string;
@@ -691,6 +694,14 @@ export interface ShellPageCraft {
   readonly matRow: string;
   /** 配方元信息行；槽位 {interval}/{exp}/{level}。 */
   readonly recipeMeta: string;
+  /** 配方自动化三态选项·不处理（#35，缺省）。 */
+  readonly autoNone: string;
+  /** 配方自动化三态选项·自动售卖（#35）。 */
+  readonly autoSell: string;
+  /** 配方自动化三态选项·自动熔炼（#35；无器屑经济的包两态退化不渲染此选项）。 */
+  readonly autoSmelt: string;
+  /** 稀有度阈值选项（#35，≤所选档才折；仅装备产出配方渲染）；槽位 {rarity}（档名）。 */
+  readonly autoCap: string;
 }
 
 /**

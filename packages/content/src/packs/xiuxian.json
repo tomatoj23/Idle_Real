@@ -690,7 +690,11 @@
           "startBtn": "开炉",
           "successRate": "成功率 {rate}%（失败损料）",
           "matRow": "{name} {have}/{need}",
-          "recipeMeta": "{interval} / 炉 · 修为 +{exp} · 需 {level} 层"
+          "recipeMeta": "{interval} / 炉 · 修为 +{exp} · 需 {level} 层",
+          "autoNone": "不处理",
+          "autoSell": "自动售卖",
+          "autoSmelt": "自动熔炼",
+          "autoCap": "≤{rarity}"
         },
         "combat": {
           "title": "斗法",

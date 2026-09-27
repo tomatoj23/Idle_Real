@@ -338,13 +338,12 @@ describe('#33 · 离线段与自动折叠聚合', () => {
     expect(offline.levels).toEqual([{ skillId: 'herb', level: 3 }]); // 在线 12 + 离线 120 → 3 层
   });
 
-  it('离线自动售卖并入离线段（配方挂点折叠成对事件聚合，不逐件成条）', () => {
+  it('离线自动售卖并入离线段（#35 规则折叠成对事件聚合，不逐件成条）', () => {
     const clock = new ManualClock();
     const game = createGame({
       content: makeCraftFoldPack(),
       clock,
       rng: () => 0.9,
-      autoFold: (c) => (c.source === 'craft' && c.itemId === 'pill1' ? 'sell' : undefined),
       save: {
         version: 1,
         time: 0,
@@ -354,6 +353,7 @@ describe('#33 · 离线段与自动折叠聚合', () => {
           items: { herb1: 50 }, // 25 轮量 > 离线 20 轮，材料不设限
           skills: { smith: { xp: 0 } },
           activity: { skillId: 'smith', index: 0, name: '炼制聚气丹', progress: 0 },
+          recipeAuto: { '0': { mode: 'sell', name: '炼制聚气丹' } },
         },
       },
     });
@@ -372,6 +372,49 @@ describe('#33 · 离线段与自动折叠聚合', () => {
       { source: 'craft', kind: 'exp', id: 'smith', count: 160, gold: 0 },
     ]);
     expect(stateOf(game.snapshot()).items.pill1).toBeUndefined();
+  });
+});
+
+describe('#35 · 在线自动转化记账（AC1：逐项自动条目）', () => {
+  it('在线炼制自动售卖：炼制段明细行带 auto 标记（被折标记行 + 折得物），完全静默', () => {
+    const clock = new ManualClock();
+    const game = createGame({
+      content: makeCraftFoldPack(),
+      clock,
+      rng: () => 0.9,
+      save: {
+        version: 1,
+        time: 0,
+        state: {
+          gold: 0,
+          hp: 50,
+          items: { herb1: 20 },
+          skills: { smith: { xp: 0 } },
+          activity: null,
+          recipeAuto: { '0': { mode: 'sell', name: '炼制聚气丹' } },
+        },
+      },
+    });
+    game.dispatch({ type: 'activity:start', payload: { skillId: 'smith', index: 0 } }); // 开段
+    for (let i = 0; i < 2; i++) {
+      clock.advance(3000);
+      game.tick(3000); // 2 炉，产出全部入账即折
+    }
+    game.dispatch({ type: 'activity:stop' });
+
+    const records = recordsOf(game);
+    // 不逐件成条：零点条目（全部账目归炼制段；升级另条与本判无关）。
+    expect(records.filter((r) => r.kind === 'point')).toEqual([]);
+    const rec = records.find((r) => r.kind === 'craft');
+    expect(rec).toMatchObject({ kind: 'craft', cycles: 2, exp: 16 });
+    if (rec?.kind !== 'craft') return;
+    // 明细行：材料损耗 + 被折叠标记（count=0 会计不计，带 auto 标记）+ 折得灵石 + 修为。
+    expect(rec.lines).toEqual([
+      { source: 'craft', kind: 'item', id: 'herb1', count: -4, gold: -16 },
+      { source: 'craft', kind: 'item', id: 'pill1', count: 0, gold: 0, auto: 'sell' },
+      { source: 'craft', kind: 'currency', id: 'gold', count: 100, gold: 100, auto: 'sell' },
+      { source: 'craft', kind: 'exp', id: 'smith', count: 16, gold: 0 },
+    ]);
   });
 });
 

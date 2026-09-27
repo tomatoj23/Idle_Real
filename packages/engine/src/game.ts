@@ -26,6 +26,7 @@ import {
   offlineParamsOf,
   progressionParamsOf,
   recipesOf,
+  rarityRankOf,
   signatureOf,
   skillsOf,
   textsOf,
@@ -99,12 +100,12 @@ import { createJournalAggregator } from './journal.js';
 import { achievementConditionMet, achievementsOf } from './achievements.js';
 import { createCombatRun, makeCombatState } from './combatRun.js';
 import type {
-  AutoFoldRule,
   LedgerAuto,
   LedgerData,
   LedgerOrigin,
   LedgerSource,
 } from './ledger.js';
+import { recipeAutoRuleOf } from './ledger.js';
 
 export interface CreateGameOptions {
   /** 由 content 包校验过的内容包；引擎零内容感知，仅透明持有。 */
@@ -123,12 +124,6 @@ export interface CreateGameOptions {
    * 装备/丹药 buff 等实体产出方由后续票在引擎内部从状态派生，不走此参数。
    */
   readonly contributions?: readonly Contribution[];
-  /**
-   * 自动售卖/熔炼规则挂点（#39 D3）：入账即折——炼制产出/战斗掉落在入账
-   * 前过此规则，命中则物品不进乾坤袋直接折灵石/器屑并发成对账本事件。
-   * 缺省 no-op（零行为差异）；规则本体（阈值表/互斥/UI）归 #35/#36。
-   */
-  readonly autoFold?: AutoFoldRule;
   /**
    * 监听器异常诊断面（#75 项 1）：引擎内置订阅者（stats/journal）或外部
    * 订阅者的异常不阻断主循环，但不再无声吞掉——缺省 console.error 面，
@@ -430,12 +425,20 @@ export function createGame(options: CreateGameOptions): Game {
   interface LedgerMeta {
     readonly origin: LedgerOrigin;
     readonly offline?: true;
+    /** 规则挂点键（#35 统一判定接缝的来源侧细分）：craft = 配方下标、combat = 敌人 id。 */
+    readonly via?: string;
   }
 
-  const autoFold = options.autoFold; // 缺省 undefined = no-op 挂点（零行为差异）
   const META_IDLE: LedgerMeta = { origin: 'idle' };
   const META_USER: LedgerMeta = { origin: 'user' };
   const META_OFFLINE: LedgerMeta = { origin: 'idle', offline: true }; // 离线 = 挂机归段
+
+  /** 炼制产出的挂点 meta（#35）：via = 配方下标（规则表键，与 activity.index 同源）。 */
+  const craftMetaOf = (index: number, offline?: true): LedgerMeta => ({
+    origin: 'idle',
+    ...(offline ? { offline: true as const } : {}),
+    via: String(index),
+  });
 
   function emitLedger(data: LedgerData): void {
     events.emit({ type: 'ledger', time, data });
@@ -448,12 +451,35 @@ export function createGame(options: CreateGameOptions): Game {
     ...(meta.offline ? { offline: true as const } : {}),
   });
 
-  /** 折叠挂点判定（D3）：入账即折在咽喉内部，规则本体归 #35/#36。
-   * 挂点按 CONTEXT「自动售卖/熔炼」收窄为配方（craft 产出）与敌人
-   * （combat 掉落）两类——其余来源（商店/成就/层奖等）不咨询挂点。 */
-  function foldDecisionOf(source: LedgerSource, itemId: string, rarity?: string): LedgerAuto | undefined {
+  /**
+   * 统一入账判定接缝（#35）：「来源→规则→入账转化」单一判定。只有挂规则的
+   * 来源过判定——配方（craft 产出，本票）与敌人（combat 掉落，#36 复用本
+   * 接缝）两类；采集/坊市购买/成就奖励/兵解保留资产等无挂点来源直接入袋，
+   * 不过判定。规则本体 = 玩家设置的配方规则表（state.recipeAuto）；命中即
+   * 「入账即折」，产出不进乾坤袋直接折算并发成对事件（D10）。
+   */
+  function foldDecisionOf(
+    source: LedgerSource,
+    via: string | undefined,
+    rarity?: string,
+  ): LedgerAuto | undefined {
     if (source !== 'craft' && source !== 'combat') return undefined;
-    return autoFold?.({ source, itemId, ...(rarity !== undefined ? { rarity } : {}) });
+    if (via === undefined) return undefined;
+    // 敌人规则表（combat 挂点，键 = 敌人 id）归 #36 填充；本票只有配方挂点。
+    const rule =
+      source === 'craft' && Object.hasOwn(state.recipeAuto, via) ? state.recipeAuto[via] : undefined;
+    if (!rule) return undefined; // 缺省不处理 / 未知挂点安全回退
+    if (rarity === undefined) {
+      // 普通产出（无稀有度，丹药/材料配方）：售卖态该来源全部产出折灵石；
+      // 熔炼态无装备语义（器屑按稀有度档位）——照常入袋。
+      return rule.mode === 'sell' ? 'sell' : undefined;
+    }
+    // 装备产出：稀有度阈值门（≤所选档；档位序 = 包内 rarities 数组序，低→高）。
+    // 阈值缺失/未知稀有度 = 安全回退不折（高品绝不误折）。
+    const tier = rarityRankOf(content, rarity);
+    const cap = rule.maxRarity === undefined ? undefined : rarityRankOf(content, rule.maxRarity);
+    if (tier === undefined || cap === undefined || tier > cap) return undefined;
+    return rule.mode;
   }
 
   /** 熔炼产出（器屑数，按稀有度 smelt 字段缺省 1）；无器屑经济 = undefined（不可熔）。 */
@@ -473,7 +499,7 @@ export function createGame(options: CreateGameOptions): Game {
     const item = findItem(content, itemId);
     if (!item) return false; // 坏包防御：未知键不入账（包校验 xref 已拦，理论不可达）
     if (count > 0) {
-      if (foldDecisionOf(source, itemId) === 'sell') {
+      if (foldDecisionOf(source, meta.via) === 'sell') {
         const gained = Math.max(0, item.sell) * count;
         state.gold += gained;
         // 成对事件（D10）：被折叠物品标记（count=0/value=0 会计不计）+ 折得灵石
@@ -484,8 +510,8 @@ export function createGame(options: CreateGameOptions): Game {
         }
         return false;
       }
-      // 判 'smelt' 的普通物品无熔炼产出语义（器屑按稀有度档位，需装备实例）：
-      // 防御性保持原样入袋（规则形状归 #35，正常不会对无稀有度物品判熔炼）。
+      // 熔炼态的普通物品无熔炼产出语义（器屑按稀有度档位，需装备实例）：判定
+      // 接缝对无稀有度产出不判 'smelt'，此处入袋为唯一去向。
       addItem(itemId, count);
       emitLedger({ ...ledgerBase(source, meta), kind: 'item', id: itemId, count, value: Math.max(0, item.sell) });
       return true;
@@ -511,7 +537,7 @@ export function createGame(options: CreateGameOptions): Game {
       count: 0,
       value: 0,
     };
-    const auto = foldDecisionOf(source, gear.itemId, gear.rarity);
+    const auto = foldDecisionOf(source, meta.via, gear.rarity);
     if (auto === 'sell') {
       state.gold += unitValue;
       emitLedger({ ...marker, auto });
@@ -792,16 +818,17 @@ export function createGame(options: CreateGameOptions): Game {
    * 成功发产出 + 配方修为；失败材料全损、只返还修为（round(exp × failRefund)）。
    * 事件面：exp（复用 grantExp）+ loot（source=craft）/ craft-fail + activity-complete。
    */
-  function completeCraftOnce(skill: SkillView, recipe: RecipeView): void {
+  function completeCraftOnce(skill: SkillView, recipe: RecipeView, index: number): void {
+    const meta = craftMetaOf(index); // 规则挂点键 = 配方下标（#35 判定接缝）
     for (const [matId, count] of Object.entries(recipe.materials)) {
-      ledgerItem(matId, -count, 'craft', META_IDLE);
+      ledgerItem(matId, -count, 'craft', meta);
     }
     if (random() < craftSuccessRateOf(content, state.skills, recipe)) {
-      grantCraftOutput(skill, recipe);
-      grantExp(skill, recipe.exp, false, { source: 'craft', meta: META_IDLE });
+      grantCraftOutput(skill, recipe, meta);
+      grantExp(skill, recipe.exp, false, { source: 'craft', meta });
     } else {
       const exp = Math.round(recipe.exp * Math.max(0, crparams.failExpRefund));
-      grantExp(skill, exp, false, { source: 'craft', meta: META_IDLE });
+      grantExp(skill, exp, false, { source: 'craft', meta });
       events.emit({
         type: 'craft-fail',
         time,
@@ -818,12 +845,13 @@ export function createGame(options: CreateGameOptions): Game {
   /**
    * 炼制产出：equip 类 → 装备实例化（rollRarity 受炼器等级偏置 + 词条掷定，
    * #5/#14 接缝：偏置 = 技艺层 × config.crafting.rarityBiasPerLevel）；其余入袋。
+   * 入账即折判定（#35）在咽喉内部按 meta.via（配方下标）过统一接缝。
    */
-  function grantCraftOutput(skill: SkillView, recipe: RecipeView): void {
+  function grantCraftOutput(skill: SkillView, recipe: RecipeView, meta: LedgerMeta): void {
     const item = findItem(content, recipe.output.item);
     if (!item) return; // 包校验已保证存在；防御路径静默跳过
     if (item.type !== 'equip') {
-      if (ledgerItem(item.id, recipe.output.count, 'craft', META_IDLE)) {
+      if (ledgerItem(item.id, recipe.output.count, 'craft', meta)) {
         emitLoot(item.id, recipe.output.count, 'craft');
       }
       return;
@@ -836,7 +864,7 @@ export function createGame(options: CreateGameOptions): Game {
         rarity: rollRarity(content, random, bias),
         affix: aparams,
       });
-      if (ledgerGearIncome(gear, 'craft', META_IDLE)) {
+      if (ledgerGearIncome(gear, 'craft', meta)) {
         events.emit({
           type: 'loot',
           time,
@@ -869,7 +897,7 @@ export function createGame(options: CreateGameOptions): Game {
     while (active.progress >= recipe.interval && guard++ < MAX_TICK_STEPS) {
       if (craftMissingOf(recipe, state.items).length > 0) break;
       active.progress -= recipe.interval;
-      completeCraftOnce(skill, recipe);
+      completeCraftOnce(skill, recipe, active.index);
     }
     if (craftMissingOf(recipe, state.items).length > 0) {
       state.activity = null; // 缺料停炉：与手动收功同效（剩余进度一并弃置）
@@ -1269,6 +1297,8 @@ export function createGame(options: CreateGameOptions): Game {
       state.activity = null;
       return;
     }
+    // 规则挂点键 = 配方下标（#35）：离线结算与在线同判（确定性 RNG 先例）。
+    const meta = craftMetaOf(active.index, true);
     const total = active.progress + elapsedMs;
     const cycles = Math.floor(total / recipe.interval);
     active.progress = total % recipe.interval;
@@ -1292,14 +1322,14 @@ export function createGame(options: CreateGameOptions): Game {
     const failures = attempts - successes;
 
     for (const [matId, need] of Object.entries(recipe.materials)) {
-      ledgerItem(matId, -(need * attempts), 'craft', META_OFFLINE);
+      ledgerItem(matId, -(need * attempts), 'craft', meta);
     }
 
     const items: Record<string, number> = {};
     const item = findItem(content, recipe.output.item);
     if (item && successes > 0) {
       if (item.type !== 'equip') {
-        if (ledgerItem(item.id, recipe.output.count * successes, 'craft', META_OFFLINE)) {
+        if (ledgerItem(item.id, recipe.output.count * successes, 'craft', meta)) {
           items[item.id] = recipe.output.count * successes;
         }
       } else {
@@ -1314,7 +1344,7 @@ export function createGame(options: CreateGameOptions): Game {
             rarity: rollRarity(content, random, bias),
             affix: aparams,
           });
-          if (ledgerGearIncome(gear, 'craft', META_OFFLINE)) kept += 1;
+          if (ledgerGearIncome(gear, 'craft', meta)) kept += 1;
         }
         if (kept > 0) items[item.id] = kept;
       }
@@ -1328,7 +1358,7 @@ export function createGame(options: CreateGameOptions): Game {
       successes * Math.round(recipe.exp * xpMult) + failures * Math.round(failPerRound * xpMult);
     const before = levelFromXp(xpOf(skill.id));
     // 事件载荷 = 实发值（离线/在线对称）。
-    const expTotal = grantExpExact(skill, expBase, true, { source: 'craft', meta: META_OFFLINE });
+    const expTotal = grantExpExact(skill, expBase, true, { source: 'craft', meta });
     const after = levelFromXp(xpOf(skill.id));
     const levels =
       after > before
@@ -2022,6 +2052,43 @@ export function createGame(options: CreateGameOptions): Game {
         case 'journal:anchor': {
           // 锚点重设（#33）：换基准 = 当下注入钟墙钟 + 计数器快照浅拷；幂等可随时重设。
           state.journalAnchor = { at: clock.now(), snap: { ...state.ledgerCounters } };
+          return;
+        }
+
+        case 'craft:auto': {
+          // 配方自动化规则设置（#35）：三态互斥单选 + 稀有度阈值。mode='none'
+          // = 清除该配方规则（回缺省不处理）。玩家设置变更非资产收支——不入
+          // 咽喉、不记修行录、不发事件（与 combat:auto 同律）。
+          const payload = action.payload;
+          const index = payload?.index;
+          const mode = payload?.mode;
+          if (
+            typeof index !== 'number' ||
+            !Number.isInteger(index) ||
+            index < 0 ||
+            (mode !== 'none' && mode !== 'sell' && mode !== 'smelt')
+          ) {
+            reject(action.type, 'bad-payload');
+            return;
+          }
+          const recipe = findRecipe(content, index);
+          if (!recipe) {
+            reject(action.type, 'bad-payload');
+            return;
+          }
+          const maxRarity = payload?.maxRarity;
+          // 存在性走 rarityRankOf 精确匹配（findRarity 未命中回退第一档，会放行坏键）。
+          if (maxRarity !== undefined && rarityRankOf(content, maxRarity) === undefined) {
+            reject(action.type, 'bad-payload');
+            return;
+          }
+          const key = String(index);
+          if (mode === 'none') {
+            delete state.recipeAuto[key];
+            return;
+          }
+          // 稳定引用名随写入冻结（ADR-015）：恢复按「下标在册 + 对名一致」双校验。
+          state.recipeAuto[key] = recipeAutoRuleOf(mode, maxRarity, recipe.name);
           return;
         }
 
