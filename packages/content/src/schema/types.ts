@@ -1335,8 +1335,9 @@ export interface Config {
 export interface ContentPack {
   /**
    * 包版本（#12 版本策略）：semver 三段（1.2.3，可带 prerelease/build 后缀）。
-   * 游戏内页脚版本行展示 + 发版追踪的单一来源——改内容 = 改版本，玩家可见。
-   * id 一经发布不可变（ADR-015）约束的是键名；版本随内容变更递增。
+   * 游戏内页脚版本行展示 + 发版追踪的单一来源——**发版即 bump**（2026-09-28
+   * 裁决：日常内容改动不 bump，bump 与出包同一次提交），玩家可见。
+   * id 一经发布不可变（ADR-015）约束的是键名；版本随发版递增。
    */
   readonly version: string;
   readonly skills: readonly Skill[];

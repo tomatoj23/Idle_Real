@@ -17,7 +17,7 @@ content 包的字段级约定。**schema 变更三处同步纪律（ADR-015）**
 
 | 节 | 必填 | schema | 说明 |
 |---|---|---|---|
-| `version` | 是 | （pack.ts 语义关卡，无独立 schema 文件） | **包版本（#12）**：semver 三段（可带 prerelease/build 后缀），游戏内页脚版本行展示 + 发版追踪；改内容 = 改版本 |
+| `version` | 是 | （pack.ts 语义关卡，无独立 schema 文件） | **包版本（#12）**：semver 三段（可带 prerelease/build 后缀），游戏内页脚版本行展示 + 发版追踪；**发版即 bump**（2026-09-28 裁决，替代引入即休眠的「改内容 = 改版本」）——日常内容改动不 bump，bump 与出包（`npm run dist`/打 tag）同一次提交。版本名的是**发出去的快照**；协议形态兼容性由 ADR-015 三处同步 + 协议守卫测试承载，不归版本号 |
 | `skills` | 是 | skill.schema.json | 技艺定义（gather 带 activities） |
 | `items` | 是 | item.schema.json | 物品，oneOf 五形态分流（见下） |
 | `recipes` | 是 | recipe.schema.json | 配方（无 id 的关系行，不参与原型继承） |
@@ -259,7 +259,9 @@ schema 无 rank 字段）；validate 语义关卡保证 `mult` 随序单调不�
 - **footer.versionLine（#12）**：页脚版本行模板，槽位 `{name}`（brand.name）、
   `{content}`（包顶层 `version`）、`{engine}`（引擎 `ENGINE_VERSION`，
   `packages/engine/src/version.ts`，与 engine package.json version 由测试钉住一致）。
-  发版流程：改包 version → 页脚玩家可见 → `npm run dist` 重打包。
+  发版流程（2026-09-28 裁决「发版即 bump」）：出包前 bump 包 version（与发版
+  同一次提交）→ 页脚玩家可见 → `npm run dist` 重打包；日常内容改动不 bump
+  （逐提交 bump 在多会话并行下徒增合并冲突，且未发布的工作树无版本语义）。
 
 ## config 槽位数据化（#16）与玩法参数数据化（#020）
 
