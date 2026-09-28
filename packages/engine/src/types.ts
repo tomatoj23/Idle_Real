@@ -50,6 +50,10 @@ export type GameAction =
   | GearUnequipAction
   | GearSellAction
   | GearSmeltAction
+  | GearLockAction
+  | GearUnlockAction
+  | GearSellAllAction
+  | GearSmeltAllAction
   | GearReforgeAction
   | RebirthPerformAction
   | TalentBuyAction
@@ -69,6 +73,17 @@ export interface ItemStackPayload {
 /** 装备实例载荷（uid = state.gear 实例序号）：gear:equip/sell/smelt 共用形态。 */
 export interface GearUidPayload {
   readonly uid?: number;
+}
+
+/**
+ * 批量处置载荷（#37，gear:sell-all / gear:smelt-all 共用形态）：uid 白名单
+ * （堆叠整堆卖/熔）或稀有度阈值（一键清存量）**二选一**——双带/双缺 = bad-payload
+ * （选择语义不容猜测）。uids = 目标实例序号；maxRarity = 阈值档键（≤该档才处置，
+ * 档位序 = 包内 rarities 数组序，在册性由动作面守卫）。
+ */
+export interface GearBatchPayload {
+  readonly uids?: readonly number[];
+  readonly maxRarity?: string;
 }
 
 /** 开工（采集/炼制）：skillId + 活动下标（craft 类 = 包内 recipes 下标）。 */
@@ -168,6 +183,40 @@ export interface GearSmeltAction {
   readonly payload: GearUidPayload;
 }
 
+/**
+ * 锁定装备实例（#37 D1/D3）：置 locked 标记（幂等）。玩家防护设置非资产收支
+ * ——不入咽喉、不记修行录、不发事件（与 combat:auto 同律），UI 反馈 = 重绘后
+ * 按钮态翻转。
+ */
+export interface GearLockAction {
+  readonly type: 'gear:lock';
+  readonly payload: GearUidPayload;
+}
+
+/** 解锁装备实例（幂等；与 gear:lock 对偶）。 */
+export interface GearUnlockAction {
+  readonly type: 'gear:unlock';
+  readonly payload: GearUidPayload;
+}
+
+/**
+ * 批量卖器（#37，一键出售/整堆卖共用动作）：uid 白名单或稀有度阈值二选一，
+ * **单动作原子化**（非逐件派发）——佩戴豁免、锁定跳过，产出一条汇总事件。
+ */
+export interface GearSellAllAction {
+  readonly type: 'gear:sell-all';
+  readonly payload: GearBatchPayload;
+}
+
+/**
+ * 批量熔器（#37，一键熔炼/整堆熔共用动作）：与 gear:sell-all 同律，器屑
+ * 产出按稀有度档位合计（无器屑经济 = not-available）。
+ */
+export interface GearSmeltAllAction {
+  readonly type: 'gear:smelt-all';
+  readonly payload: GearBatchPayload;
+}
+
 /** 重铸铭纹：uid + 铭纹下标。 */
 export interface GearReforgeAction {
   readonly type: 'gear:reforge';
@@ -250,6 +299,8 @@ export type GameEvent =
   | EquipWearEvent
   | EquipRemoveEvent
   | GearSmeltEvent
+  | GearSellAllEvent
+  | GearSmeltAllEvent
   | GearReforgeEvent
   | RebirthEvent
   | TalentBuyEvent
@@ -536,6 +587,39 @@ export interface GearSmeltEvent extends GameEventBase {
     readonly shards: number;
     /** 「档名·物品名」展示名。 */
     readonly name: string;
+  };
+}
+
+/**
+ * 批量卖器汇总（#37）：一次原子批量处置只发一条（汇总展示面；逐件账目归
+ * ledger 事件流——修行录条目由段聚合器并出，禁本事件承载账目）。
+ */
+export interface GearSellAllEvent extends GameEventBase {
+  readonly type: 'gear:sell-all';
+  readonly data: {
+    /** 实际售出件数。 */
+    readonly count: number;
+    /** 合计灵石收益。 */
+    readonly gained: number;
+    /** 售后灵石总额（单件 sell 事件同律）。 */
+    readonly gold: number;
+    /** 锁定跳过件数（D2：直接跳过、不入账）。 */
+    readonly skipped: number;
+  };
+}
+
+/** 批量熔器汇总（#37，与 GearSellAllEvent 同律）。 */
+export interface GearSmeltAllEvent extends GameEventBase {
+  readonly type: 'gear:smelt-all';
+  readonly data: {
+    /** 实际熔炼件数。 */
+    readonly count: number;
+    /** 器屑物品 id（壳层经 items 表投影展示名）。 */
+    readonly item: string;
+    /** 合计器屑产出。 */
+    readonly shards: number;
+    /** 锁定跳过件数。 */
+    readonly skipped: number;
   };
 }
 

@@ -260,9 +260,12 @@ body {
 .act-op { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .act-op .btn { margin-top: 0; }
 .act-op .act-lockmsg { margin-top: 0; padding-top: 0; }
-/* 自动化规则控件行（#35 炼制 / #36 敌人行共用零件）：三态单选 + 稀有度阈值。 */
+/* 自动化规则控件行（#35 炼制 / #36 敌人行共用零件）：三态单选 + 稀有度阈值。
+ * 乾坤袋一键清存量工具条（#37：阈值选择 + 批量按钮）的选择器同款外观。 */
 .auto-rule { display: flex; align-items: center; gap: 6px; }
-.auto-rule select {
+.bag-clear { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; }
+.auto-rule select,
+.bag-clear select {
   background: var(--panel);
   color: var(--muted);
   border: 1px solid var(--border);
@@ -271,7 +274,8 @@ body {
   font-size: 12px;
   cursor: pointer;
 }
-.auto-rule select:focus { border-color: var(--border-gold); outline: none; }
+.auto-rule select:focus,
+.bag-clear select:focus { border-color: var(--border-gold); outline: none; }
 
 /* ---------- 按钮 ---------- */
 

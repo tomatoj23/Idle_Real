@@ -27,6 +27,7 @@ import {
   gearParamsOf,
   inscriptionsOf,
   raritiesOf,
+  rarityRankOf,
   type AffixPoolView,
   type BlankView,
   type GearDropView,
@@ -64,6 +65,13 @@ export interface GearInstance {
   readonly affixes: readonly Affix[];
   /** 铭纹（#14，器胚实例专用）；空/缺省 = 无（未显式写入字段不落盘，ADR-013）。 */
   readonly inscriptions?: readonly GearInscription[];
+  /**
+   * 锁定标记（#37 D1）：实例 uid 级防护——批量处置直接跳过、单件卖出/熔炼
+   * 拒收（先解锁再操作）。可选字段向后兼容（旧档缺省未锁，不 bump SAVE_KEY；
+   * 恢复面透传见 state.ts gear 行——字段表只管 GameState 顶层、实例内部须显式
+   * 收编否则静默丢失）。true 才落盘（ADR-013 同 inscriptions 纪律）。
+   */
+  readonly locked?: boolean;
 }
 
 /**
@@ -374,6 +382,78 @@ export function gearName(content: GameContent, itemName: string, rarity: Rarity)
 /** 卖价 = max(1, round(物品卖价 × 档位卖价倍率))。 */
 export function gearSell(content: GameContent, itemSell: number, rarity: Rarity): number {
   return Math.max(1, Math.round(itemSell * (findRarity(content, rarity)?.sell ?? 1)));
+}
+
+/* ---------- 堆叠视图与批量处置（#37） ---------- */
+
+/**
+ * 堆叠身份键（#37 视图堆叠）：实例「完全相同」判据的单一来源——模板 × 稀有度
+ * × 词条（名/项/值）× 铭纹（id/纹阶）× 锁定态逐维进键，**任一差异即不同键**
+ * （纹阶差异显式分开，锁定态进键是 D2 联动所迫：整堆卖/熔必须整堆可卖，混锁
+ * 堆做不到「整堆正确移除」）。uid 不进键（同堆即同质实例，佩戴/重铸挑哪件
+ * 等价）。纯展示分组用——实例 uid 模型/数据形状不动（视图分组非数据堆叠）。
+ */
+export function gearStackKeyOf(gear: GearInstance): string {
+  return JSON.stringify([
+    gear.itemId,
+    gear.rarity,
+    gear.affixes.map((a) => [a.name, a.stat, a.val]),
+    (gear.inscriptions ?? []).map((i) => [i.id, i.tier]),
+    gear.locked === true,
+  ]);
+}
+
+/** 批量处置选择（#37）：uid 白名单（堆叠整堆）或稀有度阈值（一键清存量），二选一。 */
+export interface GearBatchSelect {
+  /** 目标 uid 白名单；缺省 = 全部散件。 */
+  readonly uids?: Iterable<number>;
+  /** 稀有度阈值（≤该档才处置；档位序 = 包内 rarities 数组序，#35 同律）；缺省 = 不设门。 */
+  readonly maxRarity?: string;
+}
+
+/** 批量处置计划（#37）：目标集 + 锁定跳过计数（跳过件不处置、不入账，D2）。 */
+export interface GearBatchPlan {
+  /** 处置目标（未佩戴豁免、未锁定，命中选择；保持 state.gear 声明序）。 */
+  readonly targets: readonly GearInstance[];
+  /** 选择范围内被跳过的锁定件数（佩戴件属豁免不计——不在选择范围内）。 */
+  readonly skippedLocked: number;
+}
+
+/**
+ * 批量处置计划（#37）：「佩戴豁免 + 锁定跳过 + 选择命中」判定的单一来源——
+ * 引擎动作面与壳层按钮计数/禁用态共用，禁壳内另写过滤。佩戴件直接豁免
+ * （不计跳过——永不参与，票面「佩戴装备豁免」）；锁定件计 skippedLocked
+ * 后跳过（D2「锁定件直接跳过」）；未知稀有度实例在阈值门下不命中（宁弃不误
+ * 处置），maxRarity 不在册 = 目标集空（在册性守卫归动作面 bad-payload）。
+ */
+export function planGearBatch(
+  content: GameContent,
+  gear: readonly GearInstance[],
+  wornUids: Iterable<number>,
+  select: GearBatchSelect,
+): GearBatchPlan {
+  const worn = new Set(wornUids);
+  const allow = select.uids === undefined ? undefined : new Set(select.uids);
+  const capRank = select.maxRarity === undefined ? undefined : rarityRankOf(content, select.maxRarity);
+  if (select.maxRarity !== undefined && capRank === undefined) {
+    return { targets: [], skippedLocked: 0 };
+  }
+  const targets: GearInstance[] = [];
+  let skippedLocked = 0;
+  for (const entry of gear) {
+    if (worn.has(entry.uid)) continue; // 佩戴豁免（零影响）
+    if (allow !== undefined && !allow.has(entry.uid)) continue; // uid 白名单外
+    if (capRank !== undefined) {
+      const rank = rarityRankOf(content, entry.rarity);
+      if (rank === undefined || rank > capRank) continue; // 阈值门外/未知档不处置
+    }
+    if (entry.locked === true) {
+      skippedLocked += 1; // 锁定跳过（D2）
+      continue;
+    }
+    targets.push(entry);
+  }
+  return { targets, skippedLocked };
 }
 
 /* ---------- 修饰符贡献投影（ADR-011 唯一出口） ---------- */

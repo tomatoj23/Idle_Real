@@ -492,6 +492,10 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
             rarity,
             affixes,
             ...(inscriptions.length > 0 ? { inscriptions } : {}),
+            // 锁定标记透传（#37 D3）：locked 是实例内部嵌套字段——字段表只管
+            // GameState 顶层、管不到这里，重建漏写即**静默丢锁**；true 才收编
+            //（旧档缺省未锁，可选字段向后兼容）。
+            ...(entry.locked === true ? { locked: true } : {}),
           });
         }
       }

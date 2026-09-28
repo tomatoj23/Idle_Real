@@ -617,6 +617,23 @@ export function buildUi(
       const data = event.data;
       flowFloat(T('events.gearReforge', { name: data.name, tier: data.tier }));
     },
+    'gear:sell-all': (event) => {
+      // 批量卖器汇总（#37）：一条汇总飘字（账目明细归修行录）；锁定跳过拼后缀。
+      const data = event.data;
+      const skip = data.skipped > 0 ? T('events.batchLockedSkip', { count: data.skipped }) : '';
+      flowFloat(T('events.sellAllLog', { count: data.count, gained: data.gained }) + skip);
+    },
+    'gear:smelt-all': (event) => {
+      const data = event.data;
+      const skip = data.skipped > 0 ? T('events.batchLockedSkip', { count: data.skipped }) : '';
+      flowFloat(
+        T('events.smeltAllLog', {
+          count: data.count,
+          shard: nameOf(data.item),
+          shards: data.shards,
+        }) + skip,
+      );
+    },
     'craft-fail': (event) => {
       const data = event.data;
       flowFloat(T('events.craftFail', { name: data.recipeName, exp: data.exp }));
@@ -816,6 +833,9 @@ export function buildUi(
       Object.entries(st.equips),
       st.gear.length,
       st.gearSeq,
+      // 装备锁定态（#37）进签名：与 recipeAuto 同律的强刷兜底——gear:lock 不发
+      // 事件，漏加则非派发路径的重绘会静默 stale 锁定按钮态。
+      st.gear.map((g) => [g.uid, g.locked === true]),
       Object.keys(st.buffs).sort(),
       st.autoFight,
       st.autoEat,

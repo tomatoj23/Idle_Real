@@ -533,11 +533,26 @@
       },
       "gear:sell": {
         "not-found": "查无此器",
-        "worn": "佩戴中的法器不可卖出"
+        "worn": "佩戴中的法器不可卖出",
+        "locked": "此器已加禁制，先解禁方可卖出"
       },
       "gear:smelt": {
         "not-found": "查无此器",
         "worn": "佩戴中的法器不可熔炼",
+        "locked": "此器已加禁制，先解禁方可熔炼",
+        "not-available": "此界并无熔炼之法"
+      },
+      "gear:lock": {
+        "not-found": "查无此器"
+      },
+      "gear:unlock": {
+        "not-found": "查无此器"
+      },
+      "gear:sell-all": {
+        "no-item": "并无可出售之散件"
+      },
+      "gear:smelt-all": {
+        "no-item": "并无可熔炼之散件",
         "not-available": "此界并无熔炼之法"
       },
       "gear:reforge": {
@@ -659,6 +674,9 @@
         "achievementToast": "成就达成【{name}】！",
         "gearSmelt": "熔炼【{name}】，得 {shard}×{count}",
         "gearReforge": "重铸【{name}】，铭纹升至 T{tier}",
+        "sellAllLog": "卖出 {count} 件，得 {gained} 灵石",
+        "smeltAllLog": "熔炼 {count} 件，得 {shard}×{shards}",
+        "batchLockedSkip": "（跳过锁定 {count} 件）",
         "floatSum": "{name} +{count}",
         "expGain": "修为 +{amount}"
       },
@@ -736,6 +754,13 @@
           "takeOffBtn": "卸下",
           "sellBtn": "卖出",
           "smeltBtn": "熔炼",
+          "sellStackBtn": "全卖",
+          "smeltStackBtn": "全熔",
+          "lockBtn": "锁定",
+          "unlockBtn": "解锁",
+          "clearCap": "≤{rarity}",
+          "clearSellBtn": "一键出售",
+          "clearSmeltBtn": "一键熔炼",
           "reforgeBtn": "重铸",
           "inscTier": "T{tier}",
           "inscCondition": "（受{element}）"

@@ -47,8 +47,10 @@ import {
   gearName,
   gearSell,
   makeGear,
+  planGearBatch,
   rollRarity,
   tierBoundsOf,
+  type GearBatchSelect,
   type GearInstance,
 } from './gear.js';
 import {
@@ -66,6 +68,7 @@ import type {
   GameAction,
   GameContent,
   GameSnapshot,
+  GearBatchPayload,
   GearUidPayload,
   ItemStackPayload,
   LootEventSource,
@@ -769,6 +772,31 @@ export function createGame(options: CreateGameOptions): Game {
     const uid = payload?.uid;
     if (typeof uid !== 'number' || !Number.isInteger(uid) || uid <= 0) return undefined;
     return uid;
+  }
+
+  /**
+   * 批量处置载荷解析（gear:sell-all / gear:smelt-all 共用，#37）：uid 白名单
+   * 或稀有度阈值二选一——双带/双缺 = 坏载荷（选择语义不容猜测）；uids 逐项
+   * 须正整数；maxRarity 须在册（rarityRankOf 精确匹配，findRarity 回退勿用）。
+   * 解析结果直作 planGearBatch 的选择入参。
+   */
+  function readGearBatchPayload(
+    payload: GearBatchPayload | undefined,
+  ): GearBatchSelect | null {
+    const uids = payload?.uids;
+    const maxRarity = payload?.maxRarity;
+    if (uids !== undefined && maxRarity !== undefined) return null;
+    if (uids !== undefined) {
+      if (!Array.isArray(uids) || uids.length === 0) return null;
+      const out: number[] = [];
+      for (const uid of uids) {
+        if (typeof uid !== 'number' || !Number.isInteger(uid) || uid <= 0) return null;
+        out.push(uid);
+      }
+      return { uids: out };
+    }
+    if (typeof maxRarity !== 'string' || rarityRankOf(content, maxRarity) === undefined) return null;
+    return { maxRarity };
   }
 
   /**
@@ -1884,6 +1912,11 @@ export function createGame(options: CreateGameOptions): Game {
             reject(action.type, 'worn');
             return;
           }
+          // 锁定防护（#37 D2）：单件卖出先解锁再操作（防手滑）。
+          if (gear.locked === true) {
+            reject(action.type, 'locked');
+            return;
+          }
           const item = findItem(content, gear.itemId);
           const gained = gearSell(content, item?.sell ?? 0, gear.rarity);
           ledgerGearRemoval(gear, 'sell', META_USER);
@@ -1920,6 +1953,11 @@ export function createGame(options: CreateGameOptions): Game {
             reject(action.type, 'worn');
             return;
           }
+          // 锁定防护（#37 D2）：单件熔炼先解锁再操作（与卖出同律）。
+          if (gear.locked === true) {
+            reject(action.type, 'locked');
+            return;
+          }
           // 熔炼产出公式单一来源（smeltYieldOf，与折叠路径同式）：无器屑经济
           // = not-available 零降级路径。
           const smelt = smeltYieldOf(gear.rarity);
@@ -1937,6 +1975,106 @@ export function createGame(options: CreateGameOptions): Game {
               item: smelt.shardItem,
               shards: smelt.shards,
               name: gearDisplayName(gear),
+            },
+          });
+          return;
+        }
+
+        case 'gear:lock':
+        case 'gear:unlock': {
+          // 锁定/解锁（#37 D1/D3）：实例 uid 级防护标记（locked=true），幂等。
+          // 玩家防护设置非资产收支——不入咽喉、不记修行录、不发事件（与
+          // combat:auto 同律）；随 uid 随档保存（可选字段旧档缺省未锁）。
+          const uid = readUidPayload(action.payload);
+          if (uid === undefined) {
+            reject(action.type, 'bad-payload');
+            return;
+          }
+          const gear = state.gear.find((entry) => entry.uid === uid);
+          if (!gear) {
+            reject(action.type, 'not-found');
+            return;
+          }
+          const locked = action.type === 'gear:lock';
+          if ((gear.locked === true) === locked) return; // 幂等
+          // true 才落盘（ADR-013）：解锁 = locked: undefined，序列化即省略。
+          state.gear = state.gear.map((entry) =>
+            entry.uid === uid ? { ...entry, ...(locked ? { locked: true } : { locked: undefined }) } : entry,
+          );
+          return;
+        }
+
+        case 'gear:sell-all': {
+          // 批量卖器（#37）：单动作原子化（非逐件派发）——uid 白名单（整堆卖）
+          // 或稀有度阈值（一键清存量）二选一；佩戴豁免、锁定跳过（D2）；账目
+          // 逐笔过咽喉、汇总事件只承载展示面（修行录并条归段聚合器，同拍同源
+          // 并一条）。
+          const select = readGearBatchPayload(action.payload);
+          if (!select) {
+            reject(action.type, 'bad-payload');
+            return;
+          }
+          const plan = planGearBatch(content, state.gear, Object.values(state.equips), select);
+          if (plan.targets.length === 0) {
+            reject(action.type, 'no-item');
+            return;
+          }
+          let gained = 0;
+          for (const gear of plan.targets) {
+            const item = findItem(content, gear.itemId);
+            gained += gearSell(content, item?.sell ?? 0, gear.rarity);
+            ledgerGearRemoval(gear, 'sell', META_USER);
+          }
+          ledgerGold(gained, 'sell', META_USER);
+          events.emit({
+            type: 'gear:sell-all',
+            time,
+            data: {
+              count: plan.targets.length,
+              gained,
+              gold: state.gold,
+              skipped: plan.skippedLocked,
+            },
+          });
+          return;
+        }
+
+        case 'gear:smelt-all': {
+          // 批量熔器（#37，与 gear:sell-all 同律）：器屑产出按稀有度档位合计
+          //（smeltYieldOf 单一来源）；无器屑经济 = not-available（与 gear:smelt
+          // 同律，先行于空集判定）。
+          const select = readGearBatchPayload(action.payload);
+          if (!select) {
+            reject(action.type, 'bad-payload');
+            return;
+          }
+          const shardItem = gparams.shardItem;
+          if (!shardItem || !findItem(content, shardItem)) {
+            reject(action.type, 'not-available');
+            return;
+          }
+          const plan = planGearBatch(content, state.gear, Object.values(state.equips), select);
+          if (plan.targets.length === 0) {
+            reject(action.type, 'no-item');
+            return;
+          }
+          let shards = 0;
+          for (const gear of plan.targets) {
+            shards += smeltYieldOf(gear.rarity)?.shards ?? 0;
+            ledgerGearRemoval(gear, 'smelt', META_USER);
+          }
+          // 合计器屑入账：0 产出不发零额行（「0 变化不入账」同律）。
+          if (shards > 0) {
+            ledgerItem(shardItem, shards, 'smelt', META_USER);
+          }
+          events.emit({
+            type: 'gear:smelt-all',
+            time,
+            data: {
+              count: plan.targets.length,
+              item: shardItem,
+              shards,
+              skipped: plan.skippedLocked,
             },
           });
           return;

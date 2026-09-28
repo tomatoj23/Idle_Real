@@ -458,11 +458,26 @@
       },
       "gear:sell": {
         "not-found": "No such piece of gear.",
-        "worn": "Unequip it before selling."
+        "worn": "Unequip it before selling.",
+        "locked": "It is locked. Unlock it before selling."
       },
       "gear:smelt": {
         "not-found": "No such piece of gear.",
         "worn": "Unequip it before smelting.",
+        "locked": "It is locked. Unlock it before smelting.",
+        "not-available": "This realm knows no smelting."
+      },
+      "gear:lock": {
+        "not-found": "No such piece of gear."
+      },
+      "gear:unlock": {
+        "not-found": "No such piece of gear."
+      },
+      "gear:sell-all": {
+        "no-item": "Nothing here to sell."
+      },
+      "gear:smelt-all": {
+        "no-item": "Nothing here to smelt.",
         "not-available": "This realm knows no smelting."
       },
       "gear:reforge": {
@@ -593,6 +608,9 @@
         "achievementToast": "Feat earned: {name}!",
         "gearSmelt": "Smelted {name}, gained {shard}×{count}.",
         "gearReforge": "Reforged {name}: rune raised to T{tier}.",
+        "sellAllLog": "Sold {count} pieces for {gained} gold.",
+        "smeltAllLog": "Smelted {count} pieces into {shard} x{shards}.",
+        "batchLockedSkip": " (skipped {count} locked)",
         "floatSum": "{name} +{count}",
         "expGain": "Cultivation +{amount}"
       },
@@ -670,6 +688,13 @@
           "takeOffBtn": "Remove",
           "sellBtn": "Sell",
           "smeltBtn": "Smelt",
+          "sellStackBtn": "Sell stack",
+          "smeltStackBtn": "Smelt stack",
+          "lockBtn": "Lock",
+          "unlockBtn": "Unlock",
+          "clearCap": "≤ {rarity}",
+          "clearSellBtn": "Quick sell",
+          "clearSmeltBtn": "Quick smelt",
           "reforgeBtn": "Reforge",
           "inscTier": "T{tier}",
           "inscCondition": " (vs {element})"

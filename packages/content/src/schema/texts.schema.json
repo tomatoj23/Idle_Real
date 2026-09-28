@@ -17,7 +17,7 @@
       "minProperties": 1,
       "additionalProperties": false,
       "patternProperties": {
-        "^(activity:start|bag:sell|shop:buy|combat:start|consumable:eat|dungeon:enter|gear:equip|gear:sell|gear:smelt|gear:reforge|rebirth:perform|talent:buy|\\*)$": {
+        "^(activity:start|bag:sell|shop:buy|combat:start|consumable:eat|dungeon:enter|gear:equip|gear:sell|gear:smelt|gear:lock|gear:unlock|gear:sell-all|gear:smelt-all|gear:reforge|rebirth:perform|talent:buy|\\*)$": {
           "$ref": "#/definitions/reasonMap"
         }
       },
@@ -193,6 +193,7 @@
             "bossPhase", "bossSummon",
             "achievementToast",
             "gearSmelt", "gearReforge",
+            "sellAllLog", "smeltAllLog", "batchLockedSkip",
             "floatSum", "expGain"
           ],
           "additionalProperties": false,
@@ -237,6 +238,9 @@
             "achievementToast": { "$ref": "#/definitions/template", "description": "成就达成浮提示（#9，achievement:unlock 事件）；槽位 {name}" },
             "gearSmelt": { "$ref": "#/definitions/template", "description": "熔炼飘字行（#14，gear:smelt 事件；#34 侧栏平移）；槽位 {name}/{shard}/{count}（shard = 器屑物品展示名）" },
             "gearReforge": { "$ref": "#/definitions/template", "description": "重铸飘字行（#14，gear:reforge 事件；#34 侧栏平移）；槽位 {name}/{tier}" },
+            "sellAllLog": { "$ref": "#/definitions/template", "description": "批量卖器汇总飘字行（#37，gear:sell-all 事件；一键出售/整堆卖）；槽位 {count}/{gained}" },
+            "smeltAllLog": { "$ref": "#/definitions/template", "description": "批量熔器汇总飘字行（#37，gear:smelt-all 事件；一键熔炼/整堆熔）；槽位 {count}/{shard}/{shards}（shard = 器屑物品展示名）" },
+            "batchLockedSkip": { "$ref": "#/definitions/template", "description": "批量处置锁定跳过后缀（#37 D2，skipped > 0 时拼在汇总行后）；槽位 {count}" },
             "floatSum": { "$ref": "#/definitions/template", "description": "获取飘字聚合形（#34 档二：同类 3 秒短窗合并计数后切换本模板）；槽位 {name}/{count}" },
             "expGain": { "$ref": "#/definitions/template", "description": "修为读数飘字（#34：仅升级与离线汇总出现）；槽位 {amount}" }
           }
@@ -319,7 +323,7 @@
             },
             "bag": {
               "type": "object",
-              "required": ["title", "matGroup", "consumableGroup", "priceEach", "sellOneBtn", "sellAllBtn", "gearWorn", "gearLoose", "emptyWorn", "emptyLoose", "emptyAll", "noAffix", "wearBtn", "takeOffBtn", "sellBtn", "smeltBtn", "reforgeBtn", "inscTier", "inscCondition"],
+              "required": ["title", "matGroup", "consumableGroup", "priceEach", "sellOneBtn", "sellAllBtn", "gearWorn", "gearLoose", "emptyWorn", "emptyLoose", "emptyAll", "noAffix", "wearBtn", "takeOffBtn", "sellBtn", "smeltBtn", "sellStackBtn", "smeltStackBtn", "lockBtn", "unlockBtn", "clearCap", "clearSellBtn", "clearSmeltBtn", "reforgeBtn", "inscTier", "inscCondition"],
               "additionalProperties": false,
               "properties": {
                 "title": { "$ref": "#/definitions/line" },
@@ -338,6 +342,13 @@
                 "takeOffBtn": { "$ref": "#/definitions/template", "description": "卸下按钮（无槽位）" },
                 "sellBtn": { "$ref": "#/definitions/template", "description": "卖出按钮（无槽位）" },
                 "smeltBtn": { "$ref": "#/definitions/template", "description": "熔炼按钮（#14，囊中装备卡；无槽位）" },
+                "sellStackBtn": { "$ref": "#/definitions/template", "description": "堆叠整卖按钮（#37，×N 整堆处置）；无槽位" },
+                "smeltStackBtn": { "$ref": "#/definitions/template", "description": "堆叠整熔按钮（#37，×N 整堆处置）；无槽位" },
+                "lockBtn": { "$ref": "#/definitions/template", "description": "锁定按钮（#37 D1，未锁态）；无槽位" },
+                "unlockBtn": { "$ref": "#/definitions/template", "description": "解锁按钮（#37 D1，已锁态）；无槽位" },
+                "clearCap": { "$ref": "#/definitions/template", "description": "一键清存量稀有度阈值选项（#37，≤所选档的散件才处置）；槽位 {rarity}（档名）" },
+                "clearSellBtn": { "$ref": "#/definitions/template", "description": "一键出售按钮（#37；无槽位）" },
+                "clearSmeltBtn": { "$ref": "#/definitions/template", "description": "一键熔炼按钮（#37；无槽位）" },
                 "reforgeBtn": { "$ref": "#/definitions/template", "description": "重铸按钮（#14，铭纹行内；无槽位）" },
                 "inscTier": { "$ref": "#/definitions/template", "description": "纹阶徽标（#14 铭纹展示）；槽位 {tier}" },
                 "inscCondition": { "$ref": "#/definitions/template", "description": "铭纹条件后缀（#14，条件修饰符语境）；槽位 {element}（elements 节展示名）" }

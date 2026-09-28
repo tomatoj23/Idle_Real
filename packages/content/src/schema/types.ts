@@ -588,6 +588,12 @@ export interface ShellEvents {
   readonly gearSmelt: string;
   /** 重铸飘字行（#14，gear:reforge 事件；#34 侧栏平移；槽位 {name}/{tier}）。 */
   readonly gearReforge: string;
+  /** 批量卖器汇总飘字行（#37，gear:sell-all 事件；槽位 {count}/{gained}）。 */
+  readonly sellAllLog: string;
+  /** 批量熔器汇总飘字行（#37，gear:smelt-all 事件；槽位 {count}/{shard}/{shards}）。 */
+  readonly smeltAllLog: string;
+  /** 批量处置锁定跳过后缀（#37 D2，skipped > 0 时拼接；槽位 {count}）。 */
+  readonly batchLockedSkip: string;
   /** 获取飘字聚合形（#34 档二：同类 3 秒短窗合并计数后切换本模板；槽位 {name}/{count}）。 */
   readonly floatSum: string;
   /** 修为读数飘字（#34：仅升级与离线汇总出现；槽位 {amount}）。 */
@@ -661,6 +667,20 @@ export interface ShellPageBag {
   readonly sellBtn: string;
   /** 熔炼按钮（#14，囊中装备卡）。 */
   readonly smeltBtn: string;
+  /** 堆叠整卖按钮（#37，×N 整堆处置）。 */
+  readonly sellStackBtn: string;
+  /** 堆叠整熔按钮（#37，×N 整堆处置）。 */
+  readonly smeltStackBtn: string;
+  /** 锁定按钮（#37 D1，未锁态）。 */
+  readonly lockBtn: string;
+  /** 解锁按钮（#37 D1，已锁态）。 */
+  readonly unlockBtn: string;
+  /** 一键清存量稀有度阈值选项（#37，≤所选档的散件才处置；槽位 {rarity}）。 */
+  readonly clearCap: string;
+  /** 一键出售按钮（#37）。 */
+  readonly clearSellBtn: string;
+  /** 一键熔炼按钮（#37）。 */
+  readonly clearSmeltBtn: string;
   /** 重铸按钮（#14，铭纹行内）。 */
   readonly reforgeBtn: string;
   /** 纹阶徽标（#14 铭纹展示）；槽位 {tier}。 */
