@@ -101,15 +101,11 @@ describe('#46 · xp 头（件3）', () => {
     );
   });
 
-  it('skillChipHtml：选中/锁定态与关闭态三形', () => {
+  it('skillChipHtml：选中态与关闭态两形（#38 起无锁定态）', () => {
     const base = { T, id: 'herb', icon: '草', name: '采药', level: 3 };
     expect(skillChipHtml({ ...base, selected: false, action: 'craftskill' })).toContain('class="chip"');
     expect(skillChipHtml({ ...base, selected: true, action: 'skill' })).toContain('class="chip selected"');
-    const locked = skillChipHtml({ ...base, selected: false, action: 'skill', locked: true, lockText: '兵解后解锁' });
-    expect(locked).toContain('chip locked');
-    expect(locked).toContain('data-disabled="y"');
-    expect(locked).toContain('<em class="chip-lock">兵解后解锁</em>');
-    expect(locked).not.toContain('chip-lv');
+    expect(skillChipHtml({ ...base, selected: false, action: 'skill' })).toContain('chip-lv');
   });
 });
 

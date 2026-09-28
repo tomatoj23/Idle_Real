@@ -115,7 +115,6 @@ export const textsSample: TextsSection = {
     pages: {
       skills: {
         empty: '无可修技艺',
-        chipLocked: '未开放',
         expSub: '修为 {into}/{need}',
         expMax: '修为已满',
         actNow: '当前 · {name}',

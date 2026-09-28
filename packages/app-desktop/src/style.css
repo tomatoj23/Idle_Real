@@ -165,8 +165,6 @@ body {
 }
 .chip:hover { border-color: var(--border-gold); }
 .chip.selected { border-color: var(--gold); background: var(--panel2); }
-.chip.locked { opacity: 0.45; cursor: default; }
-.chip-lock { font-style: normal; font-size: 11px; color: var(--faint); }
 .chip-lv { color: var(--gold); font-size: 12px; font-weight: 600; }
 
 .status-card {

@@ -63,7 +63,7 @@ export const xpSubTextOf = (T: ShellText, keyBase: string, read: XpRead): string
     ? T(`${keyBase}.expSub`, { into: read.into, need: read.need, left: Math.max(0, Math.ceil(read.need - read.into)) })
     : T(`${keyBase}.expMax`);
 
-/** 技能 chip（修炼页 locked 态 / 炼制页平态两份拷贝收敛）。 */
+/** 技能 chip（修炼页/炼制页两份拷贝收敛；恒平态可开工，#38 起无锁定态）。 */
 export function skillChipHtml(parts: {
   readonly T: ShellText;
   readonly id: string;
@@ -72,14 +72,12 @@ export function skillChipHtml(parts: {
   readonly level: number;
   readonly selected: boolean;
   readonly action: 'skill' | 'craftskill';
-  readonly locked?: boolean;
-  readonly lockText?: string;
 }): string {
-  const { T, id, icon, name, level, selected, action, locked, lockText } = parts;
-  return `<button class="chip${selected ? ' selected' : ''}${locked ? ' locked' : ''}"
-          data-act="${action}" data-skill="${id}"${locked ? ' data-disabled="y"' : ''}>
+  const { T, id, icon, name, level, selected, action } = parts;
+  return `<button class="chip${selected ? ' selected' : ''}"
+          data-act="${action}" data-skill="${id}">
           <span class="sigil sigil-sm">${esc(icon)}</span><span>${esc(name)}</span>
-          ${locked ? `<em class="chip-lock">${esc(lockText ?? '')}</em>` : `<b class="chip-lv">${esc(T('units.level', { v: level }))}</b>`}
+          <b class="chip-lv">${esc(T('units.level', { v: level }))}</b>
         </button>`;
 }
 

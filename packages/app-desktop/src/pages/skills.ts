@@ -51,13 +51,11 @@ export function createSkillsPage(env: PageEnv): PageView {
     const actInterval = act ? snap.activityIntervals?.[actKeyOf(act)] : undefined;
     const actPct = actPctOf(act?.progress ?? 0, actInterval);
 
-    const chips = content.skills
-      .filter((s) => s.kind !== 'craft')
-      .map((s) => {
-        // 修炼页只放 gather 技能（+combat 修为参照）：craft 技能导航归炼制页
-        // 专属（UX 调整）——craft 在本页无活动卡无开工入口，纯 chip 属重复导航。
-        const locked = s.kind === 'combat';
-        return skillChipHtml({
+    // 修炼页只放可开工的 gather 技能（#38）：craft 导航归炼制页专属、combat 无
+    // 活动卡无开工入口——两者的纯参照 chip 均属重复导航/死按钮，不进 chips。
+    const chips = env.gatherSkills
+      .map((s) =>
+        skillChipHtml({
           T,
           id: s.id,
           icon: s.icon,
@@ -65,10 +63,8 @@ export function createSkillsPage(env: PageEnv): PageView {
           level: levelFromXp(st.skills[s.id]?.xp ?? 0, env.prog),
           selected: s.id === skill.id,
           action: 'skill',
-          locked,
-          lockText: T('pages.skills.chipLocked'),
-        });
-      })
+        }),
+      )
       .join('');
 
     const statusCard = statusCardHtml({
@@ -151,7 +147,6 @@ export function createSkillsPage(env: PageEnv): PageView {
     handleAction(action, target) {
       switch (action) {
         case 'skill': {
-          if (target.dataset.disabled === 'y') return;
           selectedSkillId = target.dataset.skill ?? selectedSkillId;
           env.render();
           return;

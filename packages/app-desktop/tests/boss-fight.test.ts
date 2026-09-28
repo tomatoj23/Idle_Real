@@ -95,7 +95,7 @@ function makePack(): ContentPack {
         },
         pages: {
           skills: {
-            empty: '空', chipLocked: '锁', expSub: '{into}/{need}', expMax: '满', actNow: '{name}',
+            empty: '空', expSub: '{into}/{need}', expMax: '满', actNow: '{name}',
             idle: '闲', stopBtn: '停', running: '中', byproduct: '{name}', actMeta: '{interval}',
             startBtn: '始', realmLine: '{realm}',
           },

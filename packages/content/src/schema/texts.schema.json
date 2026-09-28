@@ -248,11 +248,10 @@
           "properties": {
             "skills": {
               "type": "object",
-              "required": ["empty", "chipLocked", "expSub", "expMax", "actNow", "idle", "stopBtn", "running", "byproduct", "actMeta", "startBtn", "realmLine"],
+              "required": ["empty", "expSub", "expMax", "actNow", "idle", "stopBtn", "running", "byproduct", "actMeta", "startBtn", "realmLine"],
               "additionalProperties": false,
               "properties": {
                 "empty": { "$ref": "#/definitions/template", "description": "无可修技艺空态（无槽位）" },
-                "chipLocked": { "$ref": "#/definitions/template", "description": "技能片锁定标记（无槽位）" },
                 "expSub": { "$ref": "#/definitions/template", "description": "修为进度副行；槽位 {into}/{need}/{left}" },
                 "expMax": { "$ref": "#/definitions/template", "description": "修为满层副行（无槽位）" },
                 "actNow": { "$ref": "#/definitions/template", "description": "进行中活动行；槽位 {name}" },

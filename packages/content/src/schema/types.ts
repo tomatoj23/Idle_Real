@@ -597,7 +597,6 @@ export interface ShellEvents {
 /** 修炼页文案。 */
 export interface ShellPageSkills {
   readonly empty: string;
-  readonly chipLocked: string;
   readonly expSub: string;
   readonly expMax: string;
   readonly actNow: string;

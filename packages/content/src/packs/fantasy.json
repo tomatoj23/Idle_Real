@@ -599,7 +599,6 @@
       "pages": {
         "skills": {
           "empty": "No disciplines known yet.",
-          "chipLocked": "Sealed",
           "expSub": "{into}/{need} exp ({left} to go)",
           "expMax": "Mastered",
           "actNow": "Training: {name}",
