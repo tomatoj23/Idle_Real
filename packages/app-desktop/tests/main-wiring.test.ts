@@ -13,7 +13,8 @@
  * 并且**记下 BrowserWindow 的构造参数**——webPreferences 三件套不记就等于没钉。
  *
  * #76：VITE_DEV_SERVER_URL 死分支已删（用户裁决）——main.ts 恒走 loadFile，
- * 假面不再提供 loadURL（缺面即抛：谁把 dev 分支加回来，本文件先红）。
+ * 假面不再提供 loadURL（缺面即抛）。反向钉见「设 env 仍恒 loadFile」例——
+ * 光看 loadFile 断言是空转（env 未设时旧分支也走打包态），必须喂 env 才钉得住。
  */
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -193,6 +194,20 @@ describe('#71 · 启动接线', () => {
     const text = logText();
     expect(text).toContain('[platform] adapter=mock');
     expect(text).toContain('[updater] placeholder');
+  });
+
+  it('#76 反向钉：设 VITE_DEV_SERVER_URL 也恒走 loadFile（谁加回 dev 分支谁先红）', async () => {
+    // 旧分支的三元判据只在 env 有值时走 loadURL——env 不喂，本例之前全是空转钉。
+    process.env['VITE_DEV_SERVER_URL'] = 'http://localhost:5173';
+    try {
+      await bootMain();
+      expect(calls).toContain('load-file');
+      expect(calls).not.toContain('load-url:http://localhost:5173');
+      expect(loadFileArg).toMatch(/[/\\]dist[/\\]index\.html$/);
+      expect(dialogs).toHaveLength(0);
+    } finally {
+      delete process.env['VITE_DEV_SERVER_URL'];
+    }
   });
 
   it('webPreferences 三件套 + preload 在位（假窗口记构造参数，否则这项等于没测）', async () => {

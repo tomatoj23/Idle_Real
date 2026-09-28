@@ -64,7 +64,8 @@ export interface Ui {
 export const MAX_FLOG = 60;
 /** 醒目 toast 驻留（毫秒）。 */
 const TOAST_MS = 3200;
-/** toast 栈上限（#76 项 6）：同文去重之外的兜底——不同文连发不盖满屏。导出为测试真源。 */
+/** toast 栈上限（#76 项 6）：同文去重之外的兜底——不同文连发不盖满屏。导出为测试真源。
+ * 裁剪不分档（红金同权，按剩余驻留最短先退）；红档是否优先属 UX 裁决，未裁前不特判。 */
 export const MAX_TOASTS = 3;
 /** 档二聚合窗口（C7：同类 3 秒短窗聚合，窗口可调）：同名获取行在窗口内合并计数。 */
 const FLOAT_WINDOW_MS = 3000;
@@ -222,8 +223,41 @@ export function buildUi(
   const buffbarEl = $<HTMLElement>('#buffbar');
   const pageEl = $<HTMLElement>('#page-root');
   const toastsEl = $<HTMLElement>('#toasts');
-  /** toast 驻留计时（#76 项 6）：同文合并续期要能撤旧计时，逐条计时随节点走。 */
-  const toastTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
+  /** toast 驻留簿记（#76 项 6）：合并续期要撤旧计时；deadline = 最近一次活动 + 驻留，
+   * 顶格裁剪按 deadline 最短（最久未活跃）先退——续期节点不因创建序早被误裁。 */
+  interface ToastRec {
+    readonly timer: ReturnType<typeof setTimeout>;
+    readonly deadline: number;
+  }
+  const toastRecs = new WeakMap<HTMLElement, ToastRec>();
+
+  /** 续期/起漂共用：撤旧计时、按 TOAST_MS 重挂移除。 */
+  function armToast(el: HTMLElement): void {
+    const stale = toastRecs.get(el);
+    if (stale !== undefined) clearTimeout(stale.timer);
+    toastRecs.set(el, {
+      timer: setTimeout(() => el.remove(), TOAST_MS),
+      deadline: Date.now() + TOAST_MS,
+    });
+  }
+
+  /** 顶格裁剪一条：按剩余驻留最短先退（无簿记节点视为最旧），退前撤计时。 */
+  function evictToast(): void {
+    let victim: HTMLElement | undefined;
+    let victimDeadline = Infinity;
+    for (const el of Array.from(toastsEl.children) as HTMLElement[]) {
+      const deadline = toastRecs.get(el)?.deadline ?? 0;
+      if (deadline < victimDeadline) {
+        victimDeadline = deadline;
+        victim = el;
+      }
+    }
+    if (victim === undefined) return;
+    const rec = toastRecs.get(victim);
+    if (rec !== undefined) clearTimeout(rec.timer);
+    toastRecs.delete(victim);
+    victim.remove();
+  }
   const floatStackEl = $<HTMLElement>('#float-stack');
   const combatFloatsEl = $<HTMLElement>('#combat-floats');
 
@@ -982,17 +1016,16 @@ export function buildUi(
       (el) => el.classList.contains(cls) && el.textContent === text,
     ) as HTMLElement | undefined;
     if (live) {
-      const stale = toastTimers.get(live);
-      if (stale !== undefined) clearTimeout(stale);
-      toastTimers.set(live, setTimeout(() => live.remove(), TOAST_MS));
+      armToast(live);
       return;
     }
     const el = document.createElement('div');
     el.className = `toast ${cls}`;
     el.textContent = text;
     toastsEl.appendChild(el);
-    while (toastsEl.children.length > MAX_TOASTS) toastsEl.firstElementChild?.remove();
-    toastTimers.set(el, setTimeout(() => el.remove(), TOAST_MS));
+    // 先挂簿记再裁剪：裁剪按 deadline 认人，裸节点会被当「最旧」误裁。
+    armToast(el);
+    while (toastsEl.children.length > MAX_TOASTS) evictToast();
   }
 
   return {

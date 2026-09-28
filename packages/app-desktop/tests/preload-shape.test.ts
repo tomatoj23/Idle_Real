@@ -65,10 +65,14 @@ describe('#76 · preload 形状冒烟', () => {
     }
   });
 
-  it('dist-electron/preload.cjs 在场时同过形状冒烟（旧构建残留守卫）', () => {
-    const distPath = join(pkgRoot, 'dist-electron', 'preload.cjs');
-    // 未构建环境（CI/新克隆）无产物可查——源侧冒烟恒跑，本条只守「构建过的世界」。
-    if (!existsSync(distPath)) return;
-    assertBridgeShape(evalPreload(readFileSync(distPath, 'utf8')));
-  });
+  // dist 产物在场才查（未构建环境显式跳过，不是静默绿）；只钉同形，字节新鲜度归
+  // build:preload 的拷后断言。skipIf 在收集期判存在性，输出里跳过可见。
+  it.skipIf(!existsSync(join(pkgRoot, 'dist-electron', 'preload.cjs')))(
+    'dist-electron/preload.cjs 形状冒烟（构建产物同形；新鲜度归 build:preload）',
+    () => {
+      assertBridgeShape(
+        evalPreload(readFileSync(join(pkgRoot, 'dist-electron', 'preload.cjs'), 'utf8')),
+      );
+    },
+  );
 });

@@ -351,8 +351,31 @@ describe('#76 · toast 上限（同文去重 + 顶格裁剪）', () => {
       game.events.emit(rejectWith('灵石不足')); // 首条将到期前再拒 → 续期
       vi.advanceTimersByTime(2000); // 距首条 4s > 驻留 3.2s，距续期仅 2s
       expect(root.querySelectorAll('#toasts .toast-red')).toHaveLength(1);
-      vi.advanceTimersByTime(1200); // 距续期满 3.2s → 整条消
+      vi.advanceTimersByTime(1199); // 距续期 3199ms < 3200ms：仍在（驻留下界钉）
+      expect(root.querySelectorAll('#toasts .toast-red')).toHaveLength(1);
+      vi.advanceTimersByTime(1); // 距续期恰 3200ms：整条消（TOAST_MS 上界钉死 3200）
       expect(root.querySelectorAll('#toasts .toast-red')).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('顶格裁剪按剩余驻留最短先退：刚续期节点不因创建序被误裁（栈位不挪）', () => {
+    vi.useFakeTimers();
+    try {
+      const { root, game } = mount();
+      game.events.emit(rejectWith('甲')); // t0：驻留至 3200
+      vi.advanceTimersByTime(500);
+      game.events.emit(rejectWith('乙')); // t500：至 3700
+      game.events.emit(rejectWith('丙')); // t500：至 3700
+      vi.advanceTimersByTime(500);
+      game.events.emit(rejectWith('甲')); // t1000：续期甲 → 至 4200
+      vi.advanceTimersByTime(100);
+      game.events.emit(rejectWith('丁')); // t1100：第 4 条 → 顶格裁 1 条
+      // 修复前按创建序裁 firstElementChild = 刚续期的甲（「续期」在顶格时失效）；
+      // 现按 deadline 最短裁乙（乙/丙同窗取先创建），甲存活且栈位不动。
+      const texts = Array.from(root.querySelectorAll('#toasts .toast')).map((el) => el.textContent);
+      expect(texts).toEqual(['甲', '丙', '丁']);
     } finally {
       vi.useRealTimers();
     }
