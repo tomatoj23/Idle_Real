@@ -8,42 +8,29 @@
  */
 import { describe, expect, it } from 'vitest';
 import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
-import { createGame, ManualClock, type GameAction, type SaveData } from '@wendao/engine';
-import { buildUi } from '../src/ui';
+import type { SaveData } from '@wendao/engine';
+import { makeSave as baseSave } from './helpers/save';
+import { mountGame } from './helpers/mount';
 
 /** 带修为与道韵的存档：herb 20000 修为（可得 4 道韵）、余 2 道韵、少量家当。 */
 function makeSave(): SaveData {
-  return {
-    version: 1,
-    time: 0,
-    state: {
-      gold: 50,
-      hp: 112,
-      items: { herb1: 5 },
-      skills: { herb: { xp: 20000 }, qi: { xp: 0 }, mine: { xp: 0 }, alchemy: { xp: 0 }, smith: { xp: 0 }, combat: { xp: 0 } },
-      activity: null,
-      gear: [{ uid: 1, itemId: 'sword1', rarity: 'common', affixes: [] }],
-      equips: { weapon: 1 },
-      daoYun: 2,
-      daoYunEarned: 2,
-      rebirths: 0,
-      talents: [],
-    },
-  };
+  return baseSave({
+    gold: 50,
+    hp: 112,
+    items: { herb1: 5 },
+    skills: { herb: { xp: 20000 }, qi: { xp: 0 }, mine: { xp: 0 }, alchemy: { xp: 0 }, smith: { xp: 0 }, combat: { xp: 0 } },
+    activity: null,
+    gear: [{ uid: 1, itemId: 'sword1', rarity: 'common', affixes: [] }],
+    equips: { weapon: 1 },
+    daoYun: 2,
+    daoYunEarned: 2,
+    rebirths: 0,
+    talents: [],
+  });
 }
 
-function mount(save: SaveData = makeSave(), content = loadXiuxianPack()): {
-  root: HTMLElement;
-  ui: ReturnType<typeof buildUi>;
-  game: ReturnType<typeof createGame>;
-} {
-  const game = createGame({ content, clock: new ManualClock(), save });
-  const root = document.createElement('div');
-  document.body.appendChild(root);
-  const ui = buildUi(root, content, () => game.snapshot(), game.events);
-  ui.bindActions((action: GameAction) => game.dispatch(action));
-  ui.render();
-  return { root, ui, game };
+function mount(save: SaveData = makeSave(), content = loadXiuxianPack()) {
+  return mountGame({ content, save });
 }
 
 describe('#6 · 兵解确认页', () => {

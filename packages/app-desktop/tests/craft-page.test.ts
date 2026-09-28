@@ -9,39 +9,23 @@
  */
 import { describe, expect, it } from 'vitest';
 import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
-import { createGame, ManualClock, type GameAction, type SaveData } from '@wendao/engine';
-import { buildUi } from '../src/ui';
+import type { SaveData } from '@wendao/engine';
+import { makeSave as baseSave } from './helpers/save';
+import { mountGame, type Mounted } from './helpers/mount';
 
 /** 带炼制材料的存档：够 2 炉聚气丹（herb1×4）+ 少量矿/气。 */
 function makeSave(): SaveData {
-  return {
-    version: 1,
-    time: 0,
-    state: {
-      gold: 0,
-      hp: 112,
-      items: { herb1: 4, ore1: 8, qi1: 10, silk: 6 },
-      skills: { alchemy: { xp: 0 }, smith: { xp: 0 }, herb: { xp: 0 }, mine: { xp: 0 }, qi: { xp: 0 }, combat: { xp: 0 } },
-      activity: null,
-    },
-  };
+  return baseSave({
+    gold: 0,
+    hp: 112,
+    items: { herb1: 4, ore1: 8, qi1: 10, silk: 6 },
+    skills: { alchemy: { xp: 0 }, smith: { xp: 0 }, herb: { xp: 0 }, mine: { xp: 0 }, qi: { xp: 0 }, combat: { xp: 0 } },
+    activity: null,
+  });
 }
 
-function mount(save: SaveData = makeSave()): {
-  root: HTMLElement;
-  ui: ReturnType<typeof buildUi>;
-  game: ReturnType<typeof createGame>;
-  clock: ManualClock;
-} {
-  const clock = new ManualClock();
-  const content = loadXiuxianPack();
-  const game = createGame({ content, clock, save });
-  const root = document.createElement('div');
-  document.body.appendChild(root);
-  const ui = buildUi(root, content, () => game.snapshot(), game.events);
-  ui.bindActions((action: GameAction) => game.dispatch(action));
-  ui.render();
-  return { root, ui, game, clock };
+function mount(save: SaveData = makeSave()) {
+  return mountGame({ save });
 }
 
 describe('#5 · 炼制页（craft 页）渲染', () => {
@@ -164,7 +148,7 @@ describe('#35 · 配方卡自动化控件（三态单选 + 稀有度阈值）', 
     return Array.from(root.querySelectorAll<HTMLElement>('.act-card')).find((c) => c.textContent?.includes(name))!;
   }
 
-  function openCraft(root: HTMLElement, ui: ReturnType<typeof buildUi>, skill: string): void {
+  function openCraft(root: HTMLElement, ui: Mounted['ui'], skill: string): void {
     root.querySelector<HTMLButtonElement>('.tab[data-tab="craft"]')!.click();
     root.querySelector<HTMLButtonElement>(`.chip[data-skill="${skill}"]`)!.click();
     ui.render();
@@ -224,12 +208,7 @@ describe('#35 · 配方卡自动化控件（三态单选 + 稀有度阈值）', 
   it('无器屑经济的包：熔炼态不可选（两态 UI，受 canSmelt 门控）', () => {
     const content = loadXiuxianPack();
     delete (content as { config?: { gear?: unknown } }).config?.gear; // 摘除器屑经济
-    const clock = new ManualClock();
-    const game = createGame({ content, clock, save: makeSave() });
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-    const ui = buildUi(root, content, () => game.snapshot(), game.events);
-    ui.bindActions((action: GameAction) => game.dispatch(action));
+    const { root, ui } = mountGame({ content, save: makeSave() });
     openCraft(root, ui, 'smith');
     const gearMode = cardOf(root, '锻青锋剑').querySelector<HTMLSelectElement>('.auto-mode')!;
     expect(Array.from(gearMode.options).map((o) => o.value)).toEqual(['none', 'sell']);

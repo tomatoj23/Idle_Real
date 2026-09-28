@@ -5,8 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { ContentPack } from '@wendao/content';
-import { createGame, ManualClock, type GameAction } from '@wendao/engine';
-import { buildUi } from '../src/ui';
+import { mountGame } from './helpers/mount';
 
 const PACK = {
   skills: [{ id: 'fight', name: '斗法', icon: '斗', kind: 'combat' }],
@@ -31,11 +30,7 @@ const PACK = {
 } as unknown as ContentPack;
 
 function mount(content: ContentPack): HTMLElement {
-  const game = createGame({ content, clock: new ManualClock() });
-  const root = document.createElement('div');
-  document.body.appendChild(root);
-  const ui = buildUi(root, content, () => game.snapshot(), game.events);
-  ui.bindActions((action: GameAction) => game.dispatch(action));
+  const { root, ui } = mountGame({ content });
   root.querySelector<HTMLButtonElement>('.tab[data-tab="combat"]')!.click();
   ui.render();
   return root;

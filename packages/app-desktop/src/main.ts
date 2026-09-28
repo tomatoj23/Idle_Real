@@ -12,10 +12,8 @@ import type { ContentPack } from '@wendao/content';
 import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
 import { buildUi, esc } from './ui';
 import { desktopBridgeOf, desktopSaveAdapter, wireAchievementReporting } from './desktop';
+import { SAVE_KEY } from './saveKey';
 
-// #24：状态键 gp/pill/fist → gold/consumable/basic 是存档形状 breaking change。
-// 旧存档不迁移（ADR-008）：v2 档留在旧键下永不读，新档从 v3 起。
-const SAVE_KEY = 'wendao_changsheng_v3';
 const TICK_MS = 250;
 const AUTOSAVE_MS = 15000;
 const MAX_CATCHUP_MS = 5000;

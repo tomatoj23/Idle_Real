@@ -20,7 +20,6 @@ import { createRendererRecovery, RELOAD_LIMIT } from './rendererRecovery.js';
 import { initAutoUpdate } from './updater.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL'];
 
 /**
  * 启动早期日志出口（#71 项 4）：`log` 在 whenReady 前曾是纯 noop，崩在启动路径上
@@ -167,7 +166,10 @@ function createWindow(): void {
   // 解析后与自身精确同源的那一个（判据与两处旧绕过见 navGuard.ts）。
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   const indexPath = join(here, '../dist/index.html');
-  const selfUrl = DEV_SERVER_URL ?? pathToFileURL(indexPath).href;
+  // #76：VITE_DEV_SERVER_URL 分支已删（用户裁决）——无任何脚本设置它（dev:vite
+  // 仅浏览器、dev:electron 全量构建），dev URL 的 will-navigate 白名单从未被测。
+  // 壳恒从打包产物加载；日后要热开再按「先有脚本后有分支」补回。
+  const selfUrl = pathToFileURL(indexPath).href;
   // URL 取自 event.url：Electron 38 起 will-navigate 的那串位参（url/isInPlace/
   // isMainFrame/…）在 electron.d.ts 里全标了 @deprecated，读位参在 #67 升版后会静默
   // 拿到 undefined → 判据把一切导航都拒掉（fail-closed，但坏得毫无声响）。
@@ -214,7 +216,7 @@ function createWindow(): void {
   });
   // 加载失败不许静默（#71 项 4）：reject 的是窗口内容本身，留着窗口 = 一块白板
   // 挂在玩家屏幕上。旧写法 `void load…()` 把这条 rejection 丢进了虚空。
-  const load = DEV_SERVER_URL ? win.loadURL(DEV_SERVER_URL) : win.loadFile(indexPath);
+  const load = win.loadFile(indexPath);
   void load.catch((err: unknown) => fatal.onLoadFailure(err, selfUrl));
 }
 

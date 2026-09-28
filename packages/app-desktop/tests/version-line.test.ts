@@ -7,77 +7,49 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { ContentPack } from '@wendao/content';
-import {
-  createGame,
-  ENGINE_VERSION,
-  ManualClock,
-  type GameAction,
-  type SaveData,
-} from '@wendao/engine';
-import { buildUi } from '../src/ui';
+import { ENGINE_VERSION, type SaveData } from '@wendao/engine';
+import { makePack as basePack, makeShellTexts } from './helpers/pack';
+import { makeSave as baseSave } from './helpers/save';
+import { mountGame } from './helpers/mount';
 
 /** 最小包：单战斗技能 + 一把剑 + 指定包版本；shell 只配被测键。 */
 function makePack(version: string, footer?: { versionLine: string }): ContentPack {
-  return {
+  return basePack({
     version,
     skills: [{ id: 'fight', name: '斗法', icon: '斗', kind: 'combat' }],
     items: [
       { id: 'sword', name: '试炼剑', icon: '剑', type: 'equip', slot: 'weapon', sell: 10, bonuses: { atk: 5 } },
     ],
-    recipes: [],
-    enemies: [],
-    gearDrops: [],
-    elements: [],
     rarities: [{ id: 'plain', name: '朴素', weight: 1, mult: 1, affix: 0, sell: 1 }],
-    affixPool: [],
-    combatText: {},
     texts: {
-      shell: {
-        brand: { sigil: '道', name: '试炼', locale: 'zh-CN', bootError: '中止：{message}' },
-        topbar: { statsTitle: '属', statsSigil: '斗', goldTitle: '灵石', goldSigil: '石', hpTitle: '气血', hpSigil: '血' },
+      shell: makeShellTexts({
         tabs: { skills: '修', combat: '斗', bag: '袋', shop: '市' },
-        stats: { labels: {} },
-        units: { level: '{v} 层', seconds: '{v} 秒', minute: '{m} 分', hourMinute: '{h} 时 {m} 分' },
-        icons: { buff: '丹', gear: '器', unknown: '？' },
         common: { needLevel: '需 {level} 层', compareWrap: '（{compare}）', itemListSep: '、' },
-        events: {},
-        pages: {},
         ...(footer ? { footer } : {}),
-      },
+      }),
     },
-    shop: [],
-  } as unknown as ContentPack;
+  });
 }
 
 function makeSave(): SaveData {
-  return {
-    version: 1,
-    time: 0,
-    state: {
-      gold: 0,
-      hp: 100,
-      items: {},
-      skills: { fight: { xp: 0 } },
-      activity: null,
-      gear: [],
-      equips: {},
-      buffs: {},
-      combat: null,
-      autoFight: false,
-      autoEat: false,
-      lastEncounter: {},
-    },
-  };
+  return baseSave({
+    gold: 0,
+    hp: 100,
+    items: {},
+    skills: { fight: { xp: 0 } },
+    activity: null,
+    gear: [],
+    equips: {},
+    buffs: {},
+    combat: null,
+    autoFight: false,
+    autoEat: false,
+    lastEncounter: {},
+  });
 }
 
 function mount(content: ContentPack): HTMLElement {
-  const game = createGame({ content, clock: new ManualClock(), save: makeSave() });
-  const root = document.createElement('div');
-  document.body.appendChild(root);
-  const ui = buildUi(root, content, () => game.snapshot(), game.events);
-  ui.bindActions((action: GameAction) => game.dispatch(action));
-  ui.render();
-  return root;
+  return mountGame({ content, save: makeSave() }).root;
 }
 
 describe('#12 · 页脚版本行', () => {

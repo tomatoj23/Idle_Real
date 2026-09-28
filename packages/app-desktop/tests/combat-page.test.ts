@@ -15,7 +15,7 @@ import {
   type GameAction,
   type SaveData,
 } from '@wendao/engine';
-import { buildUi } from '../src/ui';
+import { mountGame } from './helpers/mount';
 
 /** 壳挂载共用（列表/战斗两形态）：可注入状态 / 裁包（mutate）。 */
 function mountShell(
@@ -30,19 +30,16 @@ function mountShell(
     ...base,
     state: { ...(base.state as Record<string, unknown>), ...extraState },
   } as unknown as SaveData;
-  const game = createGame({ content, clock, save });
-  const root = document.createElement('div');
-  document.body.appendChild(root);
-  const ui = buildUi(root, content, () => game.snapshot(), game.events);
   const actions: GameAction[] = [];
-  ui.bindActions((action: GameAction) => {
-    actions.push(action);
-    game.dispatch(action);
+  const mounted = mountGame({
+    content,
+    clock,
+    save,
+    onAction: (action) => actions.push(action),
   });
-  ui.render();
-  root.querySelector<HTMLButtonElement>('.tab[data-tab="combat"]')!.click();
-  ui.render();
-  return { root, ui, game, actions };
+  mounted.root.querySelector<HTMLButtonElement>('.tab[data-tab="combat"]')!.click();
+  mounted.ui.render();
+  return { ...mounted, actions };
 }
 
 /** 高斗法修为存档：clv 8（e2 门控需 ≥6 放行）。恢复侧 hp 按收编后的修为

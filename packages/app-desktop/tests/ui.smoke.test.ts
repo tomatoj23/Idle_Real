@@ -6,27 +6,19 @@
  */
 import { describe, expect, it } from 'vitest';
 import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
-import {
-  createGame,
-  localStorageSaveAdapter,
-  ManualClock,
-  type GameAction,
-} from '@wendao/engine';
-import { buildUi } from '../src/ui';
+import { localStorageSaveAdapter, ManualClock } from '@wendao/engine';
+import { SAVE_KEY } from '../src/saveKey';
+import { mountGame } from './helpers/mount';
 
 describe('UI 烟测（issue #3 验收）', () => {
   it('打开即玩：点开始 → 进度条走 → 背包增长 → 重开进度保留', () => {
     const clock = new ManualClock();
     const content = loadXiuxianPack();
-    const adapter = localStorageSaveAdapter('wendao_ui_smoke_v2');
+    // 存档键与生产 SAVE_KEY 同源（#76 项 4：旧测试键 wendao_ui_smoke_v2 清理）。
+    const adapter = localStorageSaveAdapter(SAVE_KEY);
 
     // —— 首次进入 ——
-    const game = createGame({ content, clock, seed: 7 });
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-    const ui = buildUi(root, content, () => game.snapshot(), game.events);
-    ui.bindActions((action: GameAction) => game.dispatch(action));
-    ui.render();
+    const { root, ui, game } = mountGame({ content, clock, seed: 7 });
 
     // 技能页骨架：状态卡、活动卡片网格
     expect(root.querySelector('.status-card')).not.toBeNull();
@@ -63,16 +55,7 @@ describe('UI 烟测（issue #3 验收）', () => {
 
     // —— 关闭重开：存档落 localStorage，新实例恢复 ——
     adapter.save(game.snapshot());
-    const game2 = createGame({
-      content,
-      clock,
-      save: adapter.load() ?? undefined,
-    });
-    const root2 = document.createElement('div');
-    document.body.appendChild(root2);
-    const ui2 = buildUi(root2, content, () => game2.snapshot(), game2.events);
-    ui2.bindActions((action: GameAction) => game2.dispatch(action));
-    ui2.render();
+    const { root: root2, ui: ui2 } = mountGame({ content, clock, save: adapter.load() ?? undefined });
     root2.querySelector<HTMLButtonElement>('.tab[data-tab="bag"]')!.click();
     ui2.render();
     const herbRow2 = Array.from(root2.querySelectorAll('.bag-row')).find((row) =>
@@ -90,12 +73,7 @@ describe('UI 烟测（issue #3 验收）', () => {
   it('灵石不足购买：reject 事件以红字浮提示呈现', () => {
     const clock = new ManualClock();
     const content = loadXiuxianPack();
-    const game = createGame({ content, clock, seed: 7 });
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-    const ui = buildUi(root, content, () => game.snapshot(), game.events);
-    ui.bindActions((action: GameAction) => game.dispatch(action));
-    ui.render();
+    const { root, ui } = mountGame({ content, clock, seed: 7 });
 
     root.querySelector<HTMLButtonElement>('.tab[data-tab="shop"]')!.click();
     ui.render();

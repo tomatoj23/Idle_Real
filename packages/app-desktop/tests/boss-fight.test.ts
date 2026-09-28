@@ -9,16 +9,15 @@
  * 夹具包按 #26 先例内联（壳文案只配被测键，缺键回显键名与生产同码）。
  */
 import { describe, expect, it } from 'vitest';
-import type { ContentPack, ShellTexts } from '@wendao/content';
-import { createGame, ManualClock, type GameAction, type GameEvent, type SaveData } from '@wendao/engine';
-import { buildUi } from '../src/ui';
-
-/** pages.skills 文案键集形状钉（#38 复核补盲）：mock 经 `as unknown as ContentPack` 绕过形状检查，键集漂移靠此 tsc 红。 */
-const skillsTexts = (v: ShellTexts['pages']['skills']): ShellTexts['pages']['skills'] => v;
+import type { ContentPack } from '@wendao/content';
+import type { GameEvent, SaveData } from '@wendao/engine';
+import { makePack as basePack, makeShellTexts, skillsTexts } from './helpers/pack';
+import { makeSave as baseSave } from './helpers/save';
+import { mountGame } from './helpers/mount';
 
 /** 最小 Boss 包：e1 两阶段（0.6 血目暴睁 atk×2 / 0.3 狂暴 变招+叙事）。 */
 function makePack(): ContentPack {
-  return {
+  return basePack({
     skills: [{ id: 'fight', name: '斗法', icon: '斗', kind: 'combat' }],
     items: [{ id: 'heal', name: '回气丹', icon: '回', type: 'consumable', sell: 18, heal: { percent: 0.3 } }],
     recipes: [],
@@ -81,13 +80,9 @@ function makePack(): ContentPack {
     texts: {
       basicName: '拳脚',
       reject: { '*': { 'bad-payload': '指令无效' } },
-      shell: {
-        brand: { sigil: '道', name: '试炼', locale: 'zh-CN', bootError: '中止：{message}' },
-        topbar: { statsTitle: '属', statsSigil: '斗', goldTitle: '灵石', goldSigil: '石', hpTitle: '气血', hpSigil: '血' },
+      shell: makeShellTexts({
         tabs: { skills: '修', combat: '斗', bag: '袋', shop: '市', rebirth: '转', talents: '韵', dungeon: '秘', craft: '炼' },
         stats: { labels: { atk: { label: '攻' }, def: { label: '防' }, crit: { label: '暴', percent: true } } },
-        units: { level: '{v} 层', seconds: '{v} 秒', minute: '{m} 分', hourMinute: '{h} 时 {m} 分' },
-        icons: { buff: '丹', gear: '器', unknown: '？' },
         common: { needLevel: '需 {level} 层', needDaoYun: '需 {daoYun} 道韵', compareWrap: '（{compare}）', itemListSep: '、' },
         events: {
           bossPhase: '【{enemy}】显露「{name}」之相！（阶段 {phase}）',
@@ -110,7 +105,7 @@ function makePack(): ContentPack {
             engagedBadge: '集火',
           },
         },
-      },
+      }),
     },
     shop: [],
     bosses: [
@@ -126,27 +121,16 @@ function makePack(): ContentPack {
         ],
       },
     ],
-  } as unknown as ContentPack;
+  });
 }
 
 /** 斗法 3 层存档：对 e1（hp 60）恰 4-5 击，两阶段在击杀前确定性触发。 */
 function makeSave(): SaveData {
-  return {
-    version: 1,
-    time: 0,
-    state: { skills: { fight: { xp: 100 } }, items: {} },
-  } as unknown as SaveData;
+  return baseSave({ skills: { fight: { xp: 100 } }, items: {} });
 }
 
-function mount(): { root: HTMLElement; ui: ReturnType<typeof buildUi>; game: ReturnType<typeof createGame> } {
-  const content = makePack();
-  const game = createGame({ content, clock: new ManualClock(), save: makeSave() });
-  const root = document.createElement('div');
-  document.body.appendChild(root);
-  const ui = buildUi(root, content, () => game.snapshot(), game.events);
-  ui.bindActions((action: GameAction) => game.dispatch(action));
-  ui.render();
-  return { root, ui, game };
+function mount() {
+  return mountGame({ content: makePack(), save: makeSave() });
 }
 
 describe('#8 · Boss 战壳呈现', () => {

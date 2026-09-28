@@ -7,49 +7,34 @@
  * - 链路：入口点击 → 入境切页 → 假时钟推层 → 层奖励入修行录 → 撤退回列表。
  */
 import { describe, expect, it } from 'vitest';
-import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
-import { createGame, ManualClock, type GameAction, type GameEvent, type SaveData } from '@wendao/engine';
-import { buildUi } from '../src/ui';
+import type { GameEvent, SaveData } from '@wendao/engine';
+import { makeSave as baseSave } from './helpers/save';
+import { mountGame, type Mounted } from './helpers/mount';
 
 /** 带累计道韵（妖窟门槛 10）与回气丹的存档：clv1，全页签可见。 */
 function makeSave(): SaveData {
-  return {
-    version: 1,
-    time: 0,
-    state: {
-      gold: 0,
-      hp: 112,
-      items: { consumable_heal: 5 },
-      skills: { herb: { xp: 0 }, qi: { xp: 0 }, mine: { xp: 0 }, alchemy: { xp: 0 }, smith: { xp: 0 }, combat: { xp: 0 } },
-      activity: null,
-      gear: [],
-      equips: {},
-      daoYun: 0,
-      daoYunEarned: 10,
-      rebirths: 0,
-      talents: [],
-    },
-  };
+  return baseSave({
+    gold: 0,
+    hp: 112,
+    items: { consumable_heal: 5 },
+    skills: { herb: { xp: 0 }, qi: { xp: 0 }, mine: { xp: 0 }, alchemy: { xp: 0 }, smith: { xp: 0 }, combat: { xp: 0 } },
+    activity: null,
+    gear: [],
+    equips: {},
+    daoYun: 0,
+    daoYunEarned: 10,
+    rebirths: 0,
+    talents: [],
+  });
 }
 
-function mount(save: SaveData = makeSave()): {
-  root: HTMLElement;
-  ui: ReturnType<typeof buildUi>;
-  game: ReturnType<typeof createGame>;
-} {
-  const content = loadXiuxianPack();
-  const game = createGame({ content, clock: new ManualClock(), save });
-  const root = document.createElement('div');
-  document.body.appendChild(root);
-  const ui = buildUi(root, content, () => game.snapshot(), game.events);
-  ui.bindActions((action: GameAction) => game.dispatch(action));
-  ui.render();
-  return { root, ui, game };
+function mount(save: SaveData = makeSave()) {
+  return mountGame({ save });
 }
 
 /** 小步 tick 直至条件满足（事件随时收集）。 */
 function tickUntil(
-  game: ReturnType<typeof createGame>,
+  game: Mounted['game'],
   done: () => boolean,
   seen: GameEvent[] = [],
   max = 400,

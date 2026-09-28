@@ -24,15 +24,14 @@ vi.mock('../../../packages/engine/src/dungeon.js', async (importOriginal) => {
   };
 });
 
-import type { ContentPack, ShellTexts } from '@wendao/content';
-import { createGame, ManualClock, type GameAction, type SaveData } from '@wendao/engine';
-import { buildUi } from '../src/ui';
-
-/** pages.skills 文案键集形状钉（#38 复核补盲）：mock 经 `as unknown as ContentPack` 绕过形状检查，键集漂移靠此 tsc 红。 */
-const skillsTexts = (v: ShellTexts['pages']['skills']): ShellTexts['pages']['skills'] => v;
+import type { ContentPack } from '@wendao/content';
+import type { SaveData } from '@wendao/engine';
+import { makePack as basePack, makeShellTexts, skillsTexts } from './helpers/pack';
+import { makeSave as baseSave } from './helpers/save';
+import { mountGame } from './helpers/mount';
 
 function makePack(): ContentPack {
-  return {
+  return basePack({
     skills: [
       {
         id: 'herb',
@@ -92,13 +91,9 @@ function makePack(): ContentPack {
     texts: {
       basicName: '拳脚',
       reject: { '*': { 'bad-payload': '指令无效' } },
-      shell: {
-        brand: { sigil: '道', name: '试炼', locale: 'zh-CN', bootError: '中止：{message}' },
-        topbar: { statsTitle: '属', statsSigil: '斗', goldTitle: '灵石', goldSigil: '石', hpTitle: '气血', hpSigil: '血' },
+      shell: makeShellTexts({
         tabs: { skills: '修', combat: '斗', bag: '袋', shop: '市', rebirth: '转', talents: '韵', dungeon: '秘', craft: '炼' },
         stats: { labels: { atk: { label: '攻' }, def: { label: '防' }, crit: { label: '暴', percent: true } } },
-        units: { level: '{v} 层', seconds: '{v} 秒', minute: '{m} 分', hourMinute: '{h} 时 {m} 分' },
-        icons: { buff: '丹', gear: '器', unknown: '？' },
         common: { needLevel: '需 {level} 层', needDaoYun: '需 {daoYun} 道韵', compareWrap: '（{compare}）', itemListSep: '、' },
         events: {},
         pages: {
@@ -116,7 +111,7 @@ function makePack(): ContentPack {
           },
           dungeon: { title: '秘境', empty: '空', subtitle: '', floorNow: '第 {floor}/{floors} 层', best: '最深 {best}', enterBtn: '入', retreatBtn: '撤', clearBadge: '通', entryKey: '需 {item}', powerNow: '', powerRec: '' },
         },
-      },
+      }),
     },
     shop: [],
     dungeons: [
@@ -138,22 +133,15 @@ function makePack(): ContentPack {
         { id: 't_speed', name: '疾风', cost: 1, effects: [{ stat: 'gatherSpeed', zone: 'flat', value: 1 }] },
       ],
     },
-  } as unknown as ContentPack;
+  });
 }
 
 function makeSave(state: Record<string, unknown> = {}): SaveData {
-  return { version: 1, time: 0, state: { items: {}, ...state } } as unknown as SaveData;
+  return baseSave({ items: {}, ...state });
 }
 
 function mount(save: SaveData) {
-  const content = makePack();
-  const game = createGame({ content, clock: new ManualClock(), save });
-  const root = document.createElement('div');
-  document.body.appendChild(root);
-  const ui = buildUi(root, content, () => game.snapshot(), game.events);
-  ui.bindActions((action: GameAction) => game.dispatch(action));
-  ui.render();
-  return { root, ui, game };
+  return mountGame({ content: makePack(), save });
 }
 
 describe('#40 · 壳层投影消费', () => {

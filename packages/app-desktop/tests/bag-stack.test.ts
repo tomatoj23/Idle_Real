@@ -11,39 +11,32 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { ContentPack } from '@wendao/content';
-import { createGame, ManualClock, type GameAction, type SaveData } from '@wendao/engine';
-import { buildUi } from '../src/ui';
+import type { SaveData } from '@wendao/engine';
+import { makePack as basePack, makeShellTexts } from './helpers/pack';
+import { makeSave as baseSave } from './helpers/save';
+import { mountGame } from './helpers/mount';
 
 /** 最小包：单档器胚剑 + 器屑经济 + 三档词表（数组序 = 档位序）。 */
 function makePack(): ContentPack {
-  return {
+  return basePack({
     skills: [{ id: 'fight', name: '斗法', icon: '斗', kind: 'combat' }],
     items: [
       { id: 'gear_shard', name: '器屑', icon: '屑', type: 'mat', sell: 8 },
       { id: 'sword', name: '试炼剑', icon: '剑', type: 'equip', slot: 'weapon', sell: 30, bonuses: { atk: 5 } },
     ],
-    recipes: [],
-    enemies: [],
-    gearDrops: [],
     rarities: [
       { id: 'common', name: '寻常', weight: 70, mult: 1, affix: 0, sell: 1, smelt: 1 },
       { id: 'fine', name: '精良', weight: 20, mult: 1.15, affix: 1, sell: 2, smelt: 2 },
       { id: 'rare', name: '罕见', weight: 8, mult: 1.3, affix: 2, sell: 4, smelt: 4 },
     ],
-    affixPool: [],
-    combatText: {},
     config: {
       slots: [{ id: 'weapon', name: '法器' }],
       gear: { shardItem: 'gear_shard', reforgeCost: 2, tagWeightPerMatch: 1 },
     },
     texts: {
-      shell: {
-        brand: { sigil: '道', name: '试炼', locale: 'zh-CN', bootError: '中止：{message}' },
-        topbar: { statsTitle: '属', statsSigil: '斗', goldTitle: '灵石', goldSigil: '石', hpTitle: '气血', hpSigil: '血' },
+      shell: makeShellTexts({
         tabs: { skills: '修', combat: '斗', bag: '袋', shop: '市' },
         stats: { labels: { atk: { label: '攻' } } },
-        units: { level: '{v} 层', seconds: '{v} 秒', minute: '{m} 分', hourMinute: '{h} 时 {m} 分' },
-        icons: { buff: '丹', gear: '器', unknown: '？' },
         common: { needLevel: '需 {level} 层', compareWrap: '（{compare}）', itemListSep: '、' },
         events: {
           sellAllLog: '售出 {count} 件，得 {gained} 文',
@@ -62,10 +55,9 @@ function makePack(): ContentPack {
             reforgeBtn: '重铸', inscTier: 'T{tier}', inscCondition: '（受{element}）',
           },
         },
-      },
+      }),
     },
-    shop: [],
-  } as unknown as ContentPack;
+  });
 }
 
 interface GearSpec {
@@ -75,45 +67,30 @@ interface GearSpec {
 }
 
 function makeSave(gear: GearSpec[], equips: Record<string, number> = {}, gold = 0): SaveData {
-  return {
-    version: 1,
-    time: 0,
-    state: {
-      gold,
-      hp: 100,
-      items: {},
-      skills: { fight: { xp: 0 } },
-      activity: null,
-      gear: gear.map((spec) => ({
-        uid: spec.uid,
-        itemId: 'sword',
-        rarity: spec.rarity ?? 'common',
-        affixes: [],
-        ...(spec.locked ? { locked: true } : {}),
-      })),
-      equips,
-      buffs: {},
-      combat: null,
-      autoFight: false,
-      autoEat: false,
-      lastEncounter: {},
-    },
-  };
+  return baseSave({
+    gold,
+    hp: 100,
+    items: {},
+    skills: { fight: { xp: 0 } },
+    activity: null,
+    gear: gear.map((spec) => ({
+      uid: spec.uid,
+      itemId: 'sword',
+      rarity: spec.rarity ?? 'common',
+      affixes: [],
+      ...(spec.locked ? { locked: true } : {}),
+    })),
+    equips,
+    buffs: {},
+    combat: null,
+    autoFight: false,
+    autoEat: false,
+    lastEncounter: {},
+  });
 }
 
-function mount(save: SaveData): {
-  root: HTMLElement;
-  game: ReturnType<typeof createGame>;
-  ui: ReturnType<typeof buildUi>;
-} {
-  const content = makePack();
-  const game = createGame({ content, clock: new ManualClock(), save });
-  const root = document.createElement('div');
-  document.body.appendChild(root);
-  const ui = buildUi(root, content, () => game.snapshot(), game.events);
-  ui.bindActions((action: GameAction) => game.dispatch(action));
-  ui.render();
-  return { root, game, ui };
+function mount(save: SaveData) {
+  return mountGame({ content: makePack(), save });
 }
 
 const toBag = (root: HTMLElement): void => {

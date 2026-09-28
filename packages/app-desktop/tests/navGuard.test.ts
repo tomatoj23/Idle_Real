@@ -11,7 +11,7 @@ import { isSelfNavigation } from '../electron/navGuard';
 
 /** 打包态自身 URL（Electron 侧由 pathToFileURL(dist/index.html) 得到，形态一致）。 */
 const PACKAGED = 'file:///D:/games/wendao/dist/index.html';
-/** dev 态自身 URL：VITE_DEV_SERVER_URL 的原样值（vite 默认端口，无尾斜杠）。 */
+/** 合成 http 自身 URL（#76 删 dev-server 分支后生产恒 file://；判据保持通用，本组钉 http 分支不退化）。 */
 const DEV = 'http://localhost:5173';
 
 describe('#71 项 1 · 打包态（self = file:///…/dist/index.html）', () => {

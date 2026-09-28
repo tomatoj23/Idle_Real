@@ -11,10 +11,14 @@
   "scripts": {
     "dev": "vite",
     "dev:electron": "npm run build && electron .",
-    "build": "tsc --noEmit && tsc --noEmit -p tsconfig.electron.json && vite build && tsc -p tsconfig.electron.json && node -e \"require('fs').copyFileSync('electron/preload.cjs','dist-electron/preload.cjs')\"",
+    "build": "npm run build:check && npm run build:renderer && npm run build:electron && npm run build:preload",
+    "build:check": "tsc --noEmit && tsc --noEmit -p tsconfig.electron.json",
+    "build:renderer": "vite build",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "build:preload": "node scripts/copy-preload.mjs",
     "preview": "vite preview",
     "dist": "electron-builder --win",
-    "check": "tsc --noEmit && tsc --noEmit -p tsconfig.electron.json && tsc --noEmit -p tsconfig.tests.json",
+    "check": "npm run build:check && tsc --noEmit -p tsconfig.tests.json",
     "test": "vitest run"
   },
   "dependencies": {},

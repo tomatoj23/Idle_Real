@@ -14,31 +14,25 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ContentPack } from '@wendao/content';
 import { sectionSchemas } from '@wendao/content';
 import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
-import { createGame, ManualClock, type GameAction, type SaveData } from '@wendao/engine';
-import { buildUi } from '../src/ui';
+import type { SaveData } from '@wendao/engine';
+import { makePack as basePack, makeShellTexts } from './helpers/pack';
+import { makeSave as baseSave } from './helpers/save';
+import { mountGame } from './helpers/mount';
+import { MAX_TOASTS } from '../src/ui';
 
 /** 最小包：单战斗技能 + 回气丹 + 单档词表（仅补被测模板键）。 */
 function makePack(): ContentPack {
-  return {
+  return basePack({
     skills: [{ id: 'fight', name: '斗法', icon: '斗', kind: 'combat' }],
     items: [
       { id: 'heal', name: '回气丹', icon: '回', type: 'consumable', sell: 18, heal: { percent: 0.3 } },
       { id: 'ore', name: '铁矿石', icon: '矿', type: 'material', sell: 2 },
     ],
-    recipes: [],
-    enemies: [],
-    gearDrops: [],
     rarities: [{ id: 'plain', name: '朴素', weight: 1, mult: 1, affix: 0, sell: 1 }],
-    affixPool: [],
-    combatText: {},
     texts: {
-      shell: {
-        brand: { sigil: '道', name: '试炼', locale: 'zh-CN', bootError: '中止：{message}' },
-        topbar: { statsTitle: '属', statsSigil: '斗', goldTitle: '灵石', goldSigil: '石', hpTitle: '气血', hpSigil: '血' },
+      shell: makeShellTexts({
         tabs: { skills: '修', combat: '斗' },
         stats: { labels: { atk: { label: '攻' } } },
-        units: { level: '{v} 层', seconds: '{v} 秒', minute: '{m} 分', hourMinute: '{h} 时 {m} 分' },
-        icons: { buff: '丹', gear: '器', unknown: '？' },
         common: { needLevel: '需 {level} 层', compareWrap: '（{compare}）', itemListSep: '、' },
         events: {
           lootDrop: '得 {name}×{count}',
@@ -52,49 +46,26 @@ function makePack(): ContentPack {
           levelupLog: '【{name}】升至 {level} 层',
           offlineNoYield: '无所获',
         },
-        pages: {},
-      },
+      }),
     },
-    shop: [],
-  } as unknown as ContentPack;
-}
-
-function mount(): { root: HTMLElement; ui: ReturnType<typeof buildUi>; game: ReturnType<typeof createGame> } {
-  const content = makePack();
-  const game = createGame({ content, clock: new ManualClock(), save: makeSave() });
-  const root = document.createElement('div');
-  document.body.appendChild(root);
-  const ui = buildUi(root, content, () => game.snapshot(), game.events);
-  ui.bindActions((action: GameAction) => game.dispatch(action));
-  ui.render();
-  return { root, ui, game };
+  });
 }
 
 function makeSave(): SaveData {
-  return {
-    version: 1,
-    time: 0,
-    state: { gold: 0, hp: 100, items: {}, skills: { fight: { xp: 0 } }, equips: {}, gear: [], buffs: {} },
-  } as unknown as SaveData;
+  return baseSave({ gold: 0, hp: 100, items: {}, skills: { fight: { xp: 0 } }, equips: {}, gear: [], buffs: {} });
+}
+
+function mount() {
+  return mountGame({ content: makePack(), save: makeSave() });
 }
 
 /** 真包 + 真开战：#flog 槽由斗法页战斗视图渲染（战斗外无槽 = 持久体待命）。 */
-function mountFight(): {
-  root: HTMLElement;
-  ui: ReturnType<typeof buildUi>;
-  game: ReturnType<typeof createGame>;
-} {
-  const content = loadXiuxianPack();
-  const game = createGame({ content, clock: new ManualClock(), seed: 11 });
-  const root = document.createElement('div');
-  document.body.appendChild(root);
-  const ui = buildUi(root, content, () => game.snapshot(), game.events);
-  ui.bindActions((action: GameAction) => game.dispatch(action));
-  ui.render();
-  root.querySelector<HTMLButtonElement>('.tab[data-tab="combat"]')!.click();
-  root.querySelector<HTMLButtonElement>('[data-act="fight"][data-enemy="e1"]')!.click();
-  ui.render();
-  return { root, ui, game };
+function mountFight() {
+  const mounted = mountGame({ content: loadXiuxianPack(), seed: 11 });
+  mounted.root.querySelector<HTMLButtonElement>('.tab[data-tab="combat"]')!.click();
+  mounted.root.querySelector<HTMLButtonElement>('[data-act="fight"][data-enemy="e1"]')!.click();
+  mounted.ui.render();
+  return mounted;
 }
 
 describe('#34 · 右侧栏与 log() sink 完全退场', () => {
@@ -337,6 +308,51 @@ describe('#50 · toast 自动消失（D5 fake timers 补盲）', () => {
       expect(el()).not.toBeNull();
       vi.advanceTimersByTime(10000); // 远超驻留（3200ms）：自动移除
       expect(el()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('#76 · toast 上限（同文去重 + 顶格裁剪）', () => {
+  /** 合成 reject（同文连发 = 重复点击买不起的形态）。 */
+  const rejectWith = (message: string) =>
+    ({ type: 'reject', time: 0, data: { action: 'shop:buy', reason: 'no-gold', message } }) as const;
+
+  it('同文同档连发只留一条；异文与异档不受去重影响', () => {
+    const { root, ui, game } = mount();
+    for (let i = 0; i < 5; i++) game.events.emit(rejectWith('灵石不足'));
+    expect(root.querySelectorAll('#toasts .toast-red')).toHaveLength(1);
+
+    game.events.emit(rejectWith('另说一句'));
+    expect(root.querySelectorAll('#toasts .toast-red')).toHaveLength(2);
+
+    // 同文不同档：档是呈现语义，分开计。
+    ui.toast('灵石不足', 'gold');
+    expect(root.querySelectorAll('#toasts .toast-gold')).toHaveLength(1);
+    expect(root.querySelectorAll('#toasts .toast')).toHaveLength(3);
+  });
+
+  it('不同文连发顶格裁剪：最多 MAX_TOASTS 条、最旧先退', () => {
+    const { root, game } = mount();
+    for (let i = 1; i <= 5; i++) game.events.emit(rejectWith(`拒绝 ${i}`));
+    const toasts = root.querySelectorAll('#toasts .toast');
+    expect(toasts).toHaveLength(MAX_TOASTS);
+    expect(toasts[0]?.textContent).toBe('拒绝 3');
+    expect(toasts[MAX_TOASTS - 1]?.textContent).toBe('拒绝 5');
+  });
+
+  it('同文合并续期：连发期间驻留不提前到期（动作反馈不因去重失声）', () => {
+    vi.useFakeTimers();
+    try {
+      const { root, game } = mount();
+      game.events.emit(rejectWith('灵石不足'));
+      vi.advanceTimersByTime(2000);
+      game.events.emit(rejectWith('灵石不足')); // 首条将到期前再拒 → 续期
+      vi.advanceTimersByTime(2000); // 距首条 4s > 驻留 3.2s，距续期仅 2s
+      expect(root.querySelectorAll('#toasts .toast-red')).toHaveLength(1);
+      vi.advanceTimersByTime(1200); // 距续期满 3.2s → 整条消
+      expect(root.querySelectorAll('#toasts .toast-red')).toHaveLength(0);
     } finally {
       vi.useRealTimers();
     }

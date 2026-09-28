@@ -6,14 +6,16 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { ContentPack } from '@wendao/content';
-import { createGame, ManualClock, type GameAction, type SaveData } from '@wendao/engine';
-import { buildUi } from '../src/ui';
+import type { SaveData } from '@wendao/engine';
+import { makePack as basePack, makeShellTexts } from './helpers/pack';
+import { makeSave as baseSave } from './helpers/save';
+import { mountGame } from './helpers/mount';
 
 const tiersOf = (rows: Array<Array<Record<string, unknown>>>) => rows;
 
 /** 最小包：器屑经济 + 器胚 + 三条铭纹（flat/addPct/条件各一）。 */
 function makePack(withEconomy = true): ContentPack {
-  return {
+  return basePack({
     skills: [{ id: 'fight', name: '斗法', icon: '斗', kind: 'combat' }],
     elements: [{ id: 'fire', name: '火' }],
     items: [
@@ -81,13 +83,9 @@ function makePack(withEconomy = true): ContentPack {
       ...(withEconomy ? { gear: { shardItem: 'gear_shard', reforgeCost: 2, tagWeightPerMatch: 1 } } : {}),
     },
     texts: {
-      shell: {
-        brand: { sigil: '道', name: '试炼', locale: 'zh-CN', bootError: '中止：{message}' },
-        topbar: { statsTitle: '属', statsSigil: '斗', goldTitle: '灵石', goldSigil: '石', hpTitle: '气血', hpSigil: '血' },
+      shell: makeShellTexts({
         tabs: { skills: '修', combat: '斗', bag: '袋', shop: '市' },
         stats: { labels: { atk: { label: '攻' }, def: { label: '防' } } },
-        units: { level: '{v} 层', seconds: '{v} 秒', minute: '{m} 分', hourMinute: '{h} 时 {m} 分' },
-        icons: { buff: '丹', gear: '器', unknown: '？' },
         common: { needLevel: '需 {level} 层', compareWrap: '（{compare}）', itemListSep: '、' },
         events: { gearSmelt: '熔炼【{name}】，得 {shard}×{count}', gearReforge: '重铸【{name}】，铭纹升至 T{tier}' },
         pages: {
@@ -99,57 +97,43 @@ function makePack(withEconomy = true): ContentPack {
             smeltBtn: '熔炼', reforgeBtn: '重铸', inscTier: 'T{tier}', inscCondition: '（受{element}）',
           },
         },
-      },
+      }),
     },
     shop: [],
-  } as unknown as ContentPack;
+  });
 }
 
 function makeSave(): SaveData {
-  return {
-    version: 1,
-    time: 0,
-    state: {
-      gold: 0,
-      hp: 100,
-      items: { gear_shard: 10 },
-      skills: { fight: { xp: 0 } },
-      activity: null,
-      gear: [
-        {
-          uid: 1,
-          itemId: 'blank',
-          rarity: 'plain',
-          affixes: [],
-          inscriptions: [
-            { id: 'insc_a', tier: 1 },
-            { id: 'insc_b', tier: 2 },
-            { id: 'insc_c', tier: 3 },
-          ],
-        },
-      ],
-      equips: {},
-      buffs: {},
-      combat: null,
-      autoFight: false,
-      autoEat: false,
-      lastEncounter: {},
-    },
-  };
+  return baseSave({
+    gold: 0,
+    hp: 100,
+    items: { gear_shard: 10 },
+    skills: { fight: { xp: 0 } },
+    activity: null,
+    gear: [
+      {
+        uid: 1,
+        itemId: 'blank',
+        rarity: 'plain',
+        affixes: [],
+        inscriptions: [
+          { id: 'insc_a', tier: 1 },
+          { id: 'insc_b', tier: 2 },
+          { id: 'insc_c', tier: 3 },
+        ],
+      },
+    ],
+    equips: {},
+    buffs: {},
+    combat: null,
+    autoFight: false,
+    autoEat: false,
+    lastEncounter: {},
+  });
 }
 
-function mount(content: ContentPack, save: SaveData): {
-  root: HTMLElement;
-  game: ReturnType<typeof createGame>;
-  ui: ReturnType<typeof buildUi>;
-} {
-  const game = createGame({ content, clock: new ManualClock(), save });
-  const root = document.createElement('div');
-  document.body.appendChild(root);
-  const ui = buildUi(root, content, () => game.snapshot(), game.events);
-  ui.bindActions((action: GameAction) => game.dispatch(action));
-  ui.render();
-  return { root, game, ui };
+function mount(content: ContentPack, save: SaveData) {
+  return mountGame({ content, save });
 }
 
 const toBag = (root: HTMLElement): void => {

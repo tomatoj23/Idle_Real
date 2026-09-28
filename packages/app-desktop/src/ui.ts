@@ -62,6 +62,10 @@ export interface Ui {
 
 /** 战斗日志环形容量（真实 DOM 环形删头上限）。导出为测试真源（D5：禁测试自钉拷贝）。 */
 export const MAX_FLOG = 60;
+/** 醒目 toast 驻留（毫秒）。 */
+const TOAST_MS = 3200;
+/** toast 栈上限（#76 项 6）：同文去重之外的兜底——不同文连发不盖满屏。导出为测试真源。 */
+export const MAX_TOASTS = 3;
 /** 档二聚合窗口（C7：同类 3 秒短窗聚合，窗口可调）：同名获取行在窗口内合并计数。 */
 const FLOAT_WINDOW_MS = 3000;
 /** 档二堆叠限高（AC5：挂机连杀场景不无限堆积）。 */
@@ -218,6 +222,8 @@ export function buildUi(
   const buffbarEl = $<HTMLElement>('#buffbar');
   const pageEl = $<HTMLElement>('#page-root');
   const toastsEl = $<HTMLElement>('#toasts');
+  /** toast 驻留计时（#76 项 6）：同文合并续期要能撤旧计时，逐条计时随节点走。 */
+  const toastTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
   const floatStackEl = $<HTMLElement>('#float-stack');
   const combatFloatsEl = $<HTMLElement>('#combat-floats');
 
@@ -968,12 +974,25 @@ export function buildUi(
 
   /* ---------- 浮提示与飘字（#34 反馈枢纽幸存 sink） ---------- */
 
+  /** 醒目 toast（#76 项 6）：同文同档合并（驻留随最新一次续期）+ 顶格裁剪——
+   * 天量事件 3.2s 内不再堆无上限节点；合并而非吞掉，动作反馈不因去重失声。 */
   function toast(text: string, kind: 'gold' | 'red' = 'gold'): void {
+    const cls = `toast-${kind}`;
+    const live = Array.from(toastsEl.children).find(
+      (el) => el.classList.contains(cls) && el.textContent === text,
+    ) as HTMLElement | undefined;
+    if (live) {
+      const stale = toastTimers.get(live);
+      if (stale !== undefined) clearTimeout(stale);
+      toastTimers.set(live, setTimeout(() => live.remove(), TOAST_MS));
+      return;
+    }
     const el = document.createElement('div');
-    el.className = `toast toast-${kind}`;
+    el.className = `toast ${cls}`;
     el.textContent = text;
     toastsEl.appendChild(el);
-    setTimeout(() => el.remove(), 3200);
+    while (toastsEl.children.length > MAX_TOASTS) toastsEl.firstElementChild?.remove();
+    toastTimers.set(el, setTimeout(() => el.remove(), TOAST_MS));
   }
 
   return {

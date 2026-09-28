@@ -12,8 +12,8 @@
  * will-navigate 的位参已 @deprecated、setPermissionRequestHandler 实为四参），
  * 并且**记下 BrowserWindow 的构造参数**——webPreferences 三件套不记就等于没钉。
  *
- * 分支固定：删掉 VITE_DEV_SERVER_URL 之后才 import（main.ts 在模块求值期读它，
- * 事后改无效），走的是打包态 loadFile 分支。
+ * #76：VITE_DEV_SERVER_URL 死分支已删（用户裁决）——main.ts 恒走 loadFile，
+ * 假面不再提供 loadURL（缺面即抛：谁把 dev 分支加回来，本文件先红）。
  */
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -80,10 +80,6 @@ vi.mock('electron', () => {
         ? Promise.reject(new Error('ERR_FILE_NOT_FOUND'))
         : Promise.resolve();
     }
-    loadURL(url: string): Promise<void> {
-      calls.push(`load-url:${url}`);
-      return Promise.resolve();
-    }
   }
   return {
     app: {
@@ -144,7 +140,6 @@ const savedListeners: {
 beforeAll(() => {
   savedListeners.uncaughtException = process.listeners('uncaughtException');
   savedListeners.unhandledRejection = process.listeners('unhandledRejection');
-  delete process.env['VITE_DEV_SERVER_URL'];
 });
 
 afterEach(() => {
@@ -190,11 +185,10 @@ function logText(): string {
 }
 
 describe('#71 · 启动接线', () => {
-  it('打包态走 loadFile 分支（非 loadURL），日志落在 userData/wendao.log', async () => {
+  it('恒走 loadFile 加载打包产物（#76 删 dev-server 分支后的唯一路径），日志落在 userData/wendao.log', async () => {
     await bootMain();
     expect(calls).toContain('single-instance-lock');
     expect(calls).toContain('load-file');
-    expect(calls).not.toContain('load-url:http://localhost:5173');
     expect(loadFileArg).toMatch(/[/\\]dist[/\\]index\.html$/);
     const text = logText();
     expect(text).toContain('[platform] adapter=mock');

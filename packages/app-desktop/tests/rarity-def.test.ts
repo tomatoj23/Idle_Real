@@ -5,15 +5,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { ContentPack } from '@wendao/content';
-import {
-  createGame,
-  levelFromXp,
-  ManualClock,
-  type GameAction,
-  type GameEvent,
-  type SaveData,
-} from '@wendao/engine';
-import { buildUi } from '../src/ui';
+import { levelFromXp, type GameEvent, type SaveData } from '@wendao/engine';
+import { makeSave } from './helpers/save';
+import { mountGame } from './helpers/mount';
 
 /** 战斗技能 id ≠ 'combat' 的最小包：N2 回归夹具（与引擎 fixtures 同款改名）。 */
 const FIGHT_PACK = {
@@ -34,25 +28,12 @@ const FIGHT_PACK = {
   shop: [],
 } as unknown as ContentPack;
 
-function mount(content: ContentPack, game: ReturnType<typeof createGame>): HTMLElement {
-  const root = document.createElement('div');
-  document.body.appendChild(root);
-  const ui = buildUi(root, content, () => game.snapshot(), game.events);
-  ui.bindActions((action: GameAction) => game.dispatch(action));
-  ui.render();
-  return root;
-}
-
 describe('#018 · N2：斗法页修为读数按 combatSkillId 解析', () => {
   it('技能 id 改名（fight）后修为读数正常，不再落回 0 层', () => {
-    const clock = new ManualClock();
-    const save = {
-      version: 1 as const,
-      time: 0,
-      state: { skills: { fight: { xp: 100000 } } },
-    } as unknown as SaveData;
-    const game = createGame({ content: FIGHT_PACK, clock, save });
-    const root = mount(FIGHT_PACK, game);
+    const { root } = mountGame({
+      content: FIGHT_PACK,
+      save: makeSave({ skills: { fight: { xp: 100000 } } }),
+    });
 
     root.querySelector<HTMLButtonElement>('.tab[data-tab="combat"]')!.click();
     const level = levelFromXp(100000);
@@ -64,7 +45,6 @@ describe('#018 · N2：斗法页修为读数按 combatSkillId 解析', () => {
 
 describe('#018 · 稀有度展示 def 驱动', () => {
   it('showcase bool 驱动「天降异宝」特判（非 id 字面量）；着色类/档名/倍率查 def', () => {
-    const clock = new ManualClock();
     const pack = {
       skills: [{ id: 'fight', name: '斗法', icon: '斗', kind: 'combat' }],
       items: [
@@ -89,8 +69,7 @@ describe('#018 · 稀有度展示 def 驱动', () => {
       },
       shop: [],
     } as unknown as ContentPack;
-    const game = createGame({ content: pack, clock });
-    const root = mount(pack, game);
+    const { root, game } = mountGame({ content: pack });
 
     // 合成 loot 事件直接打 UI 接缝（buildUi 的事件订阅路径与生产一致）
     game.events.emit({ type: 'loot', time: 0, data: { source: 'gear', item: 'sword', itemName: '试炼剑', count: 1, rarity: 'refined', uid: 1 } });
@@ -110,8 +89,7 @@ describe('#018 · 稀有度展示 def 驱动', () => {
         gear: [{ uid: 1, itemId: 'sword', rarity: 'refined', affixes: [] }],
       },
     } as SaveData;
-    const game2 = createGame({ content: pack, clock: new ManualClock(), save });
-    const root2 = mount(pack, game2);
+    const { root: root2 } = mountGame({ content: pack, save });
     root2.querySelector<HTMLButtonElement>('.tab[data-tab="bag"]')!.click();
     expect(root2.querySelector('.gear-card.r-refined')).not.toBeNull();
     expect(root2.textContent).toContain('精淬·试炼剑');
@@ -120,7 +98,6 @@ describe('#018 · 稀有度展示 def 驱动', () => {
   });
 
   it('修仙包端到端：绝世掉落 → 特判 toast → r-epic 卡 → 卖价 = max(1, round(卖价×10))', () => {
-    const clock = new ManualClock();
     const pack = {
       skills: [{ id: 'fight', name: '斗法', icon: '斗', kind: 'combat' }],
       items: [
@@ -186,8 +163,7 @@ describe('#018 · 稀有度展示 def 驱动', () => {
       shop: [],
     } as unknown as ContentPack;
     // rng 恒 0.995：掉落必中（<0.999）、稀有度必中绝世（0.995×100=99.5 → 权重段 [98,100)）
-    const game = createGame({ content: pack, clock, rng: () => 0.995 });
-    const root = mount(pack, game);
+    const { root, game } = mountGame({ content: pack, rng: () => 0.995 });
     // LootEvent 未从 engine 公共面导出：判别联合按 type 收窄取分支。
     const loots: Extract<GameEvent, { type: 'loot' }>[] = [];
     game.events.subscribe((e) => {

@@ -6,19 +6,12 @@
  */
 import { describe, expect, it } from 'vitest';
 import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
-import { createGame, ManualClock, type GameAction } from '@wendao/engine';
-import { buildUi } from '../src/ui';
+import { mountGame } from './helpers/mount';
 
 describe('离线上限钳制文案', () => {
   it('钳制发生：修行录行含"上限"与两个时长；未钳制：维持单时长口径', () => {
     const content = loadXiuxianPack();
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-
-    const cappedGame = createGame({ content, clock: new ManualClock(), seed: 11 });
-    const ui = buildUi(root, content, () => cappedGame.snapshot(), cappedGame.events);
-    ui.bindActions((action: GameAction) => cappedGame.dispatch(action));
-    ui.render();
+    const { root, ui, game: cappedGame } = mountGame({ content, seed: 11 });
     cappedGame.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
     cappedGame.settleOffline(25 * 60 * 60 * 1000); // 离开 25h，基线上限 24h
     cappedGame.events.drain();
@@ -29,12 +22,7 @@ describe('离线上限钳制文案', () => {
     expect(text).not.toContain('离线修行 24'); // 不再拿结算时长冒充离开时长（25h→"25 时 0 分"）
 
     // 未钳制路径回归：无 contributions 时维持 offlineLog 单时长口径
-    const plainGame = createGame({ content, clock: new ManualClock(), seed: 11 });
-    const root2 = document.createElement('div');
-    document.body.appendChild(root2);
-    const ui2 = buildUi(root2, content, () => plainGame.snapshot(), plainGame.events);
-    ui2.bindActions((action: GameAction) => plainGame.dispatch(action));
-    ui2.render();
+    const { root: root2, ui: ui2, game: plainGame } = mountGame({ content, seed: 11 });
     plainGame.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
     plainGame.settleOffline(60000);
     plainGame.events.drain();

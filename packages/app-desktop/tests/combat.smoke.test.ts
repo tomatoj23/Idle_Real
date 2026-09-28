@@ -6,19 +6,14 @@
  */
 import { describe, expect, it } from 'vitest';
 import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
-import { createGame, ManualClock, type GameAction, type GameSnapshot, type SaveData } from '@wendao/engine';
+import { createGame, ManualClock, type GameSnapshot, type SaveData } from '@wendao/engine';
 import { buildUi, MAX_FLOG } from '../src/ui';
+import { mountGame } from './helpers/mount';
 
 describe('UI 烟测（issue #4 战斗切片）', () => {
   it('斗法：挑战青鬃狼 → 战斗中视图 → 挂机胜利 → 战斗日志受控', () => {
-    const clock = new ManualClock();
     const content = loadXiuxianPack();
-    const game = createGame({ content, clock, seed: 11 });
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-    const ui = buildUi(root, content, () => game.snapshot(), game.events);
-    ui.bindActions((action: GameAction) => game.dispatch(action));
-    ui.render();
+    const { root, ui, game, clock } = mountGame({ content, seed: 11 });
 
     // 斗法 tab：敌人卡列表（含门控信息）
     root.querySelector<HTMLButtonElement>('.tab[data-tab="combat"]')!.click();
@@ -57,14 +52,8 @@ describe('UI 烟测（issue #4 战斗切片）', () => {
   });
 
   it('战斗日志环形上限作用于真实 DOM：超容删头、留存精确 = MAX_FLOG', () => {
-    const clock = new ManualClock();
     const content = loadXiuxianPack();
-    const game = createGame({ content, clock, seed: 3 });
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-    const ui = buildUi(root, content, () => game.snapshot(), game.events);
-    ui.bindActions((action: GameAction) => game.dispatch(action));
-    ui.render();
+    const { root, ui, game } = mountGame({ content, seed: 3 });
     root.querySelector<HTMLButtonElement>('.tab[data-tab="combat"]')!.click();
     ui.render();
     const flog = root.querySelector<HTMLElement>('#flog')!;
@@ -89,12 +78,7 @@ describe('UI 烟测（issue #4 战斗切片）', () => {
       ...base,
       state: { ...base.state, stats: { ...base.state.stats, maxHit: 999999 } },
     };
-    const game = createGame({ content, clock, save, seed: 11 });
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-    const ui = buildUi(root, content, () => game.snapshot(), game.events);
-    ui.bindActions((action: GameAction) => game.dispatch(action));
-    ui.render();
+    const { root, ui, game } = mountGame({ content, clock, save, seed: 11 });
     root.querySelector<HTMLButtonElement>('.tab[data-tab="combat"]')!.click();
     ui.render();
     root.querySelector<HTMLButtonElement>('[data-act="fight"][data-enemy="e1"]')!.click();
@@ -168,12 +152,7 @@ describe('UI 烟测（issue #4 战斗切片）', () => {
         equips: {},
       },
     } as SaveData;
-    const game = createGame({ content, clock, save });
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-    const ui = buildUi(root, content, () => game.snapshot(), game.events);
-    ui.bindActions((action: GameAction) => game.dispatch(action));
-    ui.render();
+    const { root, ui, game } = mountGame({ content, clock, save });
 
     root.querySelector<HTMLButtonElement>('.tab[data-tab="bag"]')!.click();
     ui.render();
@@ -209,12 +188,7 @@ describe('UI 烟测（issue #4 战斗切片）', () => {
         hp: 50,
       },
     } as SaveData;
-    const game = createGame({ content, clock, save });
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-    const ui = buildUi(root, content, () => game.snapshot(), game.events);
-    ui.bindActions((action: GameAction) => game.dispatch(action));
-    ui.render();
+    const { root, ui, game } = mountGame({ content, clock, save });
 
     root.querySelector<HTMLButtonElement>('.tab[data-tab="combat"]')!.click();
     ui.render();

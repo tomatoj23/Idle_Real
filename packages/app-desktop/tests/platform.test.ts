@@ -29,6 +29,7 @@ import {
   resolvePlatform,
   type SteamClient,
 } from '../electron/platform';
+import { SAVE_KEY } from '../src/saveKey';
 
 function tempRoot(): string {
   return mkdtempSync(join(tmpdir(), 'wendao-platform-'));
@@ -160,9 +161,9 @@ describe('#10 · 模式裁决 resolvePlatform', () => {
     });
     expect(platform.mode).toBe('mock');
     // 回落的 mock 必须功能完整：文件槽位可写读（非半残 steam 面）。
-    expect(platform.loadSlot('wendao_changsheng_v3')).toBeNull();
-    platform.writeSlot('wendao_changsheng_v3', '{"version":1}');
-    expect(platform.loadSlot('wendao_changsheng_v3')).toBe('{"version":1}');
+    expect(platform.loadSlot(SAVE_KEY)).toBeNull();
+    platform.writeSlot(SAVE_KEY, '{"version":1}');
+    expect(platform.loadSlot(SAVE_KEY)).toBe('{"version":1}');
     expect(logs.join('\n')).toContain('adapter=mock');
     expect(logs.join('\n')).toContain('malformed client');
     rmSync(root, { recursive: true, force: true });
@@ -173,11 +174,11 @@ describe('#10 · mock 平台（文件槽位 + 成就本地记账）', () => {
   it('槽位写读回环；缺档读 null', () => {
     const root = tempRoot();
     const platform = createMockPlatform(root);
-    expect(platform.loadSlot('wendao_changsheng_v3')).toBeNull();
-    expect(platform.writeSlot('wendao_changsheng_v3', '{"version":1,"time":5}')).toBe(true);
-    expect(platform.loadSlot('wendao_changsheng_v3')).toBe('{"version":1,"time":5}');
+    expect(platform.loadSlot(SAVE_KEY)).toBeNull();
+    expect(platform.writeSlot(SAVE_KEY, '{"version":1,"time":5}')).toBe(true);
+    expect(platform.loadSlot(SAVE_KEY)).toBe('{"version":1,"time":5}');
     // 落盘位置：root/saves/<key>.json（槽位文件可审计）。
-    expect(existsSync(join(root, 'saves', 'wendao_changsheng_v3.json'))).toBe(true);
+    expect(existsSync(join(root, 'saves', `${SAVE_KEY}.json`))).toBe(true);
     rmSync(root, { recursive: true, force: true });
   });
 
@@ -349,9 +350,9 @@ describe('#10 · steam 平台（云存档 + 成就上报）', () => {
   it('写槽位与成就上报调用真实接口面', () => {
     const logs: string[] = [];
     const platform = createSteamPlatform(fakeSteam(logs));
-    expect(platform.writeSlot('wendao_changsheng_v3', '{"version":1}')).toBe(true);
+    expect(platform.writeSlot(SAVE_KEY, '{"version":1}')).toBe(true);
     platform.unlockAchievement('cycles_100');
-    expect(logs.some((m) => m.startsWith('write:wendao_changsheng_v3:'))).toBe(true);
+    expect(logs.some((m) => m.startsWith(`write:${SAVE_KEY}:`))).toBe(true);
     expect(logs).toContain('activate:cycles_100');
   });
 
@@ -455,7 +456,7 @@ describe('#71 项 6 · 键域格式 isSafeId', () => {
       expect(id.length).toBeGreaterThan(0);
       expect(isSafeId(id)).toBe(true);
     }
-    expect(isSafeId('wendao_changsheng_v3')).toBe(true);
+    expect(isSafeId(SAVE_KEY)).toBe(true);
   });
 
   it('畸形形状一律拒：路径分隔、空串、空白、超长；上限本身是放行值', () => {

@@ -5,19 +5,10 @@
  * - 九页全量走页：注册表逐页查找分发，页页有内容。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
-import { createGame, ManualClock, type GameAction } from '@wendao/engine';
-import { buildUi } from '../src/ui';
+import { mountGame } from './helpers/mount';
 
-function mount(): { root: HTMLElement; ui: ReturnType<typeof buildUi> } {
-  const content = loadXiuxianPack();
-  const game = createGame({ content, clock: new ManualClock(), seed: 7 });
-  const root = document.createElement('div');
-  document.body.appendChild(root);
-  const ui = buildUi(root, content, () => game.snapshot(), game.events);
-  ui.bindActions((action: GameAction) => game.dispatch(action));
-  ui.render();
-  return { root, ui };
+function mount() {
+  return mountGame({ seed: 7 });
 }
 
 describe('#46 · 未知 tab 防御（D7）', () => {

@@ -6,43 +6,28 @@
  * - 链路：假时钟采集百轮 → cycles_100 解锁 → toast/修行录/卡片/统计/奖励入袋。
  */
 import { describe, expect, it } from 'vitest';
-import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
-import { createGame, ManualClock, type GameAction, type GameEvent, type SaveData } from '@wendao/engine';
-import { buildUi } from '../src/ui';
+import type { GameEvent, SaveData } from '@wendao/engine';
+import { makeSave as baseSave } from './helpers/save';
+import { mountGame } from './helpers/mount';
 
 function makeSave(): SaveData {
-  return {
-    version: 1,
-    time: 0,
-    state: {
-      gold: 0,
-      hp: 112,
-      items: {},
-      skills: { herb: { xp: 0 }, qi: { xp: 0 }, mine: { xp: 0 }, alchemy: { xp: 0 }, smith: { xp: 0 }, combat: { xp: 0 } },
-      activity: null,
-      gear: [],
-      equips: {},
-      daoYun: 0,
-      daoYunEarned: 0,
-      rebirths: 0,
-      talents: [],
-    },
-  };
+  return baseSave({
+    gold: 0,
+    hp: 112,
+    items: {},
+    skills: { herb: { xp: 0 }, qi: { xp: 0 }, mine: { xp: 0 }, alchemy: { xp: 0 }, smith: { xp: 0 }, combat: { xp: 0 } },
+    activity: null,
+    gear: [],
+    equips: {},
+    daoYun: 0,
+    daoYunEarned: 0,
+    rebirths: 0,
+    talents: [],
+  });
 }
 
-function mount(save: SaveData = makeSave()): {
-  root: HTMLElement;
-  ui: ReturnType<typeof buildUi>;
-  game: ReturnType<typeof createGame>;
-} {
-  const content = loadXiuxianPack();
-  const game = createGame({ content, clock: new ManualClock(), save });
-  const root = document.createElement('div');
-  document.body.appendChild(root);
-  const ui = buildUi(root, content, () => game.snapshot(), game.events);
-  ui.bindActions((action: GameAction) => game.dispatch(action));
-  ui.render();
-  return { root, ui, game };
+function mount(save: SaveData = makeSave()) {
+  return mountGame({ save });
 }
 
 describe('#9 · 成就页', () => {

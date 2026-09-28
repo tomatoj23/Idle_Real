@@ -7,19 +7,12 @@
  * - 乾坤袋页签切进/切出补发 visit 信号对（#39 坊市 + #33 乾坤袋）。
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
-import { createGame, ManualClock, type GameAction, type GameEvent } from '@wendao/engine';
-import { buildUi } from '../src/ui';
+import type { GameEvent } from '@wendao/engine';
+import { makeSave } from './helpers/save';
+import { mountGame } from './helpers/mount';
 
 function mount() {
-  const content = loadXiuxianPack();
-  const game = createGame({ content, clock: new ManualClock(), seed: 7 });
-  const root = document.createElement('div');
-  document.body.appendChild(root);
-  const ui = buildUi(root, content, () => game.snapshot(), game.events);
-  ui.bindActions((action: GameAction) => game.dispatch(action));
-  ui.render();
-  return { root, ui, game };
+  return mountGame({ seed: 7 });
 }
 
 afterEach(() => {
@@ -56,22 +49,10 @@ describe('#33 · 修行录页', () => {
   });
 
   it('类型过滤：按 data-kind 显示/隐藏行，零整页重建', () => {
-    const content = loadXiuxianPack();
-    const game = createGame({
-      content,
-      clock: new ManualClock(),
+    const { root, ui, game } = mountGame({
       seed: 7,
-      save: {
-        version: 1,
-        time: 0,
-        state: { gold: 1000, hp: 50, items: { herb1: 5 }, skills: {}, activity: null },
-      },
+      save: makeSave({ gold: 1000, hp: 50, items: { herb1: 5 }, skills: {}, activity: null }),
     });
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-    const ui = buildUi(root, content, () => game.snapshot(), game.events);
-    ui.bindActions((action: GameAction) => game.dispatch(action));
-    ui.render();
     // 造一条交易条目（坊市访问段闭段成条）。
     game.dispatch({ type: 'visit:begin', payload: { page: 'shop' } });
     game.dispatch({ type: 'shop:buy', payload: { item: 'consumable_heal', count: 1 } });
@@ -178,37 +159,28 @@ describe('#33 · 修行录页', () => {
     const row = root.querySelector('#jr-list .jr-row');
     expect(row).not.toBeNull(); // 正常渲染（物品在包内走展示名）
     // id 回显兜底：坏档条目引用未知 id 也零崩溃（消毒恢复 + 查名链兜底）。
-    const reloaded = createGame({
-      content: loadXiuxianPack(),
-      save: {
-        version: 1,
-        time: 0,
-        state: {
-          gold: 0,
-          hp: 50,
-          items: {},
-          skills: {},
-          activity: null,
-          journal: {
-            seq: 1,
-            records: [
-              {
-                seq: 1,
-                t0: 0,
-                t1: 0,
-                kind: 'point',
-                source: 'sell',
-                lines: [{ source: 'sell', kind: 'item', id: 'ghost_item', count: -1, gold: -9 }],
-              },
-            ],
-          },
+    const { root: root2, ui: ui2 } = mountGame({
+      save: makeSave({
+        gold: 0,
+        hp: 50,
+        items: {},
+        skills: {},
+        activity: null,
+        journal: {
+          seq: 1,
+          records: [
+            {
+              seq: 1,
+              t0: 0,
+              t1: 0,
+              kind: 'point',
+              source: 'sell',
+              lines: [{ source: 'sell', kind: 'item', id: 'ghost_item', count: -1, gold: -9 }],
+            },
+          ],
         },
-      },
+      }),
     });
-    const root2 = document.createElement('div');
-    document.body.appendChild(root2);
-    const ui2 = buildUi(root2, loadXiuxianPack(), () => reloaded.snapshot(), reloaded.events);
-    ui2.bindActions((action: GameAction) => reloaded.dispatch(action));
     root2.querySelector<HTMLButtonElement>('.tab[data-tab="journal"]')!.click();
     ui2.render();
     const row2 = root2.querySelector('#jr-list .jr-row');
@@ -235,44 +207,35 @@ describe('#33 · 修行录页', () => {
 
 describe('#35 · 自动折叠记账渲染（行级 auto 点亮）', () => {
   it('折叠对渲染：被折标记行走折叠补注（已自动售卖 被折物），折得物走常觧行（灵石 +N）', () => {
-    const reloaded = createGame({
-      content: loadXiuxianPack(),
-      save: {
-        version: 1,
-        time: 0,
-        state: {
-          gold: 0,
-          hp: 50,
-          items: {},
-          skills: {},
-          activity: null,
-          journal: {
-            seq: 1,
-            records: [
-              {
-                seq: 1,
-                t0: 0,
-                t1: 0,
-                kind: 'craft',
-                skillId: 'alchemy',
-                activityName: '炼制回气丹',
-                cycles: 1,
-                fails: 0,
-                exp: 8,
-                lines: [
-                  { source: 'craft', kind: 'item', id: 'consumable_heal', count: 0, gold: 0, auto: 'sell' },
-                  { source: 'craft', kind: 'currency', id: 'gold', count: 45, gold: 45, auto: 'sell' },
-                ],
-              },
-            ],
-          },
+    const { root: root2, ui: ui2 } = mountGame({
+      save: makeSave({
+        gold: 0,
+        hp: 50,
+        items: {},
+        skills: {},
+        activity: null,
+        journal: {
+          seq: 1,
+          records: [
+            {
+              seq: 1,
+              t0: 0,
+              t1: 0,
+              kind: 'craft',
+              skillId: 'alchemy',
+              activityName: '炼制回气丹',
+              cycles: 1,
+              fails: 0,
+              exp: 8,
+              lines: [
+                { source: 'craft', kind: 'item', id: 'consumable_heal', count: 0, gold: 0, auto: 'sell' },
+                { source: 'craft', kind: 'currency', id: 'gold', count: 45, gold: 45, auto: 'sell' },
+              ],
+            },
+          ],
         },
-      },
+      }),
     });
-    const root2 = document.createElement('div');
-    document.body.appendChild(root2);
-    const ui2 = buildUi(root2, loadXiuxianPack(), () => reloaded.snapshot(), reloaded.events);
-    ui2.bindActions((action: GameAction) => reloaded.dispatch(action));
     root2.querySelector<HTMLButtonElement>('.tab[data-tab="journal"]')!.click();
     ui2.render();
     const row = root2.querySelector('#jr-list .jr-row');

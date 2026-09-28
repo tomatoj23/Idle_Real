@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { loadFantasyPack } from '@wendao/content/packs/fantasy';
 import { createGame, ManualClock, type GameAction } from '@wendao/engine';
-import { buildUi } from '../src/ui';
+import { mountGame } from './helpers/mount';
 
 /** 驱动 tick 直至条件满足（maxSteps 兜底断言防挂死）。 */
 function runUntil(
@@ -144,14 +144,8 @@ describe('fantasy tracer · 装备掷点与佩戴', () => {
 
 describe('fantasy tracer · 最小壳渲染（生产 buildUi 直接装配第二题材）', () => {
   it('英语品牌/页签/属性行渲染，无 shell 键名回显，战斗文案入壳', () => {
-    const clock = new ManualClock();
     const content = loadFantasyPack();
-    const game = createGame({ content, clock, seed: 5 });
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-    const ui = buildUi(root, content, () => game.snapshot(), game.events);
-    ui.bindActions((action: GameAction) => game.dispatch(action));
-    ui.render();
+    const { root, ui, game, clock } = mountGame({ content, seed: 5 });
 
     // 品牌/侧栏/页签全部英语（texts.shell 驱动）。
     expect(root.textContent).toContain('Grim Vale');

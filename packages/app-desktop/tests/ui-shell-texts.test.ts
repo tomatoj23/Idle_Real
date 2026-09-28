@@ -10,14 +10,10 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { ContentPack } from '@wendao/content';
-import {
-  createGame,
-  ManualClock,
-  projectGearBase,
-  type GameAction,
-  type SaveData,
-} from '@wendao/engine';
-import { buildUi } from '../src/ui';
+import { projectGearBase, type SaveData } from '@wendao/engine';
+import { makePack as basePack, makeShellTexts } from './helpers/pack';
+import { makeSave as baseSave } from './helpers/save';
+import { mountGame } from './helpers/mount';
 
 interface Overrides {
   /** 稀有度倍率（铁律检验：改 JSON → 展示投影跟随）。 */
@@ -38,26 +34,17 @@ interface Overrides {
 function makePack(overrides: Overrides = {}): ContentPack {
   const critLabel: { label: string; percent?: boolean } = { label: '暴' };
   if (overrides.critPercent !== undefined) critLabel.percent = overrides.critPercent;
-  return {
+  return basePack({
     skills: [{ id: 'fight', name: '斗法', icon: '斗', kind: 'combat' }],
     items: [
       { id: 'sword', name: '试炼剑', icon: '剑', type: 'equip', slot: 'weapon', sell: 10, bonuses: { atk: 5 } },
       { id: 'heal', name: '回气丹', icon: '回', type: 'consumable', sell: 18, heal: { percent: 0.3 } },
     ],
-    recipes: [],
-    enemies: [],
-    gearDrops: [],
     rarities: [{ id: 'plain', name: '朴素', weight: 1, mult: overrides.mult ?? 1, affix: 0, sell: 1 }],
-    affixPool: [],
-    combatText: {},
     texts: {
-      shell: {
-        brand: { sigil: '道', name: '试炼', locale: 'zh-CN', bootError: '中止：{message}' },
-        topbar: { statsTitle: '属', statsSigil: '斗', goldTitle: '灵石', goldSigil: '石', hpTitle: '气血', hpSigil: '血' },
+      shell: makeShellTexts({
         tabs: { skills: '修', combat: '斗', bag: '袋', shop: '市' },
         stats: { labels: { atk: { label: overrides.atkLabel ?? '攻' }, crit: critLabel } },
-        units: { level: '{v} 层', seconds: '{v} 秒', minute: '{m} 分', hourMinute: '{h} 时 {m} 分' },
-        icons: { buff: '丹', gear: '器', unknown: '？' },
         common: { needLevel: '需 {level} 层', compareWrap: '（{compare}）', itemListSep: '、' },
         events: {
           sellLog: overrides.sellLog ?? '卖出 {name}，得 {gained} 灵石',
@@ -75,49 +62,39 @@ function makePack(overrides: Overrides = {}): ContentPack {
             wearBtn: '佩戴', takeOffBtn: '卸下', sellBtn: '卖出',
           },
         },
-      },
+      }),
     },
     shop: [{ item: 'heal', price: overrides.price ?? 45 }],
-  } as unknown as ContentPack;
+  });
 }
 
 /** 带装备（crit 词条）与灵石的存档：装备卡 + 顶栏 stats + shop afford 三面共用。 */
 function makeSave(gold: number, critAffix = false): SaveData {
-  return {
-    version: 1,
-    time: 0,
-    state: {
-      gold,
-      hp: 100,
-      items: { heal: 1 },
-      skills: { fight: { xp: 0 } },
-      activity: null,
-      gear: [
-        {
-          uid: 1,
-          itemId: 'sword',
-          rarity: 'plain',
-          ...(critAffix ? { affixes: [{ name: '通明', stat: 'crit', val: 4 }] } : { affixes: [] }),
-        },
-      ],
-      equips: {},
-      buffs: {},
-      combat: null,
-      autoFight: false,
-      autoEat: false,
-      lastEncounter: {},
-    },
-  };
+  return baseSave({
+    gold,
+    hp: 100,
+    items: { heal: 1 },
+    skills: { fight: { xp: 0 } },
+    activity: null,
+    gear: [
+      {
+        uid: 1,
+        itemId: 'sword',
+        rarity: 'plain',
+        ...(critAffix ? { affixes: [{ name: '通明', stat: 'crit', val: 4 }] } : { affixes: [] }),
+      },
+    ],
+    equips: {},
+    buffs: {},
+    combat: null,
+    autoFight: false,
+    autoEat: false,
+    lastEncounter: {},
+  });
 }
 
 function mount(content: ContentPack, save?: SaveData): HTMLElement {
-  const game = createGame({ content, clock: new ManualClock(), ...(save ? { save } : {}) });
-  const root = document.createElement('div');
-  document.body.appendChild(root);
-  const ui = buildUi(root, content, () => game.snapshot(), game.events);
-  ui.bindActions((action: GameAction) => game.dispatch(action));
-  ui.render();
-  return root;
+  return mountGame({ content, save }).root;
 }
 
 describe('#26 · stat 标签与量纲由内容声明（壳零特判）', () => {
@@ -175,22 +152,14 @@ describe('#26 · 购买力走引擎 shopAffordOf（与判定同源）', () => {
 describe('#26 · 事件文案随 texts.shell 模板走', () => {
   it('改 sellLog 模板 → 卖出飘字行跟随（改文案 = 纯 JSON 改动）', () => {
     const content = makePack({ sellLog: '售出 {name} 得 {gained} 文' });
-    const game = createGame({ content, clock: new ManualClock(), save: makeSave(0) });
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-    const ui = buildUi(root, content, () => game.snapshot(), game.events);
-    ui.bindActions((action: GameAction) => game.dispatch(action));
+    const { root, game } = mountGame({ content, save: makeSave(0) });
     game.dispatch({ type: 'bag:sell', payload: { item: 'heal', count: 1 } });
     expect(root.querySelector('#float-stack')?.textContent).toContain('售出 回气丹 得 18 文');
   });
 
   it('offline-settled → toast/飘字按模板填充（时长单位模板 + 物品列表分隔符 + 修为后缀）', () => {
     const content = makePack({ offlineLog: '离线 {away}：{items}{exp}' });
-    const game = createGame({ content, clock: new ManualClock(), save: makeSave(0) });
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-    const ui = buildUi(root, content, () => game.snapshot(), game.events);
-    ui.bindActions((action: GameAction) => game.dispatch(action));
+    const { root, game } = mountGame({ content, save: makeSave(0) });
     game.events.emit({
       type: 'offline-settled',
       time: 0,
@@ -214,11 +183,7 @@ describe('#26 · 事件文案随 texts.shell 模板走', () => {
 
   it('offline-settled 无产出 → items 槽填 offlineNoYield；无 exp → 后缀整段跳过', () => {
     const content = makePack();
-    const game = createGame({ content, clock: new ManualClock(), save: makeSave(0) });
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-    const ui = buildUi(root, content, () => game.snapshot(), game.events);
-    ui.bindActions((action: GameAction) => game.dispatch(action));
+    const { root, game } = mountGame({ content, save: makeSave(0) });
     game.events.emit({
       type: 'offline-settled',
       time: 0,
