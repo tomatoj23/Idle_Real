@@ -29,6 +29,16 @@ describe('#43 · texts 双钉样本（types↔schema 同形）', () => {
       JSON.stringify(result.ok ? [] : result.errors.map((e: ContentError) => `${e.path} [${e.keyword}]`)),
     ).toBe(true);
   });
+
+  it('#38 退役承诺：旧包 texts 带 chipLocked 键 → additionalProperties:false 拦截（content.md 注记同律）', () => {
+    const legacy = structuredClone(textsSample) as typeof textsSample & {
+      shell: { pages: { skills: Record<string, string> } };
+    };
+    legacy.shell.pages.skills['chipLocked'] = '未开放';
+    const result = validateContent(legacy, sectionSchemas.texts);
+    expect(result.ok).toBe(false);
+    expect(JSON.stringify(result.ok ? [] : result.errors)).toContain('chipLocked');
+  });
 });
 
 describe('#43 · 夹具与样本的自持隔离（复审收口）', () => {

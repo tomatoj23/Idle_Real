@@ -24,9 +24,12 @@ vi.mock('../../../packages/engine/src/dungeon.js', async (importOriginal) => {
   };
 });
 
-import type { ContentPack } from '@wendao/content';
+import type { ContentPack, ShellTexts } from '@wendao/content';
 import { createGame, ManualClock, type GameAction, type SaveData } from '@wendao/engine';
 import { buildUi } from '../src/ui';
+
+/** pages.skills 文案键集形状钉（#38 复核补盲）：mock 经 `as unknown as ContentPack` 绕过形状检查，键集漂移靠此 tsc 红。 */
+const skillsTexts = (v: ShellTexts['pages']['skills']): ShellTexts['pages']['skills'] => v;
 
 function makePack(): ContentPack {
   return {
@@ -99,11 +102,11 @@ function makePack(): ContentPack {
         common: { needLevel: '需 {level} 层', needDaoYun: '需 {daoYun} 道韵', compareWrap: '（{compare}）', itemListSep: '、' },
         events: {},
         pages: {
-          skills: {
+          skills: skillsTexts({
             empty: '空', expSub: '{into}/{need}', expMax: '满', actNow: '{name}',
             idle: '闲', stopBtn: '停', running: '中', byproduct: '{name}', actMeta: '{interval}',
             startBtn: '始', realmLine: '{realm}',
-          },
+          }),
           combat: {
             title: '斗法', subtitle: '{level}', enemyMissing: '无', resting: '休整',
             enemyHp: '敌 {ehp}/{hp}', selfStats: '{hp}/{max}', fleeBtn: '撤',

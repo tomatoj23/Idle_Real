@@ -30,7 +30,8 @@ export function createSkillsPage(env: PageEnv): PageView {
 
   const render = (ctx: PageCtx): string => {
     const { st, snap, content, T } = ctx;
-    const skill = content.skills.find((s) => s.id === selectedSkillId) ?? env.gatherSkills[0];
+    // 选中回查与 chips 同源（#38 复核收口）：gatherSkills 是本页唯一技能面。
+    const skill = env.gatherSkills.find((s) => s.id === selectedSkillId) ?? env.gatherSkills[0];
     if (!skill) return `<section class="page"><p class="empty">${esc(T('pages.skills.empty'))}</p></section>`;
 
     const read = xpReadOf(st.skills[skill.id]?.xp ?? 0, env.prog);
@@ -147,7 +148,9 @@ export function createSkillsPage(env: PageEnv): PageView {
     handleAction(action, target) {
       switch (action) {
         case 'skill': {
-          selectedSkillId = target.dataset.skill ?? selectedSkillId;
+          // 白名单收窄（#38 复核收口）：只接受 gather 技能 id，未知串静默忽略。
+          const next = env.gatherSkills.find((s) => s.id === target.dataset.skill);
+          if (next) selectedSkillId = next.id;
           env.render();
           return;
         }

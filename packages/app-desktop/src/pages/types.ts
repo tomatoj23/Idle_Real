@@ -70,7 +70,9 @@ export interface PageEnv {
   readonly inscModText: (mod: Modifier) => string;
   /** 稀有度着色类（r-<档 id>，缺档 r-none）。 */
   readonly rarityClass: (rarity: string) => string;
+  /** 修炼页技能 chips 来源（#38：gather 专有——craft 归炼制页、combat 无开工入口）。 */
   readonly gatherSkills: readonly Skill[];
+  /** 炼制页技能 chips 来源。 */
   readonly craftSkills: readonly Skill[];
   /** 斗法修为技能 id（包无 combat 技能 = 空串）。 */
   readonly combatSkillId: string;

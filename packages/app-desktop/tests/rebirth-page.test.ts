@@ -32,12 +32,11 @@ function makeSave(): SaveData {
   };
 }
 
-function mount(save: SaveData = makeSave()): {
+function mount(save: SaveData = makeSave(), content = loadXiuxianPack()): {
   root: HTMLElement;
   ui: ReturnType<typeof buildUi>;
   game: ReturnType<typeof createGame>;
 } {
-  const content = loadXiuxianPack();
   const game = createGame({ content, clock: new ManualClock(), save });
   const root = document.createElement('div');
   document.body.appendChild(root);
@@ -125,6 +124,13 @@ describe('#6 · 主页境界区与解锁门控', () => {
   it('境界行：词表查表（clv1 → 练气期）+ 兵解次数（引擎 realmOf 同源）', () => {
     const { root } = mount();
     expect(root.querySelector('.status-realm')?.textContent).toBe('境界 · 练气期 · 兵解 0 世');
+  });
+
+  it('境界行零降级（#38 复核钉）：包无境界词表（rebirth.realms 缺省）整行不渲染', () => {
+    const content = loadXiuxianPack();
+    if (content.rebirth) Reflect.deleteProperty(content.rebirth, 'realms');
+    const { root } = mount(makeSave(), content);
+    expect(root.querySelector('.status-realm')).toBeNull();
   });
 
   it('e8 卡道韵门槛锁定态（解锁表 requires.daoYun=10）', () => {

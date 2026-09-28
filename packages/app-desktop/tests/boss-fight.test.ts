@@ -9,9 +9,12 @@
  * 夹具包按 #26 先例内联（壳文案只配被测键，缺键回显键名与生产同码）。
  */
 import { describe, expect, it } from 'vitest';
-import type { ContentPack } from '@wendao/content';
+import type { ContentPack, ShellTexts } from '@wendao/content';
 import { createGame, ManualClock, type GameAction, type GameEvent, type SaveData } from '@wendao/engine';
 import { buildUi } from '../src/ui';
+
+/** pages.skills 文案键集形状钉（#38 复核补盲）：mock 经 `as unknown as ContentPack` 绕过形状检查，键集漂移靠此 tsc 红。 */
+const skillsTexts = (v: ShellTexts['pages']['skills']): ShellTexts['pages']['skills'] => v;
 
 /** 最小 Boss 包：e1 两阶段（0.6 血目暴睁 atk×2 / 0.3 狂暴 变招+叙事）。 */
 function makePack(): ContentPack {
@@ -94,11 +97,11 @@ function makePack(): ContentPack {
           defeatToast: '落败',
         },
         pages: {
-          skills: {
+          skills: skillsTexts({
             empty: '空', expSub: '{into}/{need}', expMax: '满', actNow: '{name}',
             idle: '闲', stopBtn: '停', running: '中', byproduct: '{name}', actMeta: '{interval}',
             startBtn: '始', realmLine: '{realm}',
-          },
+          }),
           combat: {
             title: '斗法', subtitle: '{level}', enemyMissing: '无', resting: '休整',
             enemyHp: '敌 {ehp}/{hp}', selfStats: '{hp}/{max}', fleeBtn: '撤',

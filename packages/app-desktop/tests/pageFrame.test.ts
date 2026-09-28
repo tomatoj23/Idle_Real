@@ -101,11 +101,22 @@ describe('#46 · xp 头（件3）', () => {
     );
   });
 
-  it('skillChipHtml：选中态与关闭态两形（#38 起无锁定态）', () => {
+  it('skillChipHtml：选中/关闭两形逐字形态（#38 复核钉：锁定标记物重加即红）', () => {
     const base = { T, id: 'herb', icon: '草', name: '采药', level: 3 };
-    expect(skillChipHtml({ ...base, selected: false, action: 'craftskill' })).toContain('class="chip"');
-    expect(skillChipHtml({ ...base, selected: true, action: 'skill' })).toContain('class="chip selected"');
-    expect(skillChipHtml({ ...base, selected: false, action: 'skill' })).toContain('chip-lv');
+    expect(skillChipHtml({ ...base, selected: false, action: 'craftskill' })).toBe(
+      `<button class="chip"
+          data-act="craftskill" data-skill="herb">
+          <span class="sigil sigil-sm">草</span><span>采药</span>
+          <b class="chip-lv">units.level?v=3</b>
+        </button>`,
+    );
+    expect(skillChipHtml({ ...base, selected: true, action: 'skill' })).toBe(
+      `<button class="chip selected"
+          data-act="skill" data-skill="herb">
+          <span class="sigil sigil-sm">草</span><span>采药</span>
+          <b class="chip-lv">units.level?v=3</b>
+        </button>`,
+    );
   });
 });
 

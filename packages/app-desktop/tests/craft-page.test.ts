@@ -49,6 +49,7 @@ describe('#5 · 炼制页（craft 页）渲染', () => {
     const { root } = mount();
     expect(root.querySelectorAll('#tabs .tab')).toHaveLength(10);
     expect(root.querySelector('.tab[data-tab="craft"]')?.textContent).toBe('炼制');
+    expect(root.querySelector('.tab[data-tab="combat"]')?.textContent).toBe('斗法');
     expect(root.querySelector('.tab[data-tab="rebirth"]')?.textContent).toBe('转生');
     expect(root.querySelector('.tab[data-tab="talents"]')?.textContent).toBe('道韵');
     expect(root.querySelector('.tab[data-tab="achievements"]')?.textContent).toBe('成就');
@@ -62,6 +63,8 @@ describe('#5 · 炼制页（craft 页）渲染', () => {
 
     // 炼丹 chip 默认选中，配方卡齐备
     expect(root.querySelector('.chip[data-skill="alchemy"]')?.classList.contains('selected')).toBe(true);
+    // craftskill chips 恒平态（#38 复核钉：craft 侧重加锁定态即红）。
+    expect(root.querySelectorAll('.chip.locked').length).toBe(0);
     const cards = root.querySelectorAll('.act-card');
     expect(cards.length).toBe(5);
 
@@ -90,8 +93,13 @@ describe('#5 · 炼制页（craft 页）渲染', () => {
     expect(root.querySelector('.chip[data-skill="alchemy"]')).toBeNull();
     expect(root.querySelector('.chip[data-skill="smith"]')).toBeNull();
     expect(root.querySelector('.chip[data-skill="combat"]')).toBeNull();
-    expect(root.querySelector('.chip[data-skill="herb"]')).not.toBeNull();
+    // gather 三技全量入列且保包序（部分渲染即红），各带等级徽标（chip-lv 输出线钉）。
+    const chips = [...root.querySelectorAll('.chips .chip')];
+    expect(chips.map((c) => c.getAttribute('data-skill'))).toEqual(['qi', 'herb', 'mine']);
+    for (const chip of chips) expect(chip.querySelector('.chip-lv')).not.toBeNull();
     expect(root.querySelectorAll('.chip.locked').length).toBe(0);
+    // 境界行与 chips 同帧并存（#38 AC3：chips 收敛不动境界行）。
+    expect(root.querySelector('.status-realm')?.textContent).toBe('境界 · 练气期 · 兵解 0 世');
   });
 });
 
