@@ -227,6 +227,61 @@ describe('#33 · 行为段落账（条目=行为段，不记逐件流水）', ()
     ]);
   });
 
+  it('访问段内批量处置（#37）：装备行按品级分项列明 + 灵石/器屑行，整堆卖/熔同段并条', () => {
+    const base = makeCombatPack();
+    const pack = {
+      ...base,
+      items: [...base.items, { id: 'gear_shard', name: '器屑', icon: '屑', type: 'mat', sell: 8 }],
+      config: {
+        slots: [{ id: 'weapon', name: '法器' }],
+        gear: { shardItem: 'gear_shard', reforgeCost: 3, tagWeightPerMatch: 1 },
+      },
+    } as unknown as GameContent;
+    const clock = new ManualClock();
+    const game = createGame({
+      content: pack,
+      clock,
+      save: {
+        version: 1,
+        time: 0,
+        state: {
+          gold: 0,
+          hp: 100,
+          items: {},
+          skills: {},
+          activity: null,
+          gear: [
+            { uid: 1, itemId: 'sword1', rarity: 'common', affixes: [] },
+            { uid: 2, itemId: 'sword1', rarity: 'common', affixes: [] },
+            { uid: 3, itemId: 'sword1', rarity: 'fine', affixes: [] },
+          ],
+          equips: {},
+          buffs: {},
+          combat: null,
+          autoFight: false,
+          autoEat: false,
+          lastEncounter: {},
+        },
+      },
+    });
+    game.dispatch({ type: 'visit:begin', payload: { page: 'bag' } });
+    game.dispatch({ type: 'gear:sell-all', payload: { maxRarity: 'common' } }); // 阈值批
+    game.dispatch({ type: 'gear:smelt-all', payload: { uids: [3] } }); // 整堆熔
+    game.dispatch({ type: 'visit:end', payload: { page: 'bag' } });
+
+    const records = recordsOf(game);
+    expect(records).toHaveLength(1); // 全部并入访问段一条（申报口径）
+    const rec = records[0]!;
+    if (rec.kind !== 'visit') return;
+    // 分项列明：同档并行、异档分行；两次批量同段并条（非两条点条目）。
+    expect(rec.lines).toEqual([
+      { source: 'sell', kind: 'gear', id: 'sword1', count: -2, gold: -60, rarity: 'common' },
+      { source: 'sell', kind: 'currency', id: 'gold', count: 60, gold: 60 },
+      { source: 'smelt', kind: 'gear', id: 'sword1', count: -1, gold: -60, rarity: 'fine' },
+      { source: 'smelt', kind: 'item', id: 'gear_shard', count: 1, gold: 8 },
+    ]);
+  });
+
   it('点条目：无访问段的手动动作成条；同拍同源微批聚合（物品行+灵石行并作一条）', () => {
     const clock = new ManualClock();
     const game = createGame({

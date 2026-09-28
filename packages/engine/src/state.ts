@@ -441,10 +441,16 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
       const rarityTable = raritiesOf(env.content);
       const fallbackRarity: Rarity = rarityTable[0]?.id ?? '';
       if (Array.isArray(raw.gear)) {
+        // uid 去重（#37 复核收口）：重复 uid 的坏档若照单全收，卖出/熔炼按 uid
+        // filter 会一删双件只赔一件（静默吞件）——后见者弃置，实例身份唯一性
+        // 是 uid 模型的根，宁弃不收。
+        const seenUid = new Set<number>();
         for (const entry of raw.gear) {
           if (!isObj(entry)) continue;
           const { uid, itemId } = entry;
           if (typeof uid !== 'number' || !Number.isInteger(uid) || uid <= 0) continue;
+          if (seenUid.has(uid)) continue;
+          seenUid.add(uid);
           if (typeof itemId !== 'string') continue;
           const item = findItem(env.content, itemId);
           if (!item || (item.type !== 'equip' && item.type !== 'blank')) continue;

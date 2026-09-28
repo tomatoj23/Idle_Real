@@ -50,6 +50,7 @@ import {
   planGearBatch,
   rollRarity,
   tierBoundsOf,
+  type GearBatchPlan,
   type GearBatchSelect,
   type GearInstance,
 } from './gear.js';
@@ -797,6 +798,45 @@ export function createGame(options: CreateGameOptions): Game {
     }
     if (typeof maxRarity !== 'string' || rarityRankOf(content, maxRarity) === undefined) return null;
     return { maxRarity };
+  }
+
+  /**
+   * 锁定防护（#37 D2）：锁定件的破坏性单件操作（卖出/熔炼/重铸）一律拒绝
+   * ——先解锁再操作，防手滑。重铸同罩是复核收口的**口径修正**（原申报只列
+   * 卖出/熔炼）：重铸耗器屑且纹阶重随可降阶，是比误卖更不可逆的改写面，
+   * 「防手滑」理应同罩。返回 true = 已拒绝。
+   */
+  function rejectLocked(
+    actionType: 'gear:sell' | 'gear:smelt' | 'gear:reforge',
+    gear: GearInstance,
+  ): boolean {
+    if (gear.locked !== true) return false;
+    reject(actionType, 'locked');
+    return true;
+  }
+
+  /**
+   * 批量处置共用前置（#37 复核收口 DRY）：载荷解析（uid 白名单/阈值二选一
+   * 收窄）→ 处置计划（佩戴豁免/锁定跳过/选择命中，planGearBatch 单一来源）
+   * → 零产出拒绝。返回 null = 已拒绝。**零产出 = no-item 契约**：全锁定/
+   * 全豁免/白名单落空都是「本动作没有做成任何事」，拒绝是诚实通道（跳过件
+   * 无资产流动不留痕，申报口径）；UI 侧零可处置即按钮禁用，本路径是防线。
+   */
+  function planBatchOrReject(
+    actionType: 'gear:sell-all' | 'gear:smelt-all',
+    payload: GearBatchPayload | undefined,
+  ): GearBatchPlan | null {
+    const select = readGearBatchPayload(payload);
+    if (!select) {
+      reject(actionType, 'bad-payload');
+      return null;
+    }
+    const plan = planGearBatch(content, state.gear, Object.values(state.equips), select);
+    if (plan.targets.length === 0) {
+      reject(actionType, 'no-item');
+      return null;
+    }
+    return plan;
   }
 
   /**
@@ -1913,10 +1953,7 @@ export function createGame(options: CreateGameOptions): Game {
             return;
           }
           // 锁定防护（#37 D2）：单件卖出先解锁再操作（防手滑）。
-          if (gear.locked === true) {
-            reject(action.type, 'locked');
-            return;
-          }
+          if (rejectLocked(action.type, gear)) return;
           const item = findItem(content, gear.itemId);
           const gained = gearSell(content, item?.sell ?? 0, gear.rarity);
           ledgerGearRemoval(gear, 'sell', META_USER);
@@ -1954,10 +1991,7 @@ export function createGame(options: CreateGameOptions): Game {
             return;
           }
           // 锁定防护（#37 D2）：单件熔炼先解锁再操作（与卖出同律）。
-          if (gear.locked === true) {
-            reject(action.type, 'locked');
-            return;
-          }
+          if (rejectLocked(action.type, gear)) return;
           // 熔炼产出公式单一来源（smeltYieldOf，与折叠路径同式）：无器屑经济
           // = not-available 零降级路径。
           const smelt = smeltYieldOf(gear.rarity);
@@ -2009,16 +2043,8 @@ export function createGame(options: CreateGameOptions): Game {
           // 或稀有度阈值（一键清存量）二选一；佩戴豁免、锁定跳过（D2）；账目
           // 逐笔过咽喉、汇总事件只承载展示面（修行录并条归段聚合器，同拍同源
           // 并一条）。
-          const select = readGearBatchPayload(action.payload);
-          if (!select) {
-            reject(action.type, 'bad-payload');
-            return;
-          }
-          const plan = planGearBatch(content, state.gear, Object.values(state.equips), select);
-          if (plan.targets.length === 0) {
-            reject(action.type, 'no-item');
-            return;
-          }
+          const plan = planBatchOrReject(action.type, action.payload);
+          if (!plan) return;
           let gained = 0;
           for (const gear of plan.targets) {
             const item = findItem(content, gear.itemId);
@@ -2041,21 +2067,14 @@ export function createGame(options: CreateGameOptions): Game {
 
         case 'gear:smelt-all': {
           // 批量熔器（#37，与 gear:sell-all 同律）：器屑产出按稀有度档位合计
-          //（smeltYieldOf 单一来源）；无器屑经济 = not-available（与 gear:smelt
-          // 同律，先行于空集判定）。
-          const select = readGearBatchPayload(action.payload);
-          if (!select) {
-            reject(action.type, 'bad-payload');
-            return;
-          }
+          //（smeltYieldOf 单一来源）。判序对齐单件 gear:smelt（复核收口）：
+          // 坏载荷 → 无可处置（no-item）→ 无器屑经济（not-available）——
+          // 「查无此器」类先于「此界无此法」，单件的先查件后查经济同律。
+          const plan = planBatchOrReject(action.type, action.payload);
+          if (!plan) return;
           const shardItem = gparams.shardItem;
           if (!shardItem || !findItem(content, shardItem)) {
             reject(action.type, 'not-available');
-            return;
-          }
-          const plan = planGearBatch(content, state.gear, Object.values(state.equips), select);
-          if (plan.targets.length === 0) {
-            reject(action.type, 'no-item');
             return;
           }
           let shards = 0;
@@ -2100,6 +2119,9 @@ export function createGame(options: CreateGameOptions): Game {
             reject(action.type, 'worn');
             return;
           }
+          // 锁定防护（#37 复核收口口径修正）：重铸同罩——耗器屑且纹阶重随可
+          // 降阶，比误卖更不可逆，「防手滑」理应同罩（原申报只列卖出/熔炼）。
+          if (rejectLocked(action.type, gear)) return;
           const inscription = gear.inscriptions?.[index];
           const blank = inscription ? findBlank(content, gear.itemId) : undefined;
           const inscriptionDef = inscription ? findInscription(content, inscription.id) : undefined;

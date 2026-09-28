@@ -141,6 +141,10 @@ describe('#37 · 视图堆叠（同质合并 ×N，差异分开）', () => {
     expect(game.snapshot().state.gold).toBe(90); // 3×30（common sell 倍率 1）
     expect((game.snapshot().state as unknown as { gear: unknown[] }).gear).toHaveLength(0);
     expect(root.querySelectorAll('.gear-card')).toHaveLength(0);
+    // 汇总飘字一条；skipped=0 不拼噪音后缀（跳过后缀条件钉）。
+    const floats = root.querySelector('#float-stack')?.textContent ?? '';
+    expect(floats).toContain('售出 3 件，得 90 文');
+    expect(floats).not.toContain('避锁');
 
     const again = mount(makeSave([{ uid: 1 }, { uid: 2 }]));
     toBag(again.root);
@@ -219,5 +223,48 @@ describe('#37 · 装备锁定（整堆翻转 + 防手滑禁用）', () => {
     expect(sell?.disabled).toBe(false);
     expect(root.querySelector('[data-act=lock]')).not.toBeNull();
     expect((game.snapshot().state as unknown as { gear: Array<{ locked?: boolean }> }).gear.every((g) => g.locked !== true)).toBe(true);
+  });
+});
+
+describe('#37 · 复核收口补盲（UI 链路）', () => {
+  it('一键熔炼链路：阈值派发 gear:smelt-all(maxRarity)，smeltAllLog 飘字 + 跳过后缀', () => {
+    const { root, game } = mount(makeSave([{ uid: 1 }, { uid: 2 }, { uid: 3, locked: true }]));
+    toBag(root);
+    const select = root.querySelector<HTMLSelectElement>('.bag-clear select')!;
+    select.value = 'fine';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    (root.querySelector('[data-act=clear-smelt]') as HTMLElement).click();
+    // 2 件 common 各熔 1 屑 = 2；锁定件跳过。
+    expect(
+      (game.snapshot().state as unknown as { items: Record<string, number> }).items['gear_shard'],
+    ).toBe(2);
+    const floats = root.querySelector('#float-stack')?.textContent ?? '';
+    expect(floats).toContain('熔得 器屑×2（2 件）');
+    expect(floats).toContain('（避锁 1）');
+  });
+
+  it('锁定态进渲染签名（强刷兜底）：绕开页面按钮直接派发 gear:lock，ui.render() 即刷新', () => {
+    const { root, game, ui } = mount(makeSave([{ uid: 1 }, { uid: 2 }]));
+    toBag(root);
+    // 无 env.render 路径的派发（引擎事件也不发）——只靠签名兜底触发重绘。
+    game.dispatch({ type: 'gear:lock', payload: { uid: 1 } });
+    ui.render();
+    // uid1 与 uid2 锁态不同 → 分堆；锁定行卖出/熔炼按钮禁用。
+    expect(root.querySelectorAll('.gear-card .btn[disabled]').length).toBeGreaterThan(0);
+  });
+
+  it('阈值选择跨切页保持（页自持状态），回访后 select 回显选中档', () => {
+    const { root } = mount(makeSave([{ uid: 1 }]));
+    toBag(root);
+    const select = root.querySelector<HTMLSelectElement>('.bag-clear select')!;
+    select.value = 'rare'; // happy-dom 的 value setter 可靠（属性解析才有 quirk）
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    root.querySelector<HTMLElement>('[data-act=tab][data-tab=shop]')!.click();
+    toBag(root);
+    // 断言走 option[selected] 属性（渲染意图）：happy-dom 对 selected 属性的
+    // 解析错位（末项选中落到中项、首项 selectedIndex=-1），.value 读数假红；
+    // 生产浏览器属性语义正确，属性选择器两界同真。
+    const rendered = root.querySelector<HTMLSelectElement>('.bag-clear select')!;
+    expect(rendered.querySelector<HTMLOptionElement>('option[selected]')?.value).toBe('rare');
   });
 });

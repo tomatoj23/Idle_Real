@@ -474,6 +474,10 @@ export function buildUi(
    */
   const pendingExp = new Map<string, number>();
 
+  /** 批量汇总行的锁定跳过后缀（#37）：skipped=0 不拼（防「（跳过锁定 0 件）」噪音）。 */
+  const skipSuffixOf = (skipped: number): string =>
+    skipped > 0 ? T('events.batchLockedSkip', { count: skipped }) : '';
+
   /* ---- 事件 handler 表（#34 反馈枢纽，C7：按命名空间路由 sink）----
    * Record 全键穷尽：引擎新增事件类型而壳层漏接 = 编译错（#47 never 穷尽
    * 断言的表化升级，比 switch 尾断言更强——漏接在类型层即红）。路由口径：
@@ -620,18 +624,16 @@ export function buildUi(
     'gear:sell-all': (event) => {
       // 批量卖器汇总（#37）：一条汇总飘字（账目明细归修行录）；锁定跳过拼后缀。
       const data = event.data;
-      const skip = data.skipped > 0 ? T('events.batchLockedSkip', { count: data.skipped }) : '';
-      flowFloat(T('events.sellAllLog', { count: data.count, gained: data.gained }) + skip);
+      flowFloat(T('events.sellAllLog', { count: data.count, gained: data.gained }) + skipSuffixOf(data.skipped));
     },
     'gear:smelt-all': (event) => {
       const data = event.data;
-      const skip = data.skipped > 0 ? T('events.batchLockedSkip', { count: data.skipped }) : '';
       flowFloat(
         T('events.smeltAllLog', {
           count: data.count,
           shard: nameOf(data.item),
           shards: data.shards,
-        }) + skip,
+        }) + skipSuffixOf(data.skipped),
       );
     },
     'craft-fail': (event) => {
@@ -833,9 +835,10 @@ export function buildUi(
       Object.entries(st.equips),
       st.gear.length,
       st.gearSeq,
-      // 装备锁定态（#37）进签名：与 recipeAuto 同律的强刷兜底——gear:lock 不发
-      // 事件，漏加则非派发路径的重绘会静默 stale 锁定按钮态。
-      st.gear.map((g) => [g.uid, g.locked === true]),
+      // 装备锁定态 + 铭纹纹阶（#37）进签名：与 recipeAuto 同律的强刷兜底——
+      // gear:lock 不发事件、gear:reforge 的纹阶变化在 reforgeCost=0 包无 items
+      // 搭车触发，漏加则按钮态/纹阶展示静默 stale。
+      st.gear.map((g) => [g.uid, g.locked === true, (g.inscriptions ?? []).map((i) => i.tier)]),
       Object.keys(st.buffs).sort(),
       st.autoFight,
       st.autoEat,

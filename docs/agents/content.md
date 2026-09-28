@@ -333,8 +333,9 @@ schema 无 rank 字段）；validate 语义关卡保证 `mult` 随序单调不�
   （`count/item/shards/skipped`）只承载展示面——账目逐笔过入账咽喉，修行录
   同拍同源微批并**一条汇总条目**（乾坤袋访问段内分项列明）。
 - **锁定** `gear:lock`/`gear:unlock {uid}`：幂等；不入咽喉、不记修行录、不发
-  事件（combat:auto 同律）。锁定件单件卖出/熔炼 reject `locked`（按钮禁用，
-  先解锁再操作，D2）。锁定锁不住 #35/#36 入账即折（折叠在掉落入袋瞬间）。
+  事件（combat:auto 同律）。锁定件单件卖出/熔炼/重铸 reject `locked`（按钮
+  禁用，先解锁再操作——重铸同罩是 #37 复核收口的口径修正：耗器屑且纹阶重随
+  可降阶，比误卖更不可逆）。锁定锁不住 #35/#36 入账即折（折叠在掉落入袋瞬间）。
 - reject 动作键 `gear:lock`/`gear:unlock`/`gear:sell-all`/`gear:smelt-all` 已入
   texts.schema pattern；壳文案 `events.sellAllLog`（`{count}/{gained}`）/
   `smeltAllLog`（`{count}/{shard}/{shards}`）/ `batchLockedSkip`（`{count}`，

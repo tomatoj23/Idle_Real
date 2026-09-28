@@ -289,7 +289,7 @@ describe('#37 · gear:smelt-all 批量熔器', () => {
     expect(stOf(game).gear.map((g) => g.uid)).toEqual([6]);
   });
 
-  it('无器屑经济 = not-available（先行于空集判定）；空集 = no-item', () => {
+  it('判序对齐单件 gear:smelt：空集→no-item 先于经济门；有件无经济→not-available', () => {
     const bare = createGame({
       content: makeBatchPack(false),
       clock: new ManualClock(),
@@ -307,6 +307,16 @@ describe('#37 · gear:smelt-all 批量熔器', () => {
     game.events.drain();
     game.dispatch({ type: 'gear:smelt-all', payload: { maxRarity: 'epic' } });
     expect(rejectOf(game.events.drain())?.data).toMatchObject({ reason: 'no-item' });
+
+    // 判序钉：空集 + 无经济 = no-item（查件先于查经济，单件同律）。
+    const both = createGame({
+      content: makeBatchPack(false),
+      clock: new ManualClock(),
+      save: saveWithGear([]),
+    });
+    both.events.drain();
+    both.dispatch({ type: 'gear:smelt-all', payload: { maxRarity: 'epic' } });
+    expect(rejectOf(both.events.drain())?.data).toMatchObject({ reason: 'no-item' });
   });
 });
 
@@ -379,5 +389,144 @@ describe('#37 · 装备锁定（gear:lock / gear:unlock）', () => {
     expect(st.gear.map((g) => g.uid)).toEqual([2, 3]); // 实例原样保留
     expect(st.gear[0]!.locked).toBe(true); // 锁随实例留存
     expect(st.gear[1]!.locked).toBeUndefined();
+  });
+});
+
+/* ---------- 复核收口补盲（/fh 2026-09-28 三路对抗审计） ---------- */
+
+describe('#37 · 判序与边界补盲', () => {
+  it('worn+locked 并存：单件拒 worn（佩戴先判），批量豁免不计锁定跳过', () => {
+    const game = createGame({
+      content: makeBatchPack(),
+      clock: new ManualClock(),
+      save: saveWithGear([{ uid: 2, locked: true }], { weapon: 2 }),
+    });
+    game.events.drain();
+    game.dispatch({ type: 'gear:sell', payload: { uid: 2 } });
+    expect(rejectOf(game.events.drain())?.data).toMatchObject({ reason: 'worn' });
+    const plan = planGearBatch(
+      makeBatchPack(),
+      [{ uid: 2, itemId: 'sword1', rarity: 'common', affixes: [], locked: true }],
+      [2],
+      {},
+    );
+    expect(plan.targets).toEqual([]);
+    expect(plan.skippedLocked).toBe(0); // 佩戴豁免优先于锁定计数
+  });
+
+  it('0 器屑档批量熔炼：实例照常移除、0 补偿不发零额行（资产边界钉）', () => {
+    const pack = makeBatchPack();
+    (pack as unknown as { rarities: Array<{ id: string; smelt?: number }> }).rarities.forEach((r) => {
+      if (r.id === 'common') r.smelt = 0;
+    });
+    const game = createGame({
+      content: pack,
+      clock: new ManualClock(),
+      save: saveWithGear([{ uid: 2 }, { uid: 3 }, { uid: 4, rarity: 'fine' }]),
+    });
+    game.events.drain();
+    game.dispatch({ type: 'gear:smelt-all', payload: { maxRarity: 'epic' } });
+    const summary = game.events
+      .drain()
+      .find((e): e is Extract<GameEvent, { type: 'gear:smelt-all' }> => e.type === 'gear:smelt-all');
+    // 两件 common 折 0 + 一件 fine 折 1 = 1；销毁不补偿是内容定价语义（同单件）。
+    expect(summary?.data).toEqual({ count: 3, item: 'gear_shard', shards: 1, skipped: 0 });
+    expect(stOf(game).items['gear_shard']).toBe(1);
+    expect(stOf(game).gear).toEqual([]);
+  });
+
+  it('gear:smelt-all 坏载荷四态同律 bad-payload（与 sell-all 各自派发面）', () => {
+    const game = createGame({
+      content: makeBatchPack(),
+      clock: new ManualClock(),
+      save: saveWithGear([{ uid: 2 }]),
+    });
+    const bads: Array<{ uids?: number[]; maxRarity?: string }> = [
+      { uids: [2], maxRarity: 'common' },
+      {},
+      { maxRarity: 'nope' },
+      { uids: [] },
+    ];
+    for (const payload of bads) {
+      game.events.drain();
+      game.dispatch({ type: 'gear:smelt-all', payload });
+      expect(rejectOf(game.events.drain())?.data, JSON.stringify(payload)).toMatchObject({
+        reason: 'bad-payload',
+      });
+    }
+  });
+
+  it('uids 白名单病态输入：重复 uid 折叠只处置一件；全不存在/全佩戴 → no-item', () => {
+    const game = createGame({
+      content: makeBatchPack(),
+      clock: new ManualClock(),
+      save: saveWithGear([{ uid: 1 }, { uid: 2 }], { weapon: 1 }),
+    });
+    game.events.drain();
+    game.dispatch({ type: 'gear:sell-all', payload: { uids: [2, 2, 2] } }); // 重复折叠
+    const summary = game.events
+      .drain()
+      .find((e): e is Extract<GameEvent, { type: 'gear:sell-all' }> => e.type === 'gear:sell-all');
+    expect(summary?.data).toEqual({ count: 1, gained: 30, gold: 30, skipped: 0 });
+
+    game.events.drain();
+    game.dispatch({ type: 'gear:sell-all', payload: { uids: [99] } }); // 不存在
+    expect(rejectOf(game.events.drain())?.data).toMatchObject({ reason: 'no-item' });
+    game.events.drain();
+    game.dispatch({ type: 'gear:sell-all', payload: { uids: [1] } }); // 佩戴豁免
+    expect(rejectOf(game.events.drain())?.data).toMatchObject({ reason: 'no-item' });
+  });
+
+  it('恢复面坏档：uid 重复后见者弃置（防吞件）；locked 垃圾值弃 = 未锁', () => {
+    const save = saveWithGear([{ uid: 2 }, { uid: 3 }]);
+    (save.state as { gear: unknown[] }).gear = [
+      { uid: 2, itemId: 'sword1', rarity: 'common', affixes: [] },
+      { uid: 2, itemId: 'sword1', rarity: 'fine', affixes: [] }, // 重复 uid
+      { uid: 3, itemId: 'sword1', rarity: 'common', affixes: [], locked: 'true' }, // 垃圾值
+      { uid: 4, itemId: 'sword1', rarity: 'common', affixes: [], locked: 1 }, // 垃圾值
+    ];
+    const game = createGame({ content: makeBatchPack(), clock: new ManualClock(), save });
+    const gear = stOf(game).gear;
+    expect(gear.map((g) => g.uid)).toEqual([2, 3, 4]);
+    expect(gear[0]!.rarity).toBe('common'); // 首见者留存（后见重复件弃置）
+    expect(gear.every((g) => g.locked !== true)).toBe(true);
+  });
+
+  it('堆叠键顺序无关 + 缺省态等价（inscriptions 空/缺省、locked false/缺省同键）', () => {
+    const base = { itemId: 'blank', rarity: 'common', affixes: [] } as const;
+    const a: GearInstance = {
+      uid: 1,
+      ...base,
+      inscriptions: [
+        { id: 'i1', tier: 1 },
+        { id: 'i2', tier: 2 },
+      ],
+    };
+    const b: GearInstance = {
+      uid: 2,
+      ...base,
+      inscriptions: [
+        { id: 'i2', tier: 2 },
+        { id: 'i1', tier: 1 },
+      ],
+    };
+    expect(gearStackKeyOf(a)).toBe(gearStackKeyOf(b)); // 抽取序 ≠ 身份
+    expect(gearStackKeyOf({ uid: 3, ...base, inscriptions: [] })).toBe(
+      gearStackKeyOf({ uid: 4, ...base }),
+    );
+    expect(gearStackKeyOf({ uid: 5, ...base, locked: false })).toBe(
+      gearStackKeyOf({ uid: 6, ...base }),
+    );
+  });
+
+  it('锁定件重铸拒绝 locked（复核收口口径修正：重铸同罩防手滑）', () => {
+    const game = createGame({
+      content: makeBatchPack(),
+      clock: new ManualClock(),
+      save: saveWithGear([{ uid: 2, locked: true }]),
+    });
+    game.events.drain();
+    game.dispatch({ type: 'gear:reforge', payload: { uid: 2, index: 0 } });
+    expect(rejectOf(game.events.drain())?.data).toMatchObject({ reason: 'locked' });
   });
 });

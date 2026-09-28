@@ -432,7 +432,6 @@
         "no-materials": "You lack the materials for {activity}."
       },
       "bag:sell": {
-        "bad-payload": "Cannot sell that.",
         "not-found": "No such item is known.",
         "no-item": "You hold only {owned} × {item}."
       },
@@ -483,6 +482,7 @@
       "gear:reforge": {
         "not-found": "No such piece of gear.",
         "worn": "Unequip it before reforging.",
+        "locked": "It is locked. Unlock it before reforging.",
         "no-inscription": "This piece bears no inscription to reforge.",
         "not-available": "This realm knows no reforging.",
         "no-shard": "Not enough shards: need {cost}, you have {owned}."

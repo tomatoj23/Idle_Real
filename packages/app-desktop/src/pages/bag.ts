@@ -24,12 +24,17 @@ export function createBagPage(env: PageEnv): PageView {
   /** 一键清存量稀有度阈值（页自持 UI 状态；缺省最低档 = 只清寻常，高品绝不误卖）。 */
   let clearCapId = '';
 
-  /** data-uids 逗号表解析（批量动作载荷；坏段静默剔除，引擎守卫把关存在性）。 */
+  /**
+   * data-uids 逗号表解析（批量动作载荷）：仅收纯数字段（Number 会认 '1e3'/
+   * '0x2' 类进制/指数形——dataset 自产可控但不留歧义），坏段静默剔除，
+   * 存在性守卫归引擎。
+   */
   const uidsOf = (target: HTMLElement): number[] =>
     (target.dataset.uids ?? '')
       .split(',')
+      .filter((seg) => /^\d+$/.test(seg))
       .map(Number)
-      .filter((n) => Number.isInteger(n) && n > 0);
+      .filter((n) => n > 0);
 
   const render = (ctx: PageCtx): string => {
     const { st, content, T } = ctx;
@@ -118,6 +123,8 @@ export function createBagPage(env: PageEnv): PageView {
     const item = env.itemById.get(gear.itemId);
     const worn = Object.entries(st.equips).find(([, uid]) => uid === gear.uid);
     const locked = gear.locked === true;
+    const disCls = locked ? ' btn-disabled' : '';
+    const disAttr = locked ? ' disabled' : '';
     const uids = stack.map((entry) => entry.uid).join(',');
     // 倍率投影走引擎 projectGearBase（#26 三处复算债收敛）：round(基础 × 档位倍率)
     // 与实例化/属性聚合同式同源，UI 零 ×mult 公式；标签/量纲查 statLabels。
@@ -143,9 +150,10 @@ export function createBagPage(env: PageEnv): PageView {
               : '';
           return `${esc(env.inscModText(mod))}${cond}`;
         });
+        // 锁定件重铸同禁（#37 复核收口口径修正：重铸是更不可逆的改写面）。
         const reforgeBtn =
           env.canSmelt && !worn
-            ? ` <button class="btn btn-mini" data-act="reforge" data-uid="${gear.uid}" data-index="${index}">${esc(T('pages.bag.reforgeBtn'))}</button>`
+            ? ` <button class="btn btn-mini${disCls}"${disAttr} data-act="reforge" data-uid="${gear.uid}" data-index="${index}">${esc(T('pages.bag.reforgeBtn'))}</button>`
             : '';
         return `<span class="insc insc-t${toneTier}"><b class="insc-tier">${esc(T('pages.bag.inscTier', { tier: inscTier }))}</b>${esc(def.name)}</span> ${parts.join(esc(T('common.itemListSep')))}${reforgeBtn}`;
       })
@@ -161,8 +169,6 @@ export function createBagPage(env: PageEnv): PageView {
     const sellAct = stack.length > 1 ? 'sell-stack' : 'sell-gear';
     const smeltAct = stack.length > 1 ? 'smelt-stack' : 'smelt-gear';
     const selAttrs = stack.length > 1 ? `data-uids="${uids}"` : `data-uid="${gear.uid}"`;
-    const disCls = locked ? ' btn-disabled' : '';
-    const disAttr = locked ? ' disabled' : '';
     const sellBtn = worn
       ? ''
       : `<button class="btn btn-ghost${disCls}"${disAttr} data-act="${sellAct}" ${selAttrs}>${esc(T(stack.length > 1 ? 'pages.bag.sellStackBtn' : 'pages.bag.sellBtn'))}</button>`;

@@ -394,11 +394,19 @@ export function gearSell(content: GameContent, itemSell: number, rarity: Rarity)
  * 等价）。纯展示分组用——实例 uid 模型/数据形状不动（视图分组非数据堆叠）。
  */
 export function gearStackKeyOf(gear: GearInstance): string {
+  // 元组序规范化（#37 复核收口）：词条/铭纹的数组序是抽取序不是身份——
+  // 同质不同序必须同键（铭纹抽取序随机可倒），否则伪分堆（同内容两件拆两行，
+  // 整堆卖/锁被迫分次）。序列化后字典序排序 = 顺序无关的典范形。
+  const tupleKey = (rows: readonly (readonly (string | number)[])[]): string =>
+    rows
+      .map((row) => JSON.stringify(row))
+      .sort()
+      .join('|');
   return JSON.stringify([
     gear.itemId,
     gear.rarity,
-    gear.affixes.map((a) => [a.name, a.stat, a.val]),
-    (gear.inscriptions ?? []).map((i) => [i.id, i.tier]),
+    tupleKey(gear.affixes.map((a) => [a.name, a.stat, a.val])),
+    tupleKey((gear.inscriptions ?? []).map((i) => [i.id, i.tier])),
     gear.locked === true,
   ]);
 }

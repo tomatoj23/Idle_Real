@@ -202,4 +202,15 @@ describe('#14 · 乾坤袋装备卡：铭纹展示与熔炼/重铸入口', () =>
     expect(root.querySelectorAll('[data-act=reforge]')).toHaveLength(0);
     expect(root.querySelectorAll('.insc')).toHaveLength(3); // 铭纹展示不受经济开关影响
   });
+
+  it('锁定件卖出/重铸按钮禁用（#37 D2 复核收口口径修正：重铸同罩防手滑）', () => {
+    const { root, game, ui } = mount(makePack(), makeSave());
+    toBag(root);
+    game.dispatch({ type: 'gear:lock', payload: { uid: 1 } });
+    ui.render(); // 锁定态进签名（强刷兜底）后同码重绘
+    const reforge = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-act=reforge]'));
+    expect(reforge).toHaveLength(3);
+    expect(reforge.every((b) => b.disabled)).toBe(true);
+    expect(root.querySelector<HTMLButtonElement>('[data-act=smelt-gear]')?.disabled).toBe(true);
+  });
 });

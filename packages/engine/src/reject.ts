@@ -4,8 +4,9 @@
  * 这是「引擎 reject(action,reason) 枚举」的单一声明面，双向皆有守卫：
  * - 点 → 行（编译）：emit 点经 reject() 逐动作泛型签名对拍，越动作发码 /
  *   码拼错 = 编译错；
- * - 行 → 点（源码扫描测试）：行内冗余码（emit 点已删/改）= 红——不留
- *   永不触发的死码与陪葬文案。
+ * - 行 → 点（源码扫描测试，**平铺粒度**）：矩阵全码集与源码 emit 字面量
+ *   两向比对——冗余死码/越域散码即红；跨行搬码（码仍在别处发）本腿不红，
+ *   由包键反向对照兜（reject-coverage.test.ts 勘定的粒度边界，勿过读）。
  * 文本包键（texts.reject）与此表由覆盖对照测试双向钉死（app-desktop 侧，
  * 引擎枚举 ↔ 包键——typo 键静默回落键名回显的补丁）。跨包纪律不变：
  * content 不引 engine，包键对照在装配层测试做。
@@ -42,7 +43,7 @@ export const REJECT_MATRIX = {
   'gear:unlock': ['bad-payload', 'not-found'],
   'gear:sell-all': ['bad-payload', 'no-item'],
   'gear:smelt-all': ['bad-payload', 'no-item', 'not-available'],
-  'gear:reforge': ['bad-payload', 'not-found', 'worn', 'no-inscription', 'not-available', 'no-shard'],
+  'gear:reforge': ['bad-payload', 'not-found', 'worn', 'locked', 'no-inscription', 'not-available', 'no-shard'],
   'rebirth:perform': ['not-available', 'in-combat', 'no-progress'],
   'talent:buy': ['not-available', 'bad-payload', 'not-found', 'prereq', 'no-daoyun'],
   'craft:auto': ['bad-payload'],

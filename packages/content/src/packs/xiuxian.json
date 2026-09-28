@@ -558,6 +558,7 @@
       "gear:reforge": {
         "not-found": "查无此器",
         "worn": "佩戴中的法器不可重铸",
+        "locked": "此器已加禁制，先解禁方可重铸",
         "not-available": "此界并无重铸之法",
         "no-shard": "器屑不足（需 {cost}，现有 {owned}）",
         "no-inscription": "此器并无铭纹可重铸"
