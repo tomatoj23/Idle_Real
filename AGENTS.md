@@ -17,6 +17,10 @@ GitHub Issues，用 `gh` CLI 读写。远端：`tomatoj23/Idle_Real`（main）�
 single-context 布局：根目录 `CONTEXT.md` + `docs/adr/`（按需懒创建，不存在时静默跳过）。见 `docs/agents/domain.md`。
 `CONTEXT.md` 开头的**硬原则不可违反**；改动引擎-内容边界、schema 形态或引入新内容类型前，必读 `CONTEXT.md` 全文（硬原则+词汇表+边界示例+ADR 简表）。
 
+### 合规与参考源码库
+
+工程红线的遵循机制（机械门禁/软约束/记忆硬化）与 `D:\My_Projects\Reference_Documents` 参考源码库的使用法（**该目录严禁改动，只许读**），入口与索引见 `docs/agents/compliance.md`。
+
 ## 工程红线（engine/跨端编码纪律）
 
 - engine 源码禁引用平台全局名（localStorage/document/window/setInterval 等），环境能力走 globalThis 运行时探测（先例 `save.ts` 的 `platformOf()`），缺失时降级，勿为省事给 engine 加 DOM/node lib。
