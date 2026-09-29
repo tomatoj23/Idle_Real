@@ -1,6 +1,6 @@
 name: CI
 
-# #78-A 裁决：采纳最小 CI，跑与 .githooks/pre-push 完全相同的门禁（#82 起：policy + check + test）。
+# #78-A 裁决：采纳最小 CI，跑与 .githooks/pre-push 完全相同的门禁（#85 起：policy + 守卫金丝雀 + check + test）。
 # 定位是**回归网**，不是验收：本项目最硬的一关「真实浏览器首跑」CI 覆盖不到（AGENTS.md 工程红线），
 # 绿勾不等于可发版。价值面在钩子拦不住的三处——--no-verify 绕过、未跑过 setup 的新克隆、
 # 多会话并行下 main 的跨机会话漂移。
@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   gate:
-    name: gate（policy + check + test + lint 观察）
+    name: gate（policy + 守卫金丝雀 + check + test + lint 观察）
     # windows-latest：真机红线在 Windows 上，runner 与开发机同 OS 比 ubuntu 矩阵有意义（#78 票面）。
     runs-on: windows-latest
     timeout-minutes: 15
@@ -49,6 +49,12 @@ jobs:
       # 违规时不必等装完依赖才变红。
       - name: Policy 断言（P1/P3/P4 + review 提示）
         run: node scripts/policy-check.mjs
+
+      # 守卫金丝雀（#85 F1 接线）：pretooluse-guard --self-test，与 pre-push 同一条命令的
+      # 显式第二接线。scripts/ 非 workspace、npm test 结构上够不到，不接线则守卫失效静默
+      # （#81 过程发现 4 的欠账）。同样零依赖，放 Install 之前。
+      - name: 守卫金丝雀（pretooluse-guard --self-test）
+        run: node scripts/hooks/pretooluse-guard.mjs --self-test
 
       # 入库的 package-lock.json 有 437 条 resolved 钉在国内镜像（开发机装出来的）。npm 的
       # replace-registry-host 默认只把 npmjs 主机改写成本机 registry，反向不成立，不改写就会

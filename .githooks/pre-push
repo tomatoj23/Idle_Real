@@ -1,5 +1,5 @@
 #!/bin/sh
-# 交付门禁：push 前 policy 断言 + 全量 check + test（交付=push 的机械保障）。
+# 交付门禁：push 前 policy 断言 + 守卫金丝雀 + 全量 check + test（交付=push 的机械保障）。
 # test 走 vitest 默认池（forks）：#72 复审实证 forks/threads/vmThreads 三池
 # 67 文件全绿（vitest 4.1.11 + happy-dom 20.14.5），旧「threads/forks 必挂」
 # 系 happy-dom 18 时代残留已证伪，不再透传 vmThreads。
@@ -8,6 +8,11 @@
 echo "[pre-push] policy 断言（P1/P3/P4 硬性 + P2/P5/P6 review 提示）..."
 node scripts/policy-check.mjs || {
   echo "[pre-push] policy 断言未过，push 中止。修复后再推（勿 --no-verify 绕过）。" >&2
+  exit 1
+}
+echo "[pre-push] 守卫金丝雀（pretooluse-guard --self-test，#85 接线）..."
+node scripts/hooks/pretooluse-guard.mjs --self-test || {
+  echo "[pre-push] 守卫金丝雀未过，push 中止。修复后再推（勿 --no-verify 绕过）。" >&2
   exit 1
 }
 echo "[pre-push] workspace check..."

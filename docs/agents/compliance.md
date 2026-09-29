@@ -14,7 +14,7 @@
 
 | 层 | 载体 | 保证强度 | 覆盖面 |
 |---|---|---|---|
-| ① 机械门禁 | PreToolUse 钩子、policy 脚本（显式接线 pre-push/CI，#82）、守卫测试、CI、可选 OS ACL | **保证**（与模型服从无关） | 任何 agent / 人 |
+| ① 机械门禁 | PreToolUse 钩子、policy 脚本（含金丝雀，显式接线 pre-push/CI，#82）、CI、OS ACL（A 规则已启用）；守卫测试是未采纳备选（mechanical-gates §3） | **保证**（与模型服从无关） | 任何 agent / 人 |
 | ② 载荷知识 | AGENTS.md（宪法）、docs/agents/（流程）、ADR（决策）、票 / PR 模板（清单） | 高概率 | **跨 LLM 唯一软载体** |
 | ③ 记忆 | 各 harness 记忆（.zcode memory、.codebuddy/memory 等） | 概率性、单 harness | 仅本 harness 跨会话 |
 

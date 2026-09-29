@@ -11,7 +11,7 @@
 - **拦截**：Write / Edit 目标路径落在 `D:\My_Projects\Reference_Documents\` 下；Bash 命令对该目录有写效应（重定向、`mv`/`cp` 进入、`rm`、`touch`、`sed -i`、git/npm 等落盘工具在其内执行）。
 - **放行**：纯读命令（`ls` / `grep` / `cat` / `head` / `find` 等）。
 - **拒绝文案**：注明「用户明令：该目录严禁改动，只许读」，让模型收到明确反馈而非裸报错。
-- **验收**：对任意工具试写该目录下一文件 → 必被拒；试 `ls` → 必放行。
+- **验收**：对拦截面工具（四臂 Bash / Write / Edit / ApplyPatch + MCP `mcp__node_repl__js`，见「范围声明」）试写该目录下一文件 → 必被拒；试 `ls` → 必放行。
 
 ### 钩子 B：拦字面指向用户真档的写/删命令（2026-09-29 删档事故教训）
 
@@ -27,7 +27,12 @@
 
 ### 通用要求
 
-- **范围声明**：钩子只覆盖 agent 工具调用（Bash / Write / Edit 等）；人类自己终端里的 `git push --no-verify` 拦不住，那个面由 CI 兜底。
+- **范围声明**（#85 校准，如实勿高估）：
+  - **拦截面 = 四臂 + MCP**：Bash / Write / Edit / ApplyPatch 的工具调用文本；MCP 已扩 `mcp__node_repl__js`（**A/B 面**：code 按包装层文本判定——强字面量 + 写信号，不求完备）。其余工具（Read / Grep / Agent / NotebookEdit 等）不在拦截面。
+  - **B/C 面是「主会话工具调用面」**：**子代理会话零 hookRunner，属结构性旁路**（配置层不可修）——**涉受保护路径的作业勿派子代理**；子代理旁路与人类终端同类，交 review / CI 兜底。A 规则另有 OS 级 ACL 保险盖住该旁路（§4）。
+  - **人类自己终端**里的 `git push --no-verify` 拦不住，那个面由 CI 兜底。
+  - **编码类绕过**（`powershell -EncodedCommand` 等 base64 载荷）与计算路径绕过、8.3 短名同类，**归计算路径豁免但写明**：文本面看不见，写明不等于支持，交 review / CI。
+  - **C 规则范围 = push/commit 显式声明**：`git am / merge / rebase --no-verify` 属范围外（非交付门禁语义）；`git push -n` 是 dry-run 不是绕过。
 - 拒绝时输出**可行动的反馈**（哪条规则、来源、正确做法，走 exit 2 + stderr 或 deny 决策），符合「hook 输出按用户反馈对待」。
 - 三条之外不加钩子，除非再出事故或用户新明令（元规则 2）。
 
@@ -35,23 +40,23 @@
 
 - 配置落点二选一：用户级 `~/.zcode/cli/config.json` 或工作区 `<repo>/.zcode/config.json`。配置文件钩子**默认不跑**，必须设 `hooks.enabled: true`。
 - **Windows 下优先 `type: "process"`**（参数数组不经 shell）：`command` 型走 shell，POSIX 语法在 win32 直接挂。
-- matcher 是**大小写敏感正则**、匹配工具名（`Bash`≠`bash`；`Write`/`Edit` 有 `ApplyPatch` 别名）；**无效正则静默永不匹配**。
+- matcher 匹配工具名、大小写敏感（`Bash`≠`bash`）。语义**按形态二分**（#85 harness 源码核证）：matcher 串若为纯字符集 `[a-zA-Z0-9_|]`，按**精确表**处理（`split("|")` 后与工具名全等匹配，`Bash|Write|Edit|ApplyPatch` 即四名精确表）；含其余字符才落正则分支，**无效正则静默永不匹配**。`Write`/`Edit` 有 `ApplyPatch` 别名。
 - 拦截靠 exit 2（PreToolUse 可返回 allow/ask/deny 决策）；`command` 型 `timeout` 单位是**秒**、`process` 型 `timeoutMs` 是毫秒。
 - 钩子 stdin 为 Claude 兼容 JSON 单行（`tool_name`/`tool_input`/`cwd`/`hook_event_name`…，兼有 camelCase 同名字段）；放行 = exit 0 静默，拒绝 = exit 2 + stderr（stderr 文本即 deny 理由，回给模型）。
 
 ### 落地形态（#81 实施记录，2026-09-29）
 
-- **落点（用户裁决）**：工作区 `<repo>/.zcode/config.json`，随仓库入库；单条 `PreToolUse` 钩子（matcher `Bash|Write|Edit|ApplyPatch`）调 `node ${ZCODE_PROJECT_DIR}/scripts/hooks/pretooluse-guard.mjs`（`${ZCODE_PROJECT_DIR}` 在执行时展开，配置可机器无关）。**钩子只落工作区级，严禁落用户全局 `~/.zcode/cli/config.json`（2026-09-29 用户明令）**——git 侧同理（`core.hooksPath` 属仓库级配置）。
-- **脚本**：`scripts/hooks/pretooluse-guard.mjs`——规则 A（Reference_Documents 只读）/ B（用户真档 `%APPDATA%\问道长生` 等 userData 落点）/ C（git push/commit `--no-verify`，含 commit 短选项 `-n` 与捆绑形态）。拒绝文案含规则来源与正确做法。金丝雀自测：`node scripts/hooks/pretooluse-guard.mjs --self-test`（32 拒 + 24 放行用例；未全绿前禁止对真实目录发写尝试）。
+- **落点（用户裁决）**：工作区 `<repo>/.zcode/config.json`，随仓库入库；单条 `PreToolUse` 钩子（matcher `Bash|Write|Edit|ApplyPatch|mcp__node_repl__js`，#85 起含 MCP 臂）调 `node ${ZCODE_PROJECT_DIR}/scripts/hooks/pretooluse-guard.mjs`（`${ZCODE_PROJECT_DIR}` 在执行时展开，配置可机器无关）。**钩子只落工作区级，严禁落用户全局 `~/.zcode/cli/config.json`（2026-09-29 用户明令）**——git 侧同理（`core.hooksPath` 属仓库级配置）。
+- **脚本**：`scripts/hooks/pretooluse-guard.mjs`——规则 A（Reference_Documents 只读）/ B（用户真档 `%APPDATA%\问道长生` 等 userData 落点）/ C（git push/commit `--no-verify`：含短选项簇 `-n`、长选项前缀缩写 `--no-v*`、`core.hooksPath`/`alias.*` 配置旁路）。拒绝文案含规则来源与正确做法；运行时异常 fail-closed 保守拒。金丝雀自测：`node scripts/hooks/pretooluse-guard.mjs --self-test`（#85 扩编后 133 项全绿；用例数量以自测输出为准，勿在散文里手工维护），已接线 pre-push + CI（#85 F1）。
 - **工作区钩子的 trust 准入门（关键维护事实）**：工作区配置的钩子受授信态机管制——`pending_trust` 时**静默不跑**（正是「门禁空转」形态）；授信后 `trusted_persistent` 持久生效。**改动 `.zcode/config.json` 的钩子声明会使 digest 变化 → `stale_digest` 复锁，必须重新授信**（改脚本内容不影响授信）。命令：
   ```sh
   node "C:/Program Files/ZCode/resources/glm/zcode.cjs" hooks trust status --workspace . --json
   node "C:/Program Files/ZCode/resources/glm/zcode.cjs" hooks trust grant --workspace . --all-current --bundle-digest <sha256>
   ```
   （`zcode` CLI 隐藏命令面；也可用 UI 的 Workspace Hook review 弹层授信。）
-- **会话宿主差异（2026-09-29 实证）**：桌面/TUI（app-server 协议会话）会跑工作区钩子；**无头 `zcode -p` 不装配工作区钩子**（钩子进程根本不拉起，也无跳过诊断）——活体验收必须走 app-server/desktop 会话。
+- **会话宿主差异（现象记录，未留证）**：桌面/TUI（app-server 协议会话）会跑工作区钩子；无头 `zcode -p` 不装配工作区钩子（钩子进程根本不拉起，也无跳过诊断）——活体验收走 app-server/desktop 会话。（#85 复核：此条缺留存证据，按票面降级为「现象记录（未留证）」；复现留证随下次活体验收补。）
 - **验收记录（2026-09-29）**：两轮活体实证（app-server 探针会话 + 用户新会话 `sess_1a82cdd8` 复验 8/8）——规则 A/B/C × Bash/Edit/Write 全臂实拦（含 09-29 事故原形态 `rm -rf "$APPDATA/问道长生"` 与票面「试写一文件」形态），放行面（ls/grep/正常 push/良性 Write）正常，拒绝文案含规则来源与正确做法；事后零残留、真档完好。
-- **已知边界**：管道间接目标（`find … | xargs rm`）、计算路径绕过、测试进程内写盘均不在拦截面（前两者属蓄意交 review/CI，后者由 #82 P4 + 测试沙箱承担）；包装层（`powershell -Command` 等）按强字面量+写信号文本判定，非完备。
+- **已知边界**（#85 复核后如实清单）：管道间接目标（`find … | xargs rm`）、计算路径绕过、编码类绕过（`-EncodedCommand` base64 载荷）、8.3 短名（`MY_PROJ~1\REFERE~1`，需文件系统查询才能归一）、测试进程内写盘均不在拦截面（前四者属蓄意豁免交 review/CI，最后者由 #82 P4 + 测试沙箱承担）；包装层（`powershell -Command` 等）与 heredoc 体、`mcp__node_repl__js` code 均按强字面量+写信号文本判定，非完备；B/C 面不含子代理会话（结构性旁路，见「范围声明」）。
 
 ## 2. policy 脚本（显式两处接线：pre-push + CI，#82 已实施）
 
@@ -93,11 +98,14 @@
 
 若不想引入脚本层，同一批断言可用 vitest 写成「守卫测试」（读文件断言，失败即测试红）。与既有「协议守卫」同类。二选一即可，勿双份维护。
 
-## 4. OS 级 ACL（可选最强保险）
+## 4. OS 级 ACL（A 规则最强保险，#85 裁决 2 已启用）
 
-`icacls` 对 `D:\My_Projects\Reference_Documents` deny-write——连钩子被绕过、裸进程直写都拦。代价：将来新增快照要临时改权限。仅在「钩子被绕过过一次」或用户要求时启用。
+`icacls` 对 `D:\My_Projects\Reference_Documents` deny-write——连钩子被绕过、裸进程直写、**子代理会话旁路**都拦。代价：将来新增快照要临时改权限。**状态：已启用**（2026-09-29 观测现状两条 deny：`Everyone:(OI)(CI)(DENY)(W,D,WDAC,WO)` + 容器级 `Everyone:(CI)(DENY)(S,DC)`）。**icacls 属系统级变更，agent 严禁代跑，执行归用户**。放权/收权标准命令（各一行）：
+
+- 放权（新增快照时临时）：`icacls "D:\My_Projects\Reference_Documents" /remove:d Everyone /t`
+- 收权（入库后收回）：`icacls "D:\My_Projects\Reference_Documents" /deny Everyone:(OI)(CI)(W,D,WDAC,WO)`（用 `icacls "D:\My_Projects\Reference_Documents"` 核对恢复观测现状）
 
 ## 5. CI 与金丝雀
 
-- CI（windows-latest）与 pre-push 跑同一组门禁（#82 起：policy + check + test）：policy 是**显式两处接线**（pre-push 与 workflow 各一步），不是「挂根 check 自动双网」——两网的 check 走 `--workspaces` 不经根脚本（#82 复核实证）。CI 是第二环境执行面，两处执行痕迹可观察（pre-push 输出 + workflow 步骤日志）。
+- CI（windows-latest）与 pre-push 跑同一组门禁（#85 起：policy + 守卫金丝雀 + check + test）：policy 与守卫金丝雀都是**显式两处接线**（pre-push 与 workflow 各一步），不是「挂根 check 自动双网」——两网的 check 走 `--workspaces` 不经根脚本（#82 复核实证）；`scripts/` 非 workspace、npm test 结构上够不到，守卫金丝雀不接线则失效静默（#85 F1，#81 过程发现 4 的欠账）。CI 是第二环境执行面，两处执行痕迹可观察（pre-push 输出 + workflow 步骤日志）。
 - **金丝雀巡检**（并入 ADR-018 巡检条目）：每次巡检随机抽 1 条红线，人为构造违规确认门禁会红；门禁连续 2 次巡检未被抽测视为欠账。

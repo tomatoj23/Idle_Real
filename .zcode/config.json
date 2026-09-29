@@ -4,7 +4,7 @@
     "events": {
       "PreToolUse": [
         {
-          "matcher": "Bash|Write|Edit|ApplyPatch",
+          "matcher": "Bash|Write|Edit|ApplyPatch|mcp__node_repl__js",
           "hooks": [
             {
               "type": "process",
