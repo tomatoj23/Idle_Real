@@ -41,7 +41,7 @@
 
 ### 落地形态（#81 实施记录，2026-09-29）
 
-- **落点（用户裁决）**：工作区 `<repo>/.zcode/config.json`，随仓库入库；单条 `PreToolUse` 钩子（matcher `Bash|Write|Edit|ApplyPatch`）调 `node ${ZCODE_PROJECT_DIR}/scripts/hooks/pretooluse-guard.mjs`（`${ZCODE_PROJECT_DIR}` 在执行时展开，配置可机器无关）。
+- **落点（用户裁决）**：工作区 `<repo>/.zcode/config.json`，随仓库入库；单条 `PreToolUse` 钩子（matcher `Bash|Write|Edit|ApplyPatch`）调 `node ${ZCODE_PROJECT_DIR}/scripts/hooks/pretooluse-guard.mjs`（`${ZCODE_PROJECT_DIR}` 在执行时展开，配置可机器无关）。**钩子只落工作区级，严禁落用户全局 `~/.zcode/cli/config.json`（2026-09-29 用户明令）**——git 侧同理（`core.hooksPath` 属仓库级配置）。
 - **脚本**：`scripts/hooks/pretooluse-guard.mjs`——规则 A（Reference_Documents 只读）/ B（用户真档 `%APPDATA%\问道长生` 等 userData 落点）/ C（git push/commit `--no-verify`，含 commit 短选项 `-n` 与捆绑形态）。拒绝文案含规则来源与正确做法。金丝雀自测：`node scripts/hooks/pretooluse-guard.mjs --self-test`（32 拒 + 24 放行用例；未全绿前禁止对真实目录发写尝试）。
 - **工作区钩子的 trust 准入门（关键维护事实）**：工作区配置的钩子受授信态机管制——`pending_trust` 时**静默不跑**（正是「门禁空转」形态）；授信后 `trusted_persistent` 持久生效。**改动 `.zcode/config.json` 的钩子声明会使 digest 变化 → `stale_digest` 复锁，必须重新授信**（改脚本内容不影响授信）。命令：
   ```sh
