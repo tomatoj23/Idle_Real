@@ -21,7 +21,13 @@
 - `查证锚点`：本票涉及升级/行为争议时，先翻的本地快照路径（见 [reference-snapshots-anchors.md](reference-snapshots-anchors.md)）；升级票必填「breaking-changes / migration 已查」勾项。
 - `验收清单`：含「真实浏览器首跑」固定项（红线）。
 
-**code-review 清单**（implement 收尾复核时对照）：AGENTS.md 红线全项 + 时点数字不进文档 + 快照引用标注。清单本身放本文档集，review 时显式引用。
+**code-review 清单**（implement 收尾复核时逐项对照）：
+
+- [ ] AGENTS.md 红线全项：engine 无平台全局直接引用、globalThis 解构已 bind 宿主、验收含真实浏览器首跑记录
+- [ ] 时点版本数字未进 AGENTS.md / CONTEXT.md / ADR（进票评或 docs/research）
+- [ ] 引用本地快照处带「快照名 + 内部版本 + 取档日期」标注
+- [ ] 测试只写沙箱（tempRoot 类注入），无真档路径写入
+- [ ] 票面「查证锚点 / 验收清单」栏已填（#83 落地后为模板强制项）
 
 ## 3. 记忆硬化管道（层③ → 层①的转化）
 
