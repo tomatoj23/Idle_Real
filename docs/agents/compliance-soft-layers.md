@@ -18,7 +18,7 @@
 
 **票模板新增栏**（GitHub issue template，实施时加）：
 
-- `查证锚点`：本票涉及升级/行为争议时，先翻的本地快照路径（见 [reference-snapshots-anchors.md](reference-snapshots-anchors.md)）；升级票必填「breaking-changes / migration 已查」勾项。
+- `查证锚点`：本票涉及升级/行为争议时，先翻的本地快照路径（见 [reference-snapshots-anchors.md](reference-snapshots-anchors.md)）；升级票必填「breaking-changes / migration 已查」勾项。**卡外查阅附一行检索简报**（问题 / 入口 / 停止条件，见 [reference-snapshots-usage.md](reference-snapshots-usage.md) 直达纪律）。
 - `验收清单`：含「真实浏览器首跑」固定项（红线）。
 
 **code-review 清单**（implement 收尾复核时逐项对照）：
@@ -26,6 +26,7 @@
 - [ ] AGENTS.md 红线全项：engine 无平台全局直接引用、globalThis 解构已 bind 宿主、验收含真实浏览器首跑记录
 - [ ] 时点版本数字未进 AGENTS.md / CONTEXT.md / ADR（进票评或 docs/research）
 - [ ] 引用本地快照处带「快照名 + 内部版本 + 取档日期」标注
+- [ ] 涉快照决策带直达痕迹：卡内注明锚点名，卡外带检索简报（问题 / 入口 / 停止条件）
 - [ ] 测试只写沙箱（tempRoot 类注入），无真档路径写入
 - [ ] 票面「查证锚点 / 验收清单」栏已填（#83 落地后为模板强制项）
 

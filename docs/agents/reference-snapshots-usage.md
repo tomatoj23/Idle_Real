@@ -23,6 +23,14 @@
 | I Node API 语义 | engine 红线（globalThis 探测 / storage）争议 | node-main doc/api/ + lib/ | 语义查证 |
 | J 选型材料 | 仅当 UI 框架 / 包管理器路线重议 | react 系 / pnpm-main / husky-main | 选型对比（当前无触发） |
 
+**直达纪律（防带跑，卡内外通用）**——场景表命中即锚点直达；卡外问题按五条办：
+
+1. **先卡后搜**：锚点卡命中就直奔锚点文件，禁止重新踩点、禁止全树宽词 grep。
+2. **卡外先写一行检索简报**：`问题 / 预计入口（卡上目录地图）/ 停止条件`，写进票评或产出物（成为可审查痕迹）再动搜索；卡内直达在产出注明锚点名即可。
+3. **survey-first 两段式**：先只看命中文件名（Grep 把 `path` 钉到快照子目录 + `glob` 限类型、`files_with_matches`），挑 1-3 个文件再定位读（Read 带 `offset/limit`），禁整读大文件；查文档先 grep 标题行（`^## `）定节再读节。
+4. **预算制**：单次查阅 ≤3 文件 / ≤200 行读入；到预算无结论即停——「快照无此物」是有效结论（换线上源），继续漫游不是。
+5. **版本警戒随行**：从快照落笔任何「行为结论」前过一遍锚点卡 ⚠️（main ≠ 现役）；要下现役结论按三源分工换 node_modules / npm view 补证。
+
 ## 第二层：流程制度化（让查阅必然发生）
 
 三纪律 + 三个落点。机制细节见 [compliance-mechanical-gates.md](compliance-mechanical-gates.md) 与 [compliance-soft-layers.md](compliance-soft-layers.md)（本层只管"何时查、查完如何标注"）。
