@@ -22,6 +22,7 @@
     "dist": "npm run build --workspaces --if-present && npm run dist -w @wendao/app-desktop",
     "build:desktop": "npm run dist",
     "check": "npm run check --workspaces --if-present",
+    "policy": "node scripts/policy-check.mjs",
     "lint": "oxlint"
   },
   "devDependencies": {

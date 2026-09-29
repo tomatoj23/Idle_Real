@@ -1,7 +1,7 @@
 # Agent 合规体系（索引与总纲）
 
 > 目标：让任何 LLM / agent / 人在本仓开发时遵循工程红线与使用纪律，**且不依赖自觉**。
-> 状态：机械层①三道 PreToolUse 钩子**已实施**（#81，2026-09-29）；policy 脚本（#82）待实施。实施时允许换等效机制，以行为验收为准（§4）。
+> 状态：机械层①三道 PreToolUse 钩子**已实施**（#81，2026-09-29）；policy 脚本**已实施**（#82，同日：P1/P3/P4 硬性 + P2/P5/P6 review 级，显式接线 pre-push + CI）。实施时允许换等效机制，以行为验收为准（§4）。
 > 背书：`docs/research/reference-snapshots-value-and-upgrade-necessity.md`（调研留档）。
 
 ## 0. 元规则（写规则的规则）
@@ -14,7 +14,7 @@
 
 | 层 | 载体 | 保证强度 | 覆盖面 |
 |---|---|---|---|
-| ① 机械门禁 | PreToolUse 钩子、policy 脚本（串进 `check`）、守卫测试、CI、可选 OS ACL | **保证**（与模型服从无关） | 任何 agent / 人 |
+| ① 机械门禁 | PreToolUse 钩子、policy 脚本（显式接线 pre-push/CI，#82）、守卫测试、CI、可选 OS ACL | **保证**（与模型服从无关） | 任何 agent / 人 |
 | ② 载荷知识 | AGENTS.md（宪法）、docs/agents/（流程）、ADR（决策）、票 / PR 模板（清单） | 高概率 | **跨 LLM 唯一软载体** |
 | ③ 记忆 | 各 harness 记忆（.zcode memory、.codebuddy/memory 等） | 概率性、单 harness | 仅本 harness 跨会话 |
 
@@ -28,15 +28,15 @@
 | 规则（来源） | 机制 | 层 | 状态 |
 |---|---|---|---|
 | Reference_Documents 只读（用户明令） | PreToolUse 钩子拒写；可选 OS ACL 保险 | ① | **已实施**（#81 钩子 A） |
-| 测试严禁动用户真档（2026-09-29 事故） | 钩子拦字面写/删命令（事故形态）+ policy 查真路径字面量 + 测试沙箱注入 | ① | **已实施**（#81 钩子 B；policy P4 + 沙箱注入随 #82） |
+| 测试严禁动用户真档（2026-09-29 事故） | 钩子拦字面写/删命令（事故形态）+ policy 查真路径字面量 + 测试沙箱注入 | ① | **已实施**（#81 钩子 B + #82 P4 硬性；沙箱注入先例 `userDataDir: tempRoot()`） |
 | 禁 `--no-verify`（AGENTS.md） | 钩子 + CI 双网 | ① | **已实施**（#81 钩子 C + CI 双网） |
-| engine 禁平台全局 / bind 宿主（AGENTS.md 红线） | policy 脚本 / 守卫测试 | ① | 待实施 |
-| schema 只认 `#/definitions/`（AGENTS.md） | policy 查 `$defs` | ① | 待实施 |
+| engine 禁平台全局 / bind 宿主（AGENTS.md 红线） | policy 脚本 / 守卫测试 | ① | **已实施**（#82 P1 硬性 + P2 review 级） |
+| schema 只认 `#/definitions/`（AGENTS.md） | policy 查 `$defs` | ① | **已实施**（#82 P3 硬性） |
 | npm 查最新须显式官方源（AGENTS.md） | 包装脚本（把对的事变容易）+ 文档 | ①/② | 待实施 |
-| 快照引用三纪律 / 取档标注 | 票模板「查证锚点」栏 + policy 查 docs/research 引用格式 | ①+② | 待实施 |
+| 快照引用三纪律 / 取档标注 | 票模板「查证锚点」栏 + policy 查 docs/research 引用格式 | ①+② | **部分实施**（#82 P5 review 级；模板面与收紧随 #83） |
 | 快照查阅直达纪律（防带跑，2026-09-29） | usage 直达五条 + 票面卡外检索简报行 + review 清单「直达痕迹」项 + 巡检抽查（复发信号源） | ② | 已成文（91ba2c1）；模板/巡检面随 #83 |
 | 真实浏览器首跑（AGENTS.md 红线） | 票模板验收清单 + 冒烟脚本（半硬） | ② | 清单待加 |
-| 时点数字不进 AGENTS.md（ADR-018） | review 清单项 | ② | 已成文 |
+| 时点数字不进 AGENTS.md（ADR-018） | review 清单项 + policy P6 提示 | ② | 已成文（#82 P6 review 级接入） |
 | 票认领纪律（多会话并行） | gh assign 惯例 + 交付清单 | ② | 已成文 |
 
 ## 3. 文档集索引

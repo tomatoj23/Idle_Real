@@ -1,6 +1,6 @@
 name: CI
 
-# #78-A 裁决：采纳最小 CI，跑与 .githooks/pre-push 完全相同的两件事（check + test）。
+# #78-A 裁决：采纳最小 CI，跑与 .githooks/pre-push 完全相同的门禁（#82 起：policy + check + test）。
 # 定位是**回归网**，不是验收：本项目最硬的一关「真实浏览器首跑」CI 覆盖不到（AGENTS.md 工程红线），
 # 绿勾不等于可发版。价值面在钩子拦不住的三处——--no-verify 绕过、未跑过 setup 的新克隆、
 # 多会话并行下 main 的跨机会话漂移。
@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   gate:
-    name: gate（check + test + lint 观察）
+    name: gate（policy + check + test + lint 观察）
     # windows-latest：真机红线在 Windows 上，runner 与开发机同 OS 比 ubuntu 矩阵有意义（#78 票面）。
     runs-on: windows-latest
     timeout-minutes: 15
@@ -42,6 +42,13 @@ jobs:
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
     steps:
       - uses: actions/checkout@v7.0.1
+
+      # policy 断言（#82 机械门禁层①）：P1/P3/P4 硬性 + P2/P5/P6 review 提示，与
+      # .githooks/pre-push 同一条命令的显式第二接线（勿挂根 check——下面的 check/test
+      # 走 --workspaces 不经根脚本，挂根不生效）。纯 stdlib 零依赖，故放 Install 之前：
+      # 违规时不必等装完依赖才变红。
+      - name: Policy 断言（P1/P3/P4 + review 提示）
+        run: node scripts/policy-check.mjs
 
       # 入库的 package-lock.json 有 437 条 resolved 钉在国内镜像（开发机装出来的）。npm 的
       # replace-registry-host 默认只把 npmjs 主机改写成本机 registry，反向不成立，不改写就会
