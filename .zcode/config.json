@@ -1,0 +1,21 @@
+{
+  "hooks": {
+    "enabled": true,
+    "events": {
+      "PreToolUse": [
+        {
+          "matcher": "Bash|Write|Edit|ApplyPatch",
+          "hooks": [
+            {
+              "type": "process",
+              "command": "node",
+              "args": ["${ZCODE_PROJECT_DIR}/scripts/hooks/pretooluse-guard.mjs"],
+              "timeoutMs": 15000,
+              "statusMessage": "合规门禁（Reference_Documents 只读 / 用户真档 / 禁 --no-verify）"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

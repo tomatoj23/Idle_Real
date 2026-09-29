@@ -1,7 +1,7 @@
 # Agent 合规体系（索引与总纲）
 
 > 目标：让任何 LLM / agent / 人在本仓开发时遵循工程红线与使用纪律，**且不依赖自觉**。
-> 状态：方案成文；机械层（钩子 / policy 脚本）**尚未实施**。实施时允许换等效机制，以行为验收为准（§4）。
+> 状态：机械层①三道 PreToolUse 钩子**已实施**（#81，2026-09-29）；policy 脚本（#82）待实施。实施时允许换等效机制，以行为验收为准（§4）。
 > 背书：`docs/research/reference-snapshots-value-and-upgrade-necessity.md`（调研留档）。
 
 ## 0. 元规则（写规则的规则）
@@ -27,9 +27,9 @@
 
 | 规则（来源） | 机制 | 层 | 状态 |
 |---|---|---|---|
-| Reference_Documents 只读（用户明令） | PreToolUse 钩子拒写；可选 OS ACL 保险 | ① | 待实施 |
-| 测试严禁动用户真档（2026-09-29 事故） | 钩子拦字面写/删命令（事故形态）+ policy 查真路径字面量 + 测试沙箱注入 | ① | 待实施 |
-| 禁 `--no-verify`（AGENTS.md） | 钩子 + CI 双网 | ① | CI 已有雏形 |
+| Reference_Documents 只读（用户明令） | PreToolUse 钩子拒写；可选 OS ACL 保险 | ① | **已实施**（#81 钩子 A） |
+| 测试严禁动用户真档（2026-09-29 事故） | 钩子拦字面写/删命令（事故形态）+ policy 查真路径字面量 + 测试沙箱注入 | ① | **已实施**（#81 钩子 B；policy P4 + 沙箱注入随 #82） |
+| 禁 `--no-verify`（AGENTS.md） | 钩子 + CI 双网 | ① | **已实施**（#81 钩子 C + CI 双网） |
 | engine 禁平台全局 / bind 宿主（AGENTS.md 红线） | policy 脚本 / 守卫测试 | ① | 待实施 |
 | schema 只认 `#/definitions/`（AGENTS.md） | policy 查 `$defs` | ① | 待实施 |
 | npm 查最新须显式官方源（AGENTS.md） | 包装脚本（把对的事变容易）+ 文档 | ①/② | 待实施 |

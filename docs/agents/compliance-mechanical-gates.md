@@ -33,10 +33,24 @@
 
 ### 实现事实与已知坑（harness 钩子机制，2026-09-29 查证）
 
-- 配置落点二选一：用户级 `~/.zcode/cli/config.json` 或工作区 `<repo>/.zcode/config.json`（当前均无 hooks）。配置文件钩子**默认不跑**，必须设 `hooks.enabled: true`。
+- 配置落点二选一：用户级 `~/.zcode/cli/config.json` 或工作区 `<repo>/.zcode/config.json`。配置文件钩子**默认不跑**，必须设 `hooks.enabled: true`。
 - **Windows 下优先 `type: "process"`**（参数数组不经 shell）：`command` 型走 shell，POSIX 语法在 win32 直接挂。
 - matcher 是**大小写敏感正则**、匹配工具名（`Bash`≠`bash`；`Write`/`Edit` 有 `ApplyPatch` 别名）；**无效正则静默永不匹配**。
 - 拦截靠 exit 2（PreToolUse 可返回 allow/ask/deny 决策）；`command` 型 `timeout` 单位是**秒**、`process` 型 `timeoutMs` 是毫秒。
+- 钩子 stdin 为 Claude 兼容 JSON 单行（`tool_name`/`tool_input`/`cwd`/`hook_event_name`…，兼有 camelCase 同名字段）；放行 = exit 0 静默，拒绝 = exit 2 + stderr（stderr 文本即 deny 理由，回给模型）。
+
+### 落地形态（#81 实施记录，2026-09-29）
+
+- **落点（用户裁决）**：工作区 `<repo>/.zcode/config.json`，随仓库入库；单条 `PreToolUse` 钩子（matcher `Bash|Write|Edit|ApplyPatch`）调 `node ${ZCODE_PROJECT_DIR}/scripts/hooks/pretooluse-guard.mjs`（`${ZCODE_PROJECT_DIR}` 在执行时展开，配置可机器无关）。
+- **脚本**：`scripts/hooks/pretooluse-guard.mjs`——规则 A（Reference_Documents 只读）/ B（用户真档 `%APPDATA%\问道长生` 等 userData 落点）/ C（git push/commit `--no-verify`，含 commit 短选项 `-n` 与捆绑形态）。拒绝文案含规则来源与正确做法。金丝雀自测：`node scripts/hooks/pretooluse-guard.mjs --self-test`（32 拒 + 24 放行用例；未全绿前禁止对真实目录发写尝试）。
+- **工作区钩子的 trust 准入门（关键维护事实）**：工作区配置的钩子受授信态机管制——`pending_trust` 时**静默不跑**（正是「门禁空转」形态）；授信后 `trusted_persistent` 持久生效。**改动 `.zcode/config.json` 的钩子声明会使 digest 变化 → `stale_digest` 复锁，必须重新授信**（改脚本内容不影响授信）。命令：
+  ```sh
+  node "C:/Program Files/ZCode/resources/glm/zcode.cjs" hooks trust status --workspace . --json
+  node "C:/Program Files/ZCode/resources/glm/zcode.cjs" hooks trust grant --workspace . --all-current --bundle-digest <sha256>
+  ```
+  （`zcode` CLI 隐藏命令面；也可用 UI 的 Workspace Hook review 弹层授信。）
+- **会话宿主差异（2026-09-29 实证）**：桌面/TUI（app-server 协议会话）会跑工作区钩子；**无头 `zcode -p` 不装配工作区钩子**（钩子进程根本不拉起，也无跳过诊断）——活体验收必须走 app-server/desktop 会话。
+- **已知边界**：管道间接目标（`find … | xargs rm`）、计算路径绕过、测试进程内写盘均不在拦截面（前两者属蓄意交 review/CI，后者由 #82 P4 + 测试沙箱承担）；包装层（`powershell -Command` 等）按强字面量+写信号文本判定，非完备。
 
 ## 2. policy 脚本（串进 `check`，一次接入三网）
 
