@@ -2,6 +2,7 @@
 
 日期：2026-09-16
 状态：已接受（grilling 十问裁决；证据与对抗复审：`docs/research/version-drift-impact.md` + `version-drift-impact-round2.md`）
+**状态补注（2026-09-29）**：本文标题里的「Electron 38 暂持」为**当时决策**，已于 #67 解除（升 44.4.1），见文末「落地记录」；对齐策略本身（事件驱动 + 周期巡检）持续有效。
 
 ## 背景
 
@@ -31,11 +32,11 @@
 
 - **#67 已交付（2026-09-29）**：Electron 38.8.6 → **44.4.1**（精确 pin），暂持解除，19 条 GHSA 清账（`npm audit` = 0 vulnerabilities，比票面预期更彻底——连 extract-zip 预留残留也没了，见上勘误）。票面六项验收逐条实证：
   1. **真机首跑回归**：NSIS 实装版与 portable 版双路 CDP 冒烟全通——`window.wendao` 桥五面齐（mode/loadSave/writeSave/flushSave/reportAchievement）、`sandbox: true` 真实生效、UI 起台（`#page-root` 在、正文非空）、内嵌 Chromium 152 实证（真机 UA）。
-  2. **electron-builder × Electron 44 端到端出包并实装**：NSIS（oneClick）+ portable 两 target 出包成功，NSIS 静默实装到 `%LOCALAPPDATA%\Programs\`（注册表 DisplayIcon 指向装好的 exe）后实跑冒烟；portable 自解压到 `%TEMP%\<随机目录>` 后实跑冒烟（清进程按解包目录+CDP 端口匹配，收工复核余 0）。`@electron/rebuild` 对 steamworks.js 干净通过。
+  2. **electron-builder × Electron 44 端到端出包并实装**：NSIS（oneClick）+ portable 两 target 出包成功（各约 113MB，electron-builder 26.15.3，`archs=x64`），NSIS 静默实装到 `%LOCALAPPDATA%\Programs\@wendaoapp-desktop\`（注册表 `DisplayIcon` 实证）后实跑冒烟；portable 自解压到 `%TEMP%\<随机目录>\`（进程 cmdline 实证）后实跑冒烟，清进程按解包目录+CDP 端口匹配、收工复核余 0。**steamworks.js 不经 `@electron/rebuild`**：`@electron/rebuild/lib/rebuild.js:98` 只收含 `binding.gyp` 的目录，steamworks.js 是 N-API 按平台预编译（`dist/win64` 等）、无 binding.gyp，**压根未参与重建**——所以「38→44 免重编译」的真证据是**真机 `require` 成功**（`init()` 抛的是 steam IPC 错 = 模块已装载），不是 rebuild 通过。
   3. **steamworks.js 加载冒烟**：原生模块在 Electron 44（ABI 149）下**成功加载**——真机 `init()` 抛的是 steamworks 自有错误「Cannot create IPC pipe to Steam client process. Steam is probably not running.」（缺 Steam 客户端），不是模块装载错，反证 N-API 按平台 prebuild 免重编译的推断成立。成就上报与云存档走 mock 回落路径实证：成就落本地账本 `achievements.json`、存档槽位写读回环 ack=`ok`，回落有日志可审计（`adapter=mock (steam init failed…)`）。
   4. **42 起 postinstall 不再下载二进制**：install 后 `node_modules/electron/` 无 `dist/`、无 `path.txt`（且 44.x 的 package 无 postinstall 脚本）；首跑 `npx electron --version` 打印「Downloading Electron binary...」并生成**新的** cache 条目=真走网络而非吃本地缓存，随后 `dist/` + `path.txt` 落位。**对 CI/装机流程的含义：装完依赖不等于装好 Electron，必须留一步首跑。**
   5. **audit**：electron 19 条 GHSA 全清；extract-zip 预留残留也一并消失（超出预期）。
   6. **fuses 随包复验**：不适用——#65 尚未合入（见下）。
 
-  **升级唯一类型漂移**：`render-process-gone` 的 reason 新增 `memory-eviction`，`GoneReason` 并集补员（tsc 在 `decide(details.reason)` 装配点报错兜住，非人眼）。分类裁决为**走重载**（内存回收摘掉渲染进程不是应用过错，白窗永挂正是 rendererRecovery 要消灭的病；吃同一份 RELOAD_LIMIT 预算），已用测试钉住并做变异验红。
+  **升级唯一类型漂移**：`render-process-gone` 的 reason 新增 `memory-eviction`，`GoneReason` 并集补员（tsc 在 `decide(details.reason)` 装配点报错兜住，非人眼）。分类裁决为**走重载**（语义=「为防将来 OOM 而主动终止」，Chromium 自身把它与 `oom` 同组处理；内存回收摘掉渲染进程不是应用过错，白窗永挂正是 rendererRecovery 要消灭的病；吃同一份 RELOAD_LIMIT 预算），已用测试钉住并做变异验红。**此取舍的已知代价（对抗审计补记）**：Windows 上内存回收是直接终止进程，`beforeunload` 不触发 → 丢最近一次自动存档之后的进度，上限 `AUTOSAVE_MS=15000`（与既有 `oom` 同损，按 rendererRecovery 既定设计可接受）；Chromium 对**不可见**内容的原生做法是 discard 到再激活才 reload，本仓「立即 reload」属自设取舍，日后若要对齐可按 `win.isVisible()` 分流。
 - **#65 fuses 未随行**：本票按票面范围只做版本升级；fuses 是独立票（`electronFuses` 关 runAsNode + 开 asarIntegrity），仍待实施。

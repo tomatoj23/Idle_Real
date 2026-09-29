@@ -5,8 +5,10 @@ name: CI
 # 绿勾不等于可发版。价值面在钩子拦不住的三处——--no-verify 绕过、未跑过 setup 的新克隆、
 # 多会话并行下 main 的跨机会话漂移。
 #
-# 刻意不含 `npm audit`：ADR-018 已裁「audit 非绿不阻断验收」（extract-zip 两条 8.1 无修复版，
-# 永久残留），装成红灯只会训练人忽略它。巡检走根 scripts + docs/research。
+# 刻意不含 `npm audit`：ADR-018 已裁「audit 非绿不阻断验收」，装成红灯只会训练人忽略它。
+# 巡检走根 scripts + docs/research。（#67 升 Electron 44 后 audit 已归零：曾判「range=* 无修复版
+# 永久残留」的 extract-zip 两条，随 electron 换用自带 @electron-internal/extract-zip 一并退场，
+# 勘误见 ADR-018——但「audit 不阻断」的裁决继续有效，勿因当期归零就把它串进门禁。）
 
 on:
   push:
@@ -31,12 +33,12 @@ jobs:
     timeout-minutes: 15
     env:
       # 跳过约 100MB 的 Electron 二进制：CI 没有任何步骤启动 Electron。全仓唯一的 `from 'electron'`
-      # 在 app-desktop/electron/main.ts:10，它的类型来自 npm 包自带的 electron.d.ts（package.json
-      # types 字段，与二进制无关）；tests/ 里唯一沾 electron 的 platform.test.ts:18 引的是
-      # ../electron/platform（只用 node 内置），全仓 packages 内 child_process 零引用。
-      # 如实记录生效机制：本机 npm 11.6.2 会照跑 postinstall，而 runner 的 npm 11.19 已把
-      # electron@38.8.6 的 postinstall 判为「install scripts not yet covered by allowScripts」而不执行
-      # （见 run 35429320188 的 Install 步日志）。所以这条 env 当前是第二道保险，不是拦下下载的那一道。
+      # 在 app-desktop/electron/main.ts，它的类型来自 npm 包自带的 electron.d.ts（package.json
+      # types 字段，与二进制无关）；tests/ 里唯一沾 electron 的引的是 ../electron/*（只用 node 内置），
+      # 全仓 packages 内 child_process 零引用。
+      # 生效机制（#67 升 Electron 44 后口径，勿按旧知识写）：44.x 的 electron 包**已无 postinstall**，
+      # 二进制改在**首跑 electron 命令时**经 @electron/get 下载；CI 不启动 electron，本就不会触发下载。
+      # 所以这条 env 是第二道保险（拦任何隐式 require('electron') / 首跑下载），不是拦 postinstall 的那一道。
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
     steps:
       - uses: actions/checkout@v7.0.1
