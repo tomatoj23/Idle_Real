@@ -1,7 +1,7 @@
 #!/bin/sh
 # 交付门禁：push 前 policy 断言 + 守卫金丝雀 + 全量 check + test（交付=push 的机械保障）。
 # test 走 vitest 默认池（forks）：#72 复审实证 forks/threads/vmThreads 三池
-# 67 文件全绿（vitest 4.1.11 + happy-dom 20.14.5），旧「threads/forks 必挂」
+# 全量文件全绿（vitest + happy-dom，文件数随测试增长勿写死），旧「threads/forks 必挂」
 # 系 happy-dom 18 时代残留已证伪，不再透传 vmThreads。
 # policy 断言（#82）与 CI 各显式挂一步、命令相同；勿改挂根 package.json 的 check——
 # 下面的 check 走 --workspaces，不经根脚本（挂根不生效，#82 复核实证）。

@@ -56,7 +56,7 @@ jobs:
       - name: 守卫金丝雀（pretooluse-guard --self-test）
         run: node scripts/hooks/pretooluse-guard.mjs --self-test
 
-      # 入库的 package-lock.json 有 437 条 resolved 钉在国内镜像（开发机装出来的）。npm 的
+      # 入库的 package-lock.json 的 resolved 大量钉在国内镜像（开发机装出来的；条数随 lockfile 漂移勿写死）。npm 的
       # replace-registry-host 默认只把 npmjs 主机改写成本机 registry，反向不成立，不改写就会
       # 让 runner 去国内 CDN 拉全部依赖。只改 CI 工作副本、不改仓库文件，本地镜像加速不受影响。
       # 详见脚本头注（含「顺带把对镜像的信任收回为对官方源的逐条校验」一节）。

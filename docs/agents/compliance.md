@@ -30,7 +30,7 @@
 | Reference_Documents 只读（用户明令） | PreToolUse 钩子拒写；可选 OS ACL 保险 | ① | **已实施**（#81 钩子 A） |
 | 测试严禁动用户真档（2026-09-29 事故） | 钩子拦字面写/删命令（事故形态）+ policy 查真路径字面量 + 测试沙箱注入 | ① | **已实施**（#81 钩子 B + #82 P4 硬性；沙箱注入先例 `userDataDir: tempRoot()`） |
 | 禁 `--no-verify`（AGENTS.md） | 钩子 + CI 双网 | ① | **已实施**（#81 钩子 C + CI 双网） |
-| engine 禁平台全局 / bind 宿主（AGENTS.md 红线） | policy 脚本 / 守卫测试 | ① | **已实施**（#82 P1 硬性 + P2 review 级） |
+| engine 禁平台全局 / bind 宿主（AGENTS.md 红线） | policy 脚本（含金丝雀） | ① | **已实施**（#82 P1 硬性 + P2 review 级） |
 | schema 只认 `#/definitions/`（AGENTS.md） | policy 查 `$defs` | ① | **已实施**（#82 P3 硬性） |
 | npm 查最新须显式官方源（AGENTS.md） | 包装脚本（把对的事变容易）+ 文档 | ①/② | 待实施 |
 | 快照引用三纪律 / 取档标注 | 票模板「查证锚点」栏 + policy 查 docs/research 引用格式 | ①+② | **部分实施**（#82 P5 review 级；模板面与收紧随 #83） |

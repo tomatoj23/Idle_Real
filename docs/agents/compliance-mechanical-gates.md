@@ -47,7 +47,7 @@
 ### 落地形态（#81 实施记录，2026-09-29）
 
 - **落点（用户裁决）**：工作区 `<repo>/.zcode/config.json`，随仓库入库；单条 `PreToolUse` 钩子（matcher `Bash|Write|Edit|ApplyPatch|mcp__node_repl__js`，#85 起含 MCP 臂）调 `node ${ZCODE_PROJECT_DIR}/scripts/hooks/pretooluse-guard.mjs`（`${ZCODE_PROJECT_DIR}` 在执行时展开，配置可机器无关）。**钩子只落工作区级，严禁落用户全局 `~/.zcode/cli/config.json`（2026-09-29 用户明令）**——git 侧同理（`core.hooksPath` 属仓库级配置）。
-- **脚本**：`scripts/hooks/pretooluse-guard.mjs`——规则 A（Reference_Documents 只读）/ B（用户真档 `%APPDATA%\问道长生` 等 userData 落点）/ C（git push/commit `--no-verify`：含短选项簇 `-n`、长选项前缀缩写 `--no-v*`、`core.hooksPath`/`alias.*` 配置旁路）。拒绝文案含规则来源与正确做法；运行时异常 fail-closed 保守拒。金丝雀自测：`node scripts/hooks/pretooluse-guard.mjs --self-test`（#85 扩编后 133 项全绿；用例数量以自测输出为准，勿在散文里手工维护），已接线 pre-push + CI（#85 F1）。
+- **脚本**：`scripts/hooks/pretooluse-guard.mjs`——规则 A（Reference_Documents 只读）/ B（用户真档 `%APPDATA%\问道长生` 等 userData 落点）/ C（git push/commit `--no-verify`：含短选项簇 `-n`、长选项前缀缩写 `--no-v*`、`core.hooksPath`/`alias.*`/`git config` 写形态配置旁路）。拒绝文案含规则来源与正确做法；运行时异常 fail-closed 保守拒。金丝雀自测：`node scripts/hooks/pretooluse-guard.mjs --self-test`（#85 /fh 复核后 176 项全绿；用例数量以自测输出为准，勿在散文里手工维护），已接线 pre-push + CI（#85 F1）。
 - **工作区钩子的 trust 准入门（关键维护事实）**：工作区配置的钩子受授信态机管制——`pending_trust` 时**静默不跑**（正是「门禁空转」形态）；授信后 `trusted_persistent` 持久生效。**改动 `.zcode/config.json` 的钩子声明会使 digest 变化 → `stale_digest` 复锁，必须重新授信**（改脚本内容不影响授信）。命令：
   ```sh
   node "C:/Program Files/ZCode/resources/glm/zcode.cjs" hooks trust status --workspace . --json
@@ -56,7 +56,7 @@
   （`zcode` CLI 隐藏命令面；也可用 UI 的 Workspace Hook review 弹层授信。）
 - **会话宿主差异（现象记录，未留证）**：桌面/TUI（app-server 协议会话）会跑工作区钩子；无头 `zcode -p` 不装配工作区钩子（钩子进程根本不拉起，也无跳过诊断）——活体验收走 app-server/desktop 会话。（#85 复核：此条缺留存证据，按票面降级为「现象记录（未留证）」；复现留证随下次活体验收补。）
 - **验收记录（2026-09-29）**：两轮活体实证（app-server 探针会话 + 用户新会话 `sess_1a82cdd8` 复验 8/8）——规则 A/B/C × Bash/Edit/Write 全臂实拦（含 09-29 事故原形态 `rm -rf "$APPDATA/问道长生"` 与票面「试写一文件」形态），放行面（ls/grep/正常 push/良性 Write）正常，拒绝文案含规则来源与正确做法；事后零残留、真档完好。
-- **已知边界**（#85 复核后如实清单）：管道间接目标（`find … | xargs rm`）、计算路径绕过、编码类绕过（`-EncodedCommand` base64 载荷）、8.3 短名（`MY_PROJ~1\REFERE~1`，需文件系统查询才能归一）、测试进程内写盘均不在拦截面（前四者属蓄意豁免交 review/CI，最后者由 #82 P4 + 测试沙箱承担）；包装层（`powershell -Command` 等）与 heredoc 体、`mcp__node_repl__js` code 均按强字面量+写信号文本判定，非完备；B/C 面不含子代理会话（结构性旁路，见「范围声明」）。
+- **已知边界**（#85 复核后如实清单；/fh 对抗审计后补）：管道间接目标（`find … | xargs rm`）、计算路径绕过、编码类绕过（`-EncodedCommand` base64 载荷）、8.3 短名（`MY_PROJ~1\REFERE~1`，需文件系统查询才能归一）、测试进程内写盘均不在拦截面（前四者属蓄意豁免交 review/CI，最后者由 #82 P4 + 测试沙箱承担）；包装层（`powershell -Command` 等）与 heredoc 体、`mcp__node_repl__js` code 均按强字面量+写信号文本判定，非完备（node/python 包装里 `exec('rm …')` 字符串间接同归计算/间接豁免）；`bash -c` 尾随实参（`$1` 形态）仅在 -c 体含写信号时按写目标判，纯读体不判；转义引号字面形态（`rm -rf \"path\"`）按「反斜杠字面」政策不判——bash 语义下该形态本就打不中真路径；git 混合语义子命令（branch/remote/stash 的写形态）不进写面（写的是快照 .git 内部件，读写同名难分，粗判伤读快照）；`git config --unset core.hooksPath` 保守拒（断钩=旁路；修复正路是 `npm run setup` 钩子自愈，不走字面 config）；写信号的 `>` 重定向启发式对紧凑比较（`a>b`）仍有误伤残留；B/C 面不含子代理会话（结构性旁路，见「范围声明」）。
 
 ## 2. policy 脚本（显式两处接线：pre-push + CI，#82 已实施）
 
@@ -64,7 +64,7 @@
 
 | # | 断言 | 检测思路（示意） |
 |---|---|---|
-| P1 | engine 源码无平台全局**直接引用** | 识别裸标识符 / 成员访问；排除注释、字符串字面量、属性键（`g['setInterval']`）、声明名——基线实证：禁词词面在 engine/src 命中 13 处全是合规用法（`localStorageSaveAdapter` 标识符、接口形状、save.ts 注释），裸词表必误报。只对源码、不对测试 |
+| P1 | engine 源码无平台全局**直接引用** | 识别裸标识符 / 成员访问；排除注释、字符串字面量、属性键（`g['setInterval']`）、声明名——基线实证：禁词词面在 engine/src 的命中全是合规用法（`localStorageSaveAdapter` 标识符、接口形状、save.ts 注释），裸词表必误报；命中计数随代码漂移，复核以 policy 金丝雀为准勿写死。只对源码、不对测试 |
 | P2 | 从 globalThis/window 解构原生方法处有 bind | 弱检测即可（如匹配「解构后存函数值」模式），无法判定的交 review，勿追求完备 |
 | P3 | schema 无 `$defs` | 扫 `packages/content/src/schema/**` 与 packs JSON |
 | P4 | 测试代码不含真档路径字面量 | 模式 = 真实绝对路径 / `%APPDATA%` 写形态；**勿扫裸 `userData`**（`userDataDir: tempRoot()` 这类无害沙箱注入遍地是）；真档落点经 `app.getPath('userData')` 运行时解析，此断言防呆不防恶 |
@@ -80,7 +80,7 @@
   - P1 五类排除（注释/字符串/属性键/声明名/接口·类型块）之外补「成员访问属性位」判定：**探测根**（globalThis/window/self/global）上的属性访问仍算直接引用（`globalThis.setTimeout` 形态），**本地对象**上的同名成员（`timer.setInterval` 绑后调用）放行。词表刻意不含 location/history/alert 等短词（与领域词撞名，宁可漏报）、console（双端标准对象，解构面归 P2）、fetch/crypto 等双端共有对象。
   - P3 扫 `packages/content/src/schema/**` 与 `packages/content/src/packs/**` 全部文件（含 .ts——TS 里拼出的 schema 字符串同样是使用面）；.ts 掩蔽注释（「勿用 $defs」的提醒不误伤），JSON 全文扫（键即字符串）。
   - P4 只认真档落点族（`%APPDATA%` 族 / `AppData\Roaming` 绝对形态 / Roaming\<游戏目录> / macOS/Linux userData 落点 / `process.env.APPDATA`），分隔符取 `[\\/]+`（JS 源码转义双反斜杠形态不漏）；**不扫裸 `userData`**。
-- **接线（显式两处，缺一即门禁空转）**：`.githooks/pre-push`（policy → check → test，policy 先行快失败）；`.github/workflows/ci.yml`（checkout 后、Install 前一步——零依赖，违规不必等装依赖才变红）。根 `package.json` 的 `npm run policy` 只是人手便捷入口，两网不依赖它。
+- **接线（显式两处，缺一即门禁空转）**：`.githooks/pre-push`（policy → 守卫金丝雀 → check → test，policy 先行快失败）；`.github/workflows/ci.yml`（checkout 后、Install 前各一步——零依赖，违规不必等装依赖才变红）。根 `package.json` 的 `npm run policy` 只是人手便捷入口，两网不依赖它。
 - **豁免纪律**：文件内注释 `policy-allow: P<n> <理由>`（理由必填；**只认注释形态**，字符串/模板里的 policy-allow 不算豁免；无理由的豁免行被忽略并提示）。首个豁免：`scripts/hooks/pretooluse-guard.test.mjs`（#81 金丝雀的真档路径字样=模拟用例数据，非写盘）。
 - **金丝雀**：`node scripts/policy-check.mjs --self-test`（70 项：deny 35 + allow 29 + e2e 4 + pragma 2，2026-09-29 对抗审计后扩编）；e2e 在 `os.tmpdir()` 临时 fixture 树上跑 `runCheck`（违规树必红、干净树必零报），不改真源码。
 - **对抗审计加固记录（2026-09-29 /fh 全维度复核）**：自查+对抗子代理实锤 3 个硬 bug 已修——①词法失步：正则字面量内的引号被当字符串开界（`/['"]/`），误报（字符串内容当代码报）+漏报（其后代码整段被抹）双向；修法=正则字面量态（除法歧义偏「正则」方向）+ 字符串/正则行尾恢复。②声明名误报：类/对象方法、访问器、无类型形参、catch 绑定、解构默认值全类排除（定义位判据 = `W(…)` 后跟 `{`/`:`；形参绑定判据 = 形参表模式位）；连带补上 `f(a, document, b)` 逗号位的既有漏报（原简写规则过宽误豁免）。③type 跳过区逃逸：`type Alias = number`（无 `;` 的 ASI）曾跨界吞掉后续语句的花括号块藏违规；修法=块首扫描遇语句界（空行/语句关键字）即停。另补：三元值位/case 值位/展开运算符/模板 `${…}`/`globalThis?.X` 的引用位识别、P4/P5/P6 大小写与 IP 边界（`127.0.0.1` 不是版本号）、同文件同规则同行合并单条。
@@ -103,7 +103,7 @@
 `icacls` 对 `D:\My_Projects\Reference_Documents` deny-write——连钩子被绕过、裸进程直写、**子代理会话旁路**都拦。代价：将来新增快照要临时改权限。**状态：已启用**（2026-09-29 观测现状两条 deny：`Everyone:(OI)(CI)(DENY)(W,D,WDAC,WO)` + 容器级 `Everyone:(CI)(DENY)(S,DC)`）。**icacls 属系统级变更，agent 严禁代跑，执行归用户**。放权/收权标准命令（各一行）：
 
 - 放权（新增快照时临时）：`icacls "D:\My_Projects\Reference_Documents" /remove:d Everyone /t`
-- 收权（入库后收回）：`icacls "D:\My_Projects\Reference_Documents" /deny Everyone:(OI)(CI)(W,D,WDAC,WO)`（用 `icacls "D:\My_Projects\Reference_Documents"` 核对恢复观测现状）
+- 收权（入库后收回，**两条 deny ACE 一条命令全重建**，ACE 参数带引号——PowerShell 下括号逗号是元字符，不加引号报「参数列表中缺少参量」）：`icacls "D:\My_Projects\Reference_Documents" /deny "Everyone:(OI)(CI)(W,D,WDAC,WO)" "Everyone:(CI)(S,DC)"`（收权后用 `icacls "D:\My_Projects\Reference_Documents"` 核对恢复观测现状两条）
 
 ## 5. CI 与金丝雀
 

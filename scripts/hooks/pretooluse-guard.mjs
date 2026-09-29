@@ -14,6 +14,9 @@
 //   - 管道间接目标（如 find … | xargs rm）与计算路径绕过不可见，属蓄意，交 review / CI。
 //   - 编码类绕过（powershell -EncodedCommand 等 base64 载荷）归计算路径豁免，文本面看不见。
 //   - 8.3 短名（MY_PROJ~1\REFERE~1）需文件系统查询才能归一，同归豁免面。
+//   - git 混合语义子命令（branch/remote/stash 的写形态）不进写面：其写效应是快照 .git 内部件，
+//     读写形态同名难分（`branch --list` 是读），粗判会误伤读快照；残余已声明，交 review / CI。
+//   - 包装文本的写信号含 `>` 重定向启发式，紧凑比较（a>b）仍会误伤——与强字面量同现才拒，接受面。
 //   - 白名单：确需动真档/参考库的合法操作，在 TARGET_WHITELIST 加注释放行，勿整体关掉。
 
 import os from "node:os";
@@ -88,10 +91,12 @@ function expandEnv(text) {
     .replace(/^~(?=[\\/]|$)/, os.homedir());
 }
 
-// 归一为可比较的路径键：统一反斜杠、剥 Win32 尾点/尾空格、去尾分隔、小写（Windows 大小写不敏感）。
-// 尾点/尾空格按 Win32 语义逐段剥（`rmdir "<REF>."` 真删实证，#85 M5）；`.`/`..`/空段原样保留。
+// 归一为可比较的路径键：统一反斜杠、折叠 . / .. 段与重复分隔、剥 Win32 尾点/尾空格、去尾分隔、小写。
+// Win32 语义：`.`/`..`/重复分隔折叠（`%APPDATA%/./问道长生`、`D:\\My_Projects\\…` 双分隔形态勿漏，
+// #85 /fh 红队）；尾点/尾空格逐段剥（`rmdir "<REF>."` 真删实证，#85 M5）。
 function normalizePathKey(p) {
-  const slashed = p.replace(/\//g, "\\").replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/i, "");
+  const slashed = path.win32
+    .normalize(p.replace(/\//g, "\\").replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/i, ""));
   const parts = slashed.split("\\").map((seg) => {
     if (seg === "" || seg === "." || seg === "..") return seg;
     const stripped = seg.replace(/[. ]+$/, "");
@@ -105,6 +110,10 @@ function resolveTarget(cwd, token) {
   // Git Bash 风格 POSIX 绝对路径 /c/Users/… → C:\Users\…
   expanded = expanded.replace(/^\/([a-zA-Z])(?=\/)/, "$1:");
   expanded = expanded.replace(/\//g, "\\");
+  // 长路径前缀先剥（\\?\UNC\ 剥完才是标准 UNC 形态，顺序勿倒，#85 /fh 红队 1-B5）
+  expanded = expanded.replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/i, "");
+  // 本机 UNC 管理共享（\\localhost\C$\… / \\127.0.0.1\C$\…）映射盘符根；其余主机名 UNC 归豁免面
+  expanded = expanded.replace(/^\\\\(?:localhost|127\.0\.0\.1)\\([a-zA-Z])\$(?=\\|$)/i, "$1:");
   const abs = path.win32.isAbsolute(expanded) ? expanded : path.win32.resolve(cwd, expanded);
   return normalizePathKey(abs);
 }
@@ -157,7 +166,8 @@ function failLoudUserdata(text, out, where) {
 
 // 引号感知地按 shell 操作符切段（&& || ; | & 换行）。
 // 反斜杠按字面处理（Windows 路径分隔符优先于 POSIX 转义语义），唯一例外：
-// 行尾 `\`+换行 = bash 续行（同一条命令），拼回同段（#85 H1，`rm -rf \` 换行 目标必拒）。
+// 行尾 `\`+换行 = bash 续行、行尾反引号+换行 = PS 续行（同一条命令），拼回同段
+// （#85 H1 + /fh 红队：双引号内 CRLF 要成对吞，勿留 \n 切断路径）。
 function splitSegments(cmd) {
   const segs = [];
   let buf = "";
@@ -166,8 +176,9 @@ function splitSegments(cmd) {
     const ch = cmd[i];
     if (quote) {
       if (ch === quote) quote = null;
-      if (ch === "\\" && quote !== "'" && (cmd[i + 1] === "\n" || cmd[i + 1] === "\r")) {
+      if ((ch === "\\" || ch === "`") && quote !== "'" && (cmd[i + 1] === "\n" || cmd[i + 1] === "\r")) {
         i++; // 双引号内续行同样拼接
+        if (cmd[i] === "\r" && cmd[i + 1] === "\n") i++;
         continue;
       }
       buf += ch;
@@ -178,7 +189,7 @@ function splitSegments(cmd) {
       buf += ch;
       continue;
     }
-    if (ch === "\\" && (cmd[i + 1] === "\n" || cmd[i + 1] === "\r")) {
+    if ((ch === "\\" || ch === "`") && (cmd[i + 1] === "\n" || cmd[i + 1] === "\r")) {
       i++;
       if (cmd[i] === "\r" && cmd[i + 1] === "\n") i++;
       continue;
@@ -266,7 +277,7 @@ const READ_VERBS = new Set([
 // env 属包装前缀（#85 M4）：`env rm -rf X` 是执行 rm，不是读环境（独词 env 打印环境=无写面，自然放行）。
 const CONTROL_PREFIXES = new Set([
   "if", "elif", "while", "until", "do", "then", "else", "!",
-  "command", "builtin", "exec", "nohup", "time", "env",
+  "command", "builtin", "exec", "nohup", "time", "env", "busybox",
 ]);
 const CD_VERBS = new Set(["cd", "chdir", "pushd"]);
 // 循环头动词：`for f in …` 的词表是展开数据不是写目标（体在后续段另行判定，#85 M11）
@@ -290,12 +301,19 @@ const WRITE_FULL_VERBS = new Set([
   "gh", "curl", "wget", "ffmpeg", "magick", "pandoc", "asar",
   "powershell", "pwsh", "cmd",
 ]);
-// shell 包装：-c 的参数按命令文本递归分析
-const SHELL_WRAPPER_VERBS = new Set(["bash", "sh", "zsh", "dash"]);
+// shell 包装：-c 的参数按命令文本递归分析（ksh/fish/csh 族补入，#85 /fh 红队）
+const SHELL_WRAPPER_VERBS = new Set(["bash", "sh", "zsh", "dash", "ksh", "fish", "csh", "tcsh", "ash"]);
 // 包装代码层的写信号（与强字面量同时出现才拒，防散文误伤）。
-// python open(...,'w'/'a'/'x'/+) 与 write( 补入（#85 M1：node -e writeFile 拦、python open 漏）
+// 基础表 = 代码/脚本 API 写形态：python open(...,'w')/write_text、node writeFile、.NET ::Delete 等
+// （#85 M1 + /fh 红队扩）；rename/writing 取调用形态防散文误伤；.write( 排除 stdout/stderr。
+// 重定向信号收紧为 `>`后接目标（排除 => 箭头/-> 成员/>> 移位，#85 /fh 误伤修复）。
 const WRITE_SIGNAL_RE =
-  /writeFile|appendFile|unlink|rmSync|rmdir|createWriteStream|copyFile|rename|shutil|os\.remove|os\.rmdir|remove-item|out-file|set-content|add-content|clear-content|new-item|move-item|copy-item|remove-itemproperty|\bdel\b|\berase\b|\brd\b|>\s*\S|\bopen\s*\([^)]*['"][rwabx+]*[wax+][rwabx+]*['"]|\bwrite\s*\(/i;
+  /writeFile|appendFile|unlink(?:Sync)?|rmSync|rmdir|createWriteStream|copyFile(?:Sync)?|rename(?:Sync)?\s*\(|shutil|os\.remove|os\.rmdir|os\.mkdir|makedirs|write_text|write_bytes|writelines|remove-item|out-file|set-content|add-content|clear-content|new-item|move-item|copy-item|remove-itemproperty|::delete\(|::writeall|::appendall|::move\(|::copy\(|::create\(|(?<![=-])>\s*[^=>\s]|\bopen\s*\([^)]*['"][rwabx+]*[wax+][rwabx+]*['"]|(?<!stdout)(?<!stderr)\.write\s*\(/i;
+// shell/PS 短动词与别名（只对 powershell/pwsh/cmd 包装文本启用）——易与散文/变量名撞词
+// （`let del=1` 误伤实证，#85 /fh 红队），勿并入基础表；node/python 面的 exec('rm …') 归
+// 计算/间接豁免面（不求完备，交 review/CI）。
+const SHELL_VERB_SIGNAL_RE =
+  /\brm\b|\bri\b|\brni\b|\brd\b|\bdel\b|\berase\b|\bren\b|\bmove\b|\bmv\b|\bmi\b|\bcopy\b|\bcp\b|\bcpi\b|\bxcopy\b|\bmkdir\b|\bmd\b/i;
 
 const FIND_WRITE_FLAGS = /(^|\s)(-delete|-exec|-execdir|-ok|-okdir|-fprint0?|-fprintf|-fls)(\s|$)/;
 
@@ -319,6 +337,25 @@ const GIT_CLUSTER_VALUE_CHARS = new Set(["m", "F", "t", "c", "C"]);
 // git 配置旁路关键词（覆写钩子路径或 alias = 等效 --no-verify，#85 H3）
 const GIT_HOOK_CONFIG_KEY_RE = /^core\.hooksPath\b|^alias\./i;
 
+// git alias 体复判（-c alias.*= 与 git config alias.* 两处共用）：
+// 反斜杠转义先还原（git split_cmdline：`commit \"-n\"` → `commit "-n"`，#85 /fh 红队实证）；
+// `!` 前缀 = shell 展开，按命令文本分析 + 包装层文本判定（函数包装 `!f(){…}` 形态靠文本面兜）
+function analyzeAliasBody(body, cwd, out) {
+  const b = String(body ?? "").trim().replace(/\\(["'\\])/g, "$1");
+  if (b.startsWith("!")) {
+    const inner = b.slice(1);
+    analyzeCommand(inner, cwd, out);
+    if (/\bgit\b/i.test(inner) && /\b(push|commit)\b/i.test(inner) && /--no-v/i.test(inner)) {
+      out.push({ rule: "C", detail: "git alias 体（! shell 展开）含 git push/commit --no-verify" });
+    }
+    if (strongLiteralHit(inner) && (WRITE_SIGNAL_RE.test(inner) || SHELL_VERB_SIGNAL_RE.test(inner))) {
+      out.push({ rule: REF_STRONG_RE.test(inner) ? "A" : "B", detail: "git alias 体（! shell 展开）含写效应文本且指向受保护路径" });
+    }
+    return;
+  }
+  analyzeGit(["git", ...tokenize(b)], cwd, out);
+}
+
 function analyzeGit(tokens, cwd, out) {
   // 跳过全局选项（带值的取值一起跳过），首个非选项词 = 子命令
   const GLOBAL_WITH_VALUE = new Set(["-C", "--git-dir", "--work-tree", "--exec-path", "--namespace", "--config-env", "--super-prefix"]);
@@ -331,24 +368,26 @@ function analyzeGit(tokens, cwd, out) {
   ]);
 
   let sub = null;
+  let subIdx = -1; // 子命令 token 下标（config 分支的键值位扫描从其后开始，勿把子命令词当键）
   let phase = "global"; // 子命令前 = global（-c/-C 是 git 级配置/上下文），之后 = sub
   let afterDoubleDash = false;
   let skipValueTo = null; // "context" | "config" | "plain"
   const positionals = [];
   const contextPaths = [];
+  const targetCandidates = []; // 长选项 = 值 / 贴连短选项值里的路径（#85 /fh 补：--separate-git-dir=、-o<路径>）
   const pendingC = [];
+  const aliasMap = new Map(); // alias 名 → 体（`git -c alias.ci=commit ci -n` 展开后才是 commit -n，#85 /fh 红队）
 
-  const emitConfigValue = (val) => {
+  const emitConfigValue = (valRaw) => {
+    const val = String(valRaw).trim(); // 前导空格形态（-c " core.hooksPath=…"）勿漏（#85 /fh 红队）
     if (/^core\.hooksPath\s*=/i.test(val)) {
       pendingC.push({ kind: "anySub", detail: `git 配置覆写 core.hooksPath=${val.slice(val.indexOf("=") + 1)}（含 NUL/不存在目录等效），禁经配置旁路关钩子` });
       return;
     }
-    const am = val.match(/^alias\.[^=]*=(.*)$/is);
+    const am = val.match(/^alias\.([^=]*)=(.*)$/is);
     if (am) {
-      const body = am[1].trim();
-      // alias 体 = 命令文本，按命令语义复判（alias.p='push --no-verify' 必拒）
-      if (body.startsWith("!")) analyzeCommand(body.slice(1), cwd, out);
-      else analyzeGit(["git", ...tokenize(body)], cwd, out);
+      aliasMap.set(am[1].trim().toLowerCase(), am[2].trim());
+      analyzeAliasBody(am[2], cwd, out);
     }
   };
 
@@ -366,18 +405,20 @@ function analyzeGit(tokens, cwd, out) {
     }
     const v = t.value;
     if (v === "") continue;
-    if (v === "--") {
+    // 选项形参判定容忍两端转义残留（`\-n\` = git split_cmdline 引号转义被字面化的形态，#85 /fh 红队 3-C3）
+    const ov = v.replace(/^[\\"]+|[\\"]+$/g, "");
+    if (ov === "--") {
       afterDoubleDash = true;
       continue;
     }
 
-    if (/^--/.test(v)) {
-      const eq = v.indexOf("=");
-      const base = eq >= 0 ? v.slice(0, eq) : v;
-      const inlineVal = eq >= 0 ? v.slice(eq + 1) : null;
+    if (ov.startsWith("--")) {
+      const eq = ov.indexOf("=");
+      const base = eq >= 0 ? ov.slice(0, eq) : ov;
+      const inlineVal = eq >= 0 ? ov.slice(eq + 1) : null;
       // --no-verify 及唯一前缀缩写（--no-veri 等实证打穿 pre-push）：按前缀判、宁多拒（#85 H2）
-      if (/^--no-v/i.test(v)) {
-        pendingC.push({ kind: "long", detail: `git 长选项 ${v} 命中 --no-verify（或其前缀缩写形态）` });
+      if (/^--no-v/i.test(ov)) {
+        pendingC.push({ kind: "long", detail: `git 长选项 ${ov} 命中 --no-verify（或其前缀缩写形态）` });
         continue;
       }
       if (GLOBAL_WITH_VALUE.has(base)) {
@@ -394,12 +435,14 @@ function analyzeGit(tokens, cwd, out) {
         if (inlineVal === null) skipValueTo = "plain";
         continue;
       }
+      // 其余长选项的 = 内联值按目标位判定（--separate-git-dir=<路径> 等，#85 /fh）
+      if (inlineVal !== null) targetCandidates.push(inlineVal);
       continue;
     }
 
-    if (v !== "-" && /^-/.test(v)) {
+    if (ov !== "-" && ov.startsWith("-")) {
       // 短选项簇（#85 H6）：逐字符走，n=--no-verify（仅 commit）；带值字母吃掉其后全部（值里的 n 不算）
-      const chars = v.slice(1);
+      const chars = ov.slice(1);
       for (let ci = 0; ci < chars.length; ci++) {
         const ch = chars[ci];
         if (GIT_CLUSTER_VALUE_CHARS.has(ch)) {
@@ -419,8 +462,14 @@ function analyzeGit(tokens, cwd, out) {
           break;
         }
         if (ch === "n") {
-          pendingC.push({ kind: "shortn", detail: `git commit 短选项簇 ${v} 含 -n（等价 --no-verify）` });
+          pendingC.push({ kind: "shortn", detail: `git commit 短选项簇 ${ov} 含 -n（等价 --no-verify）` });
           continue;
+        }
+        // 贴连短选项值里的路径（git format-patch -o<路径> 等，#85 /fh）：像路径就当目标位，走完即止
+        const restAll = chars.slice(ci + 1);
+        if (restAll && /[\\/:.%$~]/.test(restAll)) {
+          targetCandidates.push(restAll);
+          break;
         }
       }
       continue;
@@ -428,42 +477,90 @@ function analyzeGit(tokens, cwd, out) {
 
     if (sub === null) {
       sub = v.toLowerCase();
+      subIdx = i;
       phase = "sub";
       continue;
     }
     positionals.push(v);
   }
 
+  // alias 展开后才是真实语义：`git -c alias.ci=commit ci -n` = `commit -n`（#85 /fh 红队）
+  const effSub =
+    sub !== null && aliasMap.has(sub)
+      ? (tokenize(aliasMap.get(sub))[0]?.value ?? sub).replace(/^!/, "").toLowerCase()
+      : sub;
+
   // C 规则命中放行时机：长选项仅 push/commit（git am/merge/rebase --no-verify 属范围外）；
   // 短选项簇 -n 在 push 是 dry-run 不算，仅 commit 算；配置旁路（anySub）与子命令无关一律拒（#85 范围声明）
   for (const p of pendingC) {
     if (p.kind === "anySub") out.push({ rule: "C", detail: p.detail });
-    else if (p.kind === "long" && (sub === "commit" || sub === "push")) out.push({ rule: "C", detail: p.detail });
-    else if (p.kind === "shortn" && sub === "commit") out.push({ rule: "C", detail: p.detail });
+    else if (p.kind === "long" && (effSub === "commit" || effSub === "push")) out.push({ rule: "C", detail: p.detail });
+    else if (p.kind === "shortn" && effSub === "commit") out.push({ rule: "C", detail: p.detail });
   }
 
-  // git config 写形态覆写 core.hooksPath / alias.*（持久化旁路，与 -c 同罪，#85 H3）
-  if (sub === "config") {
-    const keyArgs = positionals.filter((a) => GIT_HOOK_CONFIG_KEY_RE.test(a));
+  // git config 写形态：core.hooksPath 任意改动（含 --unset 断钩）= 旁路必拒；
+  // alias.* 只有体是 --no-verify 等效才拒（良性 alias 修好后放行，#85 /fh 误伤修复）。
+  // 修复正路是 `npm run setup`/`npm install`（钩子自愈），不走字面 git config。
+  if (effSub === "config") {
+    // config 语法：[文件选项] <键> [<值>]。文件选项的值不是键值位（`-f cfg --get k` 是纯读，勿当写形态，
+    // #85 /fh 红队 3-C24）；--get/--list 族强制读
+    const fileTargets = [];
+    const kvPositionals = [];
+    for (let i = Math.max(1, subIdx + 1); i < tokens.length; i++) {
+      const t = tokens[i];
+      if (t.value.startsWith("--file=")) {
+        fileTargets.push(t.value.slice(7));
+        continue;
+      }
+      if (t.value === "--file" || t.value === "-f") {
+        if (tokens[i + 1]) fileTargets.push(tokens[++i].value);
+        continue;
+      }
+      if (isFlag(t) || t.value === "") continue;
+      kvPositionals.push(t.value);
+    }
+    const readForm = tokens.some((t) => /^--(get|get-all|get-regexp|get-urlmatch|list)$/.test(t.value) || t.value === "-l");
     const isWriteForm =
-      positionals.length >= 2 ||
-      positionals.some((a) => GIT_HOOK_CONFIG_KEY_RE.test(a) && a.includes("=")) ||
-      tokens.some((t) => /^--(unset|unset-all|replace-all|add)$/.test(t.value) || t.value === "-f" || t.value === "--file");
-    if (keyArgs.length > 0 && isWriteForm) {
-      out.push({ rule: "C", detail: `git config 写形态覆写 ${keyArgs[0].split("=")[0]}，等效 --no-verify` });
+      !readForm &&
+      (kvPositionals.length >= 2 ||
+        kvPositionals.some((a) => GIT_HOOK_CONFIG_KEY_RE.test(a) && a.includes("=")) ||
+        tokens.some((t) => /^--(unset|unset-all|replace-all|add)$/.test(t.value)));
+    if (isWriteForm) {
+      for (let i = 0; i < kvPositionals.length; i++) {
+        const a = kvPositionals[i];
+        if (/^core\.hooksPath\b/i.test(a)) {
+          out.push({ rule: "C", detail: `git config 写形态改 core.hooksPath（设值或 --unset 断钩均等效 --no-verify）` });
+        } else if (/^alias\./i.test(a)) {
+          const body = a.includes("=") ? a.slice(a.indexOf("=") + 1) : (kvPositionals[i + 1] ?? "");
+          analyzeAliasBody(body, cwd, out);
+        }
+      }
+      // 写形态落盘点：显式 --file 目标 + 隐式 cwd（config 键值不是写目标，勿误伤）
+      const cwdTarget = resolveTarget(cwd, ".");
+      if (isProtected(cwdTarget)) {
+        out.push({ rule: ruleFor(cwdTarget), detail: `git config 写形态在受保护目录内执行（落盘效应）` });
+      }
+      for (const f of fileTargets) {
+        const p = resolveTarget(cwd, f);
+        if (isProtected(p)) out.push({ rule: ruleFor(p), detail: `git config --file 写入受保护路径 ${f}` });
+      }
     }
     return;
   }
 
-  if (sub === null || GIT_READ_SUBS.has(sub)) return; // 读子命令放行
-  // 写子命令：位置参数 + 上下文路径（-C/--git-dir 等）都是写目标；选项值已排除（#85 M11）
-  for (const a of positionals) {
+  if (effSub === null || GIT_READ_SUBS.has(effSub)) return; // 读子命令放行
+  // 写子命令：隐式 cwd（落盘效应）+ 位置参数 + 上下文路径 + 目标位候选值都是写目标；消息类选项值已排除（#85 M11）
+  const cwdTarget = resolveTarget(cwd, ".");
+  if (isProtected(cwdTarget)) {
+    out.push({ rule: ruleFor(cwdTarget), detail: `git ${effSub} 在受保护目录内执行（落盘效应）` });
+  }
+  for (const a of [...positionals, ...targetCandidates]) {
     const p = resolveTarget(cwd, a);
-    if (isProtected(p)) out.push({ rule: ruleFor(p), detail: `git ${sub} 命中受保护路径 ${a}` });
+    if (isProtected(p)) out.push({ rule: ruleFor(p), detail: `git ${effSub} 命中受保护路径 ${a}` });
   }
   for (const cp of contextPaths) {
     const p = resolveTarget(cwd, cp);
-    if (isProtected(p)) out.push({ rule: ruleFor(p), detail: `git ${sub} 以上下文路径指向受保护路径 ${cp}` });
+    if (isProtected(p)) out.push({ rule: ruleFor(p), detail: `git ${effSub} 以上下文路径指向受保护路径 ${cp}` });
   }
 }
 
@@ -551,7 +648,15 @@ function analyzeSegment(seg, cwd, out) {
     // bash -c "命令文本"（含 -ec 捆绑簇，#85 M8）→ 递归按命令分析；否则按落盘工具的隐式 cwd 判定
     const cIdx = argWords.findIndex((t) => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(t.value));
     if (cIdx >= 0 && argWords[cIdx + 1]) {
-      analyzeCommand(argWords[cIdx + 1].value, cwd, out);
+      const innerText = argWords[cIdx + 1].value;
+      analyzeCommand(innerText, cwd, out);
+      // -c 体 + 尾随实参（`-c 'rm -rf "$1"' _ <目标>` 间接形态）：体含写信号才把实参当写目标，
+      // 纯读体（`-c 'cat "$1"' _ <file>`）勿误伤（#85 /fh 红队 4-W11）
+      if (WRITE_SIGNAL_RE.test(innerText) || SHELL_VERB_SIGNAL_RE.test(innerText)) {
+        for (const a of argWords.slice(cIdx + 2)) {
+          if (!isFlag(a) && a.value !== "") checkArg(a, `${verb} -c 体写效应`);
+        }
+      }
       return;
     }
     const p = resolveTarget(cwd, ".");
@@ -608,7 +713,10 @@ function analyzeSegment(seg, cwd, out) {
 
   // WRITE_FULL_VERBS 与未知动词（保守：非白名单读命令之外都不放行写面）
   for (const a of args) checkArg(a, `${verb} 落盘`);
-  if (WRITE_FULL_VERBS.has(verb) && strongLiteralHit(seg) && WRITE_SIGNAL_RE.test(seg)) {
+  const wrapperSignal =
+    WRITE_SIGNAL_RE.test(seg) ||
+    ((verb === "powershell" || verb === "pwsh" || verb === "cmd") && SHELL_VERB_SIGNAL_RE.test(seg));
+  if (WRITE_FULL_VERBS.has(verb) && strongLiteralHit(seg) && wrapperSignal) {
     out.push({ rule: REF_STRONG_RE.test(seg) ? "A" : "B", detail: `${verb} 包装内含写效应文本且指向受保护路径` });
   }
   // 包装层 --no-verify 兜底（powershell/cmd/node 等非递归包装内的 git 绕过形态，含前缀缩写）
@@ -742,9 +850,9 @@ export function classify({ toolName, toolInput, cwd }) {
   if (name === "ApplyPatch") {
     checkPathFields(toolInput, base, out);
     const text = typeof toolInput?.patch === "string" ? toolInput.patch : JSON.stringify(toolInput ?? {});
-    // *** <op> File: 与 *** Move to: 行都是写目标（Move to 补于 #85 M10）
-    for (const m of text.matchAll(/\*\*\*\s+(?:\w+\s+File|Move to):\s*(.+)/g)) {
-      const target = m[1].trim();
+    // *** <op> File: 与 *** Move to: 行都是写目标（Move to 补于 #85 M10；大小写/引号形态 /fh 补）
+    for (const m of text.matchAll(/\*\*\*\s+(?:\w+\s+File|Move to):\s*(.+)/gi)) {
+      const target = m[1].trim().replace(/^["']|["']$/g, "");
       const p = resolveTarget(base, target);
       if (isProtected(p)) out.push({ rule: ruleFor(p), detail: `补丁写目标位于受保护目录下：${target}` });
       failLoudUserdata(target, out, `补丁写目标 ${target}`);
