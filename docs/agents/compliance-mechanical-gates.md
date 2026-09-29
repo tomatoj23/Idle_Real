@@ -76,8 +76,9 @@
   - P3 扫 `packages/content/src/schema/**` 与 `packages/content/src/packs/**` 全部文件（含 .ts——TS 里拼出的 schema 字符串同样是使用面）；.ts 掩蔽注释（「勿用 $defs」的提醒不误伤），JSON 全文扫（键即字符串）。
   - P4 只认真档落点族（`%APPDATA%` 族 / `AppData\Roaming` 绝对形态 / Roaming\<游戏目录> / macOS/Linux userData 落点 / `process.env.APPDATA`），分隔符取 `[\\/]+`（JS 源码转义双反斜杠形态不漏）；**不扫裸 `userData`**。
 - **接线（显式两处，缺一即门禁空转）**：`.githooks/pre-push`（policy → check → test，policy 先行快失败）；`.github/workflows/ci.yml`（checkout 后、Install 前一步——零依赖，违规不必等装依赖才变红）。根 `package.json` 的 `npm run policy` 只是人手便捷入口，两网不依赖它。
-- **豁免纪律**：文件内注释 `policy-allow: P<n> <理由>`（理由必填；无理由的豁免行被忽略并提示）。首个豁免：`scripts/hooks/pretooluse-guard.test.mjs`（#81 金丝雀的真档路径字样=模拟用例数据，非写盘）。
-- **金丝雀**：`node scripts/policy-check.mjs --self-test`（48 项：deny 21 + allow 21 + e2e 4 + pragma 2）；e2e 在 `os.tmpdir()` 临时 fixture 树上跑 `runCheck`（违规树必红、干净树必零报），不改真源码。
+- **豁免纪律**：文件内注释 `policy-allow: P<n> <理由>`（理由必填；**只认注释形态**，字符串/模板里的 policy-allow 不算豁免；无理由的豁免行被忽略并提示）。首个豁免：`scripts/hooks/pretooluse-guard.test.mjs`（#81 金丝雀的真档路径字样=模拟用例数据，非写盘）。
+- **金丝雀**：`node scripts/policy-check.mjs --self-test`（70 项：deny 35 + allow 29 + e2e 4 + pragma 2，2026-09-29 对抗审计后扩编）；e2e 在 `os.tmpdir()` 临时 fixture 树上跑 `runCheck`（违规树必红、干净树必零报），不改真源码。
+- **对抗审计加固记录（2026-09-29 /fh 全维度复核）**：自查+对抗子代理实锤 3 个硬 bug 已修——①词法失步：正则字面量内的引号被当字符串开界（`/['"]/`），误报（字符串内容当代码报）+漏报（其后代码整段被抹）双向；修法=正则字面量态（除法歧义偏「正则」方向）+ 字符串/正则行尾恢复。②声明名误报：类/对象方法、访问器、无类型形参、catch 绑定、解构默认值全类排除（定义位判据 = `W(…)` 后跟 `{`/`:`；形参绑定判据 = 形参表模式位）；连带补上 `f(a, document, b)` 逗号位的既有漏报（原简写规则过宽误豁免）。③type 跳过区逃逸：`type Alias = number`（无 `;` 的 ASI）曾跨界吞掉后续语句的花括号块藏违规；修法=块首扫描遇语句界（空行/语句关键字）即停。另补：三元值位/case 值位/展开运算符/模板 `${…}`/`globalThis?.X` 的引用位识别、P4/P5/P6 大小写与 IP 边界（`127.0.0.1` 不是版本号）、同文件同规则同行合并单条。
 - **如何变红（巡检抽测用）**：
   - P1：往 `packages/engine/src` 加 `setTimeout(() => {}, 0);` → 硬失败；
   - P3：往 `packages/content/src/schema/*.json` 加 `"$defs": {}` → 硬失败；
@@ -86,7 +87,7 @@
   - P5：新建 `docs/research/*.md` 写 `Reference_Documents` 引用但不带日期 → review 提示出现；
   - P6：往 AGENTS.md 写 `vite 8.3.0` → review 提示出现；
   - 反向（误伤面）：金丝雀 ALLOW 组 = 基线合规形状清单（`g['setInterval']` 探测、接口方法签名、属性键、解构重命名、`timer.setInterval`、裸 `userDataDir: tempRoot()`、`file:///C:/…` URL 夹具、`moduleResolution: node10` 等），跑翻红 = 检测面变宽误伤，比失效更伤；DENY 组翻绿 = 门禁失效（同 #81 金丝雀协议）。
-- **已知边界（如实声明）**：P2 只认静态解构/成员抽取形态，探测别名（`g['名']`）与 bind 后使用不进检测面；P4 防呆不防恶（`app.getPath('userData')` 运行时解析、拼接构造的路径都看不见）；P5/P6 粗正则只提示，P5 收紧随 #83（标注格式以票模板为准）；AGENTS.md「现役 TS 7」是 P6 的常驻 review 提示（时点数字的已知在案形态，处置随 review）。
+- **已知边界（如实声明）**：P2 只认静态解构/成员抽取形态，探测别名（`g['名']`）与 bind 后使用不进检测面；P4 防呆不防恶（`app.getPath('userData')` 运行时解析、拼接构造的路径都看不见）；P5/P6 粗正则只提示，P5 收紧随 #83（标注格式以票模板为准）；AGENTS.md「现役 TS 7」是 P6 的常驻 review 提示（时点数字的已知在案形态，处置随 review）。P1 残余（宁可漏报方向）：同名遮蔽引用不识别（局部变量叫 `document` 的引用面照报——engine 命名纪律兜底，勿用禁词做局部名）；CR-only 行结束符的注释掩蔽不识别（本仓 CRLF/LF 不受影响）。
 
 ## 3. 守卫测试（可选替身）
 

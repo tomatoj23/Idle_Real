@@ -17,12 +17,17 @@
 //
 // 检测原则（票 #82）：宁可漏报不误报——误报诱发豁免，比漏报更伤。
 //   P1 识别裸标识符/成员访问的直接引用；排除注释、字符串字面量、属性键、声明名、
-//      接口/类型块（基线实证：engine/src 词面命中全是这五类合规形状，裸词表必误报）。
+//      接口/类型块与定义位（基线实证：engine/src 词面命中全是合规形状，裸词表必误报）。
 //   P4 只认真档落点族（%APPDATA% 族 / AppData\Roaming 绝对形态等），勿扫裸 `userData`
 //      （`userDataDir: tempRoot()` 沙箱注入遍地是）；真档落点经 app.getPath('userData')
 //      运行时解析，本断言只防呆，不防蓄意（蓄意面交 review / 钩子 B）。
-// 豁免：文件内注释写 `policy-allow: P<n> <理由>`（理由必填，同钩子白名单「加注释放行」
-//   纪律）；无理由的豁免行会被忽略并提示。
+// 豁免：文件内**注释**写 `policy-allow: P<n> <理由>`（理由必填，同钩子白名单「加注释放行」
+//   纪律）；字符串里的 policy-allow 不算豁免；无理由的豁免行会被忽略并提示。
+//
+// 2026-09-29 对抗审计加固（自查+对抗复核实锤后修）：正则字面量识别（引号失步曾造成
+//   误报+漏报双向）、声明名全类排除（类/对象方法、访问器、形参、catch、解构默认值）、
+//   type 跳过区语句界（ASI 形态曾跨界吞掉后续语句）、三元/case/展开/模板表达式的
+//   引用位识别。已知残余边界见 compliance-mechanical-gates.md §2 落地形态。
 //
 // 运行：node scripts/policy-check.mjs [--root <dir>]（缺省 = 本脚本所在仓库根）。
 
@@ -89,9 +94,12 @@ const P1_BANNED = new Set([
 const GLOBAL_ROOTS = new Set(["globalThis", "window", "self", "global"]);
 const DECL_KEYWORDS = new Set(["const", "let", "var", "function", "class", "import", "export", "declare"]);
 
-// ---------- 词法掩码（识别引用上下文的前置：抹掉注释/字符串内容，保留位置与换行） ----------
-// strings: 抹字符串内容（P1 用）；comments: 抹注释（P1/P3/P4 都用——
+// ---------- 词法掩码（识别引用上下文的前置：抹掉注释/字符串/正则内容，保留位置与换行） ----------
+// strings: 抹字符串/正则内容（P1 用）；comments: 抹注释（P1/P3/P4 都用——
 // 注释里提及不算引用/字面量）；模板字面量的 ${…} 表达式按代码保留。
+// 正则字面量必须识别（对抗审计 F1）：`/['"]/` 里的引号若被当字符串开界，
+// 后续代码会被整段误抹（漏报）或字符串内容被当代码（误报）。
+// 字符串/正则均不跨行（续行 \ 除外）：未闭合时行尾恢复，防失步扩散（对抗审计 F1/F7）。
 
 function maskCode(src, opts = {}) {
   const maskStrings = opts.strings !== false;
@@ -108,13 +116,38 @@ function maskCode(src, opts = {}) {
   let mode = "code";
   const stack = []; // 模板 ${ 表达式上下文栈
   let depth = 0; // 当前代码上下文的花括号深度
+
+  // 除法 vs 正则的歧义判定：前一显著字符属表达式起始位才算正则。偏「正则」方向——
+  // 误判正则为除法会引号失步（误报风险），误判除法为正则只多抹一段（漏报方向，可接受）。
+  const REGEX_PREV_CHARS = new Set(["(", ")", ",", "=", ":", "[", "!", "&", "|", "?", "{", "}", ";", "+", "-", "*", "%", "<", ">", "~", "^"]);
+  const REGEX_KEYWORDS = new Set(["return", "typeof", "case", "in", "of", "new", "delete", "void", "instanceof", "do", "else", "yield", "await", "throw"]);
+  const regexAllowed = () => {
+    let q = i - 1;
+    while (q >= 0 && /\s/.test(out[q])) q--;
+    if (q < 0) return true;
+    const c = out[q];
+    if (REGEX_PREV_CHARS.has(c)) return true;
+    if (/[\w$]/.test(c)) {
+      let s = q;
+      while (s >= 0 && /[\w$]/.test(out[s])) s--;
+      return REGEX_KEYWORDS.has(out.slice(s + 1, q + 1));
+    }
+    return false; // ) ] ' " ` . 数字之后按除法
+  };
+
   while (i < n) {
     const c = src[i];
     const c2 = src[i + 1];
     if (mode === "code") {
       if (c === "/" && c2 === "/") {
-        const j = src.indexOf("\n", i);
-        const end = j === -1 ? n : j;
+        // 行注释：\n 或 \r（CR-only 文件）终结
+        let end = n;
+        for (let k = i; k < n; k++) {
+          if (src[k] === "\n" || src[k] === "\r") {
+            end = k;
+            break;
+          }
+        }
         if (maskComments) blank(i, end);
         i = end;
         continue;
@@ -128,18 +161,60 @@ function maskCode(src, opts = {}) {
       }
       if (c === "'" || c === '"') {
         let j = i + 1;
-        while (j < n && src[j] !== c) {
-          if (src[j] === "\\") j++;
+        let closed = false;
+        while (j < n) {
+          const ch = src[j];
+          if (ch === "\\") {
+            j += 2;
+            continue;
+          }
+          if (ch === c) {
+            closed = true;
+            break;
+          }
+          if (ch === "\n" || ch === "\r") break; // 行尾恢复
           j++;
         }
-        const end = Math.min(j + 1, n);
-        if (maskStrings) blank(i + 1, end - 1);
-        i = end;
+        if (maskStrings) blank(i + 1, closed ? j : j);
+        i = closed ? j + 1 : j;
         continue;
       }
       if (c === "`") {
         mode = "tmpl";
         i++;
+        continue;
+      }
+      if (c === "/" && regexAllowed()) {
+        let j = i + 1;
+        let inClass = false;
+        let closed = false;
+        while (j < n) {
+          const ch = src[j];
+          if (ch === "\\") {
+            j += 2;
+            continue;
+          }
+          if (ch === "\n" || ch === "\r") break;
+          if (inClass) {
+            if (ch === "]") inClass = false;
+            j++;
+            continue;
+          }
+          if (ch === "[") {
+            inClass = true;
+            j++;
+            continue;
+          }
+          if (ch === "/") {
+            closed = true;
+            break;
+          }
+          j++;
+        }
+        let end = closed ? j + 1 : j;
+        if (closed) while (end < n && /[a-z]/i.test(src[end])) end++; // 旗标
+        if (maskStrings) blank(i, end);
+        i = end;
         continue;
       }
       if (c === "{") depth++;
@@ -190,14 +265,17 @@ function lineIndexer(src) {
   };
 }
 
-// 接口/类型块跳过区（接口方法签名 setInterval(…) 形如调用，必须整块排除）
+// 接口/类型块跳过区（接口方法签名 setInterval(…) 形如调用，必须整块排除）。
+// 块首扫描遇语句界即停（对抗审计 F3）：`type Alias = number` 这类无 `;` 的 ASI 形态
+// 不得跨界吞掉下一个语句的花括号块。
+const STMT_KEYWORD_RE = /^(export|import|const|let|var|function|class|interface|type|return|if|for|while|switch|try|throw|declare|async|enum|break|continue|do|yield|await|case|default)\b/;
+
 function declSkipRanges(masked) {
   const ranges = [];
   const re = /\b(interface|type)\s+([A-Za-z_$][\w$]*)/g;
   for (let m = re.exec(masked); m !== null; m = re.exec(masked)) {
     let j = re.lastIndex;
     let open = -1;
-    // 向后找块首 {；遇到 ; 或先到行尾语义终结即放弃（type A = B | C; 无块体）
     while (j < masked.length) {
       const ch = masked[j];
       if (ch === "{") {
@@ -205,6 +283,12 @@ function declSkipRanges(masked) {
         break;
       }
       if (ch === ";") break;
+      if (ch === "\n") {
+        let k = j + 1;
+        while (k < masked.length && (masked[k] === " " || masked[k] === "\t" || masked[k] === "\r")) k++;
+        if (k >= masked.length || masked[k] === "\n") break; // 空行
+        if (STMT_KEYWORD_RE.test(masked.slice(k))) break; // 新语句
+      }
       j++;
     }
     if (open === -1) continue;
@@ -241,6 +325,76 @@ function skipWs(masked, from) {
   return i;
 }
 
+// 从 ( 起找配对 )
+function matchParen(masked, open) {
+  let d = 0;
+  for (let k = open; k < masked.length; k++) {
+    if (masked[k] === "(") d++;
+    else if (masked[k] === ")") {
+      d--;
+      if (d === 0) return k;
+    }
+  }
+  return -1;
+}
+
+// 向外找最近的未配对括号（掩码已抹字符串/正则/注释，括号语义干净）
+function enclosingBracket(masked, pos) {
+  let d = 0;
+  for (let k = pos - 1; k >= 0; k--) {
+    const ch = masked[k];
+    if (ch === ")" || ch === "]" || ch === "}") d++;
+    else if (ch === "(" || ch === "[" || ch === "{") {
+      if (d === 0) return { ch, idx: k };
+      d--;
+    }
+  }
+  return null;
+}
+
+// (…close) 是否形参表：function [名] / catch 之后，或 ) 之后是 =>
+function isParamList(masked, open, close) {
+  let p = open - 1;
+  while (p >= 0 && /\s/.test(masked[p])) p--;
+  const word = readIdentBefore(masked, p + 1);
+  if (word === "function" || word === "catch") return true;
+  if (word && /^[\w$]+$/.test(word)) {
+    let q = p - word.length - 1;
+    while (q >= 0 && /\s/.test(masked[q])) q--;
+    if (readIdentBefore(masked, q + 1) === "function") return true;
+  }
+  const after = skipWs(masked, close + 1);
+  return masked.startsWith("=>", after);
+}
+
+// W 在形参的**模式位**（该顶层段内 =/: 之前）才算绑定名；默认值里的是引用
+function isPatternPosition(masked, open, close, wStart) {
+  let depth = 0;
+  let segStart = open + 1;
+  let segEnd = close;
+  for (let k = open + 1; k < close; k++) {
+    const ch = masked[k];
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") depth--;
+    else if (ch === "," && depth === 0) {
+      if (wStart < k) {
+        segEnd = k;
+        break;
+      }
+      segStart = k + 1;
+    }
+  }
+  if (wStart > segEnd) return false;
+  let d2 = 0;
+  for (let k = segStart; k < wStart; k++) {
+    const ch = masked[k];
+    if (ch === "(" || ch === "[" || ch === "{") d2++;
+    else if (ch === ")" || ch === "]" || ch === "}") d2--;
+    else if (d2 === 0 && (ch === "=" || ch === ":")) return false;
+  }
+  return true;
+}
+
 // ---------- 各断言（纯函数：(relPath, content) -> [{rule, line, detail}]） ----------
 
 function checkP1(relPath, content) {
@@ -260,28 +414,69 @@ function checkP1(relPath, content) {
     let p = start - 1;
     while (p >= 0 && /\s/.test(masked[p])) p--;
     const prevCh = p >= 0 ? masked[p] : "";
+    const nx = skipWs(masked, end);
+    const nextCh = nx < masked.length ? masked[nx] : "";
+    const prevWord = prevCh !== "" ? readIdentBefore(masked, p + 1) : "";
 
-    if (prevCh === ".") {
-      // 成员访问属性位：对象是探测根（globalThis.document）才算直接引用；
-      // 本地对象成员（timer.setInterval 绑后调用）放行
+    // ① 成员访问属性位：展开运算符 …W 不是成员访问；探测根上的属性访问算直接引用
+    if (prevCh === "." && !(p >= 2 && masked[p - 1] === "." && masked[p - 2] === ".")) {
       let q = p - 1;
+      if (q >= 0 && masked[q] === "?") q--; // 可选链 ?.
       while (q >= 0 && /\s/.test(masked[q])) q--;
       const obj = readIdentBefore(masked, q + 1);
       if (!GLOBAL_ROOTS.has(obj)) continue;
       out.push({ rule: "P1", line: lineOf(start), detail: `经 ${obj} 静态成员访问平台全局「${word}」` });
       continue;
     }
-    // 声明名（const/function 等后）
-    if (prevCh !== "" && DECL_KEYWORDS.has(readIdentBefore(masked, p + 1))) continue;
 
-    let nx = skipWs(masked, end);
-    // 简写属性键/绑定名 { W }、, W }
-    if ((prevCh === "{" || prevCh === ",") && (masked[nx] === "}" || masked[nx] === ",")) continue;
-    // 属性键 / 类型注解名 / 标签：下一显著符是 :（含可选 ?）
-    if (masked[nx] === "?") nx = skipWs(masked, nx + 1);
-    if (masked[nx] === ":") continue;
+    // ② 声明关键字后的名字
+    if (prevCh !== "" && DECL_KEYWORDS.has(prevWord)) continue;
 
-    const form = masked[nx] === "(" ? "直接调用" : masked[nx] === "." || masked[nx] === "[" ? "成员访问链" : "裸引用";
+    // ③ 方法/访问器定义位：W(…) 后跟 { 或 :（返回类型）→ 定义非调用
+    if (nextCh === "(") {
+      const close = matchParen(masked, nx);
+      if (close !== -1) {
+        const after = skipWs(masked, close + 1);
+        const aCh = after < masked.length ? masked[after] : "";
+        if (aCh === "{" || aCh === ":") continue;
+      }
+    }
+
+    // ④ 属性键 / 类型注解 / 标签（含可选键 W?:）；三元值位与 case 值位是引用，照常报
+    {
+      let kx = nx;
+      if (masked[kx] === "?") kx = skipWs(masked, kx + 1);
+      if (masked[kx] === ":") {
+        const ternaryValue = prevCh === "?";
+        const caseValue = prevWord === "case";
+        if (!ternaryValue && !caseValue) continue;
+      }
+    }
+
+    const br = enclosingBracket(masked, start);
+    const templateBrace = br && br.ch === "{" && br.idx > 0 && masked[br.idx - 1] === "$";
+
+    // ⑤ 简写键 / 解构绑定 / 默认值：只在外层是 { 的模式位（prev ∈ { ,），
+    //    数组解构默认 [ W = … 同理；模板 ${…} 的 { 不是键位
+    if (!templateBrace && br) {
+      const braceBind = br.ch === "{" && (prevCh === "{" || prevCh === ",") && (nextCh === "}" || nextCh === "," || nextCh === "=");
+      const arrayDefault = br.ch === "[" && (prevCh === "[" || prevCh === ",") && nextCh === "=";
+      if (braceBind || arrayDefault) continue;
+    }
+
+    // ⑥ 形参绑定位（function / 箭头 / catch 的形参表模式位）
+    if (br && br.ch === "(") {
+      const close = matchParen(masked, br.idx);
+      if (close !== -1 && isParamList(masked, br.idx, close) && isPatternPosition(masked, br.idx, close, start)) continue;
+    }
+
+    // 模板 ${W} 首部键位豁免的补位：${document} 的 prev { 来自模板，不能当简写键
+    if (prevCh === "{" && p > 0 && masked[p - 1] === "$") {
+      out.push({ rule: "P1", line: lineOf(start), detail: `平台全局「${word}」模板表达式引用` });
+      continue;
+    }
+
+    const form = nextCh === "(" ? "直接调用" : nextCh === "." || nextCh === "[" ? "成员访问链" : "裸引用";
     out.push({ rule: "P1", line: lineOf(start), detail: `平台全局「${word}」${form}` });
   }
   return out;
@@ -302,17 +497,17 @@ function checkP3(relPath, content) {
 
 // P4 真档落点族（勿扫裸 userData：沙箱注入 userDataDir: tempRoot() 遍地是）。
 // 分隔符用 [\\/]+：JS 源码里路径字符串常写成转义双反斜杠（Roaming\\问道长生），
-// 单分隔符正则会漏掉那种形态。
+// 单分隔符正则会漏掉那种形态；大小写不敏感（roaming/…、process.env.appdata 同样算）。
 const P4_PATTERNS = [
   [/%APPDATA%/i, "%APPDATA% 写形态"],
-  [/\$\{APPDATA\}|\$APPDATA\b/, "$APPDATA 形态"],
+  [/\$\{APPDATA\}|\$APPDATA\b/i, "$APPDATA 形态"],
   [/\$env:APPDATA/i, "$env:APPDATA 形态"],
-  [/process\.env(?:\.\s*APPDATA|\[\s*["']APPDATA["']\s*\])/, "process.env.APPDATA 形态"],
+  [/process\.env(?:\.\s*APPDATA|\[\s*["']APPDATA["']\s*\])/i, "process.env.APPDATA 形态"],
   [/AppData[\\/]+Roaming/i, "真档绝对路径（AppData\\Roaming）"],
-  [/[["']AppData["']\s*,\s*["']Roaming["']/, "真档路径 join 数组形态"],
-  [/Roaming[\\/]+(?:问道长生|@wendao)/, "真档落点（Roaming\\<游戏目录>）"],
-  [/Application[ ]Support[\\/]+(?:问道长生|@wendao)/, "macOS userData 落点"],
-  [/(?:^|[\\/])\.config[\\/]+(?:问道长生|@wendao)/, "Linux userData 落点"],
+  [/[["']AppData["']\s*,\s*["']Roaming["']/i, "真档路径 join 数组形态"],
+  [/Roaming[\\/]+(?:问道长生|@wendao)/i, "真档落点（Roaming\\<游戏目录>）"],
+  [/Application[ ]Support[\\/]+(?:问道长生|@wendao)/i, "macOS userData 落点"],
+  [/(?:^|[\\/])\.config[\\/]+(?:问道长生|@wendao)/i, "Linux userData 落点"],
 ];
 
 function checkP4(relPath, content) {
@@ -372,15 +567,16 @@ function checkP2(relPath, content) {
 }
 
 function checkP5(relPath, content) {
-  if (!content.includes("Reference_Documents")) return [];
+  if (!/reference_documents/i.test(content)) return [];
   if (/\d{4}-\d{2}-\d{2}/.test(content)) return [];
   return [{ rule: "P5", line: 1, detail: "引用 Reference_Documents 快照但未见取档日期标注（20xx-xx-xx）" }];
 }
 
-// 顺序敏感：先抽「工具名+版本」并抹掉，再抽三段版本号——防「vite 8.3.0」双报
+// 顺序敏感：先抽「工具名+版本」并抹掉，再抽三段版本号——防「vite 8.3.0」双报。
+// 三段号加前后点边界：127.0.0.1 这类 IP 不是版本号（对抗审计 F5）。
 const P6_PATTERNS = [
-  [/\b(?:TS|Electron|Node\.js|vite|vitest|npm|oxlint|happy-dom|pnpm|Capacitor)\s+[vV]?\d[\d.]*/g, "工具名+版本"],
-  [/\b\d+\.\d+\.\d+\b/g, "三段版本号"],
+  [/\b(?:TS|Electron|Node(?:\.js)?|vite|vitest|npm|oxlint|happy-dom|pnpm|Capacitor)\s+[vV]?\d[\d.]*/gi, "工具名+版本"],
+  [/(?<![\d.])\d+\.\d+\.\d+(?![\d.])/g, "三段版本号"],
 ];
 
 function checkP6(relPath, content) {
@@ -400,15 +596,17 @@ function checkP6(relPath, content) {
   return out;
 }
 
-// ---------- 豁免（policy-allow: P<n> <理由>，理由必填） ----------
+// ---------- 豁免（policy-allow: P<n> <理由>，注释形态、理由必填） ----------
 
 function allowPragmas(content) {
+  // 只认注释形态（票面口径「文件内注释写」）：字符串/模板里的 policy-allow 不算豁免
+  const masked = maskCode(content, { strings: true, comments: false });
   const lineOf = lineIndexer(content);
   const ok = new Set();
   const out = [];
   const re = /policy-allow:\s*P([1-6])\b([^\n]*)/g;
   let m;
-  while ((m = re.exec(content))) {
+  while ((m = re.exec(masked))) {
     const rule = `P${m[1]}`;
     if (/[\p{L}\p{N}]/u.test(m[2])) ok.add(rule);
     else out.push({ rule, line: lineOf(m.index), detail: `policy-allow 豁免未注明理由（${rule}），已忽略` });
@@ -474,8 +672,9 @@ export function checkFile(relPath, content) {
 }
 
 export function runCheck(root) {
-  const errors = [];
-  const warnings = [];
+  // 同文件同规则同行合并为一条（多 pattern 命中同一路径/同一行不重复刷屏）
+  const errMap = new Map();
+  const warnMap = new Map();
   walkFiles(root, (file) => {
     const rel = path.relative(root, file);
     let content;
@@ -486,12 +685,19 @@ export function runCheck(root) {
     }
     for (const v of checkFile(rel, content)) {
       const level = v.level ?? RULES[v.rule].level;
-      (level === "error" ? errors : warnings).push({ ...v, file: rel.replace(/\\/g, "/") });
+      const map = level === "error" ? errMap : warnMap;
+      const key = `${v.rule}|${rel.replace(/\\/g, "/")}|${v.line}`;
+      const prev = map.get(key);
+      if (prev) {
+        if (!prev.detail.includes(v.detail)) prev.detail += `；${v.detail}`;
+      } else {
+        map.set(key, { ...v, file: rel.replace(/\\/g, "/") });
+      }
     }
   });
   const byFile = (a, b) => a.file.localeCompare(b.file) || a.line - b.line;
-  errors.sort(byFile);
-  warnings.sort(byFile);
+  const errors = [...errMap.values()].sort(byFile);
+  const warnings = [...warnMap.values()].sort(byFile);
   return { errors, warnings };
 }
 

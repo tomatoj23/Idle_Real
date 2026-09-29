@@ -37,6 +37,16 @@ const DENY_CASES = [
   ["P1-new-xhr", P1_FILE, "const x = new XMLHttpRequest();", "P1"],
   ["P1-raf", P1_FILE, "requestAnimationFrame(step);", "P1"],
   ["P1-type-typeof-query", P1_FILE, "type T = typeof setTimeout;", "P1"],
+  // ---- P1 对抗审计加固回归（F1 词法失步 / F2 声明名误报 / F3 跳过区逃逸 / F4 引用位）----
+  ["P1-fn-after-regex", P1_FILE, "const re = /['\"]/;\nsetInterval(f, 1);", "P1"],
+  ["P1-type-escape", P1_FILE, "type Alias = number\nexport function tick() { setInterval(f, 1); }", "P1"],
+  ["P1-ternary-value", P1_FILE, "const x = flag ? document : null;", "P1"],
+  ["P1-case-value", P1_FILE, "switch (x) { case document: break; }", "P1"],
+  ["P1-spread", P1_FILE, "f(...document);", "P1"],
+  ["P1-template-expr", P1_FILE, "const s = `${document}`;", "P1"],
+  ["P1-globalthis-optional", P1_FILE, "globalThis?.setTimeout(f, 1);", "P1"],
+  ["P1-call-arg-mid", P1_FILE, "report(a, document, b);", "P1"],
+  ["P1-param-default-ref", P1_FILE, "function f(a = window) {}", "P1"],
   // ---- P3 ----
   ["P3-defs-key", P3_FILE, '{"$defs": {}, "definitions": {}}', "P3"],
   // ---- P4 ----
@@ -45,6 +55,10 @@ const DENY_CASES = [
   ["P4-powershell-env", P4_FILE, "run(`del $env:APPDATA\\问道长生\\saves\\x.json`);", "P4"],
   ["P4-process-env-join", P4_FILE, "const p = path.join(process.env.APPDATA, '问道长生');", "P4"],
   ["P4-linux-form", P4_FILE, "const p = '/home/u/.config/问道长生/saves/x.json';", "P4"],
+  ["P4-lowercase-roaming", P4_FILE, "const p = 'roaming\\问道长生\\x.json';", "P4"],
+  ["P4-lowercase-env", P4_FILE, "const p = path.join(process.env.appdata, '问道长生');", "P4"],
+  ["P4-join-array", P4_FILE, "fs.rmSync(path.join('AppData', 'Roaming', '问道长生', 'x.json'));", "P4"],
+  ["P4-pragma-in-string", P4_FILE, "const note = 'policy-allow: P4 已备份';\nrmSync('%APPDATA%\\问道长生\\x');", "P4"],
   // ---- P2（review 级，命中=有提示）----
   ["P2-destructure-window", "packages/engine/src/probe.ts", "const { setTimeout } = window;", "P2"],
   ["P2-destructure-console", "packages/engine/src/probe.ts", "const { log } = console;", "P2"],
@@ -53,6 +67,7 @@ const DENY_CASES = [
   ["P5-no-date", "docs/research/probe.md", "快照见 D:\\My_Projects\\Reference_Documents\\electron-main", "P5"],
   ["P6-semver", "AGENTS.md", "现役 Electron 38.8.6 暂持", "P6"],
   ["P6-tool-major", "AGENTS.md", "现役 TS 7 = Go 原生编译器", "P6"],
+  ["P6-lowercase-tool", "AGENTS.md", "现役 electron 44 暂持", "P6"],
 ];
 
 // ALLOW：基线合规形状（P1 的五类排除 + P4 的沙箱/URL 夹具 + 探测别名），
@@ -79,6 +94,15 @@ const ALLOW_CASES = [
   ["L-p5-dated", "docs/research/probe.md", "electron-main 快照 2026-09-29 取档（main 分支）"],
   ["L-p6-node10-mode", "AGENTS.md", "`moduleResolution: node10` 与 draft-07 均为形态名，不是时点版本"],
   ["L-p6-major-only-tool", "AGENTS.md", "vitest 默认池（forks）即可"],
+  ["L-p6-ip-not-version", "AGENTS.md", "内网 127.0.0.1:5173 与 draft-07 均非版本号"],
+  // ---- P1 对抗审计加固回归（声明名/定义位不得误伤）----
+  ["L-regex-string-safety", P1_FILE, "const re = /[\"/];\nconst s = \"document\";"],
+  ["L-class-method", P1_FILE, "class T { setInterval(fn: () => void, ms: number): void {} }"],
+  ["L-object-method", P1_FILE, "const o = { setInterval(fn) {}, get localStorage() { return 1; } };"],
+  ["L-param-plain", P1_FILE, "function f(window) {}"],
+  ["L-catch-binding", P1_FILE, "try {} catch (document) {}"],
+  ["L-destr-default", P1_FILE, "const { document = d } = x;"],
+  ["L-array-destr-default", P1_FILE, "const [document = 1] = arr;"],
 ];
 
 // ---------- 断言执行 ----------
