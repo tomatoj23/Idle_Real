@@ -9,7 +9,7 @@
 
 ## 决策
 
-1. **当期对齐 = 小步**：happy-dom 18→20 + Vite 8.3.0（#64）、Electron fuses 加固（#65）、app-desktop 测试入 tsc 查型（#66）；**Electron 38.8.6 暂持**，升级 44.4.1 = #67（触发：对外发版前硬门槛；无发布计划则 UX 批 #34–#38 收口后立即）；Vitest 5 观望 = #68。
+1. **当期对齐 = 小步**：happy-dom 18→20 + Vite 8.3.0（#64）、Electron fuses 加固（#65）、app-desktop 测试入 tsc 查型（#66）；Electron 38.8.6 暂持 → 升 44.4.1 = #67（触发：对外发版前硬门槛；无发布计划则 UX 批 #34–#38 收口后立即）；Vitest 5 观望 = #68。
 2. **持续策略 = 事件驱动 + 周期巡检，反对「随时对齐」**：
    - 选型时：新依赖先查维护状态与 GA 时长（`npm view <pkg> time --registry=https://registry.npmjs.org`），停更线不进 package.json；
    - 巡检：每特性批收口（或季度）跑 `npm outdated` + `npm audit` + Electron 支持窗口核对；
@@ -23,6 +23,19 @@
 
 ## 后果
 
-- Electron 38.8.6 暂持 = **有意识接受** 19 条 GHSA 在案（最高 8.1，context isolation 绕过 7.5 与本仓 contextBridge+沙箱形态相关；缓解：本地 file:// 内容、无远程加载、window.open 全 deny）。复评触发 = #67，不得无票延长。
-- 永久残留：extract-zip 两条 8.1（range=`*` 无修复版，安装/打包期影响面），升 Electron 亦不消除——audit 非绿不阻断验收。
+- ~~Electron 38.8.6 暂持 = **有意识接受** 19 条 GHSA 在案（最高 8.1，context isolation 绕过 7.5 与本仓 contextBridge+沙箱形态相关；缓解：本地 file:// 内容、无远程加载、window.open 全 deny）。复评触发 = #67，不得无票延长。~~ **已解除（2026-09-29，#67 交付）**：升级即清账，19 条 GHSA 归零；上述缓解措施（本地内容、window.open 全 deny）在升级后仍然有效，不因清账而撤。
+- ~~永久残留：extract-zip 两条 8.1（range=`*` 无修复版，安装/打包期影响面），升 Electron 亦不消除——audit 非绿不阻断验收。~~ **勘误（2026-09-29，#67 交付实证）：此条被证伪。** electron 44.x 起不再依赖 `extract-zip`，改用自带的 `@electron-internal/extract-zip`（活跃维护）——升级后 extract-zip 整体退场，`npm audit` 归零（0 vulnerabilities），连「预留残留」都不必留。凡断言「无修复版的永久残留」，先确认该依赖是否仍是升级后依赖树的成员。
 - happy-dom 18→20 落地后 4 处 workaround 注释需同步复核（#64 验收项）。
+
+## 落地记录
+
+- **#67 已交付（2026-09-29）**：Electron 38.8.6 → **44.4.1**（精确 pin），暂持解除，19 条 GHSA 清账（`npm audit` = 0 vulnerabilities，比票面预期更彻底——连 extract-zip 预留残留也没了，见上勘误）。票面六项验收逐条实证：
+  1. **真机首跑回归**：NSIS 实装版与 portable 版双路 CDP 冒烟全通——`window.wendao` 桥五面齐（mode/loadSave/writeSave/flushSave/reportAchievement）、`sandbox: true` 真实生效、UI 起台（`#page-root` 在、正文非空）、内嵌 Chromium 152 实证（真机 UA）。
+  2. **electron-builder × Electron 44 端到端出包并实装**：NSIS（oneClick）+ portable 两 target 出包成功，NSIS 静默实装到 `%LOCALAPPDATA%\Programs\`（注册表 DisplayIcon 指向装好的 exe）后实跑冒烟；portable 自解压到 `%TEMP%\<随机目录>` 后实跑冒烟（清进程按解包目录+CDP 端口匹配，收工复核余 0）。`@electron/rebuild` 对 steamworks.js 干净通过。
+  3. **steamworks.js 加载冒烟**：原生模块在 Electron 44（ABI 149）下**成功加载**——真机 `init()` 抛的是 steamworks 自有错误「Cannot create IPC pipe to Steam client process. Steam is probably not running.」（缺 Steam 客户端），不是模块装载错，反证 N-API 按平台 prebuild 免重编译的推断成立。成就上报与云存档走 mock 回落路径实证：成就落本地账本 `achievements.json`、存档槽位写读回环 ack=`ok`，回落有日志可审计（`adapter=mock (steam init failed…)`）。
+  4. **42 起 postinstall 不再下载二进制**：install 后 `node_modules/electron/` 无 `dist/`、无 `path.txt`（且 44.x 的 package 无 postinstall 脚本）；首跑 `npx electron --version` 打印「Downloading Electron binary...」并生成**新的** cache 条目=真走网络而非吃本地缓存，随后 `dist/` + `path.txt` 落位。**对 CI/装机流程的含义：装完依赖不等于装好 Electron，必须留一步首跑。**
+  5. **audit**：electron 19 条 GHSA 全清；extract-zip 预留残留也一并消失（超出预期）。
+  6. **fuses 随包复验**：不适用——#65 尚未合入（见下）。
+
+  **升级唯一类型漂移**：`render-process-gone` 的 reason 新增 `memory-eviction`，`GoneReason` 并集补员（tsc 在 `decide(details.reason)` 装配点报错兜住，非人眼）。分类裁决为**走重载**（内存回收摘掉渲染进程不是应用过错，白窗永挂正是 rendererRecovery 要消灭的病；吃同一份 RELOAD_LIMIT 预算），已用测试钉住并做变异验红。
+- **#65 fuses 未随行**：本票按票面范围只做版本升级；fuses 是独立票（`electronFuses` 关 runAsNode + 开 asarIntegrity），仍待实施。

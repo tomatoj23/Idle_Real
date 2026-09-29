@@ -20,11 +20,15 @@
  *    杀掉「卡但会自己好」的渲染进程，丢的正是下一次自动保存本该落下的进度。
  *
  * 划界（ADR-017）：零 electron 引用（同 navGuard/fatal 体例），退出/销毁谓词由
- * 装配方注入。`app.isQuitting()` 在 electron 38.8.6 并不存在（d.ts 无命中，勿按
- * 训练数据写）——main 侧自置 before-quit 标志喂进来。
+ * 装配方注入。`app.isQuitting()` 在 electron 的 app 面并不存在（#67 升 44.4.1
+ * 复核过 d.ts 仍无命中，勿按训练数据写）——main 侧自置 before-quit 标志喂进来。
  */
 
-/** 与 electron.d.ts 38.8.6 的 RenderProcessGoneDetails.reason 同集。 */
+/**
+ * 与 electron.d.ts 的 RenderProcessGoneDetails.reason 同集（不写死版本号：升
+ * Electron 会让它腐坏）。漏项的兜底是 tsc 而非人——main.ts 把 details.reason 交给
+ * decide() 时会因并集缺员报错，#67 升 44 就是这么抓到 `memory-eviction` 的。
+ */
 export type GoneReason =
   | 'clean-exit'
   | 'abnormal-exit'
@@ -32,7 +36,8 @@ export type GoneReason =
   | 'crashed'
   | 'oom'
   | 'launch-failed'
-  | 'integrity-failure';
+  | 'integrity-failure'
+  | 'memory-eviction';
 
 export type RecoveryAction =
   | { readonly action: 'ignore' }
@@ -64,7 +69,9 @@ export function createRendererRecovery(deps: RendererRecoveryDeps): RendererReco
       if (deps.isQuitting() || deps.isDestroyed()) return { action: 'ignore' };
       if (reason === 'integrity-failure') return { action: 'escalate' };
       if (reason === 'clean-exit') return { action: 'ignore' };
-      // crashed / oom / killed / abnormal-exit / launch-failed 与未知 reason 都在这。
+      // crashed / oom / killed / abnormal-exit / launch-failed / memory-eviction 与
+      // 未知 reason 都在这：memory-eviction 是内存回收摘掉渲染进程（非应用过错），
+      // 重载回最近自动存档正是对的收法，白窗永挂则是本模块要消灭的病。
       if (attempts >= RELOAD_LIMIT) return { action: 'escalate' };
       attempts += 1;
       return { action: 'reload', attempt: attempts };

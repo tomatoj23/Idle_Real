@@ -50,8 +50,9 @@ const fatal = createFatalHandler({
 let platform: Platform | undefined;
 
 /**
- * 正在退出（rendererRecovery 的退出筛）：`app.isQuitting()` 在 electron 38.8.6
- * 并不存在（d.ts 无命中，勿按训练数据写），自置一份最小状态喂给判据谓词。
+ * 正在退出（rendererRecovery 的退出筛）：`app.isQuitting()` 在 electron 的 app 面
+ * 并不存在（#67 升 44.4.1 复核过 d.ts 仍无命中，勿按训练数据写），自置一份最小状态
+ * 喂给判据谓词。
  */
 let quitting = false;
 

@@ -101,10 +101,22 @@ describe('#71 三轮 · 重载上限与清零', () => {
     expect(recovery.decide('killed')).toEqual({ action: 'reload', attempt: 2 });
   });
 
-  it('abnormal-exit 与 launch-failed 同在动手面（枚举全五员）', () => {
+  it('abnormal-exit 与 launch-failed 同在动手面（动手面全六员）', () => {
     const { recovery } = harness();
     expect(recovery.decide('abnormal-exit')).toEqual({ action: 'reload', attempt: 1 });
     expect(recovery.decide('launch-failed')).toEqual({ action: 'reload', attempt: 2 });
+  });
+
+  it('memory-eviction 走 reload 而非 ignore/escalate：内存回收摘掉渲染进程不是应用过错（#67 升 44 新增员）', () => {
+    const { recovery } = harness();
+    // 分类判据：它既不是真退出（clean-exit→ignore），也不是 asar 被动过
+    // （integrity-failure→escalate）——重载回最近自动存档才是对的收法。理由见
+    // rendererRecovery.ts 同名注释，此处只钉分类结果，不复述。
+    expect(recovery.decide('memory-eviction')).toEqual({ action: 'reload', attempt: 1 });
+    // 且吃同一份预算：反复被回收同样有界，不许绕过 RELOAD_LIMIT。
+    recovery.decide('memory-eviction');
+    recovery.decide('memory-eviction');
+    expect(recovery.decide('memory-eviction')).toEqual({ action: 'escalate' });
   });
 
   it('integrity-failure 直接 escalate：asar 被动过，重载没用', () => {

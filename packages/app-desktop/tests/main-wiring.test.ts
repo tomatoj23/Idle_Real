@@ -8,9 +8,11 @@
  * 这些没有第二种观测手段——真机窗口不归 CI 管，而 main.ts 在本仓从未被任何用例执行
  * 过（electron 目录里此前只有零依赖的 platform.ts 进过 vitest，主进程入口没有）。
  *
- * 假面的形状按 electron.d.ts 38.8.6 对齐（穷举复审的变异矩阵抓到过两处双盲：
+ * 假面的形状按 electron.d.ts 对齐（穷举复审的变异矩阵抓到过两处双盲：
  * will-navigate 的位参已 @deprecated、setPermissionRequestHandler 实为四参），
  * 并且**记下 BrowserWindow 的构造参数**——webPreferences 三件套不记就等于没钉。
+ * 形状不写死版本号（#67 升 44 复核过：两处仍然成立），升 Electron 时按新 d.ts
+ * 过一遍即可。
  *
  * #76：VITE_DEV_SERVER_URL 死分支已删（用户裁决）——main.ts 恒走 loadFile，
  * 假面不再提供 loadURL（缺面即抛）。反向钉见「设 env 仍恒 loadFile」例——
@@ -275,7 +277,7 @@ describe('#71 项 5 · 权限一律拒', () => {
     expect(permissionHandler).toBeTypeOf('function');
     const granted: boolean[] = [];
     for (const permission of ['clipboard-read', 'notifications', 'media']) {
-      // 第四参 details 按真签名喂足（electron.d.ts 38.8.6 为四参）：
+      // 第四参 details 按真签名喂足（setPermissionRequestHandler 实为四参）：
       // 日后按 permission 加白名单要用它，缺这一参就是本文件与产品代码的双盲。
       permissionHandler?.({}, permission, (ok) => granted.push(ok), {
         requestingUrl: 'file:///app/index.html',
