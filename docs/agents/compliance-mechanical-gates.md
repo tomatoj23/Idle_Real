@@ -50,6 +50,7 @@
   ```
   （`zcode` CLI 隐藏命令面；也可用 UI 的 Workspace Hook review 弹层授信。）
 - **会话宿主差异（2026-09-29 实证）**：桌面/TUI（app-server 协议会话）会跑工作区钩子；**无头 `zcode -p` 不装配工作区钩子**（钩子进程根本不拉起，也无跳过诊断）——活体验收必须走 app-server/desktop 会话。
+- **验收记录（2026-09-29）**：两轮活体实证（app-server 探针会话 + 用户新会话 `sess_1a82cdd8` 复验 8/8）——规则 A/B/C × Bash/Edit/Write 全臂实拦（含 09-29 事故原形态 `rm -rf "$APPDATA/问道长生"` 与票面「试写一文件」形态），放行面（ls/grep/正常 push/良性 Write）正常，拒绝文案含规则来源与正确做法；事后零残留、真档完好。
 - **已知边界**：管道间接目标（`find … | xargs rm`）、计算路径绕过、测试进程内写盘均不在拦截面（前两者属蓄意交 review/CI，后者由 #82 P4 + 测试沙箱承担）；包装层（`powershell -Command` 等）按强字面量+写信号文本判定，非完备。
 
 ## 2. policy 脚本（串进 `check`，一次接入三网）
