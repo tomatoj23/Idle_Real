@@ -53,6 +53,13 @@ let getPathThrows = false;
 let windowDestroyed = false;
 let windowVisible = true;
 let reloadCount = 0;
+const monotonicClock = vi.hoisted(() => ({ value: 0 }));
+
+vi.mock('node:perf_hooks', () => ({
+  performance: {
+    now: () => monotonicClock.value,
+  },
+}));
 
 vi.mock('electron', () => {
   class FakeBrowserWindow {
@@ -183,6 +190,7 @@ afterEach(() => {
   getPathThrows = false;
   windowDestroyed = false;
   windowVisible = true;
+  monotonicClock.value = 0;
   reloadCount = 0;
 });
 
@@ -402,6 +410,7 @@ describe('#71 三轮 · 渲染进程崩溃恢复真的接上了', () => {
   it('崩环界：连报 4 次（中间无 dom-ready）→ reload 共 3 次，第 4 次弹窗点名存档 + app.exit(1)', async () => {
     await bootMain();
     const gone = winHandlers.get('render-process-gone');
+    expect(gone).toBeTypeOf('function');
     for (let i = 0; i < 4; i += 1) gone?.({}, { reason: 'crashed', exitCode: 1 });
     expect(reloadCount).toBe(3);
     expect(logText()).toContain('renderer gone (reason=crashed, exitCode=1) → escalate');
@@ -414,6 +423,7 @@ describe('#71 三轮 · 渲染进程崩溃恢复真的接上了', () => {
     await bootMain();
     const gone = winHandlers.get('render-process-gone');
     const loaded = winHandlers.get('dom-ready');
+    expect(gone).toBeTypeOf('function');
     expect(loaded).toBeTypeOf('function');
     for (let i = 0; i < 4; i += 1) {
       gone?.({}, { reason: 'crashed', exitCode: 1 });
@@ -428,6 +438,8 @@ describe('#71 三轮 · 渲染进程崩溃恢复真的接上了', () => {
     await bootMain();
     const gone = winHandlers.get('render-process-gone');
     const loaded = winHandlers.get('dom-ready');
+    expect(gone).toBeTypeOf('function');
+    expect(loaded).toBeTypeOf('function');
     gone?.({}, { reason: 'crashed', exitCode: 1 });
     loaded?.({});
     gone?.({}, { reason: 'crashed', exitCode: 1 });
@@ -467,10 +479,35 @@ describe('#71 三轮 · 渲染进程崩溃恢复真的接上了', () => {
     expect(reloadCount).toBe(2);
   });
 
+  it('memory-eviction 隐藏等待跨稳定窗口仍沿用连续预算', async () => {
+    await bootMain();
+    const gone = winHandlers.get('render-process-gone');
+    const loaded = winHandlers.get('dom-ready');
+    const show = windowHandlers.get('show');
+    expect(gone).toBeTypeOf('function');
+    expect(loaded).toBeTypeOf('function');
+    expect(show).toBeTypeOf('function');
+
+    gone?.({}, { reason: 'crashed', exitCode: 1 });
+    monotonicClock.value = 100;
+    loaded?.({});
+    gone?.({}, { reason: 'crashed', exitCode: 1 });
+
+    windowVisible = false;
+    gone?.({}, { reason: 'memory-eviction', exitCode: 2 });
+    monotonicClock.value = 100 + 3000;
+    windowVisible = true;
+    show?.({});
+    expect(reloadCount).toBe(3);
+    expect(logText()).toContain('renderer gone (reason=memory-eviction, exitCode=2) → reload 3/3');
+  });
+
   it('memory-eviction 待处理后退出不复活窗口', async () => {
     await bootMain();
     const gone = winHandlers.get('render-process-gone');
     const show = windowHandlers.get('show');
+    expect(gone).toBeTypeOf('function');
+    expect(show).toBeTypeOf('function');
     windowVisible = false;
     gone?.({}, { reason: 'memory-eviction', exitCode: 9 });
     appHandlers.get('before-quit')?.();
@@ -483,6 +520,8 @@ describe('#71 三轮 · 渲染进程崩溃恢复真的接上了', () => {
     await bootMain();
     const gone = winHandlers.get('render-process-gone');
     const show = windowHandlers.get('show');
+    expect(gone).toBeTypeOf('function');
+    expect(show).toBeTypeOf('function');
     windowVisible = false;
     gone?.({}, { reason: 'memory-eviction', exitCode: 10 });
     windowDestroyed = true;
@@ -494,6 +533,7 @@ describe('#71 三轮 · 渲染进程崩溃恢复真的接上了', () => {
   it('still-running：接线层不 reload、不弹窗、不退出', async () => {
     await bootMain();
     const gone = winHandlers.get('render-process-gone');
+    expect(gone).toBeTypeOf('function');
     gone?.({}, { reason: 'still-running', exitCode: 0 });
     expect(reloadCount).toBe(0);
     expect(dialogs).toHaveLength(0);

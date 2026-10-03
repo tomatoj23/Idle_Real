@@ -66,6 +66,8 @@ export interface RendererRecovery {
   decide(reason: GoneReason): RecoveryAction;
   /** dom-ready 记录稳定窗口起点；达到窗口后由下一次 decide() 懒清零。 */
   markLoaded(): void;
+  /** renderer 已经失效但暂不调用 decide() 时，取消当前稳定窗口。 */
+  markUnstable(): void;
 }
 
 export function createRendererRecovery(deps: RendererRecoveryDeps): RendererRecovery {
@@ -95,6 +97,9 @@ export function createRendererRecovery(deps: RendererRecoveryDeps): RendererReco
     },
     markLoaded(): void {
       loadedAt = deps.now();
+    },
+    markUnstable(): void {
+      loadedAt = undefined;
     },
   };
 }

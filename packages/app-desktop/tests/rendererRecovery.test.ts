@@ -127,6 +127,17 @@ describe('#71 三轮 · 重载上限与清零', () => {
     expect(h.recovery.decide('crashed')).toEqual({ action: 'reload', attempt: 2 });
   });
 
+  it('隐藏期间 renderer 失效不会因等待跨窗而清零预算', () => {
+    const h = harness();
+    h.recovery.decide('crashed');
+    h.recovery.decide('crashed');
+    h.recovery.markLoaded();
+    h.recovery.markUnstable();
+    h.now = RELOAD_STABILITY_WINDOW_MS * 2;
+    expect(h.recovery.decide('memory-eviction')).toEqual({ action: 'reload', attempt: 3 });
+    expect(h.recovery.decide('crashed')).toEqual({ action: 'escalate' });
+  });
+
   it('承重例：稳定窗口后计数归零，下一次报数回到 1（而非 3）', () => {
     const h = harness();
     h.recovery.decide('crashed');

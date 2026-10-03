@@ -228,6 +228,7 @@ function createWindow(): void {
     if (details.reason === 'memory-eviction' && !win.isVisible()) {
       // Chromium 会为防 OOM 主动摘掉 renderer；隐藏窗口此时立即 reload 会再次分配
       // renderer，反过来加剧内存压力。等窗口重新激活后只排一次重载。
+      recovery.markUnstable();
       pendingMemoryEviction ??= { exitCode: details.exitCode };
       log(
         `[main] renderer gone (reason=${details.reason}, exitCode=${details.exitCode}) → defer until visible`,
