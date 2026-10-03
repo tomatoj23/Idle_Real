@@ -138,6 +138,39 @@ describe('#71 三轮 · 重载上限与清零', () => {
     expect(h.recovery.decide('crashed')).toEqual({ action: 'escalate' });
   });
 
+  it.each([RELOAD_STABILITY_WINDOW_MS, RELOAD_STABILITY_WINDOW_MS + 1])(
+    '回收前已稳定 %dms：失效后等待不丢掉已完成的稳定期',
+    (elapsed) => {
+      const h = harness();
+      for (let i = 0; i < RELOAD_LIMIT; i += 1) h.recovery.decide('crashed');
+      h.now = 10000;
+      h.recovery.markLoaded();
+      h.now += elapsed;
+      h.recovery.markUnstable();
+      h.now += RELOAD_STABILITY_WINDOW_MS * 2;
+      expect(h.recovery.decide('memory-eviction')).toEqual({ action: 'reload', attempt: 1 });
+    },
+  );
+
+  it('独立隐藏回收不终身累计：每轮死亡前稳定满窗都重开预算', () => {
+    const h = harness();
+    for (let i = 0; i < RELOAD_LIMIT + 2; i += 1) {
+      h.recovery.markLoaded();
+      h.now += 3600000;
+      h.recovery.markUnstable();
+      expect(h.recovery.decide('memory-eviction')).toEqual({ action: 'reload', attempt: 1 });
+    }
+  });
+
+  it('非零 dom-ready 起点：加载耗时不能算作稳定运行', () => {
+    const h = harness();
+    h.recovery.decide('crashed');
+    h.now = 10000;
+    h.recovery.markLoaded();
+    h.now += RELOAD_STABILITY_WINDOW_MS - 1;
+    expect(h.recovery.decide('crashed')).toEqual({ action: 'reload', attempt: 2 });
+  });
+
   it('承重例：稳定窗口后计数归零，下一次报数回到 1（而非 3）', () => {
     const h = harness();
     h.recovery.decide('crashed');

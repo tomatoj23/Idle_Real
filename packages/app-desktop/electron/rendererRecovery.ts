@@ -66,13 +66,21 @@ export interface RendererRecovery {
   decide(reason: GoneReason): RecoveryAction;
   /** dom-ready 记录稳定窗口起点；达到窗口后由下一次 decide() 懒清零。 */
   markLoaded(): void;
-  /** renderer 已经失效但暂不调用 decide() 时，取消当前稳定窗口。 */
+  /** renderer 已失效但暂不判定时，先结算死亡前稳定期，再停止计时。 */
   markUnstable(): void;
 }
 
 export function createRendererRecovery(deps: RendererRecoveryDeps): RendererRecovery {
   let attempts = 0;
   let loadedAt: number | undefined;
+
+  function settleStability(): void {
+    if (loadedAt !== undefined && deps.now() - loadedAt >= RELOAD_STABILITY_WINDOW_MS) {
+      attempts = 0;
+    }
+    loadedAt = undefined;
+  }
+
   return {
     decide(reason: GoneReason): RecoveryAction {
       // 谓词每次现查：退出/销毁是会翻转的现场状态，工厂求值期冻结会翻出旧账。
@@ -83,23 +91,16 @@ export function createRendererRecovery(deps: RendererRecoveryDeps): RendererReco
       // crashed / oom / killed / abnormal-exit / launch-failed / memory-eviction 与
       // 未知 reason 都在这：memory-eviction 是内存回收摘掉渲染进程（非应用过错），
       // 重载回最近自动存档正是对的收法，白窗永挂则是本模块要消灭的病。
-      if (
-        loadedAt !== undefined &&
-        deps.now() - loadedAt >= RELOAD_STABILITY_WINDOW_MS
-      ) {
-        attempts = 0;
-        loadedAt = undefined;
-      }
+      settleStability();
       if (attempts >= RELOAD_LIMIT) return { action: 'escalate' };
       attempts += 1;
-      loadedAt = undefined;
       return { action: 'reload', attempt: attempts };
     },
     markLoaded(): void {
       loadedAt = deps.now();
     },
     markUnstable(): void {
-      loadedAt = undefined;
+      settleStability();
     },
   };
 }

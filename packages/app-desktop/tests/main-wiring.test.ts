@@ -49,6 +49,8 @@ let windowOptions: Record<string, unknown> = {};
 let loadFileArg = '';
 let userDataDir = '';
 let loadFileRejects = false;
+let initialLoad: { promise: Promise<void>; reject: (reason: unknown) => void } | undefined;
+let rendererCrashed = false;
 let getPathThrows = false;
 let windowDestroyed = false;
 let windowVisible = true;
@@ -79,7 +81,13 @@ vi.mock('electron', () => {
         winHandlers.set(event, handler);
       },
       openDevTools: () => calls.push('open-devtools'),
+      isCrashed: () => {
+        calls.push('webContents.isCrashed');
+        if (windowDestroyed) throw new Error('Object has been destroyed');
+        return rendererCrashed;
+      },
       reload: () => {
+        rendererCrashed = false;
         reloadCount += 1;
       },
     };
@@ -87,6 +95,8 @@ vi.mock('electron', () => {
       windowHandlers.set(event, handler);
     }
     isVisible(): boolean {
+      calls.push('window.isVisible');
+      if (windowDestroyed) throw new Error('Object has been destroyed');
       return windowVisible;
     }
     isDestroyed(): boolean {
@@ -95,9 +105,9 @@ vi.mock('electron', () => {
     loadFile(path: string): Promise<void> {
       loadFileArg = path;
       calls.push('load-file');
-      return loadFileRejects
+      return initialLoad?.promise ?? (loadFileRejects
         ? Promise.reject(new Error('ERR_FILE_NOT_FOUND'))
-        : Promise.resolve();
+        : Promise.resolve());
     }
   }
   return {
@@ -187,6 +197,8 @@ afterEach(() => {
   menuArg = 'setApplicationMenu-never-called';
   permissionHandler = undefined;
   loadFileRejects = false;
+  initialLoad = undefined;
+  rendererCrashed = false;
   getPathThrows = false;
   windowDestroyed = false;
   windowVisible = true;
@@ -202,6 +214,19 @@ async function bootMain(): Promise<void> {
   // 等真实信号而不是猜微任务数：装配走完的标志是 loadFile 被登记。
   // （穷举复审抓到过 flush(n) 这种写法在并发负载下把已装好的面读成未装好。）
   await vi.waitFor(() => expect(calls).toContain('load-file'), { timeout: 2000 });
+}
+
+function deferredLoad(): { promise: Promise<void>; reject: (reason: unknown) => void } {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<void>((_resolve, rejectPromise) => {
+    reject = rejectPromise;
+  });
+  return { promise, reject };
+}
+
+async function finishDeferredLoad(): Promise<void> {
+  await Promise.resolve();
+  await new Promise<void>((resolve) => setImmediate(resolve));
 }
 
 function logText(): string {
@@ -489,9 +514,9 @@ describe('#71 三轮 · 渲染进程崩溃恢复真的接上了', () => {
     expect(show).toBeTypeOf('function');
 
     gone?.({}, { reason: 'crashed', exitCode: 1 });
+    gone?.({}, { reason: 'crashed', exitCode: 1 });
     monotonicClock.value = 100;
     loaded?.({});
-    gone?.({}, { reason: 'crashed', exitCode: 1 });
 
     windowVisible = false;
     gone?.({}, { reason: 'memory-eviction', exitCode: 2 });
@@ -500,6 +525,155 @@ describe('#71 三轮 · 渲染进程崩溃恢复真的接上了', () => {
     show?.({});
     expect(reloadCount).toBe(3);
     expect(logText()).toContain('renderer gone (reason=memory-eviction, exitCode=2) → reload 3/3');
+  });
+
+  it.each(['show', 'restore'])('隐藏回收前已稳定：%s 后不是误升级 fatal', async (event) => {
+    await bootMain();
+    const gone = winHandlers.get('render-process-gone');
+    const loaded = winHandlers.get('dom-ready');
+    const resume = windowHandlers.get(event);
+    expect(gone).toBeTypeOf('function');
+    expect(loaded).toBeTypeOf('function');
+    expect(resume).toBeTypeOf('function');
+    for (let i = 0; i < 3; i += 1) gone?.({}, { reason: 'crashed', exitCode: 1 });
+    monotonicClock.value = 10000;
+    loaded?.({});
+    monotonicClock.value += 3000;
+    windowVisible = false;
+    gone?.({}, { reason: 'memory-eviction', exitCode: 2 });
+    monotonicClock.value += 6000;
+    windowVisible = true;
+    resume?.({});
+    expect(reloadCount).toBe(4);
+    expect(logText()).toContain('reason=memory-eviction, exitCode=2) → reload 1/3');
+    expect(dialogs).toHaveLength(0);
+    expect(calls).not.toContain('app.exit:1');
+  });
+
+  it.each([2999, 3000])('真实接线按非零 dom-ready 起点计算 %dms 稳定期', async (elapsed) => {
+    await bootMain();
+    const gone = winHandlers.get('render-process-gone');
+    const loaded = winHandlers.get('dom-ready');
+    expect(gone).toBeTypeOf('function');
+    expect(loaded).toBeTypeOf('function');
+    gone?.({}, { reason: 'crashed', exitCode: 1 });
+    monotonicClock.value = 10000;
+    loaded?.({});
+    monotonicClock.value += elapsed;
+    gone?.({}, { reason: 'crashed', exitCode: 1 });
+    const reloadLines = logText().split('\n').filter((line) => line.includes('→ reload'));
+    expect(reloadLines.at(-1)).toContain(`reload ${elapsed === 3000 ? 1 : 2}/3`);
+  });
+
+  it.each(['promise-first', 'gone-first'])('首次加载中崩溃：%s 不绕过恢复预算', async (order) => {
+    const deferred = deferredLoad();
+    initialLoad = { promise: deferred.promise, reject: deferred.reject };
+    await bootMain();
+    const loaded = winHandlers.get('dom-ready');
+    const gone = winHandlers.get('render-process-gone');
+    expect(loaded).toBeTypeOf('function');
+    expect(gone).toBeTypeOf('function');
+    loaded?.({});
+    rendererCrashed = true;
+    if (order === 'promise-first') {
+      deferred.reject(new Error('ERR_FAILED (-2)'));
+      await finishDeferredLoad();
+    }
+    gone?.({}, { reason: 'crashed', exitCode: 1 });
+    if (order === 'gone-first') deferred.reject(new Error('ERR_ABORTED (-3)'));
+    await finishDeferredLoad();
+    expect(reloadCount).toBe(1);
+    expect(dialogs).toHaveLength(0);
+    expect(calls).not.toContain('app.exit:1');
+  });
+
+  it.each(['quitting', 'destroyed'])('首次加载期间正常 %s 不报致命加载失败', async (state) => {
+    const deferred = deferredLoad();
+    initialLoad = { promise: deferred.promise, reject: deferred.reject };
+    await bootMain();
+    if (state === 'quitting') appHandlers.get('before-quit')?.();
+    else windowDestroyed = true;
+    deferred.reject(new Error('ERR_FAILED (-2)'));
+    const nativeReads = calls.filter((call) => call === 'webContents.isCrashed').length;
+    await finishDeferredLoad();
+    expect(calls.filter((call) => call === 'webContents.isCrashed')).toHaveLength(nativeReads);
+    expect(dialogs).toHaveLength(0);
+    expect(calls).not.toContain('app.exit:1');
+  });
+
+  it('首次 Promise 拒绝微任务早于崩溃标志：延后一轮不误退出', async () => {
+    const deferred = deferredLoad();
+    initialLoad = { promise: deferred.promise, reject: deferred.reject };
+    await bootMain();
+    deferred.reject(new Error('ERR_FAILED (-2)'));
+    await Promise.resolve();
+    expect(dialogs).toHaveLength(0);
+    rendererCrashed = true;
+    await finishDeferredLoad();
+    const gone = winHandlers.get('render-process-gone');
+    expect(gone).toBeTypeOf('function');
+    gone?.({}, { reason: 'crashed', exitCode: 1 });
+    expect(reloadCount).toBe(1);
+    expect(dialogs).toHaveLength(0);
+  });
+
+  it.each([-2, -6])('恢复后主框架真实加载失败 %d 仍 fatal，旧 Promise 不再报第二次', async (code) => {
+    const deferred = deferredLoad();
+    initialLoad = { promise: deferred.promise, reject: deferred.reject };
+    await bootMain();
+    const gone = winHandlers.get('render-process-gone');
+    const failed = winHandlers.get('did-fail-load');
+    expect(gone).toBeTypeOf('function');
+    expect(failed).toBeTypeOf('function');
+    gone?.({}, { reason: 'crashed', exitCode: 1 });
+    failed?.({}, code, '', 'file:///app/dist/index.html', true, 1, 1);
+    deferred.reject(new Error('ERR_ABORTED (-3)'));
+    await finishDeferredLoad();
+    expect(dialogs).toHaveLength(1);
+    expect(logText()).toContain(`(${code})`);
+    expect(calls.filter((call) => call === 'app.exit:1')).toHaveLength(1);
+  });
+
+  it.each(['subframe', 'aborted', 'quitting', 'destroyed'])('加载事件 %s 不误报 fatal', async (kind) => {
+    await bootMain();
+    const failed = winHandlers.get('did-fail-load');
+    expect(failed).toBeTypeOf('function');
+    if (kind === 'quitting') appHandlers.get('before-quit')?.();
+    if (kind === 'destroyed') windowDestroyed = true;
+    failed?.({}, kind === 'aborted' ? -3 : -6, 'probe', 'file:///app/dist/index.html', kind !== 'subframe', 1, 1);
+    expect(dialogs).toHaveLength(0);
+    expect(calls).not.toContain('app.exit:1');
+  });
+
+  it('主框架失败重复通知与 Promise 拒绝只收尾一次', async () => {
+    const deferred = deferredLoad();
+    initialLoad = deferred;
+    await bootMain();
+    const failed = winHandlers.get('did-fail-load');
+    expect(failed).toBeTypeOf('function');
+    failed?.({}, -6, 'ERR_FILE_NOT_FOUND', 'file:///app/dist/index.html', true, 1, 1);
+    failed?.({}, -6, 'ERR_FILE_NOT_FOUND', 'file:///app/dist/index.html', true, 1, 1);
+    deferred.reject(new Error('ERR_FILE_NOT_FOUND'));
+    await finishDeferredLoad();
+    expect(dialogs).toHaveLength(1);
+    expect(calls.filter((call) => call === 'app.exit:1')).toHaveLength(1);
+    expect(logText().split('\n').filter((line) => line.includes('FATAL load failed'))).toHaveLength(1);
+  });
+
+  it.each(['quitting', 'destroyed'])('gone 处理前先筛 %s，不查询窗口可见性', async (state) => {
+    await bootMain();
+    const gone = winHandlers.get('render-process-gone');
+    const beforeQuit = appHandlers.get('before-quit');
+    expect(gone).toBeTypeOf('function');
+    expect(beforeQuit).toBeTypeOf('function');
+    if (state === 'quitting') beforeQuit?.();
+    else windowDestroyed = true;
+    const reads = calls.filter((call) => call === 'window.isVisible').length;
+    expect(() => gone?.({}, { reason: 'memory-eviction', exitCode: 9 })).not.toThrow();
+    expect(calls.filter((call) => call === 'window.isVisible')).toHaveLength(reads);
+    expect(logText()).not.toContain('defer until visible');
+    expect(reloadCount).toBe(0);
+    expect(dialogs).toHaveLength(0);
   });
 
   it('memory-eviction 待处理后退出不复活窗口', async () => {
@@ -512,7 +686,9 @@ describe('#71 三轮 · 渲染进程崩溃恢复真的接上了', () => {
     gone?.({}, { reason: 'memory-eviction', exitCode: 9 });
     appHandlers.get('before-quit')?.();
     windowVisible = true;
+    const reads = calls.filter((call) => call === 'window.isVisible').length;
     show?.({});
+    expect(calls.filter((call) => call === 'window.isVisible')).toHaveLength(reads);
     expect(reloadCount).toBe(0);
   });
 
@@ -526,7 +702,7 @@ describe('#71 三轮 · 渲染进程崩溃恢复真的接上了', () => {
     gone?.({}, { reason: 'memory-eviction', exitCode: 10 });
     windowDestroyed = true;
     windowVisible = true;
-    show?.({});
+    expect(() => show?.({})).not.toThrow();
     expect(reloadCount).toBe(0);
   });
 

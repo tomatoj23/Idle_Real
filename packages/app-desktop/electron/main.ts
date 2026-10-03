@@ -17,7 +17,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { errMsg, isSafeId, resolvePlatform, type Platform } from './platform.js';
 import { isSelfNavigation } from './navGuard.js';
 import { createFatalHandler } from './fatal.js';
-import { createRendererRecovery, RELOAD_LIMIT } from './rendererRecovery.js';
+import { createRendererRecovery, RELOAD_LIMIT, type GoneReason } from './rendererRecovery.js';
 import { initAutoUpdate } from './updater.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -191,6 +191,7 @@ function createWindow(): void {
     now: () => performance.now(),
   });
   let pendingMemoryEviction: { readonly exitCode: number } | undefined;
+  let initialLoadInterrupted = false;
 
   const handleGone = (reason: Parameters<typeof recovery.decide>[0], exitCode: number): void => {
     const act = recovery.decide(reason);
@@ -225,6 +226,9 @@ function createWindow(): void {
   };
 
   win.webContents.on('render-process-gone', (_event, details) => {
+    if (quitting || win.isDestroyed()) return;
+    const reason = details.reason as GoneReason;
+    if (reason !== 'still-running') initialLoadInterrupted = true;
     if (details.reason === 'memory-eviction' && !win.isVisible()) {
       // Chromium 会为防 OOM 主动摘掉 renderer；隐藏窗口此时立即 reload 会再次分配
       // renderer，反过来加剧内存压力。等窗口重新激活后只排一次重载。
@@ -249,10 +253,27 @@ function createWindow(): void {
   win.webContents.on('responsive', () => {
     log('[main] renderer responsive');
   });
-  // 加载失败不许静默（#71 项 4）：reject 的是窗口内容本身，留着窗口 = 一块白板
-  // 挂在玩家屏幕上。旧写法 `void load…()` 把这条 rejection 丢进了虚空。
+  // Promise 拒绝也可能只是崩溃/重载中断；真实加载失败由主框架事件独立兜住。
+  let loadFailureReported = false;
+  const failLoad = (err: unknown, url: string): void => {
+    if (quitting || win.isDestroyed() || loadFailureReported) return;
+    loadFailureReported = true;
+    fatal.onLoadFailure(err, url);
+  };
+  win.webContents.on('did-fail-load', (_event, errorCode, description, url, isMainFrame) => {
+    if (!isMainFrame || errorCode === -3) return;
+    failLoad(new Error(`${description} (${errorCode})`), url);
+  });
   const load = win.loadFile(indexPath);
-  void load.catch((err: unknown) => fatal.onLoadFailure(err, selfUrl));
+  void load.catch((err: unknown) => {
+    // ProcessDied 的微任务可早于 isCrashed 置位；先让同步死亡通知走完。
+    setImmediate(() => {
+      if (quitting || win.isDestroyed() || initialLoadInterrupted || win.webContents.isCrashed()) {
+        return;
+      }
+      failLoad(err, selfUrl);
+    });
+  });
 }
 
 /**
