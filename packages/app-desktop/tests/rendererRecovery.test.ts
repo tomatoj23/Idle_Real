@@ -5,19 +5,21 @@
  * 承重两条（票面测试计划点名）：
  * ① crashed 连报 3 次走 reload、第 4 次 escalate——上限就是 fatal.ts 拒绝 relaunch
  *    的同一个崩环防线（一份让渲染进程启动期崩坏的存档 = 每次 reload 都崩）；
- * ② markLoaded() 把计数清回 0（下一次报数回到 1/3）——没有它，正常游戏里偶尔一次
- *    崩溃会永久消耗预算，数天后的第 4 次无关崩溃被误升级成 app.exit。
+ * ② dom-ready 记录稳定窗口起点，达到窗口后下一次 decide() 才把计数清回 0——没有它，
+ *    每轮快速加载成功都会洗回预算，坏档会形成永不 escalate 的崩环。
  *
  * 放行面（clean-exit / 已销毁 / 正在退出 → ignore）单独成例：没有它们，「一律
  * ignore」或「一律 escalate」的全拒实现也能通过动手面的例。
  *
  * 变异对照（改完必须验红再还原，别信「测试在场」）：把 `attempts >= RELOAD_LIMIT`
- * 改成 `>`、删掉 markLoaded 的清零、把 clean-exit 落进动手面——每种都必须有例变红。
+ * 改成 `>`、让 markLoaded() 无条件清零、删除稳定窗口的懒清零、把 clean-exit 落进
+ * 动手面——每种都必须有例变红。
  */
 import { describe, expect, it } from 'vitest';
 import {
   createRendererRecovery,
   RELOAD_LIMIT,
+  RELOAD_STABILITY_WINDOW_MS,
   type GoneReason,
   type RendererRecovery,
 } from '../electron/rendererRecovery';
@@ -26,18 +28,21 @@ interface Harness {
   readonly recovery: RendererRecovery;
   quitting: boolean;
   destroyed: boolean;
+  now: number;
 }
 
 function harness(): Harness {
   const state: Harness = {
     quitting: false,
     destroyed: false,
+    now: 0,
     recovery: undefined as unknown as RendererRecovery,
   };
   // 谓词每次 decide 都现查（对象属性可中途翻转，见「谓词是活的」例）。
   (state as { recovery: RendererRecovery }).recovery = createRendererRecovery({
     isQuitting: () => state.quitting,
     isDestroyed: () => state.destroyed,
+    now: () => state.now,
   });
   return state;
 }
@@ -58,6 +63,12 @@ describe('#71 三轮 · 放行面（不动作）', () => {
     const h = harness();
     h.quitting = true;
     expect(h.recovery.decide('crashed')).toEqual({ action: 'ignore' });
+  });
+
+  it('still-running：ignore 且不消耗重载预算', () => {
+    const { recovery } = harness();
+    expect(recovery.decide('still-running')).toEqual({ action: 'ignore' });
+    expect(recovery.decide('crashed')).toEqual({ action: 'reload', attempt: 1 });
   });
 
   it('谓词是活的：每次 decide 现查，不在工厂求值期冻结', () => {
@@ -83,16 +94,50 @@ describe('#71 三轮 · 重载上限与清零', () => {
     expect(RELOAD_LIMIT).toBe(3); // 日志面 `reload n/3` 的分母与上限同源
   });
 
-  it('承重例：markLoaded() 后计数归零，下一次报数回到 1（而非 3）', () => {
+  it('dom-ready 后秒崩仍受上限：每轮立即 markLoaded，第 4 次 escalate', () => {
     const { recovery } = harness();
-    recovery.decide('crashed');
-    recovery.decide('crashed');
-    recovery.markLoaded();
-    expect(recovery.decide('crashed')).toEqual({ action: 'reload', attempt: 1 });
+    const actions: ReturnType<RendererRecovery['decide']>[] = [];
+    for (let i = 0; i < RELOAD_LIMIT + 1; i += 1) {
+      actions.push(recovery.decide('crashed'));
+      recovery.markLoaded();
+    }
+    expect(actions).toEqual([
+      { action: 'reload', attempt: 1 },
+      { action: 'reload', attempt: 2 },
+      { action: 'reload', attempt: 3 },
+      { action: 'escalate' },
+    ]);
+  });
+
+  it('稳定窗口懒清零：短于窗口不清零，达到窗口后下一次 decide 从 1 开始', () => {
+    const h = harness();
+    h.recovery.decide('crashed');
+    h.recovery.markLoaded();
+    h.now = RELOAD_STABILITY_WINDOW_MS - 1;
+    expect(h.recovery.decide('crashed')).toEqual({ action: 'reload', attempt: 2 });
+    h.recovery.markLoaded();
+    h.now += RELOAD_STABILITY_WINDOW_MS;
+    expect(h.recovery.decide('crashed')).toEqual({ action: 'reload', attempt: 1 });
+  });
+
+  it('没有 dom-ready 即使时间过去也不清零', () => {
+    const h = harness();
+    h.recovery.decide('crashed');
+    h.now = RELOAD_STABILITY_WINDOW_MS;
+    expect(h.recovery.decide('crashed')).toEqual({ action: 'reload', attempt: 2 });
+  });
+
+  it('承重例：稳定窗口后计数归零，下一次报数回到 1（而非 3）', () => {
+    const h = harness();
+    h.recovery.decide('crashed');
+    h.recovery.decide('crashed');
+    h.recovery.markLoaded();
+    h.now += RELOAD_STABILITY_WINDOW_MS;
+    expect(h.recovery.decide('crashed')).toEqual({ action: 'reload', attempt: 1 });
     // 清零后预算真的重来：再走满 3 次才 escalate（证明不是「只改报数」）。
-    recovery.decide('crashed');
-    recovery.decide('crashed');
-    expect(recovery.decide('crashed')).toEqual({ action: 'escalate' });
+    h.recovery.decide('crashed');
+    h.recovery.decide('crashed');
+    expect(h.recovery.decide('crashed')).toEqual({ action: 'escalate' });
   });
 
   it('oom 与 killed 各走 reload（动手面）', () => {

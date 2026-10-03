@@ -11,6 +11,7 @@
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu, session } from 'electron';
 import { appendFileSync, statSync, writeFileSync } from 'node:fs';
+import { performance } from 'node:perf_hooks';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { errMsg, isSafeId, resolvePlatform, type Platform } from './platform.js';
@@ -183,14 +184,17 @@ function createWindow(): void {
   });
   // 渲染进程崩溃恢复（#71 三轮）：菜单置空后默认菜单里的 Reload 加速键一并没了
   // （机制推断；活体 Ctrl+R 探针见票评），渲染进程崩 = 白窗永挂、零日志、无从恢复。
-  // 判据（reason 分类 / 上限 / dom-ready 清零）在 rendererRecovery.ts，这里只接线。
+  // 判据（reason 分类 / 上限 / 稳定窗口）在 rendererRecovery.ts，这里只接线。
   const recovery = createRendererRecovery({
     isQuitting: () => quitting,
     isDestroyed: () => win.isDestroyed(),
+    now: () => performance.now(),
   });
-  win.webContents.on('render-process-gone', (_event, details) => {
-    const act = recovery.decide(details.reason);
-    const where = `reason=${details.reason}, exitCode=${details.exitCode}`;
+  let pendingMemoryEviction: { readonly exitCode: number } | undefined;
+
+  const handleGone = (reason: Parameters<typeof recovery.decide>[0], exitCode: number): void => {
+    const act = recovery.decide(reason);
+    const where = `reason=${reason}, exitCode=${exitCode}`;
     if (act.action === 'reload') {
       // 设计 c：可恢复路径只落日志不弹模态——dialog.showErrorBox 阻塞主进程事件
       // 循环，挂机一夜回来是个卡住 save-flush 同步 ack 的模态框，比安静重载更坏。
@@ -200,12 +204,41 @@ function createWindow(): void {
     }
     if (act.action === 'escalate') {
       log(`[main] renderer gone (${where}) → escalate`);
-      fatal.onRendererUnrecoverable(details.reason, details.exitCode);
+      fatal.onRendererUnrecoverable(reason, exitCode);
       return;
     }
     log(`[main] renderer gone (${where}) → ignored`);
+  };
+
+  const resumePendingMemoryEviction = (): void => {
+    if (
+      pendingMemoryEviction === undefined ||
+      quitting ||
+      win.isDestroyed() ||
+      !win.isVisible()
+    ) {
+      return;
+    }
+    const pending = pendingMemoryEviction;
+    pendingMemoryEviction = undefined;
+    handleGone('memory-eviction', pending.exitCode);
+  };
+
+  win.webContents.on('render-process-gone', (_event, details) => {
+    if (details.reason === 'memory-eviction' && !win.isVisible()) {
+      // Chromium 会为防 OOM 主动摘掉 renderer；隐藏窗口此时立即 reload 会再次分配
+      // renderer，反过来加剧内存压力。等窗口重新激活后只排一次重载。
+      pendingMemoryEviction ??= { exitCode: details.exitCode };
+      log(
+        `[main] renderer gone (reason=${details.reason}, exitCode=${details.exitCode}) → defer until visible`,
+      );
+      return;
+    }
+    handleGone(details.reason, details.exitCode);
   });
-  // 重载成功的唯一清零信号（设计 b：不按时间衰减，对「秒崩」形态无效的是时间窗）。
+  win.on('show', resumePendingMemoryEviction);
+  win.on('restore', resumePendingMemoryEviction);
+  // dom-ready 记录稳定窗口起点；达到窗口后由下一次 decide() 懒清零。
   win.webContents.on('dom-ready', () => recovery.markLoaded());
   // 设计 d：unresponsive 只记不杀——放置游戏一次长同步 tick 就能误报，杀掉
   // 「卡但会自己好」的渲染进程，丢的正是下一次自动保存本该落下的进度。

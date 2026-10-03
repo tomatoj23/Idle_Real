@@ -37,6 +37,8 @@ type WinHandler = (event: unknown, ...args: unknown[]) => void;
 const calls: string[] = [];
 const ipcHandlers = new Map<string, (event: { returnValue?: unknown }, ...a: unknown[]) => void>();
 const winHandlers = new Map<string, WinHandler>();
+const windowHandlers = new Map<string, WinHandler>();
+const appHandlers = new Map<string, (...a: unknown[]) => void>();
 const dialogs: Array<[string, string]> = [];
 let menuArg: unknown = 'setApplicationMenu-never-called';
 let permissionHandler:
@@ -49,6 +51,7 @@ let userDataDir = '';
 let loadFileRejects = false;
 let getPathThrows = false;
 let windowDestroyed = false;
+let windowVisible = true;
 let reloadCount = 0;
 
 vi.mock('electron', () => {
@@ -73,6 +76,12 @@ vi.mock('electron', () => {
         reloadCount += 1;
       },
     };
+    on(event: string, handler: WinHandler): void {
+      windowHandlers.set(event, handler);
+    }
+    isVisible(): boolean {
+      return windowVisible;
+    }
     isDestroyed(): boolean {
       return windowDestroyed;
     }
@@ -91,7 +100,10 @@ vi.mock('electron', () => {
         calls.push('single-instance-lock');
         return true;
       },
-      on: (event: string) => calls.push(`app.on:${event}`),
+      on: (event: string, handler: (...a: unknown[]) => void) => {
+        appHandlers.set(event, handler);
+        calls.push(`app.on:${event}`);
+      },
       quit: () => calls.push('app.quit'),
       exit: (code: number) => calls.push(`app.exit:${code}`),
       getPath: (name: string) => {
@@ -159,6 +171,8 @@ afterEach(() => {
   calls.length = 0;
   dialogs.length = 0;
   winHandlers.clear();
+  windowHandlers.clear();
+  appHandlers.clear();
   ipcHandlers.clear();
   windowOpenHandler = undefined;
   windowOptions = {};
@@ -168,6 +182,7 @@ afterEach(() => {
   loadFileRejects = false;
   getPathThrows = false;
   windowDestroyed = false;
+  windowVisible = true;
   reloadCount = 0;
 });
 
@@ -395,22 +410,94 @@ describe('#71 三轮 · 渲染进程崩溃恢复真的接上了', () => {
     expect(calls).toContain('app.exit:1');
   });
 
-  it('dom-ready 清零：崩溃→重载成功→再崩溃仍是 reload 1/3（承重例的接线半边）', async () => {
+  it('dom-ready 后秒崩仍受上限：每轮 reload 后立即 dom-ready，第 4 次弹窗并退出', async () => {
     await bootMain();
     const gone = winHandlers.get('render-process-gone');
     const loaded = winHandlers.get('dom-ready');
     expect(loaded).toBeTypeOf('function');
+    for (let i = 0; i < 4; i += 1) {
+      gone?.({}, { reason: 'crashed', exitCode: 1 });
+      loaded?.({});
+    }
+    expect(reloadCount).toBe(3);
+    expect(dialogs).toHaveLength(1);
+    expect(calls).toContain('app.exit:1');
+  });
+
+  it('dom-ready 短时不清零：崩溃→重载成功→再崩溃仍累计预算', async () => {
+    await bootMain();
+    const gone = winHandlers.get('render-process-gone');
+    const loaded = winHandlers.get('dom-ready');
     gone?.({}, { reason: 'crashed', exitCode: 1 });
     loaded?.({});
     gone?.({}, { reason: 'crashed', exitCode: 1 });
     expect(reloadCount).toBe(2);
     expect(dialogs).toHaveLength(0);
-    // 两行都得是 1/3：按行数出来，防「第一行残留」造成的假对照。
     const reloadLines = logText()
       .split('\n')
       .filter((line) => line.includes('→ reload'));
     expect(reloadLines).toHaveLength(2);
-    expect(reloadLines.every((line) => line.includes('reload 1/3'))).toBe(true);
+    expect(reloadLines[0]).toContain('reload 1/3');
+    expect(reloadLines[1]).toContain('reload 2/3');
+  });
+
+  it('memory-eviction：可见窗口立即 reload，不可见窗口延迟到 show/restore 且重复事件只排一次', async () => {
+    await bootMain();
+    const gone = winHandlers.get('render-process-gone');
+    const show = windowHandlers.get('show');
+    const restore = windowHandlers.get('restore');
+    expect(gone).toBeTypeOf('function');
+    expect(show).toBeTypeOf('function');
+    expect(restore).toBeTypeOf('function');
+
+    gone?.({}, { reason: 'memory-eviction', exitCode: 9 });
+    expect(reloadCount).toBe(1);
+
+    windowVisible = false;
+    gone?.({}, { reason: 'memory-eviction', exitCode: 10 });
+    gone?.({}, { reason: 'memory-eviction', exitCode: 11 });
+    expect(reloadCount).toBe(1);
+
+    show?.({});
+    expect(reloadCount).toBe(1);
+    windowVisible = true;
+    restore?.({});
+    expect(reloadCount).toBe(2);
+    show?.({});
+    expect(reloadCount).toBe(2);
+  });
+
+  it('memory-eviction 待处理后退出不复活窗口', async () => {
+    await bootMain();
+    const gone = winHandlers.get('render-process-gone');
+    const show = windowHandlers.get('show');
+    windowVisible = false;
+    gone?.({}, { reason: 'memory-eviction', exitCode: 9 });
+    appHandlers.get('before-quit')?.();
+    windowVisible = true;
+    show?.({});
+    expect(reloadCount).toBe(0);
+  });
+
+  it('memory-eviction 待处理后窗口销毁不复活', async () => {
+    await bootMain();
+    const gone = winHandlers.get('render-process-gone');
+    const show = windowHandlers.get('show');
+    windowVisible = false;
+    gone?.({}, { reason: 'memory-eviction', exitCode: 10 });
+    windowDestroyed = true;
+    windowVisible = true;
+    show?.({});
+    expect(reloadCount).toBe(0);
+  });
+
+  it('still-running：接线层不 reload、不弹窗、不退出', async () => {
+    await bootMain();
+    const gone = winHandlers.get('render-process-gone');
+    gone?.({}, { reason: 'still-running', exitCode: 0 });
+    expect(reloadCount).toBe(0);
+    expect(dialogs).toHaveLength(0);
+    expect(calls).not.toContain('app.exit:1');
   });
 
   it('对照例：clean-exit 零重载（僵尸窗口那个回归）', async () => {
