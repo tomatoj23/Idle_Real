@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { loadFantasyPack } from '@wendao/content/packs/fantasy';
-import { createGame, ManualClock, type GameAction } from '@wendao/engine';
+import { createGame, ManualClock } from '@wendao/engine';
 import { mountGame } from './helpers/mount';
 
 /** 驱动 tick 直至条件满足（maxSteps 兜底断言防挂死）。 */

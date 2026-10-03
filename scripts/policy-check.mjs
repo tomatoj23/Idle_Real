@@ -66,7 +66,7 @@ const RULES = {
     level: "warn",
     title: "快照引用须带取档标注（review 级）",
     source: "compliance.md §2「快照引用三纪律/取档标注」；compliance-mechanical-gates.md §2 P5（#82）",
-    fix: "引用 Reference_Documents 快照的文档补取档日期字样（如「2026-09-29 取档」）；标注格式以票模板为准（随 #83 收紧）。",
+    fix: "引用 Reference_Documents 快照的文档补取档日期字样（如「2026-09-29 取档」）；完整「快照名 + 内部版本 + 取档日期」标注按 #83 票模板与 review 核对（本规则只粗检日期）。",
   },
   P6: {
     level: "warn",

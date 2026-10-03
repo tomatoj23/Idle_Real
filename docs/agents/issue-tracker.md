@@ -4,7 +4,7 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 ## Conventions
 
-- **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
+- **Create an issue**: `gh issue create --title "..." --body-file <path>`. Use a UTF-8 body file for multi-line bodies; fill the two sections below before publishing.
 - **Read an issue**: `gh issue view <number> --comments`, filtering comments by `jq` and also fetching labels.
 - **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
 - **Comment on an issue**: `gh issue comment <number> --body "..."`
@@ -14,6 +14,36 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
 **本仓库远端**：`https://github.com/tomatoj23/Idle_Real.git`（main 分支，2026-09-02 接入）。
+
+## 开票与交付骨架（agent / gh CLI）
+
+GitHub web UI 使用 [工程任务模板](../../.github/ISSUE_TEMPLATE/engineering-task.yml)；`gh issue create` 不校验模板，agent 开票必须主动包含以下两栏。规则以 [compliance-soft-layers.md](compliance-soft-layers.md) §2 为准，查阅入口见 [锚点卡](reference-snapshots-anchors.md) 与 [直达纪律](reference-snapshots-usage.md)。
+
+```markdown
+## 目标
+
+描述问题、预期行为、实施范围与不做的内容。
+
+## 查证锚点
+
+- 本地快照路径：
+- 卡内直达锚点名：
+- 卡外检索简报：问题 / 入口 / 停止条件（卡内直达或无需查阅时写不适用及理由）
+- 快照引用标注：快照名 + 内部版本 + 取档日期
+- [ ] breaking-changes / migration 已查（升级票必填；非升级票说明不适用理由）
+
+## 验收清单
+
+- [ ] 本票行为验收：
+- [ ] check + test 通过（记录命令与结果）
+- [ ] 真实浏览器首跑：环境 / 操作 / 结果（纯文档票写不适用及理由）
+- [ ] 查证锚点与直达痕迹已核对（无快照查阅时说明理由）
+```
+
+- 卡外检索简报须在搜索前填入票面、票评或产出物；卡内直达注明锚点名即可。无快照查阅或非升级票写不适用及理由，不留空冒充已查。
+- 开票时验收清单保持待办；交付时逐项核销并附证据。不适用项注明理由，不把未执行写成通过；真实浏览器首跑在涉 UI / 运行时改动中不可由 happy-dom 或 CI 替代。
+- 既有票若缺这两栏，实施时在票评补齐。提交、推送后附核销评论并关闭票；无失败证据、无未决项才可核销，未执行的验收如实保留。
+- 多会话并行：动手前读票面与全部评论并核对 assignees；未认领才执行 `gh issue edit <number> --add-assignee @me`，认领后再写文件。已有认领不等于本会话授权。
 
 ## Pull requests as a triage surface
 

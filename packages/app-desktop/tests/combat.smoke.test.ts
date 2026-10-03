@@ -152,7 +152,7 @@ describe('UI 烟测（issue #4 战斗切片）', () => {
         equips: {},
       },
     } as SaveData;
-    const { root, ui, game } = mountGame({ content, clock, save });
+    const { root, ui } = mountGame({ content, clock, save });
 
     root.querySelector<HTMLButtonElement>('.tab[data-tab="bag"]')!.click();
     ui.render();

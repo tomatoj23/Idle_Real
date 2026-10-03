@@ -1,0 +1,41 @@
+name: 工程任务
+description: 功能、缺陷与合规任务，含查证锚点和验收清单。
+body:
+  - type: markdown
+    attributes:
+      value: |
+        查证规则以 [软约束细则 §2](https://github.com/tomatoj23/Idle_Real/blob/main/docs/agents/compliance-soft-layers.md#2-票--pr-模板与-review-清单) 为准。
+        先查 [锚点卡](https://github.com/tomatoj23/Idle_Real/blob/main/docs/agents/reference-snapshots-anchors.md)；卡外搜索前按 [直达纪律](https://github.com/tomatoj23/Idle_Real/blob/main/docs/agents/reference-snapshots-usage.md) 留检索简报。
+        验收项开票时保持待办，交付时填写证据；不适用须说明理由，不得把未执行写成通过。
+  - type: textarea
+    id: goal
+    attributes:
+      label: 目标
+      description: 描述问题、预期行为、实施范围与不做的内容。
+    validations:
+      required: true
+  - type: textarea
+    id: verification-anchors
+    attributes:
+      label: 查证锚点
+      description: 升级或行为争议先填快照路径；卡内注明锚点名，卡外搜索前填写检索简报。不涉及快照须说明理由。
+      value: |
+        - 本地快照路径：
+        - 卡内直达锚点名：
+        - 卡外检索简报：问题 / 入口 / 停止条件（卡内直达或无需查阅时写不适用及理由）
+        - 快照引用标注：快照名 + 内部版本 + 取档日期
+        - [ ] breaking-changes / migration 已查（升级票必填；非升级票说明不适用理由）
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance-checklist
+    attributes:
+      label: 验收清单
+      description: 补本票行为验收项；真实浏览器首跑记录环境、操作和结果。纯文档票可注明不适用及理由，涉 UI 或运行时改动不可用 happy-dom / CI 替代。
+      value: |
+        - [ ] 本票行为验收：
+        - [ ] check + test 通过（记录命令与结果）
+        - [ ] 真实浏览器首跑：环境 / 操作 / 结果（纯文档票写不适用及理由）
+        - [ ] 查证锚点与直达痕迹已核对（无快照查阅时说明理由）
+    validations:
+      required: true
