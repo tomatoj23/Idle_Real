@@ -5,6 +5,8 @@
 //   P1  engine 源码无平台全局直接引用（环境能力走 globalThis 运行时探测，缺失降级）
 //   P3  schema/packs 无 `$defs`（JSON Schema draft-07 子集，校验器只认 `#/definitions/`）
 //   P4  测试代码无用户真档路径字面量（2026-09-29 删档事故教训；防呆不防恶）
+//   P7  engine 源码无 Math.random / Date.now（ADR-013 确定性三禁的字面两禁；隐式定时器归 P1 词表）
+//   P8  测试文件总数 >= 基线（防测试被静默删除；调基线须显式改 P8_BASELINE 常量并写明理由）
 // review 级提示（命中只提示，不阻塞——「命不准转 review，不硬失败」）：
 //   P2  从 globalThis/window/console 解构原生方法处有 bind 宿主（弱检测）
 //   P5  docs/research 引用 Reference_Documents 快照带取档日期标注
@@ -55,6 +57,18 @@ const RULES = {
     title: "测试禁真档路径字面量",
     source: "2026-09-29 删档事故教训（测试严禁动用户真档）；compliance-mechanical-gates.md §2 P4（#82）",
     fix: "测试用沙箱注入（userDataDir: tempRoot() 先例），只删自己造的测试产物；确需真档字样先备份，并加 `policy-allow: P4 <理由>` 豁免。",
+  },
+  P7: {
+    level: "error",
+    title: "engine 禁非确定源（Math.random / Date.now）",
+    source: "CONTEXT.md ADR-013 确定性纪律三禁；2026-10-24 retro 批追加（#80 会话 review 在 Electron 层抓到 Date.now，硬原则出处是 ADR-013）；compliance-mechanical-gates.md §2 P7",
+    fix: "随机走注入的种子化 RNG（rng.ts）；时间走注入 Clock（ManualClock/realClock 单点，realClock 有 policy-allow 豁免）；隐式定时器由 P1 词表承担。下标探测形态（Math['random']）是放行的逃生门，勿滥用。",
+  },
+  P8: {
+    level: "error",
+    title: "测试文件总数不低于基线",
+    source: "2026-10-24 retro 批追加（#80 会话测试计数 1043/1044 口径漂移教训；防测试被静默删除）；compliance-mechanical-gates.md §2 P8",
+    fix: "删除/合并测试文件须显式改本脚本 P8_BASELINE 常量并在 commit/票写明理由；新增测试不触发。计数口径与 isTestFile 同源（tests 目录 + *.test/*.spec）。",
   },
   P2: {
     level: "warn",
@@ -572,6 +586,29 @@ function checkP5(relPath, content) {
   return [{ rule: "P5", line: 1, detail: "引用 Reference_Documents 快照但未见取档日期标注（20xx-xx-xx）" }];
 }
 
+// P7 确定性三禁的字面两禁：成员形态词面正则，刻意不做裸标识符扫描——裸 random/now
+// 与领域词撞名面大（clock.now() 是合规形状），宁可漏报不误报（同 P1 哲学）。
+// 隐式定时器（setTimeout/setInterval…）已由 P1 词表承担，不重复；下标探测形态
+// （Math['random']）放行，是同 P1 的逃生门。
+const P7_PATTERNS = [
+  [/\bMath\s*\.\s*random\b/, "Math.random"],
+  [/\bDate\s*\.\s*now\b/, "Date.now"],
+];
+
+function checkP7(relPath, content) {
+  const masked = maskCode(content);
+  const lineOf = lineIndexer(content);
+  const out = [];
+  for (const [re, label] of P7_PATTERNS) {
+    const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+    let m;
+    while ((m = g.exec(masked))) {
+      out.push({ rule: "P7", line: lineOf(m.index), detail: `engine 非确定源「${label}」（ADR-013 三禁；走注入 RNG/Clock）` });
+    }
+  }
+  return out;
+}
+
 // 顺序敏感：先抽「工具名+版本」并抹掉，再抽三段版本号——防「vite 8.3.0」双报。
 // 三段号加前后点边界：127.0.0.1 这类 IP 不是版本号（对抗审计 F5）。
 const P6_PATTERNS = [
@@ -604,7 +641,7 @@ function allowPragmas(content) {
   const lineOf = lineIndexer(content);
   const ok = new Set();
   const out = [];
-  const re = /policy-allow:\s*P([1-6])\b([^\n]*)/g;
+  const re = /policy-allow:\s*P([1-8])\b([^\n]*)/g;
   let m;
   while ((m = re.exec(masked))) {
     const rule = `P${m[1]}`;
@@ -616,7 +653,7 @@ function allowPragmas(content) {
 
 // ---------- 文件收集 ----------
 
-const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", "out", "coverage", ".vite", ".zcode", ".scratch", ".codebuddy", "release", "dist-electron"]);
+const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", "out", "coverage", ".vite", ".zcode", ".scratch", ".codebuddy", ".qoder-cn", "release", "dist-electron"]);
 const CODE_RE = /\.([mc]?[jt]s|tsx|jsx)$/i;
 
 function walkFiles(root, visit) {
@@ -642,6 +679,12 @@ function isTestFile(rel) {
   return /(^|\/)(tests?|__tests__)(\/|$)/.test(t) || /\.(test|spec)\.[mc]?[jt]sx?$/.test(t);
 }
 
+// P8 测试文件基线（树级断言，per-file policy-allow 不适用）：防测试被静默删除。
+// 调基线 = 显式改本常量并在 commit/票写明理由；新增测试不触发。计数口径与 isTestFile
+// 同源（含 scripts/ 下的 *.test.mjs 金丝雀）。起点 2026-10-24 实测 90
+// （engine 35 + content 14 + editor 6 + app-desktop 33 + scripts 金丝雀 2）。
+const P8_BASELINE = 90;
+
 function underPosix(rel, prefix) {
   return rel.replace(/\\/g, "/").startsWith(prefix);
 }
@@ -654,6 +697,7 @@ export function checkFile(relPath, content) {
   const isCode = CODE_RE.test(t);
   if (isCode && underPosix(t, "packages/engine/src/") && !isTestFile(t)) {
     found.push(...checkP1(relPath, content));
+    found.push(...checkP7(relPath, content));
   }
   // P2 的 bind 红线覆盖全部跨端代码（壳层真机同样抛 Illegal invocation）
   if (isCode && underPosix(t, "packages/") && !isTestFile(t)) {
@@ -675,7 +719,11 @@ export function runCheck(root) {
   // 同文件同规则同行合并为一条（多 pattern 命中同一路径/同一行不重复刷屏）
   const errMap = new Map();
   const warnMap = new Map();
+  let testFileCount = 0;
   walkFiles(root, (file) => {
+    const rel0 = path.relative(root, file);
+    const t0 = rel0.replace(/\\/g, "/");
+    if (CODE_RE.test(t0) && isTestFile(t0)) testFileCount++;
     const rel = path.relative(root, file);
     let content;
     try {
@@ -695,6 +743,16 @@ export function runCheck(root) {
       }
     }
   });
+  // P8 只对「仓库形态」的树生效（根有 package.json）——金丝雀/临时 fixture 合成树不计，
+  // 否则 e2e 干净树（1 个测试文件）必被误伤。
+  if (fs.existsSync(path.join(root, "package.json")) && testFileCount < P8_BASELINE) {
+    errMap.set("P8|<repo>|0", {
+      rule: "P8",
+      file: "<repo>/packages/**（测试文件计数）",
+      line: 0,
+      detail: `测试文件 ${testFileCount} 个 < 基线 ${P8_BASELINE}（防测试静默丢失；调基线须显式改 P8_BASELINE 并写明理由）`,
+    });
+  }
   const byFile = (a, b) => a.file.localeCompare(b.file) || a.line - b.line;
   const errors = [...errMap.values()].sort(byFile);
   const warnings = [...warnMap.values()].sort(byFile);

@@ -70,19 +70,21 @@
 | P4 | 测试代码不含真档路径字面量 | 模式 = 真实绝对路径 / `%APPDATA%` 写形态；**勿扫裸 `userData`**（`userDataDir: tempRoot()` 这类无害沙箱注入遍地是）；真档落点经 `app.getPath('userData')` 运行时解析，此断言防呆不防恶 |
 | P5 | docs/research 引用快照带取档标注 | 抽查含 `Reference_Documents` 的文档须同时出现取档日期字样 |
 | P6 | AGENTS.md 无时点版本数字 | 粗粒度正则即可，命中转 review 不硬失败亦可 |
+| P7 | engine 源码无 `Math.random` / `Date.now` | 确定性三禁（CONTEXT.md ADR-013）的字面两禁；成员形态词面正则，刻意不做裸标识符扫描（`clock.now()` 是合规形状，宁可漏报）；隐式定时器由 P1 词表承担不重复；`Math['random']` 下标探测形态放行（同 P1 逃生门哲学）；唯一墙钟落点 `realClock()`（clock.ts）以 `policy-allow: P7` 注释豁免。2026-10-24 retro 批新增（#80 会话 review 曾在 Electron 层抓到 Date.now，硬原则出处是 ADR-013） |
+| P8 | 测试文件总数 ≥ 基线 | 树级断言，防测试被静默删除：以 `isTestFile` 同口径计数（tests 目录 + `*.test`/`*.spec`，含 scripts 金丝雀），低于基线硬失败；调基线 = 显式改脚本 `P8_BASELINE` 常量并写明理由，新增测试不触发。只对根含 package.json 的「仓库形态」树生效（金丝雀/fixture 合成树不计，防 e2e 干净树误伤）。2026-10-24 retro 批新增（#80 会话测试计数 1043/1044 口径漂移教训） |
 
 - **原则**：宁可漏报不误报——误报会诱使后人加豁免，比漏报更伤。每条断言配一条「如何变红」的自测说明（金丝雀用）。
-- **分批落地**：P1/P3/P4 先上（确定性高），P2/P5/P6 随后——已按此落地：P1/P3/P4 硬性，P2/P5/P6 review 级（只提示不阻塞），见下。
+- **分批落地**：P1/P3/P4 先上（确定性高），P2/P5/P6 随后——已按此落地：P1/P3/P4 硬性，P2/P5/P6 review 级（只提示不阻塞），见下。P7/P8 为 2026-10-24 retro 批追加（均硬性）。
 
 ### 落地形态（#82 实施记录，2026-09-29）
 
-- **脚本**：`scripts/policy-check.mjs`（零依赖纯 node）。P1/P3/P4 命中 = 硬失败（exit 1）；P2/P5/P6 命中 = review 级提示（不阻塞，即「命不准转 review」）。断言精度按上表落地，三处细化：
+- **脚本**：`scripts/policy-check.mjs`（零依赖纯 node）。P1/P3/P4/P7/P8 命中 = 硬失败（exit 1）；P2/P5/P6 命中 = review 级提示（不阻塞，即「命不准转 review」）。断言精度按上表落地，三处细化：
   - P1 五类排除（注释/字符串/属性键/声明名/接口·类型块）之外补「成员访问属性位」判定：**探测根**（globalThis/window/self/global）上的属性访问仍算直接引用（`globalThis.setTimeout` 形态），**本地对象**上的同名成员（`timer.setInterval` 绑后调用）放行。词表刻意不含 location/history/alert 等短词（与领域词撞名，宁可漏报）、console（双端标准对象，解构面归 P2）、fetch/crypto 等双端共有对象。
   - P3 扫 `packages/content/src/schema/**` 与 `packages/content/src/packs/**` 全部文件（含 .ts——TS 里拼出的 schema 字符串同样是使用面）；.ts 掩蔽注释（「勿用 $defs」的提醒不误伤），JSON 全文扫（键即字符串）。
   - P4 只认真档落点族（`%APPDATA%` 族 / `AppData\Roaming` 绝对形态 / Roaming\<游戏目录> / macOS/Linux userData 落点 / `process.env.APPDATA`），分隔符取 `[\\/]+`（JS 源码转义双反斜杠形态不漏）；**不扫裸 `userData`**。
 - **接线（显式两处，缺一即门禁空转）**：`.githooks/pre-push`（policy → 守卫金丝雀 → check → test，policy 先行快失败）；`.github/workflows/ci.yml`（checkout 后、Install 前各一步——零依赖，违规不必等装依赖才变红）。根 `package.json` 的 `npm run policy` 只是人手便捷入口，两网不依赖它。
 - **豁免纪律**：文件内注释 `policy-allow: P<n> <理由>`（理由必填；**只认注释形态**，字符串/模板里的 policy-allow 不算豁免；无理由的豁免行被忽略并提示）。首个豁免：`scripts/hooks/pretooluse-guard.test.mjs`（#81 金丝雀的真档路径字样=模拟用例数据，非写盘）。
-- **金丝雀**：`node scripts/policy-check.mjs --self-test`（70 项：deny 35 + allow 29 + e2e 4 + pragma 2，2026-09-29 对抗审计后扩编）；e2e 在 `os.tmpdir()` 临时 fixture 树上跑 `runCheck`（违规树必红、干净树必零报），不改真源码。
+- **金丝雀**：`node scripts/policy-check.mjs --self-test`（76 项：deny 37 + allow 33 + e2e 4 + pragma 2，2026-10-24 retro 批扩编）；e2e 在 `os.tmpdir()` 临时 fixture 树上跑 `runCheck`（违规树必红、干净树必零报），不改真源码。用例数量以自测输出为准，勿在散文里手工维护。
 - **对抗审计加固记录（2026-09-29 /fh 全维度复核）**：自查+对抗子代理实锤 3 个硬 bug 已修——①词法失步：正则字面量内的引号被当字符串开界（`/['"]/`），误报（字符串内容当代码报）+漏报（其后代码整段被抹）双向；修法=正则字面量态（除法歧义偏「正则」方向）+ 字符串/正则行尾恢复。②声明名误报：类/对象方法、访问器、无类型形参、catch 绑定、解构默认值全类排除（定义位判据 = `W(…)` 后跟 `{`/`:`；形参绑定判据 = 形参表模式位）；连带补上 `f(a, document, b)` 逗号位的既有漏报（原简写规则过宽误豁免）。③type 跳过区逃逸：`type Alias = number`（无 `;` 的 ASI）曾跨界吞掉后续语句的花括号块藏违规；修法=块首扫描遇语句界（空行/语句关键字）即停。另补：三元值位/case 值位/展开运算符/模板 `${…}`/`globalThis?.X` 的引用位识别、P4/P5/P6 大小写与 IP 边界（`127.0.0.1` 不是版本号）、同文件同规则同行合并单条。
 - **如何变红（巡检抽测用）**：
   - P1：往 `packages/engine/src` 加 `setTimeout(() => {}, 0);` → 硬失败；
@@ -91,7 +93,9 @@
   - P2：往 `packages/*/src` 加 `const { setTimeout } = window;`（不 bind）→ review 提示出现；
   - P5：新建 `docs/research/*.md` 写 `Reference_Documents` 引用但不带日期 → review 提示出现；
   - P6：往 AGENTS.md 写 `vite 8.3.0` → review 提示出现；
-  - 反向（误伤面）：金丝雀 ALLOW 组 = 基线合规形状清单（`g['setInterval']` 探测、接口方法签名、属性键、解构重命名、`timer.setInterval`、裸 `userDataDir: tempRoot()`、`file:///C:/…` URL 夹具、`moduleResolution: node10` 等），跑翻红 = 检测面变宽误伤，比失效更伤；DENY 组翻绿 = 门禁失效（同 #81 金丝雀协议）。
+  - P7：往 `packages/engine/src` 加 `const x = Math.random();`（或 `Date.now()`）→ 硬失败；`clock.ts` 的 realClock 豁免注释被删 → 硬失败；
+  - P8：删任一 `tests/*.test.ts` 不调基线 → 硬失败（合成树验证：含 package.json、零测试文件的临时树必红）；
+  - 反向（误伤面）：金丝雀 ALLOW 组 = 基线合规形状清单（`g['setInterval']` 探测、接口方法签名、属性键、解构重命名、`timer.setInterval`、裸 `userDataDir: tempRoot()`、`file:///C:/…` URL 夹具、`moduleResolution: node10`、`clock.now()`、`performance.now()`、`Math['random']` 下标等），跑翻红 = 检测面变宽误伤，比失效更伤；DENY 组翻绿 = 门禁失效（同 #81 金丝雀协议）。
 - **已知边界（如实声明）**：P2 只认静态解构/成员抽取形态，探测别名（`g['名']`）与 bind 后使用不进检测面；P4 防呆不防恶（`app.getPath('userData')` 运行时解析、拼接构造的路径都看不见）；P5/P6 粗正则只提示，P5 仍只粗检日期（#83 将完整「快照名 + 内部版本 + 取档日期」标注落入票模板，由 review 核对，不扩大本规则检测面）；AGENTS.md「现役 TS 7」是 P6 的常驻 review 提示（时点数字的已知在案形态，处置随 review）。P1 残余（宁可漏报方向）：同名遮蔽引用不识别（局部变量叫 `document` 的引用面照报——engine 命名纪律兜底，勿用禁词做局部名）；CR-only 行结束符的注释掩蔽不识别（本仓 CRLF/LF 不受影响）。
 
 ## 3. 守卫测试（可选替身）
@@ -108,4 +112,4 @@
 ## 5. CI 与金丝雀
 
 - CI（windows-latest）与 pre-push 跑同一组门禁（#85 起：policy + 守卫金丝雀 + check + test）：policy 与守卫金丝雀都是**显式两处接线**（pre-push 与 workflow 各一步），不是「挂根 check 自动双网」——两网的 check 走 `--workspaces` 不经根脚本（#82 复核实证）；`scripts/` 非 workspace、npm test 结构上够不到，守卫金丝雀不接线则失效静默（#85 F1，#81 过程发现 4 的欠账）。CI 是第二环境执行面，两处执行痕迹可观察（pre-push 输出 + workflow 步骤日志）。
-- **金丝雀巡检**（并入 ADR-018 巡检条目）：每次巡检从 P1 / P3 / P4 硬性红线中随机抽 1 条，在临时沙箱构造违规确认 policy 断言会红；P2 / P5 / P6 若另行抽测只验提示，不误要求硬失败。钩子活体验收另行安排，脚本自测不证明主会话已装配钩子；门禁连续 2 次巡检未被抽测视为欠账。
+- **金丝雀巡检**（并入 ADR-018 巡检条目）：每次巡检从 P1 / P3 / P4 / P7 / P8 硬性红线中随机抽 1 条，在临时沙箱构造违规确认 policy 断言会红；P2 / P5 / P6 若另行抽测只验提示，不误要求硬失败。钩子活体验收另行安排，脚本自测不证明主会话已装配钩子；门禁连续 2 次巡检未被抽测视为欠账。

@@ -2,6 +2,7 @@ import type { Clock } from './types.js';
 
 /** 真实时钟（createGame 默认注入）。 */
 export function realClock(): Clock {
+  // policy-allow: P7 注入时钟的唯一墙钟落点——ADR-013 禁的是绕过 Clock 注入直取时，不是这个单点
   return { now: () => Date.now() };
 }
 

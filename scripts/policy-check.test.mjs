@@ -49,6 +49,9 @@ const DENY_CASES = [
   ["P1-param-default-ref", P1_FILE, "function f(a = window) {}", "P1"],
   // ---- P3 ----
   ["P3-defs-key", P3_FILE, '{"$defs": {}, "definitions": {}}', "P3"],
+  // ---- P7 ----
+  ["P7-math-random", P1_FILE, "const x = Math.random();", "P7"],
+  ["P7-date-now", P1_FILE, "const t = Date.now();", "P7"],
   // ---- P4 ----
   ["P4-percent-appdata", P4_FILE, "rmSync(String.raw`%APPDATA%\\问道长生\\saves\\x.json`);", "P4"],
   ["P4-escaped-absolute", P4_FILE, "const p = 'C:\\Users\\me\\AppData\\Roaming\\问道长生\\saves\\x.json';", "P4"],
@@ -95,6 +98,11 @@ const ALLOW_CASES = [
   ["L-p6-node10-mode", "AGENTS.md", "`moduleResolution: node10` 与 draft-07 均为形态名，不是时点版本"],
   ["L-p6-major-only-tool", "AGENTS.md", "vitest 默认池（forks）即可"],
   ["L-p6-ip-not-version", "AGENTS.md", "内网 127.0.0.1:5173 与 draft-07 均非版本号"],
+  // ---- P7 合规形状（裸 random/now 与撞名形态、下标探测逃生门不得误伤）----
+  ["L-p7-clock-now", P1_FILE, "const t = clock.now();"],
+  ["L-p7-perf-now", P1_FILE, "const t = performance.now();"],
+  ["L-p7-new-date", P1_FILE, "const d = new Date(iso);"],
+  ["L-p7-subscript-probe", P1_FILE, "const rnd = Math['random'];"],
   // ---- P1 对抗审计加固回归（声明名/定义位不得误伤）----
   ["L-regex-string-safety", P1_FILE, "const re = /[\"/];\nconst s = \"document\";"],
   ["L-class-method", P1_FILE, "class T { setInterval(fn: () => void, ms: number): void {} }"],
@@ -140,9 +148,11 @@ function runE2E() {
   };
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "policy-check-canary-"));
   try {
-    // 违规树：P1/P3/P4 各放一例 + P5/P6 各一例（review 级）
+    // 违规树：P1/P3/P4/P7 各放一例 + P5/P6 各一例（review 级）+ package.json 触发 P8（零基线树）
     const bad = {
+      "package.json": "{}\n",
       "packages/engine/src/bad.ts": "setInterval(flush, 1000);\nlocalStorage.getItem('k');\n",
+      "packages/engine/src/bad2.ts": "const x = Math.random();\nconst t = Date.now();\n",
       "packages/content/src/schema/bad.schema.json": '{"$defs": {}}\n',
       "packages/engine/tests/bad.test.ts": "const p = 'C:\\Users\\me\\AppData\\Roaming\\问道长生\\saves\\x.json';\n",
       "docs/research/nodate.md": "见 D:\\My_Projects\\Reference_Documents\\electron-main\n",
@@ -155,7 +165,10 @@ function runE2E() {
     }
     const badResult = runCheck(tmp);
     const badRules = new Set(badResult.errors.map((v) => v.rule));
-    report(badRules.has("P1") && badRules.has("P3") && badRules.has("P4"), `e2e 违规树 P1/P3/P4 全部报错（实得 ${[...badRules].join(",") || "零"}）`);
+    report(
+      badRules.has("P1") && badRules.has("P3") && badRules.has("P4") && badRules.has("P7") && badRules.has("P8"),
+      `e2e 违规树 P1/P3/P4/P7/P8 全部报错（实得 ${[...badRules].join(",") || "零"}）`,
+    );
     report(badResult.errors.length > 0, `e2e 违规树整体变红（errors=${badResult.errors.length}）`);
     const warnRules = new Set(badResult.warnings.map((v) => v.rule));
     report(warnRules.has("P5") && warnRules.has("P6"), `e2e 违规树 P5/P6 出 review 提示（实得 ${[...warnRules].join(",") || "零"}）`);
