@@ -44,7 +44,8 @@ export interface EditorStore {
   loadPack(json: unknown): PackValidationResult;
   /**
    * 原地修改当前包并标记脏（fn 收到包对象引用）。先留整树快照后执行：
-   * fn 抛错则整树回滚到快照（发 'rollback'）并原样重抛异常，成功才入历史。
+   * fn 抛错则整树回滚到快照（发 'rollback'）并原样重抛异常（事件监听器
+   * 自身抛错时随 notify 惯例以其为准），成功才入历史。
    */
   update(fn: (pack: Record<string, unknown>) => void): void;
   /** 撤销最近一次已提交变更（整树换装，发 'history'）；无可撤销返回 false。 */
@@ -138,7 +139,8 @@ export function createStore(initial?: unknown): EditorStore {
     update(fn: (pack: Record<string, unknown>) => void): void {
       // 先留快照（clone）后执行：fn 仍原地改活树（渲染树闭包持活引用的
       // #49 纪律不破，焦点保持）；fn 抛错则整树换回快照——半途变异全弃、
-      // dirty 不动，发 'rollback' 让监听方重绑活引用后，异常原样重抛。
+      // dirty 不动，发 'rollback' 让监听方重绑活引用后，异常原样重抛
+      // （监听器自身抛错时随 notify 惯例以其为准）。
       const snapshot = clonePack();
       try {
         fn(state.pack);

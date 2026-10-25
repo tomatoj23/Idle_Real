@@ -126,5 +126,12 @@ export default {
       after: "  undoBtn.addEventListener('click', () => {\n    return;\n  });",
       note: '撤销按钮脱线（store.undo 丢失）：按钮路径撤销失效，装配用例红。',
     },
+    {
+      id: '15-rollback-branch-no-toast',
+      path: mainPath,
+      before: "      refreshAll();\n      repaintForm();\n      showToast('上一步编辑未生效（已回滚）');",
+      after: '      refreshAll();\n      repaintForm();',
+      note: "'rollback' 分支丢回滚提示：toast 滞留上一条消息，装配 rollback 用例红（splice 定点注入驱动真 UI）。",
+    },
   ],
 };

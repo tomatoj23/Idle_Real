@@ -80,8 +80,7 @@ describe('#88 · 装配级：LLM 勾选入包 → 当前节表单即时刷新', 
  * #73 装配级：误删条目 → 撤销 → 重做，顶栏按钮 + 键盘双路径走真装配。
  * 钉 main.ts 的 'history' 事件接线（collapseAll + repaintForm——漏 repaint
  * 则表单滞留旧 DOM，卡数不变即红）与 syncChrome 按钮禁用态同步。
- * store 层快照栈本体（含 rollback）见 state.test.ts；'rollback' 分支接线
- * 无 UI 触发路径（fn 抛错需注入异常面），接线未覆盖为已知缺口。
+ * store 层快照栈本体（含 rollback 语义）见 state.test.ts。
  *
  * 变异对照（改完必须验红再还原，别信「测试在场」）：
  * - main.ts 'history' 分支丢 repaintForm()/collapseAll() → 撤销后卡数不恢复，本用例红；
@@ -173,5 +172,67 @@ describe('#73 · 装配级：误删条目 → 撤销 → 重做', () => {
     (document.querySelector('#btn-undo') as HTMLButtonElement).click();
     expect(document.querySelectorAll('.entry-card').length).toBe(8);
     expect(document.querySelectorAll('.entry-body').length).toBe(0);
+  });
+});
+
+/**
+ * #73 装配级：update(fn) 抛错 → main.ts 'rollback' 分支接线（审计 F1 收口）。
+ * 注入法：spyOn(Array.prototype.splice) 按 this 内容定点——敌人数组（length 8
+ * 且首元素带 id:string + hp:number）的 (0,1) 调用才抛，applyEntryOp 的删除
+ * 即在 store.update fn 内真实抛错。无差别 stub 不可用：happy-dom 内部
+ * （NamedNodeMap.setNamedItem 设 className）同样走 splice(0,1)。
+ * 钉面：rollback 后表单重绘（卡数复原）、toast「已回滚」（main.ts:192 独一份，
+ * 其余分支不写此串）、干净包不脏、不进历史栈（撤销钮保持禁用）。
+ *
+ * 变异对照（改完必须验红再还原，别信「测试在场」）：
+ * - main.ts 'rollback' 分支丢 showToast() → toast 滞留上一条消息，本用例红。
+ */
+describe('#73 · 装配级：update 抛错回滚接线（rollback 分支）', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.replaceChildren();
+  });
+
+  it('删条目时 fn 抛错 → 整树回滚 + 回滚提示 + 不脏不进历史', async () => {
+    vi.resetModules();
+    document.body.innerHTML = '<div id="app"></div>';
+    (window as unknown as { confirm?: (m: string) => boolean }).confirm = () => true;
+    await import('../src/main.js');
+
+    (document.querySelector('#btn-sample') as HTMLButtonElement).click();
+    [...document.querySelectorAll<HTMLButtonElement>('.nav-item')]
+      .find((n) => n.textContent?.includes('敌人'))!
+      .click();
+    expect(document.querySelectorAll('.entry-card').length).toBe(8);
+
+    const realSplice = Array.prototype.splice;
+    const isEnemyList = (self: unknown[]): boolean =>
+      self.length === 8 &&
+      typeof (self[0] as { id?: unknown })?.id === 'string' &&
+      typeof (self[0] as { hp?: unknown })?.hp === 'number';
+    const spy = vi
+      .spyOn(Array.prototype, 'splice')
+      .mockImplementation(function (this: unknown[], ...args: unknown[]) {
+        if (args[0] === 0 && args[1] === 1 && isEnemyList(this)) {
+          throw new Error('boom-splice');
+        }
+        return realSplice.apply(this, args as never);
+      } as never);
+
+    try {
+      // happy-dom：监听器异常上抛到 click() 调用方（真浏览器走 window.onerror）。
+      [...document.querySelectorAll<HTMLButtonElement>('.entry-card button')]
+        .find((b) => b.textContent === '✕')!
+        .click();
+    } catch {
+      // fn 抛错经 mutate → 事件监听器上抛，预期路径。
+    }
+    spy.mockRestore();
+
+    // 回滚面：半途变异全弃（卡数复原）、toast 提示、干净包不脏、不进历史。
+    expect(document.querySelectorAll('.entry-card').length).toBe(8);
+    expect(document.querySelector('#toast')!.textContent).toContain('已回滚');
+    expect((document.querySelector('#dirty-badge') as HTMLElement).hidden).toBe(true);
+    expect((document.querySelector('#btn-undo') as HTMLButtonElement).disabled).toBe(true);
   });
 });
