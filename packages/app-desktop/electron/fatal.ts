@@ -94,9 +94,10 @@ export function createFatalHandler(deps: FatalDeps): FatalHandler {
       die('startup failed', err);
     },
     onRendererUnrecoverable(reason: GoneReason, exitCode: number): void {
-      // 文案分叉（写死在壳层的理由见头注划界段）：integrity-failure = asar 完整性
-      // 校验失败（文件可能被改动），重载没用，报「反复崩溃」是误导；其余 = 连续
-      // 重载耗尽，点名存档——一份让渲染进程启动期崩坏的存档就是这个形态。
+      // 文案分叉（写死在壳层的理由见头注划界段）：integrity-failure 的官方语义是
+      // Windows code integrity 校验失败（不等于 asar 被篡改的证据；asar 校验失败走
+      // 启动期 LOG(FATAL)，见 rendererRecovery 头注），重载没用，报「反复崩溃」是
+      // 误导；其余 = 连续重载耗尽，点名存档——一份让渲染进程启动期崩坏的存档就是这个形态。
       const message =
         reason === 'integrity-failure'
           ? '应用完整性校验失败（文件可能已损坏或被改动），请重新安装后再试'

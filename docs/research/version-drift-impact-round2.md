@@ -118,6 +118,8 @@
 
 ### 2.4【低】Electron fuses 未配置（AI 旧知识的系统性盲区）
 
+> **已收口（2026-10-25）**：随 #65 落地（0a9e1ce）——`electronFuses` 关 runAsNode/node-cli-inspect、开 asarIntegrity，其余保持默认；本节以下为 2026-09-16 时点快照，留档备查。
+
 - `packages/app-desktop/electron-builder.yml` 全文（6–23 行）**无任何 fuses 配置**；按 [Electron 官方 fuses 文档](https://www.electronjs.org/docs/latest/tutorial/fuses)默认值（2026-09-16 访问），出货二进制保持：**runAsNode=Enabled**（`ELECTRON_RUN_AS_NODE` 可把应用变成裸 Node 运行时）、nodeOptions/nodeCliInspect=Enabled、**cookieEncryption=Disabled、asarIntegrityValidation=Disabled**、onlyLoadAppFromAsar=Disabled。
 - 本仓威胁面有限（file:// 本地内容、window.open 全 deny、无远程内容加载、win x64 无签名公证链），故评「低」；但 fuses 是训练数据普遍不覆盖的新机制，**AI 不会主动想起它**——恰是本报告主题的活例。electron-builder 26 原生支持配置键 `electronFuses`（本地 `node_modules/app-builder-lib/out/configuration.d.ts` 含该键，安装包 26.15.3 实证）。
 - 处置建议：并入下次 Electron 升级同一 PR（改 yml 一处），关 runAsNode + 开 asar 完整性校验是常规起点。

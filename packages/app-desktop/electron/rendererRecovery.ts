@@ -9,7 +9,10 @@
  * a. 只认非退出类 reason：clean-exit 是真退出，重载 = 关不掉的僵尸窗口；已销毁 /
  *    正在退出时也不动作（没有可重载的对象 / 退出链上的消失不是故障）。未知 reason
  *    （日后 Electron 新增）反而走重载路径——白窗永挂正是本模块要消灭的病，而 b
- *    的上限兜住失控。integrity-failure 单独走致命面：asar 被动过，重载也没用。
+ *    的上限兜住失控。integrity-failure 单独走致命面：其官方语义是 Windows code
+ *    integrity（代码完整性）校验失败，不是「asar 被动过」的证据（#80 审计校准）；载荷
+ *    校验不过时重载同一份载荷没有意义。与 #65 的 asarIntegrity fuse 是两条通路：asar
+ *    头校验失败发生在启动加载期、直接 LOG(FATAL) 终止进程，不会以本 reason 形态出现。
  * b. 重载有上限（RELOAD_LIMIT），dom-ready 只记录稳定窗口的起点；下一次判定在窗口
  *    到界后才清零。这样「秒崩」形态不会靠每轮 dom-ready 把预算洗回 0。到界升级进
  *    fatal 的收尾，提示点名存档：一份让渲染进程在启动期崩坏的存档，每次 reload 都
