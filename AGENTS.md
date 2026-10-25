@@ -26,6 +26,7 @@ single-context 布局：根目录 `CONTEXT.md` + `docs/adr/`（按需懒创建�
 - engine 源码禁引用平台全局名（localStorage/document/window/setInterval 等），环境能力走 globalThis 运行时探测（先例 `save.ts` 的 `platformOf()`），缺失时降级，勿为省事给 engine 加 DOM/node lib。
 - 凡从 globalThis/window 解构原生方法（定时器/storage/console 等），必须 bind 宿主再存函数值，否则真机抛 Illegal invocation；happy-dom 不校验 this，测试全绿完全遮蔽（e93727e 教训）。
 - 真实浏览器首跑是必要验收步骤，UI 冒烟（vitest+happy-dom）不能替代。
+- 测试头注钉「变异对照…改完必须验红再还原，别信『测试在场』」的机械执行面与 Electron 侧真机验收 harness 已入库（#86）：`scripts/mutation-check.mjs` + `packages/app-desktop/scripts/electron-acceptance.mjs`，调用法与适用时机见 `docs/agents/acceptance-tooling.md`。
 
 ## 工具链校准（防训练数据滞后，ADR-018）
 
