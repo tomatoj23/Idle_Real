@@ -3,10 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { validateContentPack } from '@wendao/content';
 import { xiuxianPackJson } from '@wendao/content/packs/xiuxian';
 import { confirmDirtyLoad, DIRTY_LOAD_MESSAGE, createStore, HISTORY_LIMIT } from '../src/core/state.js';
+import { xiuxianStore } from './helpers.js';
 
 /** 最小合法包：单点破坏用底座（copy 后改）。 */
 function brokenPack(mutate: (pack: Record<string, unknown>) => void): unknown {
-  const copy = JSON.parse(JSON.stringify(xiuxianPackJson)) as Record<string, unknown>;
+  const copy = structuredClone(xiuxianPackJson) as Record<string, unknown>;
   mutate(copy);
   return copy;
 }
@@ -38,7 +39,7 @@ describe('editor store', () => {
   });
 
   it('update：原地写回 + 标脏 + data 事件', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     const listener = vi.fn();
     store.subscribe(listener);
 
@@ -55,14 +56,14 @@ describe('editor store', () => {
   });
 
   it('setSection：改 UI 态不标脏', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     store.setSection('enemies');
     expect(store.state.section).toBe('enemies');
     expect(store.state.dirty).toBe(false);
   });
 
   it('subscribe：退订后不再通知', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     const listener = vi.fn();
     const unsubscribe = store.subscribe(listener);
     unsubscribe();
@@ -77,14 +78,14 @@ describe('editor store', () => {
 
 describe('confirmDirtyLoad：载入新包的脏确认守卫（审计修复①）', () => {
   it('包干净 → 直接放行，不触发 confirm', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     const confirmFn = vi.fn(() => false);
     expect(confirmDirtyLoad(store, confirmFn)).toBe(true);
     expect(confirmFn).not.toHaveBeenCalled();
   });
 
   it('dirty + confirm=false → 守卫拒绝：调用点不 loadPack，包不被替换、脏标记保留', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     store.update(() => {}); // 模拟一次未导出的编辑
     const before = store.state.pack;
     const confirmFn = vi.fn(() => false);
@@ -98,19 +99,19 @@ describe('confirmDirtyLoad：载入新包的脏确认守卫（审计修复①）
   });
 
   it('dirty + confirm=true → 放行：loadPack 整树替换并清脏', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     store.update(() => {});
     expect(store.state.dirty).toBe(true);
     expect(confirmDirtyLoad(store, () => true)).toBe(true);
     const before = store.state.pack;
-    const result = store.loadPack(JSON.parse(JSON.stringify(xiuxianPackJson)));
+    const result = store.loadPack(xiuxianPackJson);
     expect(result.ok).toBe(true);
     expect(store.state.pack).not.toBe(before);
     expect(store.state.dirty).toBe(false);
   });
 
   it('main.ts 同款 window.confirm 接线：lambda 方法调用 + vi.spyOn stub', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     store.update(() => {});
     // happy-dom 20 已不实现 confirm（裸 Window 无此属性）；vitest 环境层落的
     // 自有访问器 getter 返回 undefined，spyOn 要求现值是函数仍拒绝——
@@ -143,7 +144,7 @@ describe('#73 · undo/redo 快照栈（store 层）', () => {
     (store.state.pack['enemies'] as unknown[]).length;
 
   it('update 后可撤销：undo 回到前值、history 事件、包引用换新', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     const before = enemyCount(store);
     const listener = vi.fn();
     store.subscribe(listener);
@@ -166,7 +167,7 @@ describe('#73 · undo/redo 快照栈（store 层）', () => {
   });
 
   it('redo 复原被撤销的改动后重做栈归零', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     const before = enemyCount(store);
     store.update((pack) => {
       (pack['enemies'] as unknown[]).pop();
@@ -180,7 +181,7 @@ describe('#73 · undo/redo 快照栈（store 层）', () => {
   });
 
   it('undo 后的新提交清空重做栈（分叉历史即弃）', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     const hpOf = (): unknown => (store.state.pack['enemies'] as { hp: number }[])[0]!.hp;
     store.update((pack) => {
       (pack['enemies'] as { hp: number }[])[0]!.hp = 1;
@@ -201,7 +202,7 @@ describe('#73 · undo/redo 快照栈（store 层）', () => {
   });
 
   it('误切 oneOf 分支（replace 形结构写）同样可撤销', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     const before = JSON.stringify((store.state.pack['enemies'] as unknown[])[0]);
     store.update((pack) => {
       (pack['enemies'] as unknown[])[0] = { id: 'swapped', type: 'claw' }; // 模拟误切分支整条替换
@@ -213,7 +214,7 @@ describe('#73 · undo/redo 快照栈（store 层）', () => {
   });
 
   it(`快照栈上限 ${HISTORY_LIMIT}：最早的版本被挤出，撤满 ${HISTORY_LIMIT} 次后停在第 1 版`, () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     const hpOf = (): number => (store.state.pack['enemies'] as { hp: number }[])[0]!.hp;
     for (let i = 1; i <= HISTORY_LIMIT + 1; i += 1) {
       store.update((pack) => {
@@ -231,13 +232,13 @@ describe('#73 · undo/redo 快照栈（store 层）', () => {
   });
 
   it('loadPack 整树替换截断历史（双向栈清空 + 清脏）', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     store.update((pack) => {
       (pack['enemies'] as unknown[]).pop();
     });
     expect(store.canUndo()).toBe(true);
 
-    const result = store.loadPack(JSON.parse(JSON.stringify(xiuxianPackJson)));
+    const result = store.loadPack(xiuxianPackJson);
     expect(result.ok).toBe(true);
     expect(store.canUndo()).toBe(false);
     expect(store.canRedo()).toBe(false);
@@ -253,7 +254,7 @@ describe('#73 · undo/redo 快照栈（store 层）', () => {
   });
 
   it('setSection 是 UI 态不进历史；undo/redo 不动当前节', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     store.setSection('enemies');
     expect(store.canUndo()).toBe(false);
 
@@ -265,7 +266,7 @@ describe('#73 · undo/redo 快照栈（store 层）', () => {
   });
 
   it('undo/redo 一律标脏（保守语义：退回原值也不自动熄「未导出改动」）', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     store.update((pack) => {
       (pack['enemies'] as { hp: number }[])[0]!.hp = 999;
     });
@@ -279,7 +280,7 @@ describe('#73 · undo/redo 快照栈（store 层）', () => {
 
 describe('#73 · update(fn) 异常语义：先快照后执行，抛错整树回滚', () => {
   it('fn 半途抛错：包回到 fn 前值、异常向调用方传播、发 rollback 事件', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     store.update((pack) => {
       (pack['enemies'] as { hp: number }[])[0]!.hp = 100; // 先立一个干净基线
     });
@@ -305,7 +306,7 @@ describe('#73 · update(fn) 异常语义：先快照后执行，抛错整树回�
   });
 
   it('干净包上首笔更新就抛错：包回到原值且不脏', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     const baseline = JSON.stringify(store.state.pack);
     expect(() =>
       store.update(() => {
@@ -317,7 +318,7 @@ describe('#73 · update(fn) 异常语义：先快照后执行，抛错整树回�
   });
 
   it('抛错不进历史栈：canUndo/canRedo 与抛错前一致，undo 仍回到上次成功提交', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     const hpOf = (): number => (store.state.pack['enemies'] as { hp: number }[])[0]!.hp;
     store.update((pack) => {
       (pack['enemies'] as { hp: number }[])[0]!.hp = 100;
@@ -339,7 +340,7 @@ describe('#73 · update(fn) 异常语义：先快照后执行，抛错整树回�
   });
 
   it('回滚后 store 可正常继续编辑（无残留半途态）', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     const hpOf = (): number => (store.state.pack['enemies'] as { hp: number }[])[0]!.hp;
     expect(() =>
       store.update((pack) => {

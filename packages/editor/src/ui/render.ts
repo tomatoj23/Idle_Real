@@ -12,9 +12,10 @@
  * 错误点击定位靠它。
  */
 
-import { sectionSchemas, type JsonSchema } from '@wendao/content';
+import { sectionSchemas, type ContentError, type JsonSchema } from '@wendao/content';
 import { skeletonOf, switchBranch } from '../core/defaults.js';
 import { buildFormNode, sectionTitle, type ArrayNode, type FormNode, type ObjectNode, type OneOfNode } from '../core/model.js';
+import { packRecordOf, packSectionArray } from '../core/packSection.js';
 import type { EditorStore } from '../core/state.js';
 import { xrefOptions, type XrefTarget } from '../core/xref.js';
 
@@ -152,21 +153,26 @@ function remappedIndex(op: EntryOp, index: number): number | null {
 
 /** EntryOp 的数据面：对节顶层数组就地应用（expanded 面由 mutate 负责）。 */
 function applyEntryOp(pack: Record<string, unknown>, section: string, op: EntryOp): void {
-  const list = pack[section] as unknown[];
+  // 形态守卫（#74 项 2）：节被旁门写坏时抛可读错误 → store.update 回滚 +
+  // 'rollback' 事件（装配层 toast），不再裸断言直取 TypeError。
+  const mutable = packSectionArray(pack, section);
+  if (mutable === undefined) {
+    throw new Error(`内容节 ${section} 不是数组（包形态损坏），操作未生效`);
+  }
   switch (op.kind) {
     case 'insert':
-      list.splice(op.at, 0, op.value);
+      mutable.splice(op.at, 0, op.value);
       break;
     case 'remove':
-      list.splice(op.at, 1);
+      mutable.splice(op.at, 1);
       break;
     case 'move': {
-      const [moved] = list.splice(op.from, 1);
-      list.splice(op.to, 0, moved!);
+      const [moved] = mutable.splice(op.from, 1);
+      mutable.splice(op.to, 0, moved!);
       break;
     }
     case 'replace':
-      list[op.at] = op.value;
+      mutable[op.at] = op.value;
       break;
   }
 }
@@ -232,15 +238,16 @@ function renderSectionInto(
 
   if (Array.isArray(value)) {
     renderArraySection(container, section, schema, value, commit);
-  } else if (typeof value === 'object' && value !== null) {
-    const node = buildFormNode(schema, schema, '', section, true);
-    if (node.kind === 'object') {
-      const body = el('div', 'object-body');
-      renderObjectFields(body, node, value as Record<string, unknown>, `/${section}`, commit);
-      container.append(body);
-    }
   } else {
-    container.append(el('p', 'empty-hint', `内容节 ${section} 缺失（坏包？重导入）。`));
+    const record = packRecordOf(value);
+    const node = buildFormNode(schema, schema, '', section, true);
+    if (record !== undefined && node.kind === 'object') {
+      const body = el('div', 'object-body');
+      renderObjectFields(body, node, record, `/${section}`, commit);
+      container.append(body);
+    } else {
+      container.append(el('p', 'empty-hint', `内容节 ${section} 缺失（坏包？重导入）。`));
+    }
   }
 }
 
@@ -341,9 +348,13 @@ function entryCard(
   if (isOpen) {
     const body = el('div', 'entry-body');
     const entryNode = node.item;
-    const entry = value[index] as Record<string, unknown>;
+    const entry = packRecordOf(value[index]);
     const entryPath = `/${section}/${index}`;
-    if (entryNode.kind === 'oneOf') {
+    if (entry === undefined) {
+      // 坏形态条目（#74 项 2）：非对象条目展开不炸，落提示（手风琴摘要
+      // 已回显原始值）。
+      body.append(el('p', 'empty-hint', '条目形态异常（非对象，坏包？重导入）。'));
+    } else if (entryNode.kind === 'oneOf') {
       renderOneOfBody(body, entryNode, entry, entryPath, section, index, commit, syncSummary);
     } else if (entryNode.kind === 'object') {
       renderObjectFields(body, entryNode, entry, entryPath, commit, syncSummary);
@@ -481,9 +492,9 @@ function controlOf(
       return selectControl(node, container, key, commit);
     case 'object': {
       const wrap = el('div', 'nested-object');
-      const child = container[key];
-      if (typeof child === 'object' && child !== null && !Array.isArray(child)) {
-        renderObjectFields(wrap, node, child as Record<string, unknown>, path, commit);
+      const child = packRecordOf(container[key]);
+      if (child !== undefined) {
+        renderObjectFields(wrap, node, child, path, commit);
       }
       return wrap;
     }
@@ -492,16 +503,16 @@ function controlOf(
     case 'dict':
       return dictBlock(
         { keyPattern: node.keyPattern, keyXref: node.keyXref, valueNode: node.valueNode },
-        container[key] as Record<string, unknown>,
+        packRecordOf(container[key]) ?? {},
         path,
         commit,
         node.requiredKeys,
       );
     case 'oneOf': {
       const wrap = el('div', 'nested-object');
-      const child = container[key];
-      if (typeof child === 'object' && child !== null && !Array.isArray(child)) {
-        renderOneOfInline(wrap, node, child as Record<string, unknown>, path, commit);
+      const child = packRecordOf(container[key]);
+      if (child !== undefined) {
+        renderOneOfInline(wrap, node, child, path, commit);
       }
       return wrap;
     }
@@ -802,21 +813,22 @@ function dictRow(
 
   const valueWrap = el('div', 'dict-value');
   const valueNode = dict.valueNode;
-  const childValue = value[key];
-  if (typeof childValue === 'object' && childValue !== null && !Array.isArray(childValue)) {
+  const childRecord = packRecordOf(value[key]);
+  if (childRecord !== undefined) {
     if (valueNode.kind === 'array') {
       valueWrap.append(
         arrayControl(valueNode, value, key, `${path}/*`, commit),
       );
     } else if (valueNode.kind === 'object') {
-      renderObjectFields(valueWrap, valueNode, childValue as Record<string, unknown>, `${path}/${key}`, commit);
+      renderObjectFields(valueWrap, valueNode, childRecord, `${path}/${key}`, commit);
     }
   } else {
     // 标量值（reasonMap 的字符串等）。
+    const scalar = value[key];
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'input';
-    input.value = typeof childValue === 'string' ? childValue : String(childValue ?? '');
+    input.value = typeof scalar === 'string' ? scalar : String(scalar ?? '');
     input.addEventListener('input', () => {
       commit.touch(() => {
         value[key] = input.value;
@@ -830,6 +842,48 @@ function dictRow(
 }
 
 /* ==================== xref 池接线 ==================== */
+
+/**
+ * 校验错误 → 行错误态（#74 项 4）：先清容器内旧标，再逐条错误命中挂
+ * has-error。每条错误两段式：先精确 data-path（兄弟行不误标——清空敌人 0
+ * 的 id 不能标红敌人 1 的 id 行）；无精确行才退到数字段折叠对齐——嵌套
+ * 数组条目行的 data-path 既有口径不含条目下标（drops[1].item 的行是
+ * /enemies/0/drops/item），错误 path 有下标，折叠后对齐。
+ */
+export function applyErrorMarks(container: HTMLElement, errors: readonly ContentError[]): void {
+  const rows = [...container.querySelectorAll<HTMLElement>('[data-path]')];
+  for (const row of rows) {
+    row.classList.remove('has-error');
+  }
+  for (const error of errors) {
+    const exact = rows.filter((row) => row.dataset.path === error.path);
+    if (exact.length > 0) {
+      for (const row of exact) {
+        row.classList.add('has-error');
+      }
+      continue;
+    }
+    const collapsed = collapseIndexSegments(error.path);
+    if (collapsed.length === 0) {
+      continue;
+    }
+    for (const row of rows) {
+      const rowCollapsed = collapseIndexSegments(row.dataset.path ?? '');
+      if (rowCollapsed.length > 0 && sameSegments(collapsed, rowCollapsed)) {
+        row.classList.add('has-error');
+      }
+    }
+  }
+}
+
+/** 折叠纯数字段：/enemies/0/drops/1/item → ['enemies','drops','item']。 */
+function collapseIndexSegments(path: string): readonly string[] {
+  return path.split('/').filter((segment) => segment !== '' && !/^\d+$/.test(segment));
+}
+
+function sameSegments(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((segment, index) => segment === b[index]);
+}
 
 /**
  * 给输入框挂跨引用 datalist（focus 时经 commit.xrefPool 按当前包快照重建

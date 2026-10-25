@@ -344,6 +344,26 @@ body {
   outline: 1px solid var(--gold);
 }
 
+/* —— 校验错误行联动（#74-4）：错误按 data-path 标回表单行 —— */
+.field-row.has-error > .input,
+.dict-row.has-error .input,
+.array-item.has-error .input {
+  border-color: var(--cinnabar);
+}
+
+.field-row.has-error > .field-label {
+  color: var(--cinnabar);
+  font-weight: 600;
+}
+
+.entry-card.has-error {
+  border-color: var(--cinnabar);
+}
+
+.section-title.has-error {
+  color: var(--cinnabar);
+}
+
 .empty-hint {
   color: var(--ink-soft);
   padding: 24px 0;
@@ -479,6 +499,19 @@ body {
 .llm-field > span {
   color: var(--ink-soft);
   font-size: 12px;
+}
+
+/* API Key 威胁模型文案（#74-6） */
+.llm-threat-note {
+  color: var(--ink-soft);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.llm-threat-note:not(label) {
+  line-height: 1.4;
 }
 
 .llm-status {

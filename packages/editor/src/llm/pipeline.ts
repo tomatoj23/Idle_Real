@@ -10,6 +10,7 @@
 import { validateContent, sectionSchemas, type ContentError, type JsonSchema } from '@wendao/content';
 import type { EditorStore } from '../core/state.js';
 import { entrySchemaOf } from '../core/model.js';
+import { packRecordOf, packSectionArray } from '../core/packSection.js';
 import { extractJsonArray, type LlmClient } from './client.js';
 import { buildMessages, type GenKind, type PackContext } from './prompts.js';
 
@@ -100,13 +101,20 @@ export async function generateCandidates(opts: {
   readonly count: number;
   readonly hint: string;
   readonly pack: Record<string, unknown>;
+  /** 取消信号（#74 项 7）：透传给 client，中止即 ok:false 带取消错误。 */
+  readonly signal?: AbortSignal;
 }): Promise<GenerateResult> {
   const ctx = packContextOf(opts.pack);
   const messages = buildMessages(opts.kind, ctx, opts.count, opts.hint);
   let reply: string;
   try {
-    reply = await opts.client.complete(opts.config, messages);
+    reply = await opts.client.complete(opts.config, messages, opts.signal);
   } catch (cause) {
+    // 取消（#74 项 7）是控制流不是失败：带 signal 中止标记的原样上抛，
+    // 由面板层转「已取消」口径；其余失败转 ok:false 可读错误。
+    if (opts.signal?.aborted) {
+      throw cause;
+    }
     return { ok: false, error: cause instanceof Error ? cause.message : String(cause) };
   }
 
@@ -155,26 +163,41 @@ export function applyCandidates(
   const skipped: string[] = [];
   const schema = candidateSchemaOf(kind);
   store.update((pack) => {
+    // 形态守卫（#74 项 2）：目标容器经安全访问器取，坏形态（update 旁门
+    // 写坏/旧版包缺节）整批跳过，不再裸断言直取 TypeError。
     if (kind === 'verbs') {
-      const combatText = pack['combatText'] as { verbs: Record<string, unknown> };
+      const verbs = packRecordOf(packRecordOf(pack['combatText'])?.['verbs']);
+      if (verbs === undefined) {
+        for (const candidate of approved) {
+          skipped.push(candidate.label);
+        }
+        return;
+      }
       for (const candidate of approved) {
         const { key, list } = candidate.value as { key?: unknown; list?: unknown };
-        if (typeof key !== 'string' || key in combatText.verbs || !passesSchema(candidate.value, schema)) {
+        if (typeof key !== 'string' || key in verbs || !passesSchema(candidate.value, schema)) {
           skipped.push(candidate.label);
           continue;
         }
-        combatText.verbs[key] = list;
+        verbs[key] = list;
         applied += 1;
       }
       return;
     }
     // 敌人候选的语义闭合辅助：敌人须在 combatText.moves 注册招式名
     // （语义关卡 xref），入包时以敌人名为初始招式补缺省注册，作者可再润色。
+    // moves 缺省只降级（不自动注册），不拦截入包。
     const moves =
       kind === 'enemies'
-        ? (pack['combatText'] as { moves: Record<string, string[]> }).moves
+        ? packRecordOf(packRecordOf(pack['combatText'])?.['moves'])
         : undefined;
-    const section = pack[kind] as unknown[];
+    const section = packSectionArray(pack, kind);
+    if (section === undefined) {
+      for (const candidate of approved) {
+        skipped.push(candidate.label);
+      }
+      return;
+    }
     for (const candidate of approved) {
       const entry = JSON.parse(JSON.stringify(candidate.value)) as { id?: unknown; name?: unknown };
       if (!passesSchema(entry, schema)) {

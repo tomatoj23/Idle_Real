@@ -5,7 +5,7 @@ import { extractJsonArray, type LlmClient } from '../src/llm/client.js';
 import { createFetchClient } from '../src/llm/client.js';
 import { applyCandidates, generateCandidates, packContextOf } from '../src/llm/pipeline.js';
 import { GEN_LABELS, genKinds } from '../src/llm/prompts.js';
-import { createStore } from '../src/core/state.js';
+import { xiuxianStore } from './helpers.js';
 import type { ChatMessage } from '../src/llm/client.js';
 
 /** 假 LLM client：按脚本回固定文本（验收 2 的「配置假 LLM client」）。 */
@@ -52,7 +52,7 @@ describe('extractJsonArray', () => {
 
 describe('generateCandidates：假 client 批量生成（验收 2）', () => {
   it('批量 10 条敌人 → 全部过节级校验 → 勾选入包 → 整包仍合法', async () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     const calls: ChatMessage[][] = [];
     const client = fakeClient(TEN_ENEMIES_REPLY, calls);
 
@@ -94,7 +94,7 @@ describe('generateCandidates：假 client 批量生成（验收 2）', () => {
   });
 
   it('LLM 回复含坏条目：坏条目带字段级错误，好条目仍可入包', async () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     const reply = JSON.stringify({
       items: [
         { id: 'good_one', name: '好怪', icon: '好', level: 1, kind: 'claw', hp: 40, atk: 8, def: 2, attackInterval: 2400, exp: 10, gold: { min: 1, max: 3 }, drops: [{ item: 'core1', chance: 0.3 }] },
@@ -112,7 +112,7 @@ describe('generateCandidates：假 client 批量生成（验收 2）', () => {
   });
 
   it('verbs 候选入包合并进 combatText.verbs；撞键跳过', async () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     const reply = JSON.stringify({
       items: [
         { key: 'fan', list: [{ v: '折扇轻摇', limbs: ['手腕'] }, { v: '扇骨点穴', limbs: ['指尖'] }] },
@@ -141,7 +141,7 @@ describe('generateCandidates：假 client 批量生成（验收 2）', () => {
   });
 
   it('enemies 入包：自动补缺省招式注册并在报告中可见；入包前复核拦截失效候选', async () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     const result = await generateCandidates({
       kind: 'enemies', client: fakeClient(TEN_ENEMIES_REPLY), config: CONFIG, count: 10, hint: '', pack: store.state.pack,
     });
@@ -167,7 +167,7 @@ describe('generateCandidates：假 client 批量生成（验收 2）', () => {
   });
 
   it('client 抛错 / 回复无 JSON → ok:false 带可读错误', async () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     const fail = await generateCandidates({
       kind: 'enemies',
       client: {

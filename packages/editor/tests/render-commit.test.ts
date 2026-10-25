@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
-import { xiuxianPackJson } from '@wendao/content/packs/xiuxian';
-import { createStore, type EditorStore } from '../src/core/state.js';
+import type { EditorStore } from '../src/core/state.js';
 import { createSectionController, remapExpanded } from '../src/ui/render.js';
+import { xiuxianStore } from './helpers.js';
 
 /**
  * 写回收敛单门（#49）：remapExpanded 纯函数单测 + 六处结构写回（增/删/
@@ -86,7 +86,7 @@ describe('#49 · remapExpanded 重映射纯函数（D1）', () => {
 
 describe('#49 · 结构写回 DOM 级行为（增/删/移/拖/换支/展开切换）', () => {
   it('删除中间条目：上方条目展开态跟随平移，不错贴（AC3 回归）', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     renderWith(store, 'enemies', [0, 2]);
     expect(expandedPaths()).toEqual(['/enemies/0', '/enemies/2']);
 
@@ -101,7 +101,7 @@ describe('#49 · 结构写回 DOM 级行为（增/删/移/拖/换支/展开切�
   });
 
   it('新增条目就地展开，连加不遗幽灵下标（off-by-one 回归）', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     renderWith(store, 'enemies');
     const addBtn = document.querySelector<HTMLButtonElement>('.btn-add')!;
 
@@ -113,7 +113,7 @@ describe('#49 · 结构写回 DOM 级行为（增/删/移/拖/换支/展开切�
   });
 
   it('上移/下移：条目与展开态同步对换', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     renderWith(store, 'enemies', [2]);
 
     cardButton(2, '上移').click();
@@ -126,7 +126,7 @@ describe('#49 · 结构写回 DOM 级行为（增/删/移/拖/换支/展开切�
   });
 
   it('拖拽跨位：区间旋转，展开态整体迁移而非只迁 from→to', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     renderWith(store, 'enemies', [0, 1]);
 
     // 0 号（e1）拖到 2 号位：旧 1 号（展开的 e2）应平移到 0 号位。
@@ -143,7 +143,7 @@ describe('#49 · 结构写回 DOM 级行为（增/删/移/拖/换支/展开切�
   });
 
   it('oneOf 换支：原位替换、公共字段保留、条目保持展开', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     renderWith(store, 'items', [0]);
     const select = document.querySelector<HTMLSelectElement>('.branch-select')!;
     expect(select.value).toBe('mat');
@@ -159,7 +159,7 @@ describe('#49 · 结构写回 DOM 级行为（增/删/移/拖/换支/展开切�
   });
 
   it('展开切换走控制器（toggleEntry）：不触数据、仅重渲染', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     renderWith(store, 'enemies', [0]);
     expect(expandedPaths()).toEqual(['/enemies/0']);
     expect(store.state.dirty).toBe(false);
@@ -172,7 +172,7 @@ describe('#49 · 结构写回 DOM 级行为（增/删/移/拖/换支/展开切�
   });
 
   it('xref datalist focus 时按当前包快照求值（D3 参数化活体）', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     renderWith(store, 'enemies', [0]);
     // 嵌套数组条目行的 data-path 不含条目下标（arrayItemRow 既有口径），
     // 首个命中即 drops[0] 的 item 字段。
@@ -186,5 +186,31 @@ describe('#49 · 结构写回 DOM 级行为（增/删/移/拖/换支/展开切�
     const options = [...datalist.querySelectorAll('option')].map((option) => option.getAttribute('value'));
     expect(options.length).toBeGreaterThan(0);
     expect(options).toContain('core1');
+  });
+});
+
+describe('#74-2 · 坏形态包的渲染守卫（update 旁门写坏后不 TypeError）', () => {
+  it('条目非对象：展开落「形态异常」提示，不炸渲染', () => {
+    const store = xiuxianStore();
+    store.update((pack) => {
+      (pack['enemies'] as unknown[])[0] = 'oops-scalar';
+    });
+    expect(() => renderWith(store, 'enemies', [0])).not.toThrow();
+    expect(document.querySelector('.entry-body')!.textContent).toContain('形态异常');
+  });
+
+  it('节数组被旁门删除后点陈旧卡片的删除钮：可读错误经 update 回滚重抛', () => {
+    const store = xiuxianStore();
+    renderWith(store, 'enemies');
+    store.update((pack) => {
+      delete pack['enemies'];
+    });
+    const removeBtn = [...document.querySelectorAll<HTMLButtonElement>('.entry-card button')].find(
+      (node) => node.textContent === '✕',
+    )!;
+    // mutate → applyEntryOp 守卫抛错 → store.update 回滚后原样重抛（装配层
+    // 靠 'rollback' 事件 toast + 重绘；此处钉错误可读 + 回滚后包仍是删除态）。
+    expect(() => removeBtn.click()).toThrow('包形态损坏');
+    expect('enemies' in store.state.pack).toBe(false);
   });
 });

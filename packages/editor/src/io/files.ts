@@ -50,6 +50,20 @@ function parsePackJson(text: string): unknown {
 }
 
 /**
+ * 包文件字节 → 文本（#74 项 3）：UTF-8 解码 + 显式剥 BOM（strFromU8 现行
+ * 为已剥，此处防依赖漂移自证语义）+ 非 UTF-8 字节检测——GBK/ANSI 包宽松
+ * 解码产出 U+FFFD，照旧 parse 只会得到 mojibake 后的不可读 SyntaxError，
+ * 不如在此拒绝并指路转存。
+ */
+function decodePackText(bytes: Uint8Array): string {
+  const text = strFromU8(bytes);
+  if (text.includes('\uFFFD')) {
+    throw new Error('文件不是 UTF-8 编码（Windows 记事本 ANSI/GBK？）：请转存为 UTF-8 后重新导入');
+  }
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
+/**
  * 读取内容包文件：.json 直接解析；.zip 解包取首个 .json 条目。
  * 解析产物先经 sanitizeParsed 净化（原型污染键剔除，审计修复②）。
  * 解析失败抛错（调用方呈现给用户；包数据不受影响）。
@@ -63,10 +77,10 @@ export async function readPackFile(file: File): Promise<PackFileInfo> {
     if (jsonEntry === undefined) {
       throw new Error('zip 包内未找到 .json 内容文件');
     }
-    return { json: parsePackJson(strFromU8(entries[jsonEntry]!)), sourceName: file.name };
+    return { json: parsePackJson(decodePackText(entries[jsonEntry]!)), sourceName: file.name };
   }
   if (name.endsWith('.json')) {
-    return { json: parsePackJson(strFromU8(bytes)), sourceName: file.name };
+    return { json: parsePackJson(decodePackText(bytes)), sourceName: file.name };
   }
   throw new Error('仅支持 .json / .zip 内容包文件');
 }

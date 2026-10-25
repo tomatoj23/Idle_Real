@@ -9,13 +9,16 @@ export interface ChatMessage {
 }
 
 export interface LlmClient {
-  /** 单轮补全：返回助手消息文本。失败抛错（消息带响应摘要）。 */
+  /**
+   * 单轮补全：返回助手消息文本。失败抛错（消息带响应摘要）。
+   * signal 可选（#74 项 7 取消入口）：中止即 reject，客户端实现应透传。
+   */
   complete(config: {
     readonly baseUrl: string;
     readonly apiKey: string;
     readonly model: string;
     readonly temperature: number;
-  }, messages: readonly ChatMessage[]): Promise<string>;
+  }, messages: readonly ChatMessage[], signal?: AbortSignal): Promise<string>;
 }
 
 interface ChatChoice {
@@ -31,8 +34,10 @@ interface ChatResponse {
 export function createFetchClient(fetchLike?: typeof fetch): LlmClient {
   const doFetch = fetchLike ?? ((...args: Parameters<typeof fetch>) => globalThis.fetch(...args));
   return {
-    async complete(config, messages) {
+    async complete(config, messages, signal) {
       const url = `${config.baseUrl.replace(/\/+$/, '')}/chat/completions`;
+      // 60s 超时防挂死；外部 signal（#74 项 7 取消）与超时任一触发即中止。
+      const timeout = AbortSignal.timeout(60_000);
       const response = await doFetch(url, {
         method: 'POST',
         headers: {
@@ -44,7 +49,7 @@ export function createFetchClient(fetchLike?: typeof fetch): LlmClient {
           messages,
           temperature: config.temperature,
         }),
-        signal: AbortSignal.timeout(60_000),
+        signal: signal === undefined ? timeout : AbortSignal.any([timeout, signal]),
       });
       const body = (await response.json().catch(() => null)) as ChatResponse | null;
       if (!response.ok) {

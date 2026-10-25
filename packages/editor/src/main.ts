@@ -12,7 +12,7 @@ import { exportJsonDownload, exportZipDownload, readPackFile } from './io/files.
 import { exportToGame } from './io/gameBridge.js';
 import { createValidatePanel } from './ui/panel.js';
 import { createLlmPanel } from './ui/llmPanel.js';
-import { createSectionController } from './ui/render.js';
+import { applyErrorMarks, createSectionController } from './ui/render.js';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 
@@ -47,7 +47,9 @@ if (app) {
   // expanded 所有权在控制器（#49 D2）：换节/换包 collapseAll，错误定位 expandEntry。
   const controller = createSectionController(store, {
     onData: () => scheduleValidate(),
-    onStructure: () => scheduleValidate(),
+    // 结构操作立即校验（#74-4）：展开/收起/增删条目整节重绘后行错误标
+    // 即时回挂——走去抖会有 400ms 标记闪断（真机首跑抓到）。
+    onStructure: () => scheduleValidate(true),
   });
 
   const nav = document.querySelector<HTMLElement>('#section-nav')!;
@@ -137,17 +139,14 @@ if (app) {
       controller.expandEntry(entryIndex);
     }
     repaintForm();
-    // 渲染后定位：节标题或字段行。
+    // 渲染后定位：节标题或字段行。选择器内插走标准 CSS.escape（#74 项 8：
+    // 手写 cssEscape 只处理 \ 和 "，残缺版退役）。
     const target =
-      document.querySelector<HTMLElement>(`[data-path="${cssEscape(path)}"]`) ??
+      document.querySelector<HTMLElement>(`[data-path="${CSS.escape(path)}"]`) ??
       document.querySelector<HTMLElement>('.section-title');
     target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     target?.classList.add('flash');
     window.setTimeout(() => target?.classList.remove('flash'), 1200);
-  }
-
-  function cssEscape(value: string): string {
-    return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   }
 
   /* —— 校验调度（输入 debounce，结构性变更立即） —— */
@@ -160,6 +159,11 @@ if (app) {
   function refreshAll(): void {
     validatePanel.refresh();
     repaintNav();
+    // 行错误态联动（#74-4）：当前节的错误按 data-path 标回表单行。
+    applyErrorMarks(
+      formArea,
+      store.state.section === null ? [] : (validatePanel.errorsBySection().get(store.state.section) ?? []),
+    );
     syncChrome();
   }
   function scheduleValidate(immediate = false): void {
@@ -172,8 +176,9 @@ if (app) {
       controller.collapseAll();
       // 加载后默认落第一个节。
       store.setSection(Object.keys(sectionSchemas)[0] ?? null);
-      refreshAll();
+      // 先重绘再刷新（#74-4）：refreshAll 的行错误标要落在重绘后的新行上。
       repaintForm();
+      refreshAll();
       showToast('内容包已加载并通过校验');
       return;
     }
@@ -181,14 +186,14 @@ if (app) {
       // 撤销/重做是整树换装（#73）：expanded 下标随历史失效、渲染树活引用
       // 全部换血——收起 + 重渲染重绑，校验/徽标/按钮即时跟进。
       controller.collapseAll();
-      refreshAll();
       repaintForm();
+      refreshAll();
       return;
     }
     if (event === 'rollback') {
       // fn 抛错回滚（#73）：包引用已换（半途变异被弃），重绑活引用 + 提示。
-      refreshAll();
       repaintForm();
+      refreshAll();
       showToast('上一步编辑未生效（已回滚）');
       return;
     }
@@ -197,8 +202,8 @@ if (app) {
   });
 
   store.setSection(Object.keys(sectionSchemas)[0] ?? null);
-  refreshAll();
   repaintForm();
+  refreshAll();
 
   /* —— 关窗脏提醒（审计修复①）：有未导出改动时浏览器弹原生留页确认。 —— */
   window.addEventListener('beforeunload', (event) => {
@@ -214,8 +219,8 @@ if (app) {
     if (!confirmDirtyLoad(store, (message) => window.confirm(message))) return;
     const result = store.loadPack(JSON.parse(JSON.stringify(xiuxianPackJson)));
     showToast(result.ok ? '示例包（修仙）已载入' : `示例包校验失败：${result.errors.length} 错`);
-    refreshAll();
     repaintForm();
+    refreshAll();
   });
 
   document.querySelector('#btn-import')?.addEventListener('click', () => {
@@ -239,8 +244,8 @@ if (app) {
       }
       const result = store.loadPack(info.json);
       if (result.ok) {
-        refreshAll();
         repaintForm();
+        refreshAll();
         showToast(`已导入 ${info.sourceName}（校验通过）`);
       } else {
         // 坏包不应用（验收 3）：字段级错误以拒绝块呈现在校验面板；

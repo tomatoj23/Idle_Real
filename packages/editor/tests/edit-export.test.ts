@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
 import { validateContentPack, type ContentError } from '@wendao/content';
-import { xiuxianPackJson } from '@wendao/content/packs/xiuxian';
-import { createStore, type EditorStore } from '../src/core/state.js';
+import type { EditorStore } from '../src/core/state.js';
+import { xiuxianStore } from './helpers.js';
 import { createSectionController } from '../src/ui/render.js';
 import { exportJsonBytes } from '../src/io/files.js';
 
@@ -48,7 +48,7 @@ function typeValue(input: HTMLInputElement, value: string): void {
 
 describe('渲染 → 改值 → 导出（端到端）', () => {
   it('enemies 表单渲染 8 条，改首个敌人 hp 后导出包校验通过且值生效', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     renderWith(store, 'enemies', [0]);
 
     // 条目卡数量与真包一致，首卡展开。
@@ -71,7 +71,7 @@ describe('渲染 → 改值 → 导出（端到端）', () => {
   });
 
   it('items 条目渲染 oneOf 分支选择器（五形态）', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     renderWith(store, 'items', [0]);
     const branchSelect = document.querySelector<HTMLSelectElement>('.branch-select');
     expect(branchSelect).not.toBeNull();
@@ -79,14 +79,14 @@ describe('渲染 → 改值 → 导出（端到端）', () => {
   });
 
   it('combatText 对象节直接展开，moves 字典行可增删', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     renderWith(store, 'combatText');
     // moves 字典的既有键渲染为 dict 行。
     expect(document.querySelectorAll('.dict-row').length).toBeGreaterThan(3);
   });
 
   it('新增条目：骨架入列且整包仍合法', () => {
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     renderWith(store, 'enemies');
     const before = (store.state.pack['enemies'] as unknown[]).length;
     const addBtn = document.querySelector<HTMLButtonElement>('.btn-add')!;

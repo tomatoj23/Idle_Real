@@ -236,3 +236,147 @@ describe('#73 · 装配级：update 抛错回滚接线（rollback 分支）', ()
     expect((document.querySelector('#btn-undo') as HTMLButtonElement).disabled).toBe(true);
   });
 });
+
+/**
+ * #74-4 装配级：校验错误 ↔ 表单行错误态联动。清空必填字段 → 去抖校验
+ * 后行挂 has-error（定位不再全靠右栏手点 + 1.2s flash）；改回合法值即熄灭。
+ * 钉 main.ts refreshAll 的 applyErrorMarks 接线与 render.ts 路径匹配
+ * （错误 path 与 data-path 同构，字段行精确命中）。
+ *
+ * 变异对照（改完必须验红再还原，别信「测试在场」）：
+ * - main.ts refreshAll 丢 applyErrorMarks(...) → 行永不挂 has-error，红；
+ * - render.ts 丢精确匹配分支（只留折叠对齐）→ 折叠兜底误标兄弟行，
+ *   sibling 干净断言红。
+ */
+describe('#74-4 · 校验错误 → 表单行错误态联动', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.body.replaceChildren();
+  });
+
+  it('清空必填字段：行挂 has-error；改回即熄灭', async () => {
+    vi.resetModules();
+    document.body.innerHTML = '<div id="app"></div>';
+    await import('../src/main.js');
+
+    (document.querySelector('#btn-sample') as HTMLButtonElement).click();
+    [...document.querySelectorAll<HTMLButtonElement>('.nav-item')]
+      .find((n) => n.textContent?.includes('敌人'))!
+      .click();
+    // 展开条目 0 与 1：兄弟行的「不误标」断言需要两行同屏。
+    const editBtns = [...document.querySelectorAll<HTMLButtonElement>('.entry-card button')].filter(
+      (b) => b.textContent === '编辑',
+    );
+    editBtns[0]!.click();
+    editBtns[1]!.click();
+
+    const row = document.querySelector<HTMLElement>('[data-path="/enemies/0/id"]')!;
+    const sibling = document.querySelector<HTMLElement>('[data-path="/enemies/1/id"]')!;
+    const input = row.querySelector('input')!;
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    // 去抖 400ms 后 refreshAll 标红；兄弟行必须保持干净（精确优先，
+    // 折叠兜底只服务无下标的嵌套数组行——清敌人 0 的 id 不能标红敌人 1）。
+    await vi.waitFor(() => expect(row.classList.contains('has-error')).toBe(true), { timeout: 2000 });
+    expect(sibling.classList.contains('has-error')).toBe(false);
+
+    input.value = 'e1';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await vi.waitFor(() => expect(row.classList.contains('has-error')).toBe(false), { timeout: 2000 });
+  });
+});
+
+/**
+ * #74-8 装配级（兼 #74-10 覆盖缺口）：校验面板错误项点击 → gotoError 全链
+ * （跳节/展开条目/data-path 定位/flash）。定位选择器走标准 CSS.escape
+ * （main.ts 手写 cssEscape 退役——只处理 \ 和 " 的残缺版）。
+ *
+ * 变异对照（改完必须验红再还原，别信「测试在场」）：
+ * - gotoError 丢 expandEntry（或下标解析）→ 条目未展开、行不存在，红；
+ * - 丢 flash（或 target 落空走 .section-title 兜底）→ 行无 flash 类，红。
+ */
+describe('#74-8 · 错误定位 gotoError 装配（CSS.escape 路径）', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.body.replaceChildren();
+  });
+
+  it('清空必填字段 → 点校验项 → 行定位 + flash', async () => {
+    vi.resetModules();
+    document.body.innerHTML = '<div id="app"></div>';
+    await import('../src/main.js');
+
+    (document.querySelector('#btn-sample') as HTMLButtonElement).click();
+    [...document.querySelectorAll<HTMLButtonElement>('.nav-item')]
+      .find((n) => n.textContent?.includes('敌人'))!
+      .click();
+    [...document.querySelectorAll<HTMLButtonElement>('.entry-card button')]
+      .find((b) => b.textContent === '编辑')!
+      .click();
+    const row = document.querySelector<HTMLElement>('[data-path="/enemies/0/id"]')!;
+    const input = row.querySelector('input')!;
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+
+    // 收起条目再点击错误项：gotoError 须自行展开（expandEntry 分支才钉得住）。
+    [...document.querySelectorAll<HTMLButtonElement>('.entry-card button')]
+      .find((b) => b.textContent === '收起')!
+      .click();
+
+    const item = await vi.waitFor(() => {
+      const node = [...document.querySelectorAll<HTMLButtonElement>('.validate-item')].find(
+        (candidate) => candidate.textContent?.includes('/enemies/0/id'),
+      );
+      if (node === undefined) throw new Error('校验项未出现');
+      return node;
+    }, { timeout: 2000 });
+    item.click();
+
+    expect(document.querySelectorAll('.entry-body').length).toBe(1);
+    const target = document.querySelector<HTMLElement>('[data-path="/enemies/0/id"]')!;
+    expect(target.classList.contains('flash')).toBe(true);
+  });
+});
+
+/**
+ * #74-10 装配级：脏包载入守卫接线（confirmDirtyLoad 经真装配走通）。
+ * 有未导出改动时「载入示例包」先弹确认；取消则整树不动。删除条目的
+ * confirm 与脏载入 confirm 共用 window.confirm 垫片——按消息文案分流
+ * （删除放行、脏载入拒绝）。
+ *
+ * 变异对照（改完必须验红再还原，别信「测试在场」）：
+ * - btn-sample 丢 confirmDirtyLoad 守卫 → 不弹确认直接整树替换，红。
+ */
+describe('#74-10 · 装配级：脏包载入守卫', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.replaceChildren();
+  });
+
+  it('有未导出改动时先确认；取消则包保持原样', async () => {
+    vi.resetModules();
+    document.body.innerHTML = '<div id="app"></div>';
+    const confirms: string[] = [];
+    (window as unknown as { confirm?: (message: string) => boolean }).confirm = (message: string) => {
+      confirms.push(message);
+      return message.includes('删除');
+    };
+    await import('../src/main.js');
+
+    (document.querySelector('#btn-sample') as HTMLButtonElement).click();
+    [...document.querySelectorAll<HTMLButtonElement>('.nav-item')]
+      .find((n) => n.textContent?.includes('敌人'))!
+      .click();
+    // 弄脏：误删第一个条目（confirm 垫片对删除放行）。
+    [...document.querySelectorAll<HTMLButtonElement>('.entry-card button')]
+      .find((b) => b.textContent === '✕')!
+      .click();
+    expect(document.querySelectorAll('.entry-card').length).toBe(7);
+
+    // 脏包上点「载入示例包」：先确认，取消 → 包不被替换（仍是 7 卡）。
+    (document.querySelector('#btn-sample') as HTMLButtonElement).click();
+    expect(confirms.some((message) => message.includes('未导出的修改'))).toBe(true);
+    expect(document.querySelectorAll('.entry-card').length).toBe(7);
+    expect((document.querySelector('#dirty-badge') as HTMLElement).hidden).toBe(false);
+  });
+});

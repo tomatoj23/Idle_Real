@@ -1,6 +1,11 @@
 /**
  * LLM 面板（#11）：OpenAI 兼容配置（本地存储零上传）+ 批量生成 +
  * 候选勾选入包。生成/入包经 llm/pipeline，UI 只做编排与呈现。
+ *
+ * #74：按钮两态（计数/可用）由 repaintCandidates 单点自持——候选勾选
+ * change 即重绘（逐条勾选主路径曾堵死）；对外 refresh() 接口退役，
+ * 调用方无需知道本面板。生成中可取消（AbortController 透传 pipeline）。
+ * API Key 可选「仅本会话内存态」（#74 项 6 威胁模型：localStorage 明文）。
  */
 
 import { GEN_LABELS, genKinds, type GenKind } from '../llm/prompts.js';
@@ -10,11 +15,6 @@ import { loadLlmConfig, saveLlmConfig, type LlmConfig } from '../llm/config.js';
 import type { EditorStore } from '../core/state.js';
 import { optionEl } from './render.js';
 
-export interface LlmPanel {
-  /** 数据变更后刷新入包按钮可用态（候选相对当前包可能失效）。 */
-  refresh(): void;
-}
-
 export function createLlmPanel(
   root: HTMLElement,
   store: EditorStore,
@@ -22,11 +22,12 @@ export function createLlmPanel(
     readonly client?: LlmClient; // 测试注入假 client；缺省 fetch 客户端。
     readonly onApplied?: () => void;
   },
-): LlmPanel {
+): void {
   const client = opts.client ?? createFetchClient();
   let config: LlmConfig = loadLlmConfig();
   let candidates: Candidate[] = [];
   let busy = false;
+  let abortController: AbortController | undefined;
 
   /* —— 配置区 —— */
   const fieldset = document.createElement('details');
@@ -34,7 +35,7 @@ export function createLlmPanel(
   fieldset.open = config.apiKey === '';
 
   const summary = document.createElement('summary');
-  summary.textContent = 'LLM 连接配置（仅存本地）';
+  summary.textContent = 'LLM 连接配置（仅存本地，不上传）';
   const grid = document.createElement('div');
   grid.className = 'llm-config-grid';
 
@@ -42,6 +43,24 @@ export function createLlmPanel(
   const keyInput = textInput(config.apiKey, 'API Key');
   keyInput.type = 'password';
   const modelInput = textInput(config.model, '模型名（如 deepseek-chat）');
+  // #74 项 6：默认记住（存量行为不变）；不勾 = 仅本会话内存态，落库无 key。
+  const rememberKeyInput = document.createElement('input');
+  rememberKeyInput.type = 'checkbox';
+  rememberKeyInput.className = 'remember-key';
+  rememberKeyInput.checked = config.rememberApiKey;
+  const rememberKeyLabel = document.createElement('label');
+  rememberKeyLabel.className = 'llm-threat-note';
+  rememberKeyLabel.append(
+    rememberKeyInput,
+    document.createTextNode('记住 API Key'),
+  );
+  rememberKeyLabel.title =
+    '勾选：Key 明文保存在本机浏览器 localStorage（不上传，但本机脚本可读）。' +
+    '不勾：仅保留在当前页面内存，刷新即失，每次会话现填。';
+  const threatNote = document.createElement('div');
+  threatNote.className = 'llm-threat-note';
+  threatNote.textContent =
+    'Key 只存本机、不上传；localStorage 为明文存储，可被本机脚本读取——介意请取消勾选（仅本会话有效）。';
   const saveBtn = button('保存配置', 'btn btn-mini');
   saveBtn.addEventListener('click', () => {
     config = {
@@ -49,6 +68,7 @@ export function createLlmPanel(
       apiKey: keyInput.value.trim(),
       model: modelInput.value.trim() || config.model,
       temperature: config.temperature,
+      rememberApiKey: rememberKeyInput.checked,
     };
     saveLlmConfig(config);
     statusLine.textContent = '✓ 配置已保存到本地';
@@ -57,6 +77,8 @@ export function createLlmPanel(
     labeled('Base URL', baseUrlInput),
     labeled('API Key', keyInput),
     labeled('模型', modelInput),
+    rememberKeyLabel,
+    threatNote,
     saveBtn,
   );
   fieldset.append(summary, grid);
@@ -76,11 +98,17 @@ export function createLlmPanel(
   countInput.value = '10';
   const hintInput = textInput('', '附加要求（可选，如「低层野外怪」）');
   const generateBtn = button('批量生成', 'btn');
+  const cancelBtn = button('取消', 'btn btn-mini');
+  cancelBtn.hidden = true;
   const statusLine = document.createElement('div');
   statusLine.className = 'llm-status';
 
   generateBtn.addEventListener('click', () => {
     void runGenerate();
+  });
+  // #74 项 7：busy 期取消入口——中止当前请求，busy 复位走 runGenerate finally。
+  cancelBtn.addEventListener('click', () => {
+    abortController?.abort();
   });
 
   /* —— 候选区 —— */
@@ -115,6 +143,7 @@ export function createLlmPanel(
     labeled('数量', countInput),
     labeled('附加要求', hintInput),
     generateBtn,
+    cancelBtn,
     statusLine,
     candidateBox,
     approveAllBtn,
@@ -129,8 +158,11 @@ export function createLlmPanel(
     }
     busy = true;
     generateBtn.disabled = true;
+    cancelBtn.hidden = false;
     statusLine.textContent = '生成中…';
     candidateBox.replaceChildren();
+    const controller = new AbortController();
+    abortController = controller;
     try {
       const result = await generateCandidates({
         kind: kindSelect.value as GenKind,
@@ -139,6 +171,7 @@ export function createLlmPanel(
         count: Math.max(1, Math.min(30, Number.parseInt(countInput.value, 10) || 1)),
         hint: hintInput.value,
         pack: store.state.pack,
+        signal: controller.signal,
       });
       if (!result.ok) {
         statusLine.textContent = `✗ ${result.error}`;
@@ -149,12 +182,21 @@ export function createLlmPanel(
       statusLine.textContent = `生成 ${candidates.length} 条，其中 ${passed} 条过校验（红条不可入包）`;
       repaintCandidates();
     } catch (cause) {
+      // 取消（#74 项 7）不是失败：单独口径呈现，不带 ✗。
+      if (controller.signal.aborted) {
+        statusLine.textContent = '已取消生成';
+        return;
+      }
       const stack = cause instanceof Error ? (cause.stack ?? '') : '';
       statusLine.textContent = `✗ 生成失败：${cause instanceof Error ? cause.message : String(cause)}`;
       statusLine.title = stack;
     } finally {
       busy = false;
       generateBtn.disabled = false;
+      cancelBtn.hidden = true;
+      if (abortController === controller) {
+        abortController = undefined;
+      }
     }
   }
 
@@ -169,6 +211,9 @@ export function createLlmPanel(
       checkbox.checked = candidate.approved;
       checkbox.addEventListener('change', () => {
         candidate.approved = checkbox.checked;
+        // #74 项 11：两态由本函数单点自持——勾选即整表重绘（个位数规模），
+        // 计数与可用态不再有第二条维护路径（曾漏此步致主路径堵死）。
+        repaintCandidates();
       });
       const label = document.createElement('span');
       label.className = 'candidate-label';
@@ -187,11 +232,8 @@ export function createLlmPanel(
     applyBtn.disabled = candidates.every((candidate) => !candidate.approved);
   }
 
-  return {
-    refresh() {
-      applyBtn.disabled = candidates.every((candidate) => !candidate.approved);
-    },
-  };
+  // 初始两态：无候选 → 入包钮禁用（与 repaintCandidates 单点同律）。
+  repaintCandidates();
 }
 
 function heading(text: string): HTMLElement {

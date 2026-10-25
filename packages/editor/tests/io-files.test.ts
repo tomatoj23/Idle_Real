@@ -11,7 +11,7 @@ import {
   suggestFileName,
 } from '../src/io/files.js';
 import { exportToGame, hostBridgeOf } from '../src/io/gameBridge.js';
-import { createStore } from '../src/core/state.js';
+import { xiuxianStore } from './helpers.js';
 
 function jsonFile(content: string, name = 'pack.json'): File {
   return new File([content], name, { type: 'application/json' });
@@ -37,6 +37,24 @@ describe('io/files：导入导出往返', () => {
     await expect(readPackFile(jsonFile('{oops'))).rejects.toThrow();
     const emptyZip = new File([exportZipBytes({ version: '0.1.0' }).slice(0, 0) as BlobPart], 'x.zip');
     await expect(readPackFile(emptyZip)).rejects.toThrow();
+  });
+
+  it('BOM 包（#74 项 3）：UTF-8 BOM 剥离后正常导入（.json 与 .zip 双路径）', async () => {
+    const bomText = `\uFEFF${serializePack(xiuxianPackJson as Record<string, unknown>)}`;
+    const info = await readPackFile(jsonFile(bomText));
+    expect(validateContentPack(info.json).ok).toBe(true);
+    const zip = zipSync({ 'pack.json': new TextEncoder().encode(bomText) });
+    const zipInfo = await readPackFile(new File([zip as BlobPart], 'pack.zip'));
+    expect((zipInfo.json as { version: string }).version).toBe('0.1.0');
+  });
+
+  it('GBK/ANSI 包（#74 项 3）：解码出替换符即拒绝，报错可读指路转存 UTF-8', async () => {
+    // 手工构造非 UTF-8 字节：中文「盾牌」的 GBK 双字节序列落在 UTF-8 的
+    // 非法序列区，strFromU8 宽松解码产出 U+FFFD——据此判定编码不对。
+    const gbkBytes = new Uint8Array([0x7b, 0x22, 0xd6, 0xd0, 0x22, 0x7d]); // {"中"} 的 GBK 骨架
+    await expect(readPackFile(new File([gbkBytes as BlobPart], 'pack.json'))).rejects.toThrow('UTF-8');
+    const zip = zipSync({ 'pack.json': gbkBytes });
+    await expect(readPackFile(new File([zip as BlobPart], 'pack.zip'))).rejects.toThrow('UTF-8');
   });
 
   it('原型污染键防御：__proto__/constructor/prototype 自有键被剔除且解析不炸（审计修复②）', async () => {
@@ -84,7 +102,7 @@ describe('io/files：导入导出往返', () => {
 describe('io/gameBridge：一键导入游戏', () => {
   it('无宿主桥：降级为下载包（验收 1 的 web 路径）', async () => {
     expect(hostBridgeOf()).toBeUndefined();
-    const store = createStore(xiuxianPackJson);
+    const store = xiuxianStore();
     const result = await exportToGame(store);
     expect(result).toMatchObject({ ok: true, via: 'download' });
   });
@@ -98,7 +116,7 @@ describe('io/gameBridge：一键导入游戏', () => {
       },
     };
     try {
-      const store = createStore(xiuxianPackJson);
+      const store = xiuxianStore();
       const result = await exportToGame(store);
       expect(result).toMatchObject({ ok: true, via: 'desktop' });
       expect(writes).toHaveLength(1);
@@ -116,7 +134,7 @@ describe('io/gameBridge：一键导入游戏', () => {
       },
     };
     try {
-      const store = createStore(xiuxianPackJson);
+      const store = xiuxianStore();
       const result = await exportToGame(store);
       expect(result).toEqual({ ok: false, error: 'content 目录只读' });
     } finally {
