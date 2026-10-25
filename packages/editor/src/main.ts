@@ -60,7 +60,12 @@ if (app) {
     onGoto: (path) => gotoError(path),
   });
   createLlmPanel(document.querySelector('#llm-panel')!, store, {
-    onApplied: () => scheduleValidate(),
+    // LLM 入包是结构写（#88）：立即刷校验并重渲染当前节——受影响节开着
+    // 时表单区即时反映新条目（滞留旧 DOM 是曾经的坑）。
+    onApplied: () => {
+      scheduleValidate(true);
+      repaintForm();
+    },
   });
 
   /* —— 节导航 —— */
