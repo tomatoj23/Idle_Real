@@ -72,7 +72,7 @@
         },
         "percent": {
           "type": "boolean",
-          "title": "比例",
+          "title": "量纲标记",
           "description": "量纲标记（#26 票评，循 ADR-016 裁决 ④ 显式 bool 先例）：true = 百分比量纲，展示值后缀 %；缺省 = 点数量纲。壳零量纲特判"
         }
       },
@@ -120,13 +120,13 @@
           "required": ["skills", "craft", "combat", "bag", "shop", "rebirth", "talents", "dungeon", "achievements", "journal"],
           "additionalProperties": false,
           "properties": {
-            "skills": { "$ref": "#/definitions/line", "title": "所属技艺", "x-xref": "skills" },
+            "skills": { "$ref": "#/definitions/line", "title": "所属技艺" },
             "craft": { "$ref": "#/definitions/line" },
-            "combat": { "$ref": "#/definitions/line", "title": "战斗参数" },
+            "combat": { "$ref": "#/definitions/line", "title": "斗法页签" },
             "bag": { "$ref": "#/definitions/line" },
             "shop": { "$ref": "#/definitions/line" },
             "rebirth": { "$ref": "#/definitions/line", "description": "转生页签（#6；包无 rebirth 节时壳不渲染该页签）" },
-            "talents": { "$ref": "#/definitions/line", "title": "天赋树", "description": "天赋页签（#6；同上）" },
+            "talents": { "$ref": "#/definitions/line", "title": "天赋页签", "description": "天赋页签（#6；同上）" },
             "dungeon": { "$ref": "#/definitions/line", "description": "秘境页签（#7；包无 dungeons 节时壳不渲染该页签）" },
             "achievements": { "$ref": "#/definitions/line", "description": "成就页签（#9；包无 achievements 节时壳不渲染该页签）" },
             "journal": { "$ref": "#/definitions/line", "description": "修行录页签（#33，随档记录页）" }
@@ -164,7 +164,7 @@
           "additionalProperties": false,
           "properties": {
             "buff": { "$ref": "#/definitions/glyph", "description": "增益条物品缺省图标字" },
-            "gear": { "$ref": "#/definitions/glyph", "title": "装备参数", "description": "装备卡物品缺省图标字" },
+            "gear": { "$ref": "#/definitions/glyph", "title": "装备卡缺省图标字", "description": "装备卡物品缺省图标字" },
             "unknown": { "$ref": "#/definitions/glyph", "description": "未知物品缺省图标字" }
           }
         },
@@ -257,7 +257,6 @@
             "skills": {
               "type": "object",
               "title": "所属技艺",
-              "x-xref": "skills",
               "required": ["empty", "expSub", "expMax", "actNow", "idle", "stopBtn", "running", "byproduct", "actMeta", "startBtn", "realmLine"],
               "additionalProperties": false,
               "properties": {
@@ -300,7 +299,7 @@
             },
             "combat": {
               "type": "object",
-              "title": "战斗参数",
+              "title": "斗法页文案",
               "required": ["title", "subtitle", "enemyMissing", "resting", "enemyHp", "selfStats", "fleeBtn", "autoFightOn", "autoFightOff", "autoEatOn", "autoEatOff", "noConsumables", "enemyStats", "enemyGold", "dropsSuffix", "fightBtn", "expSub", "engagedBadge", "autoNone", "autoSell", "autoSmelt", "autoCap"],
               "additionalProperties": false,
               "properties": {
@@ -413,7 +412,7 @@
             },
             "talents": {
               "type": "object",
-              "title": "天赋树",
+              "title": "天赋页文案",
               "required": ["title", "subtitle", "empty", "costRow", "needDaoYun", "needPrereq", "owned", "buyBtn"],
               "additionalProperties": false,
               "description": "道韵天赋树页（#6）：节点名/图标/描述/消耗全部来自 rebirth.talents（树数据 100% content），壳只承载结构性文案",

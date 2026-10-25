@@ -133,7 +133,7 @@
       "additionalProperties": false,
       "description": "战后一行签名画像（#019 出池）：tiers 按主导伤害档出画句；base/crit 为整行模板（crit 版多会心段）",
       "properties": {
-        "tiers": { "$ref": "#/definitions/flavorTiers", "title": "三阶表" },
+        "tiers": { "$ref": "#/definitions/flavorTiers", "title": "画句伤害档分池" },
         "base": {
           "$ref": "#/definitions/templateLines",
           "description": "无会心整行模板",

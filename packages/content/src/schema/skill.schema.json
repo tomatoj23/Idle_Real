@@ -44,7 +44,7 @@
           "description": "单字图标（汉字）"
         },
         "kind": {
-          "title": "动词风格",
+          "title": "技艺类型",
           "enum": ["gather", "craft", "combat"],
           "description": "gather 采集 / craft 炼制 / combat 斗法"
         },
