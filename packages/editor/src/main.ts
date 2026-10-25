@@ -22,6 +22,8 @@ if (app) {
       <h1 class="brand">问道 · 内容编辑器</h1>
       <label class="version-field">包版本 <input id="pack-version" class="input input-inline" type="text" placeholder="1.0.0" /></label>
       <span id="dirty-badge" class="dirty-badge" hidden>未导出改动</span>
+      <button id="btn-undo" class="btn" type="button" title="撤销（Ctrl+Z）" disabled>↶ 撤销</button>
+      <button id="btn-redo" class="btn" type="button" title="重做（Ctrl+Y / Ctrl+Shift+Z）" disabled>↷ 重做</button>
       <span class="spacer"></span>
       <button id="btn-sample" class="btn" type="button">载入示例包</button>
       <button id="btn-import" class="btn" type="button">导入 json/zip</button>
@@ -52,6 +54,8 @@ if (app) {
   const formArea = document.querySelector<HTMLElement>('#form-area')!;
   const versionInput = document.querySelector<HTMLInputElement>('#pack-version')!;
   const dirtyBadge = document.querySelector<HTMLElement>('#dirty-badge')!;
+  const undoBtn = document.querySelector<HTMLButtonElement>('#btn-undo')!;
+  const redoBtn = document.querySelector<HTMLButtonElement>('#btn-redo')!;
   const fileInput = document.querySelector<HTMLInputElement>('#file-input')!;
   const toast = document.querySelector<HTMLElement>('#toast')!;
 
@@ -148,10 +152,15 @@ if (app) {
 
   /* —— 校验调度（输入 debounce，结构性变更立即） —— */
   let validateTimer = 0;
+  function syncChrome(): void {
+    dirtyBadge.hidden = !store.state.dirty;
+    undoBtn.disabled = !store.canUndo();
+    redoBtn.disabled = !store.canRedo();
+  }
   function refreshAll(): void {
     validatePanel.refresh();
     repaintNav();
-    dirtyBadge.hidden = !store.state.dirty;
+    syncChrome();
   }
   function scheduleValidate(immediate = false): void {
     window.clearTimeout(validateTimer);
@@ -168,8 +177,23 @@ if (app) {
       showToast('内容包已加载并通过校验');
       return;
     }
-    // data 事件由 scheduleValidate 驱动；这里同步标题/徽标轻量面。
-    dirtyBadge.hidden = !store.state.dirty;
+    if (event === 'history') {
+      // 撤销/重做是整树换装（#73）：expanded 下标随历史失效、渲染树活引用
+      // 全部换血——收起 + 重渲染重绑，校验/徽标/按钮即时跟进。
+      controller.collapseAll();
+      refreshAll();
+      repaintForm();
+      return;
+    }
+    if (event === 'rollback') {
+      // fn 抛错回滚（#73）：包引用已换（半途变异被弃），重绑活引用 + 提示。
+      refreshAll();
+      repaintForm();
+      showToast('上一步编辑未生效（已回滚）');
+      return;
+    }
+    // data 事件由 scheduleValidate 驱动；这里同步徽标/撤销按钮轻量面。
+    syncChrome();
   });
 
   store.setSection(Object.keys(sectionSchemas)[0] ?? null);
@@ -296,6 +320,34 @@ if (app) {
       pack['version'] = versionInput.value.trim();
     });
     scheduleValidate(true);
+  });
+
+  /* —— 撤销/重做（#73）：store 层快照栈的 UI 面，'history' 事件驱动重绘 —— */
+  undoBtn.addEventListener('click', () => {
+    store.undo();
+  });
+  redoBtn.addEventListener('click', () => {
+    store.redo();
+  });
+  window.addEventListener('keydown', (event) => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+    // 文本输入内保留原生文本撤销——其 input 事件自会经 touch 进历史，双轨会一步抵两步。
+    // select 无原生文本撤销，不豁免（焦点在其上时 Ctrl+Z 照常走 store 撤销）。
+    const target = event.target;
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+      return;
+    }
+    if (event.key === 'z' || event.key === 'Z') {
+      event.preventDefault();
+      if (event.shiftKey) {
+        store.redo();
+      } else {
+        store.undo();
+      }
+    } else if (event.key === 'y' || event.key === 'Y') {
+      event.preventDefault();
+      store.redo();
+    }
   });
 
   let toastTimer = 0;

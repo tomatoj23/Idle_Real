@@ -75,3 +75,103 @@ describe('#88 · 装配级：LLM 勾选入包 → 当前节表单即时刷新', 
     expect(dirtyBadge.hidden).toBe(false);
   });
 });
+
+/**
+ * #73 装配级：误删条目 → 撤销 → 重做，顶栏按钮 + 键盘双路径走真装配。
+ * 钉 main.ts 的 'history' 事件接线（collapseAll + repaintForm——漏 repaint
+ * 则表单滞留旧 DOM，卡数不变即红）与 syncChrome 按钮禁用态同步。
+ * store 层快照栈本体（含 rollback）见 state.test.ts；'rollback' 分支接线
+ * 无 UI 触发路径（fn 抛错需注入异常面），接线未覆盖为已知缺口。
+ *
+ * 变异对照（改完必须验红再还原，别信「测试在场」）：
+ * - main.ts 'history' 分支丢 repaintForm()/collapseAll() → 撤销后卡数不恢复，本用例红；
+ * - 键盘映射 shift+z 误配 undo（或丢输入控件守卫改吞原生撤销）→ 键盘步骤红。
+ */
+describe('#73 · 装配级：误删条目 → 撤销 → 重做', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.body.replaceChildren();
+  });
+
+  it('删除条目后撤销恢复、重做再删；按钮禁用态随历史同步（按钮 + Ctrl+Y/Ctrl+Shift+Z）', async () => {
+    vi.resetModules();
+    document.body.innerHTML = '<div id="app"></div>';
+    // 删除条目走 window.confirm（happy-dom 未实现，垫桩放行——同 state.test.ts 手法）。
+    (window as unknown as { confirm?: (message: string) => boolean }).confirm = () => true;
+    await import('../src/main.js');
+
+    (document.querySelector('#btn-sample') as HTMLButtonElement).click();
+    const nav = [...document.querySelectorAll<HTMLButtonElement>('.nav-item')].find(
+      (node) => node.textContent?.includes('敌人'),
+    )!;
+    nav.click();
+    const cards = (): number => document.querySelectorAll('.entry-card').length;
+    expect(cards()).toBe(8);
+
+    const undoBtn = document.querySelector<HTMLButtonElement>('#btn-undo')!;
+    const redoBtn = document.querySelector<HTMLButtonElement>('#btn-redo')!;
+    expect(undoBtn.disabled).toBe(true); // 尚无历史
+    expect(redoBtn.disabled).toBe(true);
+
+    // 误删第一个条目（手风琴头部 ✕；收起态无嵌套 ✕，唯一点位）。
+    const removeBtn = [...document.querySelectorAll<HTMLButtonElement>('.entry-card button')].find(
+      (node) => node.textContent === '✕',
+    )!;
+    removeBtn.click();
+    expect(cards()).toBe(7);
+    expect(undoBtn.disabled).toBe(false);
+    expect(redoBtn.disabled).toBe(true);
+    expect((document.querySelector('#dirty-badge') as HTMLElement).hidden).toBe(false);
+
+    // 撤销：整树换装 + 'history' 事件重渲染，卡数恢复。
+    undoBtn.click();
+    expect(cards()).toBe(8);
+    expect(undoBtn.disabled).toBe(true);
+    expect(redoBtn.disabled).toBe(false);
+
+    // 键盘重做（Ctrl+Y，非输入焦点路径）。
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'y', ctrlKey: true, bubbles: true }));
+    expect(cards()).toBe(7);
+    expect(redoBtn.disabled).toBe(true);
+
+    // Ctrl+Shift+Z 重做（shift+z 重做路径），再 Ctrl+Z 撤销回恢复位。
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, shiftKey: true, bubbles: true }),
+    );
+    expect(cards()).toBe(7);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+    expect(cards()).toBe(8);
+    expect((document.querySelector('#dirty-badge') as HTMLElement).hidden).toBe(false); // 撤销不熄徽标（保守语义）
+  });
+
+  it('撤销后展开态不跨历史保留（collapseAll——expanded 下标随整树换装失效）', async () => {
+    vi.resetModules();
+    document.body.innerHTML = '<div id="app"></div>';
+    (window as unknown as { confirm?: (message: string) => boolean }).confirm = () => true;
+    await import('../src/main.js');
+
+    (document.querySelector('#btn-sample') as HTMLButtonElement).click();
+    const nav = [...document.querySelectorAll<HTMLButtonElement>('.nav-item')].find(
+      (node) => node.textContent?.includes('敌人'),
+    )!;
+    nav.click();
+
+    // 展开第 2 个条目（index 1），随后误删第 1 个条目：remap 后原 index1 展开态随迁至 index0。
+    const editBtns = [...document.querySelectorAll<HTMLButtonElement>('.entry-card button')].filter(
+      (node) => node.textContent === '编辑',
+    );
+    editBtns[1]!.click();
+    expect(document.querySelectorAll('.entry-body').length).toBe(1);
+    const removeBtn = [...document.querySelectorAll<HTMLButtonElement>('.entry-card button')].find(
+      (node) => node.textContent === '✕',
+    )!;
+    removeBtn.click();
+    expect(document.querySelectorAll('.entry-card').length).toBe(7);
+    expect(document.querySelectorAll('.entry-body').length).toBe(1); // 删除后展开态随 remap 迁至新 index0
+
+    // 撤销：'history' 分支 collapseAll——不带它则旧下标展开态跨树残留（假展开）。
+    (document.querySelector('#btn-undo') as HTMLButtonElement).click();
+    expect(document.querySelectorAll('.entry-card').length).toBe(8);
+    expect(document.querySelectorAll('.entry-body').length).toBe(0);
+  });
+});

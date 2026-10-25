@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { validateContentPack } from '@wendao/content';
 import { xiuxianPackJson } from '@wendao/content/packs/xiuxian';
-import { confirmDirtyLoad, DIRTY_LOAD_MESSAGE, createStore } from '../src/core/state.js';
+import { confirmDirtyLoad, DIRTY_LOAD_MESSAGE, createStore, HISTORY_LIMIT } from '../src/core/state.js';
 
 /** 最小合法包：单点破坏用底座（copy 后改）。 */
 function brokenPack(mutate: (pack: Record<string, unknown>) => void): unknown {
@@ -126,5 +126,234 @@ describe('confirmDirtyLoad：载入新包的脏确认守卫（审计修复①）
       spy.mockRestore();
       if (!hadOwn) delete holder.confirm;
     }
+  });
+});
+
+/**
+ * #73 undo/redo + update 异常语义（store 层，快照栈裁决）。
+ *
+ * 变异对照（改完必须验红再还原，别信「测试在场」）：
+ * 变异集 scripts/mutation-sets/editor-undo-73.mjs，与本文件 + app-assembly.test.ts
+ * 配套；钉的是 state.ts 快照栈三面——undo/redo 双栈回填、上限 50 挤出、
+ * loadPack 整树替换截断历史、update 先快照后执行抛错整树回滚（rollback 事件 +
+ * 异常传播）、以及「新提交清空重做栈」。
+ */
+describe('#73 · undo/redo 快照栈（store 层）', () => {
+  const enemyCount = (store: ReturnType<typeof createStore>): number =>
+    (store.state.pack['enemies'] as unknown[]).length;
+
+  it('update 后可撤销：undo 回到前值、history 事件、包引用换新', () => {
+    const store = createStore(xiuxianPackJson);
+    const before = enemyCount(store);
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    store.update((pack) => {
+      (pack['enemies'] as unknown[]).pop(); // 模拟误删条目
+    });
+    expect(enemyCount(store)).toBe(before - 1);
+    expect(store.canUndo()).toBe(true);
+    expect(store.canRedo()).toBe(false);
+
+    listener.mockClear();
+    expect(store.undo()).toBe(true);
+    expect(enemyCount(store)).toBe(before);
+    expect(listener).toHaveBeenCalledWith(store.state, 'history');
+    // 回滚进来的树是新对象（渲染树活引用须重绑的契约面）。
+    expect(store.state.pack).not.toBe(xiuxianPackJson);
+    expect(store.canUndo()).toBe(false);
+    expect(store.canRedo()).toBe(true);
+  });
+
+  it('redo 复原被撤销的改动后重做栈归零', () => {
+    const store = createStore(xiuxianPackJson);
+    const before = enemyCount(store);
+    store.update((pack) => {
+      (pack['enemies'] as unknown[]).pop();
+    });
+    store.undo();
+
+    expect(store.redo()).toBe(true);
+    expect(enemyCount(store)).toBe(before - 1);
+    expect(store.canRedo()).toBe(false);
+    expect(store.canUndo()).toBe(true);
+  });
+
+  it('undo 后的新提交清空重做栈（分叉历史即弃）', () => {
+    const store = createStore(xiuxianPackJson);
+    const hpOf = (): unknown => (store.state.pack['enemies'] as { hp: number }[])[0]!.hp;
+    store.update((pack) => {
+      (pack['enemies'] as { hp: number }[])[0]!.hp = 1;
+    });
+    store.update((pack) => {
+      (pack['enemies'] as { hp: number }[])[0]!.hp = 2;
+    });
+    expect(store.undo()).toBe(true);
+    expect(hpOf()).toBe(1);
+
+    store.update((pack) => {
+      (pack['enemies'] as { hp: number }[])[0]!.hp = 3;
+    });
+    expect(store.canRedo()).toBe(false);
+    expect(store.redo()).toBe(false);
+    expect(store.undo()).toBe(true);
+    expect(hpOf()).toBe(1); // hp=2 的旧线已不可达
+  });
+
+  it('误切 oneOf 分支（replace 形结构写）同样可撤销', () => {
+    const store = createStore(xiuxianPackJson);
+    const before = JSON.stringify((store.state.pack['enemies'] as unknown[])[0]);
+    store.update((pack) => {
+      (pack['enemies'] as unknown[])[0] = { id: 'swapped', type: 'claw' }; // 模拟误切分支整条替换
+    });
+    expect(JSON.stringify((store.state.pack['enemies'] as unknown[])[0])).not.toBe(before);
+
+    expect(store.undo()).toBe(true);
+    expect(JSON.stringify((store.state.pack['enemies'] as unknown[])[0])).toBe(before);
+  });
+
+  it(`快照栈上限 ${HISTORY_LIMIT}：最早的版本被挤出，撤满 ${HISTORY_LIMIT} 次后停在第 1 版`, () => {
+    const store = createStore(xiuxianPackJson);
+    const hpOf = (): number => (store.state.pack['enemies'] as { hp: number }[])[0]!.hp;
+    for (let i = 1; i <= HISTORY_LIMIT + 1; i += 1) {
+      store.update((pack) => {
+        (pack['enemies'] as { hp: number }[])[0]!.hp = i;
+      });
+    }
+    expect(hpOf()).toBe(HISTORY_LIMIT + 1);
+    for (let i = 0; i < HISTORY_LIMIT; i += 1) {
+      expect(store.undo()).toBe(true);
+    }
+    expect(store.canUndo()).toBe(false);
+    expect(hpOf()).toBe(1); // 载入基底（hp 初值）已越界被挤出
+    expect(store.redo()).toBe(true);
+    expect(hpOf()).toBe(2);
+  });
+
+  it('loadPack 整树替换截断历史（双向栈清空 + 清脏）', () => {
+    const store = createStore(xiuxianPackJson);
+    store.update((pack) => {
+      (pack['enemies'] as unknown[]).pop();
+    });
+    expect(store.canUndo()).toBe(true);
+
+    const result = store.loadPack(JSON.parse(JSON.stringify(xiuxianPackJson)));
+    expect(result.ok).toBe(true);
+    expect(store.canUndo()).toBe(false);
+    expect(store.canRedo()).toBe(false);
+    expect(store.state.dirty).toBe(false);
+  });
+
+  it('无包/无历史时 undo/redo 返回 false 不抛', () => {
+    const empty = createStore();
+    expect(empty.undo()).toBe(false);
+    expect(empty.redo()).toBe(false);
+    expect(empty.canUndo()).toBe(false);
+    expect(empty.canRedo()).toBe(false);
+  });
+
+  it('setSection 是 UI 态不进历史；undo/redo 不动当前节', () => {
+    const store = createStore(xiuxianPackJson);
+    store.setSection('enemies');
+    expect(store.canUndo()).toBe(false);
+
+    store.update((pack) => {
+      (pack['enemies'] as unknown[]).pop();
+    });
+    expect(store.undo()).toBe(true);
+    expect(store.state.section).toBe('enemies');
+  });
+
+  it('undo/redo 一律标脏（保守语义：退回原值也不自动熄「未导出改动」）', () => {
+    const store = createStore(xiuxianPackJson);
+    store.update((pack) => {
+      (pack['enemies'] as { hp: number }[])[0]!.hp = 999;
+    });
+    expect(store.state.dirty).toBe(true);
+    store.undo();
+    expect(store.state.dirty).toBe(true);
+    store.redo();
+    expect(store.state.dirty).toBe(true);
+  });
+});
+
+describe('#73 · update(fn) 异常语义：先快照后执行，抛错整树回滚', () => {
+  it('fn 半途抛错：包回到 fn 前值、异常向调用方传播、发 rollback 事件', () => {
+    const store = createStore(xiuxianPackJson);
+    store.update((pack) => {
+      (pack['enemies'] as { hp: number }[])[0]!.hp = 100; // 先立一个干净基线
+    });
+    const baseline = JSON.stringify(store.state.pack);
+    const baselineRef = store.state.pack;
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    const boom = new Error('boom');
+    expect(() =>
+      store.update((pack) => {
+        (pack['enemies'] as { hp: number }[])[0]!.hp = 1; // 半途写入
+        (pack['enemies'] as unknown[]).pop(); // 再来一处——两处都必须被回滚
+        throw boom;
+      }),
+    ).toThrow(boom);
+
+    expect(JSON.stringify(store.state.pack)).toBe(baseline);
+    // 包引用已换（DOM 活引用重绑契约）；dirty 与抛错前一致。
+    expect(store.state.pack).not.toBe(baselineRef);
+    expect(store.state.dirty).toBe(true);
+    expect(listener).toHaveBeenCalledWith(store.state, 'rollback');
+  });
+
+  it('干净包上首笔更新就抛错：包回到原值且不脏', () => {
+    const store = createStore(xiuxianPackJson);
+    const baseline = JSON.stringify(store.state.pack);
+    expect(() =>
+      store.update(() => {
+        throw new Error('first-write boom');
+      }),
+    ).toThrow('first-write boom');
+    expect(JSON.stringify(store.state.pack)).toBe(baseline);
+    expect(store.state.dirty).toBe(false);
+  });
+
+  it('抛错不进历史栈：canUndo/canRedo 与抛错前一致，undo 仍回到上次成功提交', () => {
+    const store = createStore(xiuxianPackJson);
+    const hpOf = (): number => (store.state.pack['enemies'] as { hp: number }[])[0]!.hp;
+    store.update((pack) => {
+      (pack['enemies'] as { hp: number }[])[0]!.hp = 100;
+    });
+    expect(store.canUndo()).toBe(true);
+    expect(store.canRedo()).toBe(false);
+
+    expect(() =>
+      store.update((pack) => {
+        (pack['enemies'] as { hp: number }[])[0]!.hp = 1;
+        throw new Error('boom');
+      }),
+    ).toThrow('boom');
+    expect(store.canUndo()).toBe(true);
+    expect(store.canRedo()).toBe(false);
+
+    expect(store.undo()).toBe(true);
+    expect(hpOf()).toBe((xiuxianPackJson as { enemies: { hp: number }[] }).enemies[0]!.hp);
+  });
+
+  it('回滚后 store 可正常继续编辑（无残留半途态）', () => {
+    const store = createStore(xiuxianPackJson);
+    const hpOf = (): number => (store.state.pack['enemies'] as { hp: number }[])[0]!.hp;
+    expect(() =>
+      store.update((pack) => {
+        (pack['enemies'] as { hp: number }[])[0]!.hp = 1;
+        throw new Error('boom');
+      }),
+    ).toThrow('boom');
+
+    store.update((pack) => {
+      (pack['enemies'] as { hp: number }[])[0]!.hp = 777;
+    });
+    expect(hpOf()).toBe(777);
+    expect(store.state.dirty).toBe(true);
+    expect(store.undo()).toBe(true);
+    expect(hpOf()).toBe((xiuxianPackJson as { enemies: { hp: number }[] }).enemies[0]!.hp);
   });
 });
