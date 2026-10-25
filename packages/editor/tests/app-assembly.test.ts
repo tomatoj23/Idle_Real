@@ -245,8 +245,8 @@ describe('#73 · 装配级：update 抛错回滚接线（rollback 分支）', ()
  *
  * 变异对照（改完必须验红再还原，别信「测试在场」）：
  * - main.ts refreshAll 丢 applyErrorMarks(...) → 行永不挂 has-error，红；
- * - render.ts 丢精确匹配分支（只留折叠对齐）→ 折叠兜底误标兄弟行，
- *   sibling 干净断言红。
+ * - render.ts 折叠匹配丢条目首下标对齐 → 未展开条目的嵌套行错误误标
+ *   兄弟条目同形行（跨条目用例）与 sibling 字段行（清敌人 0 的 id）双红。
  */
 describe('#74-4 · 校验错误 → 表单行错误态联动', () => {
   afterEach(() => {
@@ -283,6 +283,45 @@ describe('#74-4 · 校验错误 → 表单行错误态联动', () => {
     input.value = 'e1';
     input.dispatchEvent(new Event('input', { bubbles: true }));
     await vi.waitFor(() => expect(row.classList.contains('has-error')).toBe(false), { timeout: 2000 });
+  });
+
+  it('折叠条目的嵌套行错误：不误标已展开兄弟条目的同形行（折叠兜底限同条目）', async () => {
+    vi.resetModules();
+    document.body.innerHTML = '<div id="app"></div>';
+    await import('../src/main.js');
+
+    (document.querySelector('#btn-sample') as HTMLButtonElement).click();
+    [...document.querySelectorAll<HTMLButtonElement>('.nav-item')]
+      .find((n) => n.textContent?.includes('敌人'))!
+      .click();
+    // 展开条目 0 与 1（按卡片定位——展开后「编辑」按钮序会漂移）；把条目 1
+    // 的首个掉落物品改成悬空 id（语义错误，path=/enemies/1/drops/0/item），
+    // 随后收起条目 1。
+    [...document.querySelectorAll<HTMLElement>('.entry-card')[0]!.querySelectorAll('button')]
+      .find((b) => b.textContent === '编辑')!
+      .click();
+    [...document.querySelectorAll<HTMLElement>('.entry-card')[1]!.querySelectorAll('button')]
+      .find((b) => b.textContent === '编辑')!
+      .click();
+    const drop1Input = document.querySelector<HTMLInputElement>('[data-path="/enemies/1/drops/item"] input')!;
+    drop1Input.value = 'ghost_item';
+    drop1Input.dispatchEvent(new Event('input', { bubbles: true }));
+    await vi.waitFor(
+      () =>
+        expect(
+          [...document.querySelectorAll('.validate-item')].some((n) =>
+            n.textContent?.includes('/enemies/1/drops/0/item'),
+          ),
+        ).toBe(true),
+      { timeout: 2000 },
+    );
+    // 收起条目 1（其嵌套行退场，精确行缺席）→ 结构操作立即校验。
+    const card1 = document.querySelectorAll('.entry-card')[1]!;
+    [...card1.querySelectorAll('button')].find((b) => b.textContent === '收起')!.click();
+
+    // 条目 0 的同形嵌套行（/enemies/0/drops/item）必须保持干净。
+    const drop0Row = document.querySelector<HTMLElement>('[data-path="/enemies/0/drops/item"]')!;
+    expect(drop0Row.classList.contains('has-error')).toBe(false);
   });
 });
 

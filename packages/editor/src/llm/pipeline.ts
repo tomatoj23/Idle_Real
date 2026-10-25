@@ -162,15 +162,18 @@ export function applyCandidates(
   let movesRegistered = 0;
   const skipped: string[] = [];
   const schema = candidateSchemaOf(kind);
+  const skipAll = (): void => {
+    for (const candidate of approved) {
+      skipped.push(candidate.label);
+    }
+  };
   store.update((pack) => {
     // 形态守卫（#74 项 2）：目标容器经安全访问器取，坏形态（update 旁门
     // 写坏/旧版包缺节）整批跳过，不再裸断言直取 TypeError。
     if (kind === 'verbs') {
       const verbs = packRecordOf(packRecordOf(pack['combatText'])?.['verbs']);
       if (verbs === undefined) {
-        for (const candidate of approved) {
-          skipped.push(candidate.label);
-        }
+        skipAll();
         return;
       }
       for (const candidate of approved) {
@@ -193,9 +196,7 @@ export function applyCandidates(
         : undefined;
     const section = packSectionArray(pack, kind);
     if (section === undefined) {
-      for (const candidate of approved) {
-        skipped.push(candidate.label);
-      }
+      skipAll();
       return;
     }
     for (const candidate of approved) {

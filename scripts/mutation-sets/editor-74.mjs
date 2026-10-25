@@ -63,7 +63,7 @@ export default {
       id: '04-pipeline-verbs-raw-assert',
       path: pipelinePath,
       before:
-        '      const verbs = packRecordOf(packRecordOf(pack[\'combatText\'])?.[\'verbs\']);\n      if (verbs === undefined) {\n        for (const candidate of approved) {\n          skipped.push(candidate.label);\n        }\n        return;\n      }',
+        '      const verbs = packRecordOf(packRecordOf(pack[\'combatText\'])?.[\'verbs\']);\n      if (verbs === undefined) {\n        skipAll();\n        return;\n      }',
       after: '      const verbs = (pack[\'combatText\'] as { verbs: Record<string, unknown> }).verbs;',
       note: '复活旧码裸断言：combatText.verbs 缺失即 TypeError。',
     },
@@ -71,7 +71,7 @@ export default {
       id: '05-pipeline-section-raw-assert',
       path: pipelinePath,
       before:
-        '    const section = packSectionArray(pack, kind);\n    if (section === undefined) {\n      for (const candidate of approved) {\n        skipped.push(candidate.label);\n      }\n      return;\n    }',
+        '    const section = packSectionArray(pack, kind);\n    if (section === undefined) {\n      skipAll();\n      return;\n    }',
       after: '    const section = pack[kind] as unknown[];',
       note: '复活旧码裸断言：目标节非数组即 TypeError。',
     },
@@ -99,11 +99,11 @@ export default {
       note: '行错误态接线拆除：清空必填字段后行永不标红。',
     },
     {
-      id: '09-errormarks-no-exact-match',
+      id: '13-errormarks-collapse-cross-entry',
       path: renderPath,
-      before: '    const exact = rows.filter((row) => row.dataset.path === error.path);\n    if (exact.length > 0) {\n      for (const row of exact) {\n        row.classList.add(\'has-error\');\n      }\n      continue;\n    }',
+      before: '        errorKey.firstIndex === rowKey.firstIndex &&',
       after: '',
-      note: '精确优先分支拆除：只剩折叠对齐兜底，兄弟行（敌人 1 的 id 行）被误标，sibling 干净断言红。',
+      note: '折叠匹配丢条目首下标对齐：未展开条目的嵌套行错误误标已展开兄弟条目的同形行，跨条目用例红。',
     },
     {
       id: '10-goto-no-expand',

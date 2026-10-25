@@ -844,36 +844,51 @@ function dictRow(
 /* ==================== xref 池接线 ==================== */
 
 /**
- * 校验错误 → 行错误态（#74 项 4）：先清容器内旧标，再逐条错误命中挂
- * has-error。每条错误两段式：先精确 data-path（兄弟行不误标——清空敌人 0
- * 的 id 不能标红敌人 1 的 id 行）；无精确行才退到数字段折叠对齐——嵌套
- * 数组条目行的 data-path 既有口径不含条目下标（drops[1].item 的行是
- * /enemies/0/drops/item），错误 path 有下标，折叠后对齐。
+ * 校验错误 → 行错误态（#74 项 4）：按 data-path 命中挂 has-error。匹配
+ * 规则单条：数字段折叠对齐 + 条目首下标一致——精确路径相等是其自然子集，
+ * 不设第二分支（评审收口：原「精确优先两段式」被该规则完全覆盖）。折叠
+ * 服务嵌套数组条目行的既有口径（data-path 不含条目下标，drops[1].item
+ * 的行是 /enemies/0/drops/item）；首下标一致把匹配限定在同条目内——未
+ * 展开条目的嵌套行错误不得误标已展开兄弟条目的同形行。
  */
 export function applyErrorMarks(container: HTMLElement, errors: readonly ContentError[]): void {
   const rows = [...container.querySelectorAll<HTMLElement>('[data-path]')];
+  const rowKeys = rows.map((row) => rowKeyOf(row.dataset.path ?? ''));
   for (const row of rows) {
     row.classList.remove('has-error');
   }
   for (const error of errors) {
-    const exact = rows.filter((row) => row.dataset.path === error.path);
-    if (exact.length > 0) {
-      for (const row of exact) {
-        row.classList.add('has-error');
-      }
+    const errorKey = rowKeyOf(error.path);
+    if (errorKey === null) {
       continue;
     }
-    const collapsed = collapseIndexSegments(error.path);
-    if (collapsed.length === 0) {
-      continue;
-    }
-    for (const row of rows) {
-      const rowCollapsed = collapseIndexSegments(row.dataset.path ?? '');
-      if (rowCollapsed.length > 0 && sameSegments(collapsed, rowCollapsed)) {
+    rows.forEach((row, index) => {
+      const rowKey = rowKeys[index]!;
+      if (
+        rowKey !== null &&
+        errorKey.firstIndex === rowKey.firstIndex &&
+        sameSegments(errorKey.collapsed, rowKey.collapsed)
+      ) {
         row.classList.add('has-error');
       }
-    }
+    });
   }
+}
+
+interface RowKey {
+  readonly collapsed: readonly string[];
+  readonly firstIndex: string | null;
+}
+
+/** 行/错误路径 → 匹配键；空路径（根）返回 null 不参与匹配。 */
+function rowKeyOf(path: string): RowKey | null {
+  const collapsed = collapseIndexSegments(path);
+  return collapsed.length === 0 ? null : { collapsed, firstIndex: firstIndexSegment(path) };
+}
+
+/** 路径中第一个纯数字段（条目位）：无则返回 null。 */
+function firstIndexSegment(path: string): string | null {
+  return path.split('/').find((segment) => /^\d+$/.test(segment)) ?? null;
 }
 
 /** 折叠纯数字段：/enemies/0/drops/1/item → ['enemies','drops','item']。 */

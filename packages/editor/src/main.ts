@@ -166,6 +166,14 @@ if (app) {
     );
     syncChrome();
   }
+  /**
+   * 重绘→刷新一体（#74-4 顺序不变式单点）：先重绘表单再跑校验，行错误标
+   * 落在重绘后的新行上。任何整树/整节换装（载包/撤销/回滚/换节）后的统一出口。
+   */
+  function repaintAll(): void {
+    repaintForm();
+    refreshAll();
+  }
   function scheduleValidate(immediate = false): void {
     window.clearTimeout(validateTimer);
     validateTimer = window.setTimeout(refreshAll, immediate ? 0 : 400);
@@ -176,9 +184,7 @@ if (app) {
       controller.collapseAll();
       // 加载后默认落第一个节。
       store.setSection(Object.keys(sectionSchemas)[0] ?? null);
-      // 先重绘再刷新（#74-4）：refreshAll 的行错误标要落在重绘后的新行上。
-      repaintForm();
-      refreshAll();
+      repaintAll();
       showToast('内容包已加载并通过校验');
       return;
     }
@@ -186,14 +192,12 @@ if (app) {
       // 撤销/重做是整树换装（#73）：expanded 下标随历史失效、渲染树活引用
       // 全部换血——收起 + 重渲染重绑，校验/徽标/按钮即时跟进。
       controller.collapseAll();
-      repaintForm();
-      refreshAll();
+      repaintAll();
       return;
     }
     if (event === 'rollback') {
       // fn 抛错回滚（#73）：包引用已换（半途变异被弃），重绑活引用 + 提示。
-      repaintForm();
-      refreshAll();
+      repaintAll();
       showToast('上一步编辑未生效（已回滚）');
       return;
     }
@@ -202,8 +206,7 @@ if (app) {
   });
 
   store.setSection(Object.keys(sectionSchemas)[0] ?? null);
-  repaintForm();
-  refreshAll();
+  repaintAll();
 
   /* —— 关窗脏提醒（审计修复①）：有未导出改动时浏览器弹原生留页确认。 —— */
   window.addEventListener('beforeunload', (event) => {
@@ -219,8 +222,7 @@ if (app) {
     if (!confirmDirtyLoad(store, (message) => window.confirm(message))) return;
     const result = store.loadPack(JSON.parse(JSON.stringify(xiuxianPackJson)));
     showToast(result.ok ? '示例包（修仙）已载入' : `示例包校验失败：${result.errors.length} 错`);
-    repaintForm();
-    refreshAll();
+    repaintAll();
   });
 
   document.querySelector('#btn-import')?.addEventListener('click', () => {
@@ -244,8 +246,7 @@ if (app) {
       }
       const result = store.loadPack(info.json);
       if (result.ok) {
-        repaintForm();
-        refreshAll();
+        repaintAll();
         showToast(`已导入 ${info.sourceName}（校验通过）`);
       } else {
         // 坏包不应用（验收 3）：字段级错误以拒绝块呈现在校验面板；
