@@ -21,3 +21,11 @@ nsis:
   perMachine: false
   createDesktopShortcut: always
   createStartMenuShortcut: true
+# #65：出货二进制 fuses 加固。只列要改的三项，未列出的 fuse 保持二进制默认（builder 对 undefined 项跳过不写）。
+# runAsNode=关：堵 ELECTRON_RUN_AS_NODE 把应用当裸 Node 跑；仅作用于打包产物，dev 的 node_modules electron 不受影响。
+# enableNodeCliInspectArguments=关：堵 --inspect 远程调试口。
+# enableEmbeddedAsarIntegrityValidation=开：启动时校验 app.asar 头哈希；exe 侧 INTEGRITY/ELECTRONASAR 资源由 builder 注入（26.x 默认行为）。
+electronFuses:
+  runAsNode: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
