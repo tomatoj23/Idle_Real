@@ -19,6 +19,11 @@ node scripts/mutation-check.mjs --set <变异集.mjs> --filter <id 正则>   # �
 node scripts/mutation-check.mjs --self-test                             # 分类器合成用例自检
 ```
 
+两脚本的 `--self-test` 是操作者前置自检（纯逻辑合成用例），**有意不接** check/pre-push 门禁
+——两工具的验收口径是实跑，分类器/判定器的意图钉在 self-test 用例里，接入回归只会复制同一批
+用例钉住同一份意图（2026-10-25 审计裁量）；将来确要接入，唯一可接受形态是 CI 加步，属门禁
+构成变更须另票，不得进 pre-push/check。
+
 变异集是 ESM 数据模块（default export）：`name` / `packageDir` / `tests`（相对 packageDir，
 shadow vitest 的 include）/ `inputs.dirs` + `inputs.files`（仓库相对，进快照）/
 `mutations[]`（`id` / `path` / `before` / `after` / `note`；`before` 必须在目标文件恰好出现一次）。
@@ -71,10 +76,11 @@ crashed/killed/abnormal-exit/oom 的 `render-process-gone`；事件注入 = `inj
 且事件带 `injected: true, notRealOSRecovery: true`。两者在 results.json 分开计数，交付申报不得混淆。
 
 **产出**：报告目录（缺省 `.scratch/electron-acceptance-<时标>/`）落盘 manifest.json（源码
-hash 三时点核对：构建前/构建后/全部场景后，非冻结即抛错 + electron exe hash + safety 声明）、
-results.json（8 场景判定 + 事件时序索引）、每场景 events.jsonl（逐事件 seq/ms 时序）、
-config/stdout/stderr、commands.json（每次 spawn 的原件留痕）、normal-ui 截图。沙箱在
-os.tmpdir 下 mkdtemp，真档零接触（红线同 2026-09-29 删档事故教训）。
+hash 三时点核对：构建前/构建后/全部场景后——构建期失配即抛错中止，场景后失配则判定
+false 走 exit 1、manifest 留 `sourceFrozenAcrossRun: false` 供复核；另含 electron exe hash
+与 safety 声明）、results.json（8 场景判定 + 事件时序索引）、每场景 events.jsonl（逐事件
+seq/ms 时序）、config/stdout/stderr、commands.json（每次 spawn 的原件留痕）、normal-ui 截图。
+沙箱在 os.tmpdir 下 mkdtemp，真档零接触（红线同 2026-09-29 删档事故教训）。
 
 **已知坑（原型实测吸收）**：
 - 慢资源 fixture（initial-death / close-loading）必须**等请求真实到达、load 仍 pending** 才

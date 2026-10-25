@@ -81,10 +81,12 @@ export async function runMutationCheck({ setPath, filter, outDir }) {
   const reportHome = resolve(outDir ?? join(repo, '.scratch', `mutation-check-${stamp()}`));
   {
     // shadow 靠祖先 node_modules 解析依赖，报告目录必须在仓库树内（--out 越树/越盘符
-    // 只会在 vitest 启动期才炸，这里前置拒绝）。默认落点恒在树内，此闸只拦 override。
+    // 只会在 vitest 启动期才炸，这里前置拒绝）；仓库根本身也不收——shadow/snapshot/reports
+    // 会直接建进工作树顶（审计复核 F2：relative() 对同目录返回 ''，原闸拦不住）。
+    // 默认落点恒合规，此闸只拦 override。
     const rel = relative(repo, reportHome);
-    if (isAbsolute(rel) || rel.startsWith('..')) {
-      throw new Error(`--out 必须落在仓库树内（shadow 依赖仓库 node_modules）: ${reportHome}`);
+    if (!rel || isAbsolute(rel) || rel.startsWith('..')) {
+      throw new Error(`--out 必须落在仓库树内的子目录（shadow 依赖仓库 node_modules，仓库根本身不收）: ${reportHome}`);
     }
   }
   const shadow = join(reportHome, 'shadow');
