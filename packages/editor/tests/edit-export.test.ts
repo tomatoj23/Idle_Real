@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
-import { validateContentPack } from '@wendao/content';
+import { validateContentPack, type ContentError } from '@wendao/content';
 import { xiuxianPackJson } from '@wendao/content/packs/xiuxian';
-import { createStore } from '../src/core/state.js';
-import { renderSection } from '../src/ui/render.js';
+import { createStore, type EditorStore } from '../src/core/state.js';
+import { createSectionController } from '../src/ui/render.js';
 import { exportJsonBytes } from '../src/io/files.js';
 
 /**
@@ -15,6 +15,17 @@ function mount(): HTMLElement {
   document.body.replaceChildren(); // 清掉上一用例的挂载，避免跨用例查询串场。
   const area = document.createElement('main');
   document.body.append(area);
+  return area;
+}
+
+/** 经控制器渲染（expanded 所有权在控制器，#49 D2）：返回挂载容器。 */
+function renderWith(store: EditorStore, section: string, expand: readonly number[] = []): HTMLElement {
+  const area = mount();
+  const controller = createSectionController(store);
+  for (const index of expand) {
+    controller.expandEntry(index);
+  }
+  controller.render(area, section);
   return area;
 }
 
@@ -38,8 +49,7 @@ function typeValue(input: HTMLInputElement, value: string): void {
 describe('渲染 → 改值 → 导出（端到端）', () => {
   it('enemies 表单渲染 8 条，改首个敌人 hp 后导出包校验通过且值生效', () => {
     const store = createStore(xiuxianPackJson);
-    const area = mount();
-    renderSection(area, store, 'enemies', { expanded: new Set([0]) });
+    renderWith(store, 'enemies', [0]);
 
     // 条目卡数量与真包一致，首卡展开。
     expect(document.querySelectorAll('.entry-card')).toHaveLength(8);
@@ -62,8 +72,7 @@ describe('渲染 → 改值 → 导出（端到端）', () => {
 
   it('items 条目渲染 oneOf 分支选择器（五形态）', () => {
     const store = createStore(xiuxianPackJson);
-    const area = mount();
-    renderSection(area, store, 'items', { expanded: new Set([0]) });
+    renderWith(store, 'items', [0]);
     const branchSelect = document.querySelector<HTMLSelectElement>('.branch-select');
     expect(branchSelect).not.toBeNull();
     expect(branchSelect!.options).toHaveLength(5);
@@ -71,16 +80,14 @@ describe('渲染 → 改值 → 导出（端到端）', () => {
 
   it('combatText 对象节直接展开，moves 字典行可增删', () => {
     const store = createStore(xiuxianPackJson);
-    const area = mount();
-    renderSection(area, store, 'combatText', { expanded: new Set() });
+    renderWith(store, 'combatText');
     // moves 字典的既有键渲染为 dict 行。
     expect(document.querySelectorAll('.dict-row').length).toBeGreaterThan(3);
   });
 
   it('新增条目：骨架入列且整包仍合法', () => {
     const store = createStore(xiuxianPackJson);
-    const area = mount();
-    renderSection(area, store, 'enemies', { expanded: new Set() });
+    renderWith(store, 'enemies');
     const before = (store.state.pack['enemies'] as unknown[]).length;
     const addBtn = document.querySelector<HTMLButtonElement>('.btn-add')!;
     addBtn.click();
@@ -88,8 +95,13 @@ describe('渲染 → 改值 → 导出（端到端）', () => {
     expect(enemies).toHaveLength(before + 1);
     expect(enemies[enemies.length - 1]!.id).toBe('placeholder');
     const check = validateContentPack(store.state.pack);
-    // 骨架 id 占位与既有敌人不冲突 → 整包仍合法（新敌未注册 moves 由
-    // 语义关卡提示，作者后续润色——此处允许语义错误存在，仅骨架可渲染）。
-    expect(check.ok || (check.ok === false && check.errors.length > 0)).toBe(true);
+    // 真断言（原式 `check.ok || (!ok && errors>0)` 恒真，骨架合法性实际无人
+    // 验证；#49 D5 / #74-5 语义白名单）：占位骨架必须过结构关卡——整包
+    // 校验只允许新条目自身的语义提示（xref：占位 id 未注册 moves / 占位
+    // kind 未入动词池，作者续填放行），required 缺字段 / pattern 不中 /
+    // 未知键等任何结构错误都算骨架非法。
+    const allowed = (error: ContentError): boolean =>
+      error.keyword === 'xref' && error.path.startsWith(`/enemies/${before}`);
+    expect(check.ok ? [] : check.errors.filter((error) => !allowed(error))).toEqual([]);
   });
 });

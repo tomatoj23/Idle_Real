@@ -1,9 +1,12 @@
 /**
  * 控件树 → DOM（#11 表单渲染）。
  *
- * 写回策略：标量输入经闭包持有的真实父引用直改（不重渲染，焦点保持）；
- * 结构性操作（数组增删/排序、oneOf 分支切换、字段添加/移除、字典行增删）
- * 先改数据再整节重渲染。校验由面板层订阅 data 事件 debounce 重跑。
+ * 写回策略（#49 收敛为 Commit 控制器单门）：标量输入经 touch 直改引用
+ * （不重渲染，焦点保持）；条目结构操作（新增/删除/上下移/拖拽/oneOf 换支）
+ * 全部经 mutate 的类型化 EntryOp——数据变更、expanded 单点重映射
+ * （remapExpanded 纯函数）、整节重渲染一体完成；嵌套结构（字段添加、
+ * 非节数组、字典行）走 touch + rerender，不涉条目下标故无重映射。
+ * store.update 的直接调用面仅剩控制器一处。校验由外层回调 debounce 重跑。
  *
  * data-path 标注与 validateContentPack 错误 path 同构（`/节/…/字段`），
  * 错误点击定位靠它。
@@ -15,16 +18,157 @@ import { buildFormNode, sectionTitle, type ArrayNode, type FormNode, type Object
 import type { EditorStore } from '../core/state.js';
 import { xrefOptions, type XrefTarget } from '../core/xref.js';
 
-/** 数据写回通道：一切变更过 store.update（标脏 + data 事件）。 */
-type Commit = (fn: () => void) => void;
+/**
+ * 条目结构操作（#49 D2）：手风琴条目列表（节数组顶层）的全部合法结构写。
+ * 下标均为操作前口径；插入默认展开新条目（作者就地续填）。
+ */
+export type EntryOp =
+  | { readonly kind: 'insert'; readonly at: number; readonly value: unknown }
+  | { readonly kind: 'remove'; readonly at: number }
+  | { readonly kind: 'move'; readonly from: number; readonly to: number }
+  | { readonly kind: 'replace'; readonly at: number; readonly value: unknown };
+
+/** 写回通道（#49 D2）：「一切变更过 store.update」从注释变类型。 */
+export interface Commit {
+  /** 条目是否展开（expanded 所有权在控制器，渲染树只读）。 */
+  isExpanded(index: number): boolean;
+  /** 切换条目展开态（纯 UI 态：不触数据/标脏，仅重渲染）。 */
+  toggleEntry(index: number): void;
+  /** 标量写：直改引用 + 标脏 + onData，不重渲染（焦点保持）。 */
+  touch(fn: () => void): void;
+  /** 条目结构写：数据变更 + expanded 单点重映射 + 整节重渲染。 */
+  mutate(op: EntryOp): void;
+  /** 嵌套结构重渲染（非节数组/字典行/字段添加——不涉条目下标，无重映射）。 */
+  rerender(): void;
+  /** 跨引用候选池（datalist focus 时按当前包快照求值，#49 D3 参数化）。 */
+  xrefPool(target: XrefTarget): readonly string[];
+}
 
 export interface SectionRenderOpts {
   /** 结构性变更后回调（默认整节重渲染由内部完成；外层接校验刷新）。 */
   readonly onStructure?: () => void;
   /** 标量数据变更后回调（外层 debounce 校验）。 */
   readonly onData?: () => void;
-  /** 已展开的数组条目下标（跨重渲染保持）。 */
-  readonly expanded: Set<number>;
+}
+
+/** 节渲染控制器（#49 D2）：expanded 所有权收进控制器，调用方不再持有。 */
+export interface SectionController {
+  /** 渲染指定节（结构性操作内部自渲染）。 */
+  render(container: HTMLElement, section: string): void;
+  /** 清空展开态（换节/换包）。 */
+  collapseAll(): void;
+  /** 展开指定条目（错误定位跳转）。 */
+  expandEntry(index: number): void;
+}
+
+export function createSectionController(
+  store: EditorStore,
+  opts: SectionRenderOpts = {},
+): SectionController {
+  const expanded = new Set<number>();
+  const render = (container: HTMLElement, section: string): void => {
+    const rerender = (): void => {
+      render(container, section);
+      opts.onStructure?.();
+    };
+    const commit: Commit = {
+      isExpanded: (index) => expanded.has(index),
+      toggleEntry: (index) => {
+        if (expanded.has(index)) {
+          expanded.delete(index);
+        } else {
+          expanded.add(index);
+        }
+        rerender();
+      },
+      touch: (fn) => {
+        store.update(fn);
+        opts.onData?.();
+      },
+      mutate: (op) => {
+        store.update((pack) => applyEntryOp(pack, section, op));
+        // expanded 单点重映射（#49 D1）：按操作前集合求映射后回填。
+        const remapped = remapExpanded(expanded, op);
+        expanded.clear();
+        for (const index of remapped) {
+          expanded.add(index);
+        }
+        if (op.kind === 'insert') {
+          expanded.add(op.at);
+        }
+        rerender();
+      },
+      rerender,
+      xrefPool: (target) => xrefOptions(store.state.pack, target),
+    };
+    renderSectionInto(container, store, section, commit);
+  };
+  return {
+    render,
+    collapseAll: () => expanded.clear(),
+    expandEntry: (index) => expanded.add(index),
+  };
+}
+
+/**
+ * 结构操作后的条目下标重映射（#49 D1 单点纯函数）：旧展开集 → 新展开集，
+ * 返回新 Set 不改传入。删除 → 大于被删位的全部 -1；插入 → ≥插入位的全部
+ * +1；移动 → 区间旋转。原三例错位（新增 off-by-one / 删除只删单下标 /
+ * 拖拽只迁 from→to 一对）全部收进此函数，配单测钉住。
+ */
+export function remapExpanded(expanded: ReadonlySet<number>, op: EntryOp): Set<number> {
+  const next = new Set<number>();
+  for (const index of expanded) {
+    const mapped = remappedIndex(op, index);
+    if (mapped !== null) {
+      next.add(mapped);
+    }
+  }
+  return next;
+}
+
+/** 单下标映射：null = 该条目已随操作删除，展开态随之移除。 */
+function remappedIndex(op: EntryOp, index: number): number | null {
+  switch (op.kind) {
+    case 'insert':
+      return index >= op.at ? index + 1 : index;
+    case 'remove':
+      if (index === op.at) {
+        return null;
+      }
+      return index > op.at ? index - 1 : index;
+    case 'move':
+      if (index === op.from) {
+        return op.to;
+      }
+      if (op.from < op.to) {
+        return index > op.from && index <= op.to ? index - 1 : index;
+      }
+      return index >= op.to && index < op.from ? index + 1 : index;
+    case 'replace':
+      return index;
+  }
+}
+
+/** EntryOp 的数据面：对节顶层数组就地应用（expanded 面由 mutate 负责）。 */
+function applyEntryOp(pack: Record<string, unknown>, section: string, op: EntryOp): void {
+  const list = pack[section] as unknown[];
+  switch (op.kind) {
+    case 'insert':
+      list.splice(op.at, 0, op.value);
+      break;
+    case 'remove':
+      list.splice(op.at, 1);
+      break;
+    case 'move': {
+      const [moved] = list.splice(op.from, 1);
+      list.splice(op.to, 0, moved!);
+      break;
+    }
+    case 'replace':
+      list[op.at] = op.value;
+      break;
+  }
 }
 
 let datalistSeq = 0;
@@ -53,26 +197,6 @@ export function optionEl(value: string, text: string, selected = false): HTMLOpt
   return option;
 }
 
-/**
- * 给输入框挂跨引用 datalist（focus 时从当前包快照重建候选池）。
- * datalist 是输入辅助不是硬约束——引用目标可能尚未建条目（先建敌人后建
- * 掉落物品），自由输入 + 校验面板兜底是有意裁断。
- */
-function attachXrefDatalist(input: HTMLInputElement, xref: XrefTarget): void {
-  input.classList.add('xref-input');
-  const listId = `dl-${(datalistSeq += 1)}`;
-  input.setAttribute('list', listId);
-  const datalist = document.createElement('datalist');
-  datalist.id = listId;
-  input.append(datalist);
-  input.addEventListener('focus', () => {
-    datalist.replaceChildren();
-    for (const option of currentXrefPool(xref)) {
-      datalist.append(optionEl(option, option));
-    }
-  });
-}
-
 /** 条目列表摘要（id + name）。 */
 function entrySummary(entry: unknown): string {
   if (typeof entry !== 'object' || entry === null) {
@@ -84,14 +208,13 @@ function entrySummary(entry: unknown): string {
   return `${id}${name}`;
 }
 
-/** 渲染当前节到容器（结构性操作内部自渲染）。 */
-export function renderSection(
+/** 渲染当前节到容器（结构性操作由 Commit 控制器自渲染）。 */
+function renderSectionInto(
   container: HTMLElement,
   store: EditorStore,
   section: string,
-  opts: SectionRenderOpts,
+  commit: Commit,
 ): void {
-  xrefPack = store.state.pack;
   container.replaceChildren();
   if (!store.hasPack()) {
     container.append(el('p', 'empty-hint', '尚未加载内容包——先从顶栏导入 .json / .zip，或载入示例包。'));
@@ -107,22 +230,13 @@ export function renderSection(
   title.dataset.path = `/${section}`;
   container.append(title);
 
-  const rerender = (): void => {
-    renderSection(container, store, section, opts);
-    opts.onStructure?.();
-  };
-  const touch = (fn: () => void): void => {
-    store.update(fn);
-    opts.onData?.();
-  };
-
   if (Array.isArray(value)) {
-    renderArraySection(container, store, section, schema, value, rerender, touch, opts);
+    renderArraySection(container, section, schema, value, commit);
   } else if (typeof value === 'object' && value !== null) {
     const node = buildFormNode(schema, schema, '', section, true);
     if (node.kind === 'object') {
       const body = el('div', 'object-body');
-      renderObjectFields(body, node, value as Record<string, unknown>, `/${section}`, touch, rerender);
+      renderObjectFields(body, node, value as Record<string, unknown>, `/${section}`, commit);
       container.append(body);
     }
   } else {
@@ -134,13 +248,10 @@ export function renderSection(
 
 function renderArraySection(
   container: HTMLElement,
-  store: EditorStore,
   section: string,
   schema: JsonSchema,
   value: unknown[],
-  rerender: () => void,
-  touch: Commit,
-  opts: SectionRenderOpts,
+  commit: Commit,
 ): void {
   const node = buildFormNode(schema, schema, '', section, true);
   if (node.kind !== 'array') {
@@ -148,18 +259,15 @@ function renderArraySection(
   }
   const list = el('div', 'entry-list');
   value.forEach((entry, index) => {
-    list.append(entryCard(node, section, value, index, store, rerender, touch, opts));
+    list.append(entryCard(node, section, value, index, commit));
   });
 
   const addBtn = el('button', 'btn btn-add', '+ 新增条目');
   addBtn.type = 'button';
   addBtn.addEventListener('click', () => {
-    const skeleton = skeletonOf(node.item);
-    store.update((pack) => {
-      (pack[section] as unknown[]).push(skeleton);
-    });
-    opts.expanded.add(value.length);
-    rerender();
+    // at 取点击时活引用长度（渲染后无未重渲染的结构变更，二者恒一致）；
+    // 新条目展开由 mutate 的 insert 策略负责。
+    commit.mutate({ kind: 'insert', at: value.length, value: skeletonOf(node.item) });
   });
   container.append(list, addBtn);
 }
@@ -169,10 +277,7 @@ function entryCard(
   section: string,
   value: unknown[],
   index: number,
-  store: EditorStore,
-  rerender: () => void,
-  touch: Commit,
-  opts: SectionRenderOpts,
+  commit: Commit,
 ): HTMLElement {
   const card = el('div', 'entry-card');
   card.dataset.path = `/${section}/${index}`;
@@ -195,42 +300,21 @@ function entryCard(
   header.append(
     makeBtn('↑', '上移', () => {
       if (index === 0) return;
-      store.update((pack) => {
-        const list = pack[section] as unknown[];
-        [list[index - 1], list[index]] = [list[index]!, list[index - 1]!];
-      });
-      opts.expanded.delete(index);
-      opts.expanded.add(index - 1);
-      rerender();
+      commit.mutate({ kind: 'move', from: index, to: index - 1 });
     }),
     makeBtn('↓', '下移', () => {
       if (index >= value.length - 1) return;
-      store.update((pack) => {
-        const list = pack[section] as unknown[];
-        [list[index + 1], list[index]] = [list[index]!, list[index + 1]!];
-      });
-      opts.expanded.delete(index);
-      opts.expanded.add(index + 1);
-      rerender();
+      commit.mutate({ kind: 'move', from: index, to: index + 1 });
     }),
     makeBtn('✕', '删除', () => {
       if (!window.confirm(`删除条目 ${entrySummary(value[index])}？`)) return;
-      store.update((pack) => {
-        (pack[section] as unknown[]).splice(index, 1);
-      });
-      opts.expanded.delete(index);
-      rerender();
+      commit.mutate({ kind: 'remove', at: index });
     }),
   );
 
-  const isOpen = opts.expanded.has(index);
+  const isOpen = commit.isExpanded(index);
   const toggle = makeBtn(isOpen ? '收起' : '编辑', '展开编辑', () => {
-    if (opts.expanded.has(index)) {
-      opts.expanded.delete(index);
-    } else {
-      opts.expanded.add(index);
-    }
-    rerender();
+    commit.toggleEntry(index);
   });
   header.append(toggle);
 
@@ -250,16 +334,7 @@ function entryCard(
     if (Number.isNaN(from) || from === index || from < 0 || from >= value.length) {
       return;
     }
-    store.update((pack) => {
-      const list = pack[section] as unknown[];
-      const [moved] = list.splice(from, 1);
-      list.splice(index, 0, moved!);
-    });
-    if (opts.expanded.has(from)) {
-      opts.expanded.delete(from);
-      opts.expanded.add(index);
-    }
-    rerender();
+    commit.mutate({ kind: 'move', from, to: index });
   });
 
   card.append(header);
@@ -269,9 +344,9 @@ function entryCard(
     const entry = value[index] as Record<string, unknown>;
     const entryPath = `/${section}/${index}`;
     if (entryNode.kind === 'oneOf') {
-      renderOneOfBody(body, entryNode, entry, entryPath, store, section, index, rerender, touch, syncSummary);
+      renderOneOfBody(body, entryNode, entry, entryPath, section, index, commit, syncSummary);
     } else if (entryNode.kind === 'object') {
-      renderObjectFields(body, entryNode, entry, entryPath, touch, rerender);
+      renderObjectFields(body, entryNode, entry, entryPath, commit, syncSummary);
     }
     card.append(body);
   }
@@ -285,11 +360,9 @@ function renderOneOfBody(
   node: OneOfNode,
   value: Record<string, unknown>,
   path: string,
-  store: EditorStore,
   section: string,
   index: number,
-  rerender: () => void,
-  touch: Commit,
+  commit: Commit,
   syncSummary: () => void,
 ): void {
   const current = typeof value['type'] === 'string' ? value['type'] : node.branches[0]?.discriminator ?? '';
@@ -305,18 +378,16 @@ function renderOneOfBody(
     select.append(option);
   }
   select.addEventListener('change', () => {
+    // 保留面取自旧值，必须先算后写（value 是活引用）。
     const next = switchBranch(value, node, select.value);
-    store.update((pack) => {
-      (pack[section] as unknown[])[index] = next;
-    });
-    rerender();
+    commit.mutate({ kind: 'replace', at: index, value: next });
   });
   branchRow.append(branchLabel, select);
   body.append(branchRow);
 
   const branch = node.branches.find((candidate) => candidate.discriminator === current) ?? node.branches[0];
   if (branch !== undefined && branch.node.kind === 'object') {
-    renderObjectFields(body, branch.node, value, path, touch, rerender, syncSummary);
+    renderObjectFields(body, branch.node, value, path, commit, syncSummary);
   }
 }
 
@@ -327,15 +398,14 @@ function renderObjectFields(
   node: ObjectNode,
   value: Record<string, unknown>,
   path: string,
-  touch: Commit,
-  onStructure: () => void,
+  commit: Commit,
   syncSummary?: () => void,
 ): void {
   for (const field of node.fields) {
     if (!field.required && !(field.field in value)) {
       continue; // 可选字段未启用不渲染（「添加字段」入口补）。
     }
-    body.append(fieldRow(field, value, path, touch, onStructure, syncSummary));
+    body.append(fieldRow(field, value, path, commit, syncSummary));
   }
 
   // 添加可选字段。
@@ -351,10 +421,10 @@ function renderObjectFields(
     addSelect.addEventListener('change', () => {
       if (addSelect.value === '') return;
       const field = optional.find((candidate) => candidate.field === addSelect.value)!;
-      touch(() => {
+      commit.touch(() => {
         value[field.field] = skeletonOf(field);
       });
-      onStructure();
+      commit.rerender();
     });
     addRow.append(addSelect);
     body.append(addRow);
@@ -362,7 +432,7 @@ function renderObjectFields(
 
   // 附加开放键值容器（bonuses 的 patternProperties 等）。
   if (node.dict !== undefined) {
-    body.append(dictBlock(node.dict, value, path, touch, onStructure));
+    body.append(dictBlock(node.dict, value, path, commit));
   }
 }
 
@@ -370,8 +440,7 @@ function fieldRow(
   field: FormNode,
   value: Record<string, unknown>,
   path: string,
-  touch: Commit,
-  onStructure: () => void,
+  commit: Commit,
   syncSummary?: () => void,
 ): HTMLElement {
   const row = el('div', 'field-row');
@@ -386,7 +455,7 @@ function fieldRow(
   }
   row.dataset.path = fullPath;
   row.append(label);
-  row.append(controlOf(field, value, field.field, fullPath, touch, onStructure, syncSummary));
+  row.append(controlOf(field, value, field.field, fullPath, commit, syncSummary));
   return row;
 }
 
@@ -397,44 +466,42 @@ function controlOf(
   container: Record<string, unknown>,
   key: string,
   path: string,
-  touch: Commit,
-  onStructure: () => void,
+  commit: Commit,
   syncSummary?: () => void,
 ): HTMLElement {
   switch (node.kind) {
     case 'string':
-      return stringControl(node, container, key, touch, syncSummary);
+      return stringControl(node, container, key, commit, syncSummary);
     case 'integer':
     case 'number':
-      return numberControl(node, container, key, touch);
+      return numberControl(node, container, key, commit);
     case 'boolean':
-      return checkboxControl(container, key, touch);
+      return checkboxControl(container, key, commit);
     case 'select':
-      return selectControl(node, container, key, touch);
+      return selectControl(node, container, key, commit);
     case 'object': {
       const wrap = el('div', 'nested-object');
       const child = container[key];
       if (typeof child === 'object' && child !== null && !Array.isArray(child)) {
-        renderObjectFields(wrap, node, child as Record<string, unknown>, path, touch, onStructure);
+        renderObjectFields(wrap, node, child as Record<string, unknown>, path, commit);
       }
       return wrap;
     }
     case 'array':
-      return arrayControl(node, container, key, path, touch, onStructure);
+      return arrayControl(node, container, key, path, commit);
     case 'dict':
       return dictBlock(
         { keyPattern: node.keyPattern, keyXref: node.keyXref, valueNode: node.valueNode },
         container[key] as Record<string, unknown>,
         path,
-        touch,
-        onStructure,
+        commit,
         node.requiredKeys,
       );
     case 'oneOf': {
       const wrap = el('div', 'nested-object');
       const child = container[key];
       if (typeof child === 'object' && child !== null && !Array.isArray(child)) {
-        renderOneOfInline(wrap, node, child as Record<string, unknown>, path, touch, onStructure);
+        renderOneOfInline(wrap, node, child as Record<string, unknown>, path, commit);
       }
       return wrap;
     }
@@ -445,7 +512,7 @@ function stringControl(
   node: { pattern?: string; minLength?: number; maxLength?: number; xref?: FormNode['xref'] },
   container: Record<string, unknown>,
   key: string,
-  touch: Commit,
+  commit: Commit,
   syncSummary?: () => void,
 ): HTMLElement {
   const input = document.createElement('input');
@@ -456,10 +523,10 @@ function stringControl(
     input.placeholder = `格式 ${node.pattern}`;
   }
   if (node.xref !== undefined) {
-    attachXrefDatalist(input, node.xref);
+    attachXrefDatalist(input, node.xref, commit);
   }
   input.addEventListener('input', () => {
-    touch(() => {
+    commit.touch(() => {
       container[key] = input.value;
     });
     syncSummary?.();
@@ -471,7 +538,7 @@ function numberControl(
   node: { kind: 'integer' | 'number'; min?: number; max?: number },
   container: Record<string, unknown>,
   key: string,
-  touch: Commit,
+  commit: Commit,
 ): HTMLElement {
   const input = document.createElement('input');
   input.type = 'number';
@@ -484,7 +551,7 @@ function numberControl(
   input.addEventListener('input', () => {
     const parsed = node.kind === 'integer' ? Number.parseInt(input.value, 10) : Number.parseFloat(input.value);
     if (Number.isNaN(parsed)) return; // 清空输入中：不写回，避免破类型。
-    touch(() => {
+    commit.touch(() => {
       container[key] = parsed;
     });
   });
@@ -494,13 +561,13 @@ function numberControl(
 function checkboxControl(
   container: Record<string, unknown>,
   key: string,
-  touch: Commit,
+  commit: Commit,
 ): HTMLElement {
   const input = document.createElement('input');
   input.type = 'checkbox';
   input.checked = container[key] === true;
   input.addEventListener('change', () => {
-    touch(() => {
+    commit.touch(() => {
       container[key] = input.checked;
     });
   });
@@ -511,7 +578,7 @@ function selectControl(
   node: { options: readonly { value: string; label: string }[]; xref?: FormNode['xref'] },
   container: Record<string, unknown>,
   key: string,
-  touch: Commit,
+  commit: Commit,
 ): HTMLElement {
   const select = document.createElement('select');
   select.className = 'input';
@@ -526,7 +593,7 @@ function selectControl(
     select.disabled = true; // 单值判别字段（分支内 type）。
   }
   select.addEventListener('change', () => {
-    touch(() => {
+    commit.touch(() => {
       container[key] = select.value;
     });
   });
@@ -540,24 +607,23 @@ function arrayControl(
   container: Record<string, unknown>,
   key: string,
   path: string,
-  touch: Commit,
-  onStructure: () => void,
+  commit: Commit,
 ): HTMLElement {
   const wrap = el('div', 'array-block');
   const list = Array.isArray(container[key]) ? (container[key] as unknown[]) : [];
   const itemsWrap = el('div', 'array-items');
   list.forEach((_, index) => {
-    itemsWrap.append(arrayItemRow(node, list, index, path, touch, onStructure));
+    itemsWrap.append(arrayItemRow(node, list, index, path, commit));
   });
   wrap.append(itemsWrap);
   const addBtn = el('button', 'btn btn-mini', '+ 添加');
   addBtn.type = 'button';
   addBtn.disabled = node.maxItems !== undefined && list.length >= node.maxItems;
   addBtn.addEventListener('click', () => {
-    touch(() => {
+    commit.touch(() => {
       list.push(skeletonOf(node.item));
     });
-    onStructure();
+    commit.rerender();
   });
   wrap.append(addBtn);
   return wrap;
@@ -568,8 +634,7 @@ function arrayItemRow(
   list: unknown[],
   index: number,
   path: string,
-  touch: Commit,
-  onStructure: () => void,
+  commit: Commit,
 ): HTMLElement {
   const row = el('div', 'array-item');
   row.dataset.path = `${path.replace(/\*$/, '')}/${index}`;
@@ -579,30 +644,30 @@ function arrayItemRow(
   removeBtn.type = 'button';
   removeBtn.title = '移除该项';
   removeBtn.addEventListener('click', () => {
-    touch(() => {
+    commit.touch(() => {
       list.splice(index, 1);
     });
-    onStructure();
+    commit.rerender();
   });
   const upBtn = el('button', 'btn btn-mini', '↑');
   upBtn.type = 'button';
   upBtn.title = '上移';
   upBtn.addEventListener('click', () => {
     if (index === 0) return;
-    touch(() => {
+    commit.touch(() => {
       [list[index - 1], list[index]] = [list[index]!, list[index - 1]!];
     });
-    onStructure();
+    commit.rerender();
   });
   const downBtn = el('button', 'btn btn-mini', '↓');
   downBtn.type = 'button';
   downBtn.title = '下移';
   downBtn.addEventListener('click', () => {
     if (index >= list.length - 1) return;
-    touch(() => {
+    commit.touch(() => {
       [list[index + 1], list[index]] = [list[index]!, list[index + 1]!];
     });
-    onStructure();
+    commit.rerender();
   });
 
   const content = el('div', 'array-item-content');
@@ -610,28 +675,28 @@ function arrayItemRow(
     const record = list[index] as Record<string, unknown>;
     const itemPath = `${path.replace(/\*$/, String(index))}`;
     if (itemNode.kind === 'object') {
-      renderObjectFields(content, itemNode, record, itemPath, touch, onStructure);
+      renderObjectFields(content, itemNode, record, itemPath, commit);
     } else if (itemNode.kind === 'oneOf') {
-      renderOneOfInline(content, itemNode, record, itemPath, touch, onStructure);
+      renderOneOfInline(content, itemNode, record, itemPath, commit);
     }
   } else {
     // 标量数组条目（pool 的物品 id、reset 的键等）：行内 input。
-    content.append(scalarItemInput(itemNode, list, index, touch));
+    content.append(scalarItemInput(itemNode, list, index, commit));
   }
   row.append(el('span', 'array-item-index', String(index + 1)), content, upBtn, downBtn, removeBtn);
   return row;
 }
 
-function scalarItemInput(node: FormNode, list: unknown[], index: number, touch: Commit): HTMLElement {
+function scalarItemInput(node: FormNode, list: unknown[], index: number, commit: Commit): HTMLElement {
   const input = document.createElement('input');
   input.type = 'text';
   input.className = 'input';
   input.value = typeof list[index] === 'string' ? (list[index] as string) : '';
   if (node.xref !== undefined) {
-    attachXrefDatalist(input, node.xref);
+    attachXrefDatalist(input, node.xref, commit);
   }
   input.addEventListener('input', () => {
-    touch(() => {
+    commit.touch(() => {
       list[index] = input.value;
     });
   });
@@ -645,13 +710,12 @@ function renderOneOfInline(
   node: OneOfNode,
   value: Record<string, unknown>,
   path: string,
-  touch: Commit,
-  onStructure: () => void,
+  commit: Commit,
 ): void {
   const current = typeof value['type'] === 'string' ? value['type'] : '';
   const branch = node.branches.find((candidate) => candidate.discriminator === current) ?? node.branches[0];
   if (branch !== undefined && branch.node.kind === 'object') {
-    renderObjectFields(wrap, branch.node, value, path, touch, onStructure);
+    renderObjectFields(wrap, branch.node, value, path, commit);
   }
 }
 
@@ -667,15 +731,14 @@ function dictBlock(
   dict: DictShapeView,
   value: Record<string, unknown>,
   path: string,
-  touch: Commit,
-  onStructure: () => void,
+  commit: Commit,
   requiredKeys: readonly string[] = [],
 ): HTMLElement {
   const wrap = el('div', 'dict-block');
   const keys = Object.keys(value ?? {});
   const rows = el('div', 'dict-rows');
   for (const key of keys) {
-    rows.append(dictRow(dict, value, key, path, touch, onStructure, requiredKeys.includes(key)));
+    rows.append(dictRow(dict, value, key, path, commit, requiredKeys.includes(key)));
   }
   wrap.append(rows);
   const addBtn = el('button', 'btn btn-mini', '+ 添加键');
@@ -687,10 +750,10 @@ function dictBlock(
       n += 1;
       candidate = `key${n}`;
     }
-    touch(() => {
+    commit.touch(() => {
       value[candidate] = skeletonOf(dict.valueNode);
     });
-    onStructure();
+    commit.rerender();
   });
   wrap.append(addBtn);
   return wrap;
@@ -701,8 +764,7 @@ function dictRow(
   value: Record<string, unknown>,
   key: string,
   path: string,
-  touch: Commit,
-  onStructure: () => void,
+  commit: Commit,
   locked: boolean,
 ): HTMLElement {
   const row = el('div', 'dict-row');
@@ -713,7 +775,7 @@ function dictRow(
   keyInput.value = key;
   keyInput.placeholder = dict.keyPattern !== undefined ? `键格式 ${dict.keyPattern}` : '键';
   if (dict.keyXref !== undefined) {
-    attachXrefDatalist(keyInput, dict.keyXref);
+    attachXrefDatalist(keyInput, dict.keyXref, commit);
   }
   keyInput.addEventListener('change', () => {
     const next = keyInput.value.trim();
@@ -721,21 +783,21 @@ function dictRow(
       keyInput.value = key;
       return;
     }
-    touch(() => {
+    commit.touch(() => {
       value[next] = value[key];
       delete value[key];
     });
-    onStructure();
+    commit.rerender();
   });
 
   const removeBtn = el('button', 'btn btn-mini', '✕');
   removeBtn.type = 'button';
   removeBtn.title = locked ? '语义恒需键（删除将无法过校验）' : '移除该键';
   removeBtn.addEventListener('click', () => {
-    touch(() => {
+    commit.touch(() => {
       delete value[key];
     });
-    onStructure();
+    commit.rerender();
   });
 
   const valueWrap = el('div', 'dict-value');
@@ -744,10 +806,10 @@ function dictRow(
   if (typeof childValue === 'object' && childValue !== null && !Array.isArray(childValue)) {
     if (valueNode.kind === 'array') {
       valueWrap.append(
-        arrayControl(valueNode, value, key, `${path}/*`, touch, onStructure),
+        arrayControl(valueNode, value, key, `${path}/*`, commit),
       );
     } else if (valueNode.kind === 'object') {
-      renderObjectFields(valueWrap, valueNode, childValue as Record<string, unknown>, `${path}/${key}`, touch, onStructure);
+      renderObjectFields(valueWrap, valueNode, childValue as Record<string, unknown>, `${path}/${key}`, commit);
     }
   } else {
     // 标量值（reasonMap 的字符串等）。
@@ -756,7 +818,7 @@ function dictRow(
     input.className = 'input';
     input.value = typeof childValue === 'string' ? childValue : String(childValue ?? '');
     input.addEventListener('input', () => {
-      touch(() => {
+      commit.touch(() => {
         value[key] = input.value;
       });
     });
@@ -769,9 +831,23 @@ function dictRow(
 
 /* ==================== xref 池接线 ==================== */
 
-/** 当前包快照（renderSection 入口更新；datalist focus 时读取）。 */
-let xrefPack: Record<string, unknown> = {};
-
-function currentXrefPool(target: XrefTarget | undefined): readonly string[] {
-  return target !== undefined ? xrefOptions(xrefPack, target) : [];
+/**
+ * 给输入框挂跨引用 datalist（focus 时经 commit.xrefPool 按当前包快照重建
+ * 候选池——#49 D3：池求值参数化，模块级单例退役）。
+ * datalist 是输入辅助不是硬约束——引用目标可能尚未建条目（先建敌人后建
+ * 掉落物品），自由输入 + 校验面板兜底是有意裁断。
+ */
+function attachXrefDatalist(input: HTMLInputElement, xref: XrefTarget, commit: Commit): void {
+  input.classList.add('xref-input');
+  const listId = `dl-${(datalistSeq += 1)}`;
+  input.setAttribute('list', listId);
+  const datalist = document.createElement('datalist');
+  datalist.id = listId;
+  input.append(datalist);
+  input.addEventListener('focus', () => {
+    datalist.replaceChildren();
+    for (const option of commit.xrefPool(xref)) {
+      datalist.append(optionEl(option, option));
+    }
+  });
 }

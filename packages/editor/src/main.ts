@@ -12,7 +12,7 @@ import { exportJsonDownload, exportZipDownload, readPackFile } from './io/files.
 import { exportToGame } from './io/gameBridge.js';
 import { createValidatePanel } from './ui/panel.js';
 import { createLlmPanel } from './ui/llmPanel.js';
-import { renderSection, type SectionRenderOpts } from './ui/render.js';
+import { createSectionController } from './ui/render.js';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 
@@ -42,7 +42,11 @@ if (app) {
   `;
 
   const store = createStore();
-  const expanded = new Set<number>();
+  // expanded 所有权在控制器（#49 D2）：换节/换包 collapseAll，错误定位 expandEntry。
+  const controller = createSectionController(store, {
+    onData: () => scheduleValidate(),
+    onStructure: () => scheduleValidate(),
+  });
 
   const nav = document.querySelector<HTMLElement>('#section-nav')!;
   const formArea = document.querySelector<HTMLElement>('#form-area')!;
@@ -50,12 +54,6 @@ if (app) {
   const dirtyBadge = document.querySelector<HTMLElement>('#dirty-badge')!;
   const fileInput = document.querySelector<HTMLInputElement>('#file-input')!;
   const toast = document.querySelector<HTMLElement>('#toast')!;
-
-  const sectionOpts: SectionRenderOpts = {
-    expanded,
-    onData: () => scheduleValidate(),
-    onStructure: () => scheduleValidate(),
-  };
 
   /* —— 校验面板（错误点击 → goto 定位） —— */
   const validatePanel = createValidatePanel(document.querySelector('#validate-panel')!, store, {
@@ -87,7 +85,7 @@ if (app) {
         `<span class="nav-label">${sectionTitle(section)}</span>` +
         `<span class="nav-badges">${count > 0 ? `<i class="nav-count">${count}</i>` : ''}${errorCount > 0 ? `<i class="nav-errors">${errorCount}</i>` : ''}</span>`;
       item.addEventListener('click', () => {
-        expanded.clear();
+        controller.collapseAll();
         store.setSection(section);
         repaintNav();
         repaintForm();
@@ -110,7 +108,7 @@ if (app) {
       formArea.append(hint);
       return;
     }
-    renderSection(formArea, store, store.state.section, sectionOpts);
+    controller.render(formArea, store.state.section);
   }
 
   /* —— 错误定位 —— */
@@ -122,12 +120,12 @@ if (app) {
       return;
     }
     if (store.state.section !== section) {
-      expanded.clear();
+      controller.collapseAll();
       store.setSection(section);
     }
     const entryIndex = Number.parseInt(segments[1] ?? '', 10);
     if (!Number.isNaN(entryIndex)) {
-      expanded.add(entryIndex);
+      controller.expandEntry(entryIndex);
     }
     repaintForm();
     // 渲染后定位：节标题或字段行。
@@ -157,7 +155,7 @@ if (app) {
 
   store.subscribe((_state, event) => {
     if (event === 'pack') {
-      expanded.clear();
+      controller.collapseAll();
       // 加载后默认落第一个节。
       store.setSection(Object.keys(sectionSchemas)[0] ?? null);
       refreshAll();
