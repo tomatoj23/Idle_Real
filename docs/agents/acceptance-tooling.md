@@ -35,9 +35,10 @@ mutation hash、每次运行前后的 source hash 核验（setup 即验锚点，
 - 根 `tsconfig.json` 是 solution-style：被 references 的包 tsconfig 必须进快照，否则 vite 的
   tsconfig 解析链报 `TSCONFIG_ERROR`（runner 已自动收编，自定义 inputs 时留意同类传递依赖）；
 - shadow 根 `package.json` 必须是桩——真根 package.json 的 workspace 语义会串场；
-- 锚点写法对 CRLF/LF 敏感：runner 已做 EOL 自适应，变异集里 `before` 用 `\n` 写即可；
+- 锚点写法对 CRLF/LF 敏感：runner 已做 EOL 自适应（before/after 对称），变异集里用 `\n` 写即可；
+  `after` 里的 `$&`/`$1` 按字面落盘（函数形替换），不会被解释成替换模式；
 - 报告目录必须在仓库树内（`.scratch/` 已 gitignore）——shadow 靠祖先 node_modules 解析依赖，
-  不复制不安装。
+  不复制不安装；`--out` 越树/越盘符会被前置拒绝。
 
 ## `packages/app-desktop/scripts/electron-acceptance.mjs` —— Electron 真机验收 harness
 
@@ -81,9 +82,13 @@ os.tmpdir 下 mkdtemp，真档零接触（红线同 2026-09-29 删档事故教�
   变成「随机通过」；
 - 编译走 `node node_modules/typescript/bin/tsc` 直起，**不要**经 cmd.exe 调 `node_modules/.bin/*.cmd`
   （双层引号陷阱；若必须走 cmd，参照原型用 `windowsVerbatimArguments`）；
+- 沙箱重定向的是 `userData`/`sessionData`/`crashDumps`/`logs` 四路径（main 侧实际触达面），
+  不是字面意义的「全部 app.getPath」——`appData`/`temp` 等是 Electron 内部派生源，动了反而
+  破坏沙箱自身；
 - 验收超时杀进程须 `taskkill /PID <pid> /T /F`（Windows 下 SIGKILL 到不了进程树）；
-- 判定口径里 `→ reload <n>/3` 的分母与 `RELOAD_LIMIT` 同源钉死——改重载上限须同步
-  `judgeScenario` 的正则与 `expectedAttempts` 表。
+- 判定口径的 reload 分母由 runner 从编译产物 `RELOAD_LIMIT` 读取传入（同源）；`expectedAttempts`
+  表与各场景崩溃次数设计仍钉当前 RELOAD_LIMIT=3 的行为——改重载上限须同步重拟场景脚本与
+  期望表，不能只改正则。
 
 ## 证据留档
 

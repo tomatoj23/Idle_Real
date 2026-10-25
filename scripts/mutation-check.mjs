@@ -9,7 +9,7 @@
 //
 // 运行：
 //   node scripts/mutation-check.mjs --set scripts/mutation-sets/renderer-recovery-80.mjs
-//     [--filter <id 正则>] [--out <报告目录>]
+//     [--filter <id 正则>] [--out <报告目录>（须在仓库树内）]
 //   node scripts/mutation-check.mjs --self-test     （分类器合成用例自检，不跑真测试）
 //
 // 变异集 = ESM 数据模块（default export），形状：
@@ -30,7 +30,7 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
 
@@ -39,6 +39,28 @@ const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const slash = (path) => path.replaceAll('\\', '/');
 const readIf = (path) => (existsSync(path) ? readFileSync(path) : null);
+
+/** git 全量 tracked 文件的当前 hash 表（收尾对账「真仓零改动」用）。 */
+const trackedHashes = () =>
+  Object.fromEntries(
+    execFileSync('git', ['-C', repo, 'ls-files', '-z'], { encoding: 'utf8' })
+      .split('\0')
+      .filter(Boolean)
+      .map((path) => {
+        const full = join(repo, path);
+        return [path, existsSync(full) && statSync(full).isFile() ? hash(readFileSync(full)) : null];
+      }),
+  );
+
+/** 根 tsconfig.json 的 references[].path（solution-style）；解析不动（JSONC 形态）就当没有。 */
+const tsconfigReferences = () => {
+  try {
+    const parsed = JSON.parse(readFileSync(join(repo, 'tsconfig.json'), 'utf8'));
+    return (parsed.references ?? []).map((reference) => reference.path).filter(Boolean);
+  } catch {
+    return [];
+  }
+};
 
 // ---------- 通用 runner：对任意变异集执行 快照→基线→逐变异→报告 ----------
 
@@ -56,17 +78,25 @@ export async function runMutationCheck({ setPath, filter, outDir }) {
     : set.mutations;
   if (!selected.length) throw new Error(`--filter 无命中: ${filter}`);
 
-  const home = resolve(outDir ?? join(repo, '.scratch', `mutation-check-${stamp()}`));
-  const shadow = join(home, 'shadow');
-  const snapshots = join(home, 'snapshot');
-  const reports = join(home, 'reports');
-  const testTmp = join(home, 'test-tmp');
+  const reportHome = resolve(outDir ?? join(repo, '.scratch', `mutation-check-${stamp()}`));
+  {
+    // shadow 靠祖先 node_modules 解析依赖，报告目录必须在仓库树内（--out 越树/越盘符
+    // 只会在 vitest 启动期才炸，这里前置拒绝）。默认落点恒在树内，此闸只拦 override。
+    const rel = relative(repo, reportHome);
+    if (isAbsolute(rel) || rel.startsWith('..')) {
+      throw new Error(`--out 必须落在仓库树内（shadow 依赖仓库 node_modules）: ${reportHome}`);
+    }
+  }
+  const shadow = join(reportHome, 'shadow');
+  const snapshots = join(reportHome, 'snapshot');
+  const reports = join(reportHome, 'reports');
+  const testTmp = join(reportHome, 'test-tmp');
   mkdirSync(reports, { recursive: true });
   mkdirSync(testTmp, { recursive: true });
 
   const write = (path, bytes) => {
-    const rel = relative(home, resolve(path));
-    if (rel.startsWith('..') || resolve(path) === home) {
+    const rel = relative(reportHome, resolve(path));
+    if (rel.startsWith('..') || resolve(path) === reportHome) {
       throw new Error(`Refusing write outside own report dir: ${path}`);
     }
     mkdirSync(dirname(path), { recursive: true });
@@ -130,28 +160,7 @@ export async function runMutationCheck({ setPath, filter, outDir }) {
     }
   };
 
-const trackedHashes = () =>
-  Object.fromEntries(
-    execFileSync('git', ['-C', repo, 'ls-files', '-z'], { encoding: 'utf8' })
-      .split('\0')
-      .filter(Boolean)
-      .map((path) => {
-        const full = join(repo, path);
-        return [path, existsSync(full) && statSync(full).isFile() ? hash(readFileSync(full)) : null];
-      }),
-  );
-
-/** 根 tsconfig.json 的 references[].path（solution-style）；解析不动（JSONC 形态）就当没有。 */
-const tsconfigReferences = () => {
-  try {
-    const parsed = JSON.parse(readFileSync(join(repo, 'tsconfig.json'), 'utf8'));
-    return (parsed.references ?? []).map((reference) => reference.path).filter(Boolean);
-  } catch {
-    return [];
-  }
-};
-
-  const manifestPath = join(home, 'source-manifest.json');
+  const manifestPath = join(reportHome, 'source-manifest.json');
   const assertSources = (stage) => {
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
     const current = inputFiles();
@@ -205,7 +214,9 @@ const tsconfigReferences = () => {
     const before = mutation.before.replaceAll('\n', eol);
     const after = mutation.after.replaceAll('\n', eol);
     if (original.split(before).length !== 2) throw new Error(`shadow 内锚点非唯一: ${mutation.id}`);
-    const mutated = original.replace(before, after);
+    // 函数形替换：after 里的 $&/$1 等必须按字面落盘，不走 replace 的模式解释；
+    // after 与 before 同步 EOL 自适应（CRLF 源上不留混合换行）。
+    const mutated = original.replace(before, () => after);
     write(target, mutated);
     jsonWrite(join(reports, `${mutation.id}.mutation.json`), {
       ...mutation,
@@ -295,7 +306,7 @@ const tsconfigReferences = () => {
     results.push({ ...result, mutation });
     restore();
     assertSources(`${mutation.id}-after`);
-    jsonWrite(join(home, 'mutation-results.json'), { baseline, results });
+    jsonWrite(join(reportHome, 'mutation-results.json'), { baseline, results });
   }
 
   const finalBaseline = run('final-baseline');
@@ -308,7 +319,7 @@ const tsconfigReferences = () => {
   const checks = readdirSync(reports).filter((path) => path.endsWith('.source-hash-check.json'));
   const final = {
     completedAt: new Date().toISOString(),
-    home,
+    reportHome,
     set: { name: set.name, file: slash(setPath) },
     baseline,
     finalBaseline,
@@ -327,10 +338,10 @@ const tsconfigReferences = () => {
     trackedFileChanges: changes,
     finalGitStatus: execFileSync('git', ['-C', repo, 'status', '--short'], { encoding: 'utf8' }),
   };
-  jsonWrite(join(home, 'mutation-results.json'), final);
+  jsonWrite(join(reportHome, 'mutation-results.json'), final);
   console.log(`\n汇总: ${JSON.stringify(final.summary)}`);
   console.log(`hash 留痕: ${final.sourceHashChecks.count} 次核验，全部一致=${final.sourceHashChecks.allUnchanged}`);
-  console.log(`报告目录: ${home}`);
+  console.log(`报告目录: ${reportHome}`);
   if (finalBaseline.classification !== 'green' || changes.length) process.exitCode = 1;
 }
 
@@ -383,8 +394,14 @@ export function classifyRun({ child, report, stderrText }) {
   };
 }
 
-/** green 对变异议面收口：用例总数与基线不符 = 套件没跑全，不算 survivor。 */
+/**
+ * green 对变异议面收口：用例总数与基线不符 = 套件没跑全，不算 survivor。
+ * execution-error / compile-or-load-error 如实保留——这两类本就没把套件跑起来，
+ * totalTests 与基线的差异不是「跑了一半」的证据；吞进 incomplete-suite-error 会把
+ * 诊断信息降格（六分类承诺名存实亡）。
+ */
 export function settleClassification(classification, totalTests, baselineTotalTests) {
+  if (classification === 'execution-error' || classification === 'compile-or-load-error') return classification;
   if (totalTests !== baselineTotalTests) return 'incomplete-suite-error';
   if (classification === 'green') return 'survived';
   return classification;
@@ -486,5 +503,7 @@ function selfTest() {
   ok('settle: green→survived', settleClassification('green', 61, 61) === 'survived');
   ok('settle: 总数不符→incomplete-suite-error', settleClassification('green', 60, 61) === 'incomplete-suite-error');
   ok('settle: 非 green 原样保留', settleClassification('assertion-killed', 61, 61) === 'assertion-killed');
+  ok('settle: compile-error 不吞进 incomplete（总数必然不符）', settleClassification('compile-or-load-error', 0, 61) === 'compile-or-load-error');
+  ok('settle: execution-error 不吞进 incomplete', settleClassification('execution-error', undefined, 61) === 'execution-error');
   console.log('self-test 全过。');
 }

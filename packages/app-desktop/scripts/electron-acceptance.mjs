@@ -8,8 +8,9 @@
 //         —— runner：全新临时构建（electron main tsc + renderer vite，均落临时根不复用旧
 //         dist）→ 逐场景搭隔离沙箱并 spawn 真 electron → 按事件流判定 → 结果落盘。
 //   electron packages/app-desktop/scripts/electron-acceptance.mjs <config.json>
-//         —— harness（沙箱内真 app main）：重定向全部 app.getPath → 清 Steam 环境 →
-//         替换 dialog 为记录器 → 按场景脚本驱动真 BrowserWindow/webContents → 事件 JSONL。
+//         —— harness（沙箱内真 app main）：重定向 userData/sessionData/crashDumps/logs
+//         四路径（在导入真实 main 之前）→ 清 Steam 环境 → dialog.showErrorBox 换记录器
+//         （防无人值守模态阻塞）→ 按场景脚本驱动真 BrowserWindow/webContents → 事件 JSONL。
 //
 // 八场景（原型 rev2 全过）：
 //   normal-ui                  真渲染层启动：mock 桥、存档往返落盘、start→running、截屏
@@ -214,6 +215,8 @@ async function runnerMain({ outDir, scenario }) {
   const compiledRecovery = await import(pathToFileURL(join(buildRoot, 'dist-electron/rendererRecovery.js')).href);
   const stabilityMs = compiledRecovery.RELOAD_STABILITY_WINDOW_MS;
   if (typeof stabilityMs !== 'number') throw new Error('编译产物缺 RELOAD_STABILITY_WINDOW_MS 导出');
+  const reloadLimit = compiledRecovery.RELOAD_LIMIT;
+  if (typeof reloadLimit !== 'number') throw new Error('编译产物缺 RELOAD_LIMIT 导出');
 
   const results = [];
   for (const name of names) {
@@ -257,7 +260,7 @@ async function runnerMain({ outDir, scenario }) {
       : [];
     const loggerPath = join(sandboxRoot, 'userData', 'wendao.log');
     const logger = existsSync(loggerPath) ? readFileSync(loggerPath, 'utf8') : '';
-    const judged = judgeScenario(name, { run: { code: run.code, timedOut: run.timedOut }, events, logger });
+    const judged = judgeScenario(name, { run: { code: run.code, timedOut: run.timedOut }, events, logger, reloadLimit });
     const result = {
       name,
       passed: judged.passed,
@@ -321,15 +324,17 @@ async function runnerMain({ outDir, scenario }) {
 /**
  * 场景判定口径。分级标注在此收口：realRendererDeaths 只计真实死亡 reason，
  * forcefullyCrashRendererCalls 只计真崩溃调用，injectedGoneEvents 只计注入事件。
- * reload 口径与 main.ts 日志同源：`→ reload <n>/3`（分母 = RELOAD_LIMIT，改上限须同步本表）。
+ * reload 口径与 main.ts 日志同源：`→ reload <n>/<RELOAD_LIMIT>`，分母由 runner 从编译产物
+ * 读取传入（self-test 走缺省 3）；expectedAttempts 表与各场景的崩溃次数设计仍钉当前
+ * RELOAD_LIMIT=3 的行为——改重载上限须同步重拟场景脚本与期望表，不能只改正则。
  */
-export function judgeScenario(name, { run, events, logger }) {
+export function judgeScenario(name, { run, events, logger, reloadLimit = 3 }) {
   const dialogs = events.filter((event) => event.type === 'dialog-recorded-not-displayed');
   const crashCalls = events.filter((event) => event.type === 'forcefullyCrashRenderer-call');
   const gone = events.filter((event) => event.type === 'render-process-gone');
   const realGone = gone.filter((event) => ['crashed', 'killed', 'abnormal-exit', 'oom'].includes(event.details?.reason));
   const failures = events.filter((event) => event.type === 'harness-error' || (event.type === 'assert' && !event.passed));
-  const reloadAttempts = [...logger.matchAll(/→ reload (\d+)\/3/g)].map((match) => Number(match[1]));
+  const reloadAttempts = [...logger.matchAll(new RegExp(`→ reload (\\d+)\\/${reloadLimit}`, 'g'))].map((match) => Number(match[1]));
   const expectedAttempts = {
     'crash-loop': [1, 2, 3],
     'initial-death': [1],
