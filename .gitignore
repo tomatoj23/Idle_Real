@@ -9,3 +9,7 @@ release/
 .playwright-cli/
 *.lnk
 .zcodeignore
+# Qoder 侧 harness 落点，本机件不入库：.qoder-cn/ 内是 scripts/hooks 守卫的本机适配副本（会随原件漂移），
+# .qoder/ 目前只放了同一份钩子声明（等重启后查明 CN 构建真正读哪个目录，死的那份即删）
+.qoder-cn/
+.qoder/
