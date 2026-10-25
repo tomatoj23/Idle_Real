@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "TextsSection",
+  "title": "界面文案",
   "description": "content 包 texts 节（#019 批 2；#26 扩壳层文案）：系统展示文案 + 壳层文案。协议 code 本体归引擎（不在内容里定义新 code），texts 基础键只承载引擎侧展示文案；code 未命中时引擎按键名回显降级（ADR-016 裁决 ④ 防御路径）。shell 子节承载游戏壳的全部题材文案（#26，ADR-017 裁决 9：外壳文案归 content，壳零题材字符串），模板槽 {slot} 由壳按语境填入，缺键回显键名。",
   "type": "object",
   "required": ["basicName", "reject", "shell"],
@@ -8,12 +8,14 @@
   "properties": {
     "basicName": {
       "type": "string",
+      "title": "基础动作名",
       "minLength": 1,
       "maxLength": 18,
       "description": "无佩戴武器时的兵刃展示名（makeAttackText weaponName 槽兜底值）；上限按非 CJK 等义文本放宽（#027）"
     },
     "reject": {
       "type": "object",
+      "title": "拒绝文案",
       "minProperties": 1,
       "additionalProperties": false,
       "patternProperties": {
@@ -24,7 +26,8 @@
       "description": "reject 展示文案：动作协议键 → 理由 code → 文案模板；'*' 为跨动作兜底键（bad-payload/unknown-action 等通用文案），命中序 = 精确动作优先、'*' 次之、键名回显殿后。模板槽位 {level}/{activity}/{item}/{owned}/{cost}/{gold}/{daoYun}/{need}/{xp} 由引擎按协议语境填入（rebirth:perform 的 no-progress 带 {need}/{xp}，rebirth-locked 带 {daoYun}；talent:buy 的 no-daoyun 带 {cost}/{daoYun}；dungeon:enter 的 locked 带 {daoYun}、no-key 带 {item}，#7；gear:reforge 的 no-shard 带 {cost}/{owned}，#14）"
     },
     "shell": {
-      "$ref": "#/definitions/shellTexts"
+      "$ref": "#/definitions/shellTexts",
+      "title": "壳层文案"
     }
   },
   "definitions": {
@@ -69,6 +72,7 @@
         },
         "percent": {
           "type": "boolean",
+          "title": "比例",
           "description": "量纲标记（#26 票评，循 ADR-016 裁决 ④ 显式 bool 先例）：true = 百分比量纲，展示值后缀 %；缺省 = 点数量纲。壳零量纲特判"
         }
       },
@@ -93,7 +97,7 @@
           "additionalProperties": false,
           "properties": {
             "sigil": { "$ref": "#/definitions/glyph" },
-            "name": { "type": "string", "minLength": 1, "maxLength": 20, "description": "游戏名：顶栏品牌与页标题（document.title）" },
+            "name": { "type": "string", "title": "名称", "minLength": 1, "maxLength": 20, "description": "游戏名：顶栏品牌与页标题（document.title）" },
             "locale": { "type": "string", "pattern": "^[a-z]{2}(-[A-Z]{2})?$", "description": "展示 locale：数字千分位格式化与文档 lang" },
             "bootError": { "$ref": "#/definitions/template", "description": "启动失败兜底页模板；槽位 {message}" }
           }
@@ -116,13 +120,13 @@
           "required": ["skills", "craft", "combat", "bag", "shop", "rebirth", "talents", "dungeon", "achievements", "journal"],
           "additionalProperties": false,
           "properties": {
-            "skills": { "$ref": "#/definitions/line" },
+            "skills": { "$ref": "#/definitions/line", "title": "所属技艺", "x-xref": "skills" },
             "craft": { "$ref": "#/definitions/line" },
-            "combat": { "$ref": "#/definitions/line" },
+            "combat": { "$ref": "#/definitions/line", "title": "战斗参数" },
             "bag": { "$ref": "#/definitions/line" },
             "shop": { "$ref": "#/definitions/line" },
             "rebirth": { "$ref": "#/definitions/line", "description": "转生页签（#6；包无 rebirth 节时壳不渲染该页签）" },
-            "talents": { "$ref": "#/definitions/line", "description": "天赋页签（#6；同上）" },
+            "talents": { "$ref": "#/definitions/line", "title": "天赋树", "description": "天赋页签（#6；同上）" },
             "dungeon": { "$ref": "#/definitions/line", "description": "秘境页签（#7；包无 dungeons 节时壳不渲染该页签）" },
             "achievements": { "$ref": "#/definitions/line", "description": "成就页签（#9；包无 achievements 节时壳不渲染该页签）" },
             "journal": { "$ref": "#/definitions/line", "description": "修行录页签（#33，随档记录页）" }
@@ -148,7 +152,7 @@
           "required": ["level", "seconds", "minute", "hourMinute"],
           "additionalProperties": false,
           "properties": {
-            "level": { "$ref": "#/definitions/template", "description": "层级读数模板；槽位 {v}" },
+            "level": { "$ref": "#/definitions/template", "title": "层数", "description": "层级读数模板；槽位 {v}" },
             "seconds": { "$ref": "#/definitions/template", "description": "秒时长模板；槽位 {v}" },
             "minute": { "$ref": "#/definitions/template", "description": "分钟时长模板；槽位 {m}" },
             "hourMinute": { "$ref": "#/definitions/template", "description": "时分时长模板；槽位 {h}/{m}" }
@@ -160,7 +164,7 @@
           "additionalProperties": false,
           "properties": {
             "buff": { "$ref": "#/definitions/glyph", "description": "增益条物品缺省图标字" },
-            "gear": { "$ref": "#/definitions/glyph", "description": "装备卡物品缺省图标字" },
+            "gear": { "$ref": "#/definitions/glyph", "title": "装备参数", "description": "装备卡物品缺省图标字" },
             "unknown": { "$ref": "#/definitions/glyph", "description": "未知物品缺省图标字" }
           }
         },
@@ -252,6 +256,8 @@
           "properties": {
             "skills": {
               "type": "object",
+              "title": "所属技艺",
+              "x-xref": "skills",
               "required": ["empty", "expSub", "expMax", "actNow", "idle", "stopBtn", "running", "byproduct", "actMeta", "startBtn", "realmLine"],
               "additionalProperties": false,
               "properties": {
@@ -262,7 +268,7 @@
                 "idle": { "$ref": "#/definitions/template", "description": "未修行空态（无槽位）" },
                 "stopBtn": { "$ref": "#/definitions/template", "description": "收功按钮（无槽位）" },
                 "running": { "$ref": "#/definitions/template", "description": "进行中徽标（无槽位）" },
-                "byproduct": { "$ref": "#/definitions/template", "description": "副产出预览；槽位 {icon}/{name}/{chance}" },
+                "byproduct": { "$ref": "#/definitions/template", "title": "副产出", "description": "副产出预览；槽位 {icon}/{name}/{chance}" },
                 "actMeta": { "$ref": "#/definitions/template", "description": "活动元信息行；槽位 {interval}/{exp}/{level}" },
                 "startBtn": { "$ref": "#/definitions/template", "description": "开始按钮（无槽位）" },
                 "realmLine": { "$ref": "#/definitions/template", "description": "主页境界区行（#6 主页重做 + B2 词表收编）；槽位 {realm}/{rebirths}；包无 rebirth 节或境界词表时壳按缺省降级（realm 空、次数 0）" }
@@ -283,7 +289,7 @@
                 "stopBtn": { "$ref": "#/definitions/template", "description": "熄炉按钮（无槽位）" },
                 "running": { "$ref": "#/definitions/template", "description": "进行中徽标（无槽位）" },
                 "startBtn": { "$ref": "#/definitions/template", "description": "开炉按钮（无槽位）" },
-                "successRate": { "$ref": "#/definitions/template", "description": "成功率行（#5）；槽位 {rate}（数值来自引擎 craftSuccessRateOf × 100，量纲 %）" },
+                "successRate": { "$ref": "#/definitions/template", "title": "成功率", "description": "成功率行（#5）；槽位 {rate}（数值来自引擎 craftSuccessRateOf × 100，量纲 %）" },
                 "matRow": { "$ref": "#/definitions/template", "description": "材料行（#5）；槽位 {name}/{have}/{need}（着色由壳按 craftMissingOf 结果驱动）" },
                 "recipeMeta": { "$ref": "#/definitions/template", "description": "配方元信息行（#5）；槽位 {interval}/{exp}/{level}" },
                 "autoNone": { "$ref": "#/definitions/line", "description": "配方自动化三态选项·不处理（#35，缺省）" },
@@ -294,6 +300,7 @@
             },
             "combat": {
               "type": "object",
+              "title": "战斗参数",
               "required": ["title", "subtitle", "enemyMissing", "resting", "enemyHp", "selfStats", "fleeBtn", "autoFightOn", "autoFightOff", "autoEatOn", "autoEatOff", "noConsumables", "enemyStats", "enemyGold", "dropsSuffix", "fightBtn", "expSub", "engagedBadge", "autoNone", "autoSell", "autoSmelt", "autoCap"],
               "additionalProperties": false,
               "properties": {
@@ -361,7 +368,7 @@
               "properties": {
                 "title": { "$ref": "#/definitions/line" },
                 "subtitle": { "$ref": "#/definitions/template", "description": "坊市副标题（无槽位）" },
-                "price": { "$ref": "#/definitions/template", "description": "售价行；槽位 {price}" },
+                "price": { "$ref": "#/definitions/template", "title": "售价", "description": "售价行；槽位 {price}" },
                 "owned": { "$ref": "#/definitions/template", "description": "持有数行；槽位 {count}" },
                 "buyBtn": { "$ref": "#/definitions/template", "description": "买一按钮（无槽位）" }
               }
@@ -406,6 +413,7 @@
             },
             "talents": {
               "type": "object",
+              "title": "天赋树",
               "required": ["title", "subtitle", "empty", "costRow", "needDaoYun", "needPrereq", "owned", "buyBtn"],
               "additionalProperties": false,
               "description": "道韵天赋树页（#6）：节点名/图标/描述/消耗全部来自 rebirth.talents（树数据 100% content），壳只承载结构性文案",

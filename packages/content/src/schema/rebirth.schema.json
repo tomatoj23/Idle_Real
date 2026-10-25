@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "RebirthSection",
+  "title": "转生",
   "description": "content 包 rebirth 节（#6 转生系统）：兵解重修的重置/保留清单、道韵公式、天赋树、解锁表与境界词表。本节在包级校验中可选：省略 = 该题材无转生玩法（引擎零降级路径，壳不渲染转生页签）。重置/保留清单键域为引擎注册表闭集（schema 只钉字符串形态，键域合法性由语义校验对照注册表收口，#021/#25 先例）：reset 键由引擎逐键解释重置语义，keep 键由引擎绑定保留语义（gear 保留时佩戴表与 uid 序列器随动）；两清单均未登记的资产键默认保留（兵解不吞资产，未来新键安全）。道韵公式形状归引擎机制（floor(base + coef × 总修为^exp)），系数全部来自本节 formula（引擎基线 + 覆盖，#020 同款分策）。",
   "type": "object",
   "required": ["reset", "keep", "formula", "talents"],
@@ -8,17 +8,20 @@
   "properties": {
     "reset": {
       "type": "array",
+      "title": "重置清单",
       "minItems": 1,
       "description": "重置集：兵解时清零的资产键。键域 = 引擎注册表闭集（skills 修为归零 / items 乾坤袋清空 / gold 灵石清零 / buffs 消耗品增益清空 / lastEncounter 同对手对照清空），schema 只钉字符串形态，键域合法性由语义校验对照注册表收口（#021/#25 先例：引用合法性在语义层，坏键加载期拒绝）；瞬态（活动/战斗/气血）由引擎一律清空回满，不进清单",
       "items": { "type": "string", "minLength": 1 }
     },
     "keep": {
       "type": "array",
+      "title": "保留清单",
       "description": "保留集：兵解时保留的资产键。键域 = 引擎注册表闭集（gear = 装备实例仓库，佩戴表与 uid 序列器随动保留），键域合法性由语义校验收口（同上）；未登记的资产键默认保留",
       "items": { "type": "string", "minLength": 1 }
     },
     "formula": {
       "type": "object",
+      "title": "兵解公式",
       "additionalProperties": false,
       "description": "道韵公式参数（#020 同款：缺省字段逐项回落引擎基线）：入账 = floor(base + coef × 总修为^exp)，总修为 = 全技艺当前累计修为之和；兵解门槛 = 总修为 ≥ minProgress",
       "properties": {
@@ -34,6 +37,7 @@
         },
         "exp": {
           "type": "number",
+          "title": "经验",
           "minimum": 1,
           "description": "修为指数（缺省 1）"
         },
@@ -46,6 +50,7 @@
     },
     "talents": {
       "type": "array",
+      "title": "天赋树",
       "description": "天赋树节点（100% 来自 content：换包换整棵树）；节点一次点亮（state.talents 按 id 稳定引用，ADR-015），效果 = 引擎标准修饰符走 ADR-011 聚合管线（禁绕管直改）；生效须引擎消费点（docs/agents/content.md stat 消费点注册表）",
       "items": {
         "type": "object",
@@ -55,23 +60,27 @@
         "properties": {
           "id": {
             "type": "string",
+            "title": "标识",
             "pattern": "^[a-z][a-zA-Z0-9_]*$",
             "description": "节点 id：存档键（state.talents），一经发布不可变；id 去重（语义检查）"
           },
           "name": {
             "type": "string",
+            "title": "名称",
             "minLength": 1,
             "maxLength": 18,
             "description": "节点名（树数据归 content，壳零题材字符串）；上限按非 CJK 等义文本放宽（#027 先例）"
           },
           "icon": {
             "type": "string",
+            "title": "图标",
             "minLength": 1,
             "maxLength": 2,
             "description": "单字图标（可选）"
           },
           "description": {
             "type": "string",
+            "title": "描述",
             "minLength": 1,
             "maxLength": 60,
             "description": "节点描述（可选；效果数值的题材表述）"
@@ -83,6 +92,7 @@
           },
           "requires": {
             "type": "array",
+            "title": "前置节点",
             "description": "前置节点 id 列表：全部点亮才可购买（语义校验 xref + 查环）",
             "items": {
               "type": "string",
@@ -91,6 +101,7 @@
           },
           "effects": {
             "type": "array",
+            "title": "效果",
             "description": "效果修饰符组：点亮后常驻产出，走引擎聚合管线（来源 kind=talent）",
             "items": { "$ref": "#/definitions/modifier" }
           }
@@ -99,6 +110,7 @@
     },
     "unlocks": {
       "type": "array",
+      "title": "解锁表",
       "description": "解锁表：道韵门槛（按累计道韵 daoYunEarned 判定，只增不减——花掉的道韵不回锁）解锁新内容；targets 引用合法性由语义校验 xref，同目标重复登记拒绝",
       "items": {
         "type": "object",
@@ -107,6 +119,7 @@
         "properties": {
           "requires": {
             "type": "object",
+            "title": "前置节点",
             "required": ["daoYun"],
             "additionalProperties": false,
             "properties": {
@@ -119,11 +132,15 @@
           },
           "enemies": {
             "type": "array",
+            "title": "敌人",
+            "x-xref": "enemies",
             "description": "解锁的敌人 id 列表（开战门控 + 壳锁定态展示）",
             "items": { "type": "string", "minLength": 1 }
           },
           "skills": {
             "type": "array",
+            "title": "所属技艺",
+            "x-xref": "skills",
             "description": "解锁的技艺 id 列表（activity:start 门控 + 壳锁定态展示）",
             "items": { "type": "string", "minLength": 1 }
           }
@@ -132,6 +149,7 @@
     },
     "realms": {
       "type": "array",
+      "title": "境界词表",
       "minItems": 1,
       "description": "境界词表（B2 功能缺口收编，旧版 js/data.js REALMS）：按斗法层数映射称号，取 level ≤ 斗法层数的最后一档（无命中回退第一档）；词表归 content（ADR-016 词表零默认延伸），同层数重复拒绝（语义检查）",
       "items": {
@@ -141,11 +159,13 @@
         "properties": {
           "level": {
             "type": "integer",
+            "title": "层数",
             "minimum": 1,
             "description": "达成境界所需斗法层数"
           },
           "name": {
             "type": "string",
+            "title": "名称",
             "minLength": 1,
             "maxLength": 18,
             "description": "境界称号；上限按非 CJK 等义文本放宽（#027 先例，英语题材如 Apprentice）"
@@ -163,30 +183,36 @@
       "properties": {
         "stat": {
           "type": "string",
+          "title": "属性键",
           "pattern": "^[a-z][a-zA-Z0-9_]*$",
           "description": "目标属性 id；生效须引擎消费点（docs/agents/content.md stat 消费点注册表：atk/def/hp/crit/gatherXp/gatherSpeed/xpMult/offlineCap）"
         },
         "zone": {
+          "title": "聚合区",
           "enum": ["flat", "addPct", "mult"],
           "description": "聚合区：flat 固定值 / addPct 加法百分比 / mult 乘法区"
         },
-        "value": { "type": "number", "description": "数值；乘法区须 > 0、加法%区 ≥ −100（语义检查）" },
+        "value": { "type": "number", "title": "数值", "description": "数值；乘法区须 > 0、加法%区 ≥ −100（语义检查）" },
         "condition": { "$ref": "#/definitions/condition" }
       }
     },
     "condition": {
       "type": "object",
+      "title": "条件",
       "minProperties": 1,
       "additionalProperties": false,
       "description": "定向条件：至少声明一维，命中才生效（天赋效果一般无条件——常驻全局）",
       "properties": {
         "element": {
           "type": "string",
+          "title": "系别",
+          "x-xref": "elements",
           "pattern": "^[a-z][a-zA-Z0-9_]*$",
           "description": "系别键（#25 键域开放）：须在包 elements 节注册（语义校验 xref）"
         },
         "moveId": {
           "type": "string",
+          "title": "招式键",
           "minLength": 1,
           "description": "招式命中（定向强化）：战斗侧语境匹配"
         }

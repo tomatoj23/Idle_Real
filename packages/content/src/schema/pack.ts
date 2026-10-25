@@ -23,7 +23,8 @@
  *    - 配方材料、产出、所属技艺，活动产出/副产出，敌人掉落，坊市
  *      货架的物品 id 必须存在（旧版 data.js 曾因材料 id 打错而埋雷，
  *      教训固化为校验）；
- *    - 物品按类型的字段形态（equip 须 slot+bonuses、consumable 须
+ *    - 物品按类型的字段形态（equip 的 slot+bonuses 结构必填已升 schema
+ *      分支 required，#45 对齐 blank 先例；语义层只管 consumable 须
  *      effect/heal；器胚胚纹与铭纹各阶的修饰符区约束：乘法区 > 0、
  *      加法%区 ≥ −100；floorRange/tierRange 方向性 min ≤ max）；
  *    - 槽位数据化（#16）：equip/blank 的 slot 须在 config.slots 有定义
@@ -485,14 +486,7 @@ function checkItemShapes(
     if ((item.type === 'equip' || item.type === 'blank') && item.slot !== undefined && weaponSlotIds.has(item.slot)) {
       weaponIds.add(item.id);
     }
-    if (item.type === 'equip') {
-      if (item.slot === undefined) {
-        errors.push({ path: at('slot'), keyword: 'shape', message: 'equip 类物品缺少 slot' });
-      }
-      if (item.bonuses === undefined) {
-        errors.push({ path: at('bonuses'), keyword: 'shape', message: 'equip 类物品缺少 bonuses' });
-      }
-    } else if (item.type === 'consumable') {
+    if (item.type === 'consumable') {
       if (item.effect === undefined && item.heal === undefined) {
         errors.push({
           path: at('effect'),

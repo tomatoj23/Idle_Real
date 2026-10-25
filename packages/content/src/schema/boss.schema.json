@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "BossesSection",
+  "title": "Boss",
   "description": "content 包 bosses 节（#8，可选节；#30 扩召唤）：Boss 战阶段脚本。每条指向 enemies 节的一个敌人 id；phases 为递进脚本（血量比例 ≤ threshold 进入该阶段，全数组严格递减由语义校验保证）；moveKey 变招引用 combatText.moves 注册键（xref + 注册表放行）；narration 为阶段转场叙事池（{enemy}/{phase} 槽）；summons 为阶段召唤脚本（入场时按池权重掷 count 个召唤物，enemy xref enemies，行内 enemy 去重由语义校验保证）；drops 为专属掉落表（叠于 enemy.drops 之上）。",
   "type": "array",
   "items": { "$ref": "#/definitions/boss" },
@@ -12,16 +12,20 @@
       "properties": {
         "enemy": {
           "type": "string",
+          "title": "敌人",
+          "x-xref": "enemies",
           "pattern": "^[a-z][a-z0-9_]*$",
           "description": "Boss 敌人 id（语义校验 xref enemies；每个敌人至多一条 Boss 定义）"
         },
         "phases": {
           "type": "array",
+          "title": "阶段",
           "minItems": 1,
           "items": { "$ref": "#/definitions/phase" }
         },
         "drops": {
           "type": "array",
+          "title": "掉落表",
           "description": "专属掉落表：击杀时与 enemy.drops 同机制叠加掷点",
           "items": { "$ref": "#/definitions/drop" }
         }
@@ -34,58 +38,69 @@
       "properties": {
         "threshold": {
           "type": "number",
+          "title": "血量阈值",
           "exclusiveMinimum": 0,
           "exclusiveMaximum": 1,
           "description": "血量比例阈值（≤ 即进入该阶段）；全数组须严格递减（语义校验，递进顺序）"
         },
         "name": {
           "type": "string",
+          "title": "名称",
           "minLength": 1,
           "maxLength": 12,
           "description": "阶段名（boss:phase 事件载荷 / 壳徽标展示）"
         },
         "mods": {
           "type": "object",
+          "title": "属性修正",
           "minProperties": 1,
           "additionalProperties": false,
           "description": "阶段属性修正（乘区；键钉 atk/def/attackInterval——阶段是战斗过程修正，hp/gold/exp 不随阶段投影）",
           "properties": {
-            "atk": { "type": "number", "exclusiveMinimum": 0 },
-            "def": { "type": "number", "exclusiveMinimum": 0 },
-            "attackInterval": { "type": "number", "exclusiveMinimum": 0 }
+            "atk": { "type": "number", "title": "攻击", "exclusiveMinimum": 0 },
+            "def": { "type": "number", "title": "防御", "exclusiveMinimum": 0 },
+            "attackInterval": { "type": "number", "title": "攻击间隔", "exclusiveMinimum": 0 }
           }
         },
         "moveKey": {
           "type": "string",
+          "title": "变招",
+          "x-xref": "movesKeys",
           "pattern": "^[a-z][a-z0-9_]*$",
           "description": "变招：该阶段敌方出招名改用此 combatText.moves 注册键（语义校验 xref + 注册表放行）"
         },
         "narration": {
           "type": "array",
+          "title": "转场叙事",
           "minItems": 1,
           "items": { "type": "string", "minLength": 1, "maxLength": 80 },
           "description": "阶段转场叙事池（{enemy}/{phase} 槽，进入该阶段时由引擎抽取一条播报 combat-note）"
         },
         "summons": {
           "type": "object",
+          "title": "召唤脚本",
           "required": ["count", "enemies"],
           "additionalProperties": false,
           "description": "阶段召唤脚本（#30，可选）：进入该阶段时逐槽从 enemies 池按权重抽签召唤 count 个（多敌战斗状态机；集火/清场语义归引擎）",
           "properties": {
             "count": {
               "type": "integer",
+              "title": "数量",
               "minimum": 1,
               "maximum": 24,
               "description": "召唤数量（入场一次性召唤，本阶段不重复触发）"
             },
             "enemies": {
               "type": "array",
+              "title": "敌人",
+              "x-xref": "enemies",
               "minItems": 1,
               "items": { "$ref": "#/definitions/summonEntry" },
               "description": "召唤池（≥1 行；行内 enemy 重复由语义校验拒绝——投影按敌 id 定位，重复即歧义）"
             },
             "narration": {
               "type": "array",
+              "title": "转场叙事",
               "minItems": 1,
               "items": { "type": "string", "minLength": 1, "maxLength": 80 },
               "description": "召唤转场叙事池（{enemy}/{phase} 槽，召唤入场时由引擎抽取一条播报 combat-note；缺省 = 不播报）"
@@ -99,8 +114,8 @@
       "required": ["item", "chance"],
       "additionalProperties": false,
       "properties": {
-        "item": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "description": "物品 id（语义校验 xref items）" },
-        "chance": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "description": "专属掉落掷定概率，(0,1]；0 = 死掉落，schema 关卡拒绝（审计修复⑤）" }
+        "item": { "type": "string", "title": "物品", "x-xref": "items", "pattern": "^[a-z][a-z0-9_]*$", "description": "物品 id（语义校验 xref items）" },
+        "chance": { "type": "number", "title": "概率", "exclusiveMinimum": 0, "maximum": 1, "description": "专属掉落掷定概率，(0,1]；0 = 死掉落，schema 关卡拒绝（审计修复⑤）" }
       }
     },
     "summonEntry": {
@@ -110,23 +125,27 @@
       "properties": {
         "enemy": {
           "type": "string",
+          "title": "敌人",
+          "x-xref": "enemies",
           "pattern": "^[a-z][a-z0-9_]*$",
           "description": "召唤物敌人 id（语义校验 xref enemies；行内去重同上）"
         },
         "weight": {
           "type": "number",
+          "title": "权重",
           "exclusiveMinimum": 0,
           "description": "抽签权重（正数；按占比归一化，缺省 = 1）"
         },
         "mult": {
           "type": "object",
+          "title": "属性修正",
           "minProperties": 1,
           "additionalProperties": false,
           "description": "召唤物属性缩放（乘区；键钉 hp/atk/def——召唤物是战斗过程实体，gold/exp/drops 不投影，无收益结算）",
           "properties": {
-            "hp": { "type": "number", "exclusiveMinimum": 0 },
-            "atk": { "type": "number", "exclusiveMinimum": 0 },
-            "def": { "type": "number", "exclusiveMinimum": 0 }
+            "hp": { "type": "number", "title": "血量", "exclusiveMinimum": 0 },
+            "atk": { "type": "number", "title": "攻击", "exclusiveMinimum": 0 },
+            "def": { "type": "number", "title": "防御", "exclusiveMinimum": 0 }
           }
         }
       }

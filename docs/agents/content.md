@@ -35,19 +35,37 @@ content 包的字段级约定。**schema 变更三处同步纪律（ADR-015）**
 | `bosses` | **否** | boss.schema.json | Boss 战阶段脚本（#8）：敌人条目 + 阶段数组（阈值/阶段名/属性修正/变招/叙事/**召唤脚本**）+ 专属掉落表；省略 = 无 Boss 玩法（全部敌人按普通敌人战斗，零降级路径） |
 | `achievements` | **否** | achievements.schema.json | 成就表（#9）：条件（阈值型/布尔型/反向阈值）+ 奖励（gold/daoYun/items）+ 隐藏；判定只读引擎统计 snapshot；省略 = 无成就玩法（壳不渲染成就页签） |
 
+## 编辑器显示关键字（#45，schema 展示通道——D4 登记，不走三处同步全流程）
+
+编辑器表单的字段级展示知识全部由 schema 关键字承载（labels/xref/defaults 三张影子表
+已退役）。三个关键字都是**纯展示通道，校验器与引擎零消费**；只加关键字、不改
+形态/required 的变更不走 ADR-015 三处同步全流程，在本节登记约定即可：
+
+| 关键字 | 位置 | 语义 | 消费方 |
+|---|---|---|---|
+| `title` | 节根 / 字段属性 / oneOf 分支定义 | 中文展示名（节导航与标题、字段标签、分支形态名）；缺省回显原始键名（零兜底，不查第二份表） | editor model/render/main/panel |
+| `x-xref` | 字段属性或其 $ref 目标定义 | 跨引用域标注（items/skills/enemies/elements/verbsKeys/movesKeys/slotIds），渲染 datalist 候选下拉；数组条目继承容器标注 | editor core/xref.ts 求值 |
+| `x-llm` | 节根或节内一层子对象 | LLM 可生成旗标，值 = 生成目标 id（GenKind）；新增旗标须同步 editor prompts.ts 任务模板（genKinds 同步测试钉住） | editor llm/prompts.ts 扫描 |
+
+约定：`title` 标识「字段」（属性级优先于 $ref 目标定义级）；新内容节的 schema
+从第一天就带 title/x-xref，编辑器零改动跟随（form-model.test.ts 有只写 schema
+的深度证明测试）。
+
 ## items 五形态（#16 起 oneOf 分流，判别式 = `type`）
 
 | type | 语义 | 分支必填 | 分支专有可选 |
 |---|---|---|---|
 | `mat` | 材料 | 公共字段（id/name/icon/type/sell） | — |
 | `consumable` | 消耗品（丹药等） | 公共字段 | effect、heal（至少其一，语义检查） |
-| `equip` | 装备 | 公共字段 | slot、bonuses（须都有，语义检查）、verbStyle（#021 批 4） |
+| `equip` | 装备 | 公共字段 + slot + bonuses（#45 升 schema required） | verbStyle（#021 批 4）、element（#15） |
 | `blank` | **器胚**（装备底材模板） | 公共字段 + slot + floorRange + tierRange | preferredTags、inherentModifiers、element（#15） |
 | `inscription` | **铭纹**（装备词缀模板） | 公共字段 + tiers | feature、tags |
 
 - 跨形态字段由 oneOf 分支 `additionalProperties:false` 在 schema 关卡拒绝；
-  分支内规则（equip 缺 bonuses、consumable 无 effect/heal、区间方向、修饰符区约束）
-  由 `validateContentPack` 语义检查补全（ADR-010 分工）。
+  分支内规则（consumable 无 effect/heal、区间方向、修饰符区约束）
+  由 `validateContentPack` 语义检查补全（ADR-010 分工）；equip 的 slot+bonuses
+  结构存在性已升 schema 分支 required（#45 对齐 blank 先例），语义层只管其
+  内容（slot xref 槽位表、bonuses 键域/数值）。
 - **`element`（#15，equip/blank 分支可选）**：系别键，须在 elements 节注册（xref）。
   引擎只消费**武器槽**物品的 element——佩戴后玩家攻击携带该系（机制签名/亲和度/
   风味句路由的攻方来源）；其余槽位为未来留门，不配系（见下「系别机制签名」）。

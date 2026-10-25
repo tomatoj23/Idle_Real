@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "ConfigSection",
+  "title": "配置",
   "description": "content 包 config 节：全局配置。槽位数据化起步（issue #16），#13 起槽位列表驱动引擎遍历（加/减槽引擎零改动）；#020 起承载玩法参数子节（combat/progression/affix/crafting/gear，ADR-016 裁决 ① 分策：数值参数引擎内置基线 + config 覆盖，子节与字段全可选，缺省 = 引擎基线）；#61 边界自查增开 offline/power 两子节（离线门槛/上限基线、战力合成权重）。本节在包级校验中可选：省略 = 无槽位数据且参数走引擎基线。",
   "type": "object",
   "required": ["slots"],
@@ -8,6 +8,7 @@
   "properties": {
     "slots": {
       "type": "array",
+      "title": "槽位表",
       "minItems": 1,
       "description": "佩戴槽位列表：法器/护体/灵饰起步，为法宝/外袍留门；数组顺序即槽位顺序，id 需唯一（语义校验）",
       "items": {
@@ -18,6 +19,7 @@
         "properties": {
           "id": {
             "type": "string",
+            "title": "标识",
             "pattern": "^[a-z][a-z0-9_]*$",
             "description": "槽位 id：items 的 slot 字段引用它"
           },
@@ -28,12 +30,14 @@
           },
           "name": {
             "type": "string",
+            "title": "名称",
             "minLength": 1,
             "maxLength": 6,
             "description": "显示名（中文，如 法器/护体/灵饰）"
           },
           "icon": {
             "type": "string",
+            "title": "图标",
             "minLength": 1,
             "maxLength": 2,
             "description": "单字图标（汉字，可选）"
@@ -43,6 +47,7 @@
     },
     "combat": {
       "type": "object",
+      "title": "战斗参数",
       "additionalProperties": false,
       "description": "战斗机制与属性基线参数（#020）。毫秒/百分点计量；缺省 = 引擎基线：间隔 2200、减伤 K 120、波动 ±10%、暴击 ×1.6 / 上限 75、危血 15%、开战门控与败北回血 30%、自动嗑丹 50%、休整 1500ms、门控偏移 +2、伤害档 0.95/1.05/1.5、属性 攻 8+3·层 / 防 2+1.2·层 / 暴 5、autoFight/autoEat 缺省 true",
       "properties": {
@@ -151,6 +156,7 @@
     },
     "progression": {
       "type": "object",
+      "title": "成长参数",
       "additionalProperties": false,
       "description": "修为曲线与气血映射（#020）。缺省 = 引擎基线：层数上限 99、升层修为 floor(10·L^1.8 + 15·L)、气血 100 + 12·层、脱战回血 4%/s",
       "properties": {
@@ -190,6 +196,7 @@
     },
     "affix": {
       "type": "object",
+      "title": "词条参数",
       "additionalProperties": false,
       "description": "装备随机词条机制参数（#020）。缺省 = 引擎基线：标尺 hp÷5 / crit×0.8 / 兜底 3、波动 ±20%",
       "properties": {
@@ -218,6 +225,7 @@
     },
     "crafting": {
       "type": "object",
+      "title": "炼制参数",
       "additionalProperties": false,
       "description": "炼制机制参数（#5）。缺省 = 引擎基线：成功率层加成 +0.004/层、成功率上限 0.99、失败修为返还 25%、稀有度偏置 0.0004/层。per-recipe 差异归 recipes[].successRate；「炼器必得」由 successRate: 1 表达（上限不击穿必得配方）",
       "properties": {
@@ -247,21 +255,26 @@
     },
     "gear": {
       "type": "object",
+      "title": "装备参数",
       "additionalProperties": false,
       "description": "装备构筑循环参数（#14）。缺省 = 引擎基线：重铸耗器屑 1、标签加权系数 1（权重 = 基础 × (1+匹配数×加成)）。shardItem 缺省 = 无器屑经济（熔炼/重铸拒绝 not-available，零降级路径）",
       "properties": {
         "shardItem": {
           "type": "string",
+          "title": "器屑物品",
+          "x-xref": "items",
           "pattern": "^[a-z][a-z0-9_]*$",
           "description": "器屑物品 id（熔炼产物/重铸消耗，语义校验 xref items 且须为 mat 类）；缺省 = 该包无熔炼/重铸玩法"
         },
         "reforgeCost": {
           "type": "integer",
+          "title": "重铸费用",
           "minimum": 0,
           "description": "单条铭纹重铸消耗（器屑数量）"
         },
         "tagWeightPerMatch": {
           "type": "number",
+          "title": "标签加权",
           "minimum": 0,
           "description": "标签加权系数：铭纹抽取权重 = 基础 × (1+匹配数×该值)，匹配数 = 器胚 preferredTags ∩ 铭纹 tags"
         }

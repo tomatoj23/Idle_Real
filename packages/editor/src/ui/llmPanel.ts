@@ -3,7 +3,7 @@
  * 候选勾选入包。生成/入包经 llm/pipeline，UI 只做编排与呈现。
  */
 
-import { GEN_KINDS, type GenKind } from '../llm/prompts.js';
+import { GEN_LABELS, genKinds, type GenKind } from '../llm/prompts.js';
 import { createFetchClient, type LlmClient } from '../llm/client.js';
 import { applyCandidates, generateCandidates, type Candidate } from '../llm/pipeline.js';
 import { loadLlmConfig, saveLlmConfig, type LlmConfig } from '../llm/config.js';
@@ -64,9 +64,11 @@ export function createLlmPanel(
   /* —— 生成区 —— */
   const kindSelect = document.createElement('select');
   kindSelect.className = 'input';
-  for (const entry of GEN_KINDS) {
-    kindSelect.append(optionEl(entry.kind, entry.label));
-  }  const countInput = document.createElement('input');
+  // 可生成目标从节 schema 的 x-llm 旗标发现（#45），展示名随模板同居 prompts。
+  for (const kind of genKinds()) {
+    kindSelect.append(optionEl(kind, GEN_LABELS[kind]));
+  }
+  const countInput = document.createElement('input');
   countInput.type = 'number';
   countInput.className = 'input input-inline';
   countInput.min = '1';

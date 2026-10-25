@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "GearDropsSection",
+  "title": "异宝掉落",
   "description": "content 包 gearDrops 节：异宝（妖物专属装备）掉落表。pool 引用的物品存在性、equip 类型与敌人 id 存在性由语义校验补全。",
   "type": "array",
   "items": { "$ref": "#/definitions/gearDrop" },
@@ -12,17 +12,22 @@
       "properties": {
         "enemy": {
           "type": "string",
+          "title": "敌人",
+          "x-xref": "enemies",
           "pattern": "^[a-z][a-z0-9_]*$",
           "description": "敌人 id"
         },
         "chance": {
           "type": "number",
+          "title": "概率",
           "exclusiveMinimum": 0,
           "maximum": 1,
           "description": "装备掉率，(0,1]；0 = 死掉落，schema 关卡拒绝（审计修复⑤）"
         },
         "pool": {
           "type": "array",
+          "title": "异宝池",
+          "x-xref": "items",
           "minItems": 1,
           "description": "异宝池：equip 类物品 id 列表",
           "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }

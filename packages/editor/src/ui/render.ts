@@ -11,8 +11,7 @@
 
 import { sectionSchemas, type JsonSchema } from '@wendao/content';
 import { skeletonOf, switchBranch } from '../core/defaults.js';
-import { SECTION_LABELS } from '../core/labels.js';
-import { buildFormNode, type ArrayNode, type FormNode, type ObjectNode, type OneOfNode } from '../core/model.js';
+import { buildFormNode, sectionTitle, type ArrayNode, type FormNode, type ObjectNode, type OneOfNode } from '../core/model.js';
 import type { EditorStore } from '../core/state.js';
 import { xrefOptions, type XrefTarget } from '../core/xref.js';
 
@@ -104,7 +103,7 @@ export function renderSection(
     return;
   }
   const value = store.state.pack[section];
-  const title = el('h2', 'section-title', `${SECTION_LABELS[section] ?? section}`);
+  const title = el('h2', 'section-title', sectionTitle(section));
   title.dataset.path = `/${section}`;
   container.append(title);
 

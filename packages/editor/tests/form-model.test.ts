@@ -216,3 +216,90 @@ describe('preserveFields：形态切换保留公共面', () => {
     expect(preserveFields({ tags: 'fire' }, { tags: [] })).toEqual({ tags: [] });
   });
 });
+
+/* ==================== #45 字段知识回迁 schema 通道 ==================== */
+
+describe('#45 字段级展示知识全部来自 schema 关键字', () => {
+  it('schema 属性无 title 时回显原始键名（D3 零兜底：标签表已退役，无第二份查找）', () => {
+    const schema: JsonSchema = {
+      type: 'object',
+      properties: {
+        named: { type: 'string', title: '有名字' },
+        unnamed: { type: 'string' },
+      },
+      required: ['named', 'unnamed'],
+      additionalProperties: false,
+    };
+    const node = buildFormNode(schema, schema, '', 'demo', true) as ObjectNode;
+    const byField = Object.fromEntries(node.fields.map((f) => [f.field, f]));
+    expect(byField['named']!.label).toBe('有名字');
+    expect(byField['unnamed']!.label).toBe('unnamed');
+  });
+
+  it('验收 2 深度证明：新增测试节只写 schema（title/x-xref），表单树自动携带中文标签与引用域——零 editor 代码/表改动', () => {
+    // 虚构新节「灵兽」：只写 schema，不经任何 editor 注册/字典。
+    const schema: JsonSchema = {
+      type: 'array',
+      title: '灵兽',
+      items: {
+        type: 'object',
+        required: ['id', 'name', 'masterItem'],
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', pattern: '^[a-z][a-z0-9_]*$' },
+          name: { type: 'string', title: '名称', minLength: 1 },
+          masterItem: { type: 'string', title: '本命物', 'x-xref': 'items' },
+        },
+      },
+    };
+    const node = buildFormNode(schema, schema, '', 'beasts', true) as ArrayNode;
+    // 节级 title 即导航/标题展示名（render/main/panel 直接读 schema.title）。
+    expect(schema.title).toBe('灵兽');
+    const item = node.item as ObjectNode;
+    const byField = Object.fromEntries(item.fields.map((f) => [f.field, f]));
+    expect(byField['name']!.label).toBe('名称');
+    expect(byField['masterItem']!.label).toBe('本命物');
+    expect(byField['masterItem']!.xref).toBe('items');
+    // 未写 title 的字段回显键名。
+    expect(byField['id']!.label).toBe('id');
+  });
+
+  it('x-xref 双读：$ref 目标定义声明生效，属性级声明优先', () => {
+    const schema: JsonSchema = {
+      type: 'object',
+      definitions: { itemRef: { type: 'string', 'x-xref': 'items' } },
+      properties: {
+        viaDef: { $ref: '#/definitions/itemRef' },
+        viaProp: { $ref: '#/definitions/itemRef', 'x-xref': 'skills' },
+      },
+      additionalProperties: false,
+    };
+    const node = buildFormNode(schema, schema, '', 'demo', true) as ObjectNode;
+    const byField = Object.fromEntries(node.fields.map((f) => [f.field, f]));
+    expect(byField['viaDef']!.xref).toBe('items');
+    expect(byField['viaProp']!.xref).toBe('skills');
+  });
+
+  it('数组条目继承容器 x-xref（pool 条目=物品引用，与旧字段名传播同形）', () => {
+    const schema: JsonSchema = {
+      type: 'object',
+      properties: {
+        pool: { type: 'array', 'x-xref': 'items', items: { type: 'string' } },
+      },
+      additionalProperties: false,
+    };
+    const node = buildFormNode(schema, schema, '', 'demo', true) as ObjectNode;
+    const pool = node.fields[0] as ArrayNode;
+    expect(pool.xref).toBe('items');
+    expect(pool.item.xref).toBe('items');
+  });
+
+  it('混合形态开放键值面：minProperties 驱动骨架占位键（equip.bonuses 过新 required）', () => {
+    const root = formOf('items') as ArrayNode;
+    const equip = branchSkeleton(root.item as OneOfNode, 'equip') as Record<string, unknown>;
+    expect(equip['slot']).toBe('placeholder');
+    expect(equip['bonuses']).toBeTruthy();
+    const result = validateContent([equip], sectionSchemas['items'] as JsonSchema);
+    expect(result.ok ? '' : JSON.stringify(result.errors)).toBe('');
+  });
+});

@@ -4,7 +4,7 @@
  */
 
 import { validateContentPack, type ContentError } from '@wendao/content';
-import { SECTION_LABELS } from '../core/labels.js';
+import { sectionTitle } from '../core/model.js';
 import type { EditorStore } from '../core/state.js';
 
 export interface ValidatePanel {
@@ -81,7 +81,7 @@ function errorGroups(
     block.className = 'validate-group';
     const head = document.createElement('div');
     head.className = 'validate-group-head';
-    head.textContent = `${SECTION_LABELS[section] ?? section}（${sectionErrors.length}）`;
+    head.textContent = `${sectionTitle(section)}（${sectionErrors.length}）`;
     block.append(head);
     for (const error of sectionErrors) {
       const item = document.createElement('button');

@@ -16,10 +16,14 @@ import { KEYWORD_MATRIX, discriminatorOf } from './keywords.js';
 
 /** 本校验器支持的 JSON Schema 关键字子集。 */
 export interface JsonSchema {
-  /** 节/字段展示名（校验器不消费；编辑器表单标签来源，#11）。 */
+  /** 节/字段展示名（校验器不消费；编辑器表单标签来源，#11/#45——字段中文标签已迁入）。 */
   readonly title?: string;
   /** 输入提示（校验器不消费；编辑器字段 tooltip，#11）。 */
   readonly description?: string;
+  /** 编辑器显示通道（#45，校验器不消费）：字段跨引用域（editor xref datalist 的候选池标注）。 */
+  readonly 'x-xref'?: string;
+  /** 编辑器显示通道（#45，校验器不消费）：LLM 可生成旗标，值 = 生成目标 id（GenKind）。 */
+  readonly 'x-llm'?: string;
   readonly type?: string | readonly string[];
   readonly properties?: Readonly<Record<string, JsonSchema>>;
   readonly required?: readonly string[];

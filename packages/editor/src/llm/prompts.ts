@@ -3,18 +3,45 @@
  * 模板注入当前包的实况上下文（动词池键域、可引用物品 id、槽位、系别、
  * 层数上限），约束 LLM 只产跨引用闭合的条目——生成的条目过不过关由
  * schema 校验判定（pipeline），提示词只是把过关率做高。
+ *
+ * 「哪些目标可生成」的旗标已迁入 schema 自定义关键字 `x-llm`（#45，值 =
+ * GenKind id：节根或节内子对象声明），genKinds() 从 sectionSchemas 扫描
+ * 发现；本模块只保留 GenKind 的任务模板与下拉展示名（提示词工程，非
+ * 字段知识）。schema 新声明旗标而模板缺失 → genKinds 同步测试红。
  */
 
+import { sectionSchemas, type JsonSchema } from '@wendao/content';
 import type { ChatMessage } from './client.js';
 
-/** 支持的生成目标（票面优先三类）。 */
+/** 支持的生成目标（任务模板的键域；可生成旗标在 schema x-llm 侧声明）。 */
 export type GenKind = 'enemies' | 'items' | 'verbs';
 
-export const GEN_KINDS: readonly { readonly kind: GenKind; readonly label: string }[] = [
-  { kind: 'enemies', label: '敌人（怪物条目）' },
-  { kind: 'items', label: '物品（材料/消耗品）' },
-  { kind: 'verbs', label: '战斗动词池（新风格）' },
-];
+/** 生成目标 → 下拉展示名（任务描述性文案，随模板同居本模块）。 */
+export const GEN_LABELS: Readonly<Record<GenKind, string>> = {
+  enemies: '敌人（怪物条目）',
+  items: '物品（材料/消耗品）',
+  verbs: '战斗动词池（新风格）',
+};
+
+/**
+ * 从节 schema 注册表扫描 x-llm 旗标（节根 + 节内一层子对象），返回可生成
+ * 目标 id 列表（按节注册表序）。旗标声明了模板域外的值 = 包 schema 与
+ * 编辑器模板漂移，同步测试大声红——此处不静默过滤。
+ */
+export function genKinds(): readonly GenKind[] {
+  const kinds: GenKind[] = [];
+  for (const schema of Object.values(sectionSchemas) as readonly JsonSchema[]) {
+    const roots = [schema, ...Object.values(schema.properties ?? {})];
+
+    for (const node of roots) {
+      const flag = node['x-llm'];
+      if (typeof flag === 'string') {
+        kinds.push(flag as GenKind);
+      }
+    }
+  }
+  return kinds;
+}
 
 /** 提示词注入的包实况上下文（由 pipeline 从当前包提取）。 */
 export interface PackContext {

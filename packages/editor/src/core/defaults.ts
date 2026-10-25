@@ -98,21 +98,22 @@ function objectSkeleton(node: ObjectNode): Record<string, unknown> {
       value[field.field] = skeletonOf(field);
     }
   }
+  // 混合形态的开放键值面（bonuses 等）：required 键之外还需满足
+  // minProperties 时补一个占位键（策略名经矩阵 dict 行读取，与纯 dict 同律）。
+  if (node.dict !== undefined && Object.keys(value).length === 0) {
+    const minProps = skeletonAttr<number>(node.dict, 'keyPlaceholder') ?? 0;
+    if (minProps > 0) {
+      value['key1'] = skeletonOf(node.dict.valueNode);
+    }
+  }
   return value;
 }
 
 /**
- * 分支级语义补丁：schema required 之外、语义校验（validateContentPack
- * 语义关卡）强制的字段——equip 的 slot 缺席会立刻报 shape 错，骨架直接
- * 给 config.slots 引用域占位值。
- */
-const BRANCH_EXTRA_FIELDS: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
-  equip: { slot: 'placeholder' },
-};
-
-/**
- * oneOf 分支骨架：目标分支骨架 + 判别字段写值 + 语义补丁字段。无匹配
- * 分支时回退首分支（校验面板兜底提示）。
+ * oneOf 分支骨架：目标分支骨架 + 判别字段写值。分支内 schema required
+ * 之外的字段一概不补（#45：equip 语义槽位补丁表随 required 升级退役，
+ * 结构必填全由 schema required 驱动 objectSkeleton 产出）。无匹配分支时
+ * 回退首分支（校验面板兜底提示）。
  */
 export function branchSkeleton(node: OneOfNode, discriminator: string): Record<string, unknown> {
   const branch =
@@ -122,11 +123,6 @@ export function branchSkeleton(node: OneOfNode, discriminator: string): Record<s
   if (typeof value === 'object' && value !== null && discriminator !== '') {
     const record = value as Record<string, unknown>;
     record['type'] = discriminator;
-    for (const [key, fieldValue] of Object.entries(BRANCH_EXTRA_FIELDS[discriminator] ?? {})) {
-      if (!(key in record)) {
-        record[key] = fieldValue;
-      }
-    }
     return record;
   }
   return { type: discriminator };

@@ -10,6 +10,10 @@
  *
  * FormNode 与具体包数据无关——同一节所有条目共享一棵树；值过滤
  * （可选字段是否渲染）是渲染层的事。
+ *
+ * 字段级展示知识（#45）全部来自 schema 关键字，编辑器零影子表：
+ * - 中文标签 = title（属性级优先，$ref 目标定义次之，都缺省回显字段名）；
+ * - 跨引用域 = x-xref（数组条目/oneOf 分支继承容器的标注——字典值不继承）。
  */
 
 import type {
@@ -20,8 +24,8 @@ import type {
   StringFormAttrs,
 } from '@wendao/content';
 import { discriminatorOf, formAttrsOf } from '@wendao/content';
-import { BRANCH_LABELS, fieldLabel } from './labels.js';
-import { xrefForField, type XrefTarget } from './xref.js';
+import { sectionSchemas } from '@wendao/content';
+import type { XrefTarget } from './xref.js';
 
 /** 所有节点的公共面：路径、展示名、输入提示、必填标志、跨引用标注。 */
 interface CommonNode {
@@ -82,6 +86,8 @@ export interface DictShape {
   readonly keyPattern?: string;
   readonly keyXref?: XrefTarget;
   readonly valueNode: FormNode;
+  /** 混合形态对象的 minProperties（矩阵 dict 家族投影；骨架占位键消费，#45/#53）。 */
+  readonly minProperties?: number;
 }
 
 export interface OneOfBranch {
@@ -119,8 +125,27 @@ function resolveRef(schema: JsonSchema, root: JsonSchema): JsonSchema {
 }
 
 /**
+ * title 属性级优先：title 标识「字段」（属性语境），$ref 目标上的 title
+ * 标识「类型」（定义语境，共享定义多字段复用）；draft-07 虽规定 $ref 兄弟
+ * 键被忽略，但 title 不进校验，编辑器显示通道按上述语义双读。
+ */
+function titleOf(schema: JsonSchema, resolved: JsonSchema): string | undefined {
+  return schema.title ?? resolved.title;
+}
+
+/** x-xref 同 title 双读：属性级优先，$ref 目标定义兜底。 */
+function xrefOf(schema: JsonSchema, resolved: JsonSchema): XrefTarget | undefined {
+  return (schema['x-xref'] ?? resolved['x-xref']) as XrefTarget | undefined;
+}
+
+/** 节展示名：节 schema 的 title（#45），未声明回显节键名。节导航/标题/校验分组三处共用。 */
+export function sectionTitle(section: string): string {
+  return (sectionSchemas as Record<string, JsonSchema | undefined>)[section]?.title ?? section;
+}
+
+/**
  * 构建（子）控件树。`field` 是该节点在父对象中的字段名（数组条目传
- * 数组字段名，供 xref 判定：pool 条目仍是物品引用）。
+ * 数组字段名，供 xref 继承：pool 条目仍是物品引用）。
  */
 export function buildFormNode(
   schema: JsonSchema,
@@ -128,15 +153,16 @@ export function buildFormNode(
   path: string,
   field: string,
   required: boolean,
+  inheritedXref?: XrefTarget,
 ): FormNode {
   const resolved = resolveRef(schema, root);
   const common = {
     path,
     field,
-    label: fieldLabel(field),
+    label: titleOf(schema, resolved) ?? field,
     description: resolved.description ?? schema.description,
     required,
-    xref: xrefForField(field),
+    xref: xrefOf(schema, resolved) ?? inheritedXref,
   };
 
   if (resolved.oneOf !== undefined) {
@@ -184,8 +210,9 @@ function buildOneOf(
       enumValues !== undefined && enumValues.length === 1 ? String(enumValues[0]) : String(index);
     return {
       discriminator,
-      label: BRANCH_LABELS[discriminator] ?? `分支 ${index + 1}`,
-      node: buildFormNode(resolved, root, common.path, common.field, common.required),
+      // 分支中文名 = 分支定义的 title（#45：BRANCH_LABELS 影子表已退役）。
+      label: titleOf(branch, resolved) ?? `分支 ${index + 1}`,
+      node: buildFormNode(resolved, root, common.path, common.field, common.required, common.xref),
     };
   });
   return { ...common, kind: 'oneOf', branches };
@@ -211,7 +238,7 @@ function buildObject(
         ...common,
         kind: 'dict',
         keyPattern: patternEntries[0]![0],
-        keyXref: xrefForField(common.field),
+        keyXref: common.xref,
         valueNode: buildFormNode(valueSchema, root, `${path}/*`, `${common.field}.*`, false),
         ...formAttrsOf(schema, 'dict'),
         requiredKeys: schema.required ?? [],
@@ -221,7 +248,7 @@ function buildObject(
       return {
         ...common,
         kind: 'dict',
-        keyXref: xrefForField(common.field),
+        keyXref: common.xref,
         valueNode: buildFormNode(addProps, root, `${path}/*`, `${common.field}.*`, false),
         ...formAttrsOf(schema, 'dict'),
         requiredKeys: schema.required ?? [],
@@ -234,18 +261,21 @@ function buildObject(
   );
 
   // 混合形态（如 bonuses：显式 crit 字段 + patternProperties 开放键）。
+  // minProperties 经矩阵 dict 家族投影（与 DictNode 同一读取路径，#53）。
   let dict: DictShape | undefined;
   if (patternEntries.length > 0) {
     const [pattern, valueSchema] = patternEntries[0]!;
     dict = {
       keyPattern: pattern,
-      keyXref: xrefForField(common.field),
+      keyXref: common.xref,
       valueNode: buildFormNode(valueSchema, root, `${path}/*`, `${common.field}.*`, false),
+      ...formAttrsOf(schema, 'dict'),
     };
   } else if (typeof addProps === 'object' && addProps !== null) {
     dict = {
-      keyXref: xrefForField(common.field),
+      keyXref: common.xref,
       valueNode: buildFormNode(addProps, root, `${path}/*`, `${common.field}.*`, false),
+      ...formAttrsOf(schema, 'dict'),
     };
   }
 
@@ -262,7 +292,9 @@ function buildArray(
   return {
     ...common,
     kind: 'array',
-    item: buildFormNode(itemSchema, root, `${path}/*`, common.field, false),
+    // 数组条目继承容器的 xref 标注（pool 条目=物品引用；#45 前按字段名
+    // 约定传播，现沿 schema 关键字显式下传，行为同形）。
+    item: buildFormNode(itemSchema, root, `${path}/*`, common.field, false, common.xref),
     ...formAttrsOf(schema, 'array'),
   };
 }

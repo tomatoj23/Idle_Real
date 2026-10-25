@@ -6,8 +6,8 @@
 import './style.css';
 import { sectionSchemas } from '@wendao/content';
 import { xiuxianPackJson } from '@wendao/content/packs/xiuxian';
-import { SECTION_LABELS } from './core/labels.js';
 import { confirmDirtyLoad, createStore } from './core/state.js';
+import { sectionTitle } from './core/model.js';
 import { exportJsonDownload, exportZipDownload, readPackFile } from './io/files.js';
 import { exportToGame } from './io/gameBridge.js';
 import { createValidatePanel } from './ui/panel.js';
@@ -84,7 +84,7 @@ if (app) {
         (store.state.section === section ? ' active' : '') +
         (errorCount > 0 ? ' has-errors' : '');
       item.innerHTML =
-        `<span class="nav-label">${SECTION_LABELS[section] ?? section}</span>` +
+        `<span class="nav-label">${sectionTitle(section)}</span>` +
         `<span class="nav-badges">${count > 0 ? `<i class="nav-count">${count}</i>` : ''}${errorCount > 0 ? `<i class="nav-errors">${errorCount}</i>` : ''}</span>`;
       item.addEventListener('click', () => {
         expanded.clear();

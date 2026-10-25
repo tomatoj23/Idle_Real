@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "CombatTextSection",
+  "title": "战斗文案",
   "description": "content 包 combatText 节：战斗文案词库（CTEXT 体系数据化）。招式注册键的存在性（武器/敌人 id、basic 兜底）由语义校验补全。#019 批 2 扩：句式模板/系统 note/战后摘要/对照语出池，十键恒需。长度上限按非 CJK 等义文本（约 3× 字符密度）放宽（#027 槽位审查裁决），语义见 docs/combat-text-slots.md。",
   "type": "object",
   "required": ["verbs", "moves", "openings", "critIntro", "cons", "fatal", "templates", "notes", "summary", "compare"],
@@ -8,6 +8,8 @@
   "properties": {
     "verbs": {
       "type": "object",
+      "title": "动词池",
+      "x-llm": "verbs",
       "required": ["basic"],
       "additionalProperties": false,
       "description": "动词部位池（#021 批 4 键域开放，ADR-016 裁决 ⑦）：新增动词风格 = 新 JSON 键；仅引擎兜底键 basic 恒需（安全兜底约定），其余键在被 item.verbStyle / enemy.kind 引用时由语义校验强制存在；sword/basic/claw/magic 为官方包约定",
@@ -17,20 +19,24 @@
     },
     "moves": {
       "type": "object",
+      "title": "招式注册",
       "minProperties": 1,
       "description": "招式名注册表：键为 basic、武器物品 id 或敌人 id；未注册者由引擎回退 basic",
       "additionalProperties": { "$ref": "#/definitions/moveNames" }
     },
     "openings": {
       "$ref": "#/definitions/lines",
+      "title": "开战白",
       "description": "起势（重击时加一段）"
     },
     "critIntro": {
       "$ref": "#/definitions/lines",
+      "title": "暴击引",
       "description": "暴击起势"
     },
     "cons": {
       "type": "object",
+      "title": "普攻连",
       "required": ["hit", "hurt"],
       "additionalProperties": false,
       "description": "后果词库：按伤害档分池，hit 打妖物 / hurt 玩家挨打",
@@ -41,6 +47,7 @@
     },
     "fatal": {
       "type": "object",
+      "title": "致命一击",
       "required": ["hit", "hurt"],
       "additionalProperties": false,
       "description": "致命一击专属（剩余生命=危 且 伤害=重/濒死）",
@@ -59,6 +66,7 @@
     },
     "templates": {
       "type": "object",
+      "title": "句式模板",
       "required": ["playerLight", "playerHeavy", "playerCrit", "enemyLight", "enemyHeavy"],
       "additionalProperties": false,
       "description": "出招句式模板池（#019 出池）：引擎按出招方与伤害档选池抽取后填槽。槽位：{move} 招式名 / {weapon} 兵刃展示名 / {verb} 动词 / {defender} 受击妖名 / {enemy} 妖名 / {limb} 部位 / {opening} 起势（heavy 池）/ {critIntro} 暴击起势（crit 池）",
@@ -92,6 +100,7 @@
     },
     "notes": {
       "type": "object",
+      "title": "战报批注",
       "required": ["retreat", "retreatToGather", "retreatWounded", "retreatVictory", "reengage", "start", "autoConsume"],
       "additionalProperties": false,
       "description": "系统 combat-note 叙事池（#019 出池）：手动停战 / 转赴修行 / 残血退避 / 胜后离场 / 自动再战 / 开战 / 自动嗑丹",
@@ -119,11 +128,12 @@
     },
     "summary": {
       "type": "object",
+      "title": "战报小结",
       "required": ["tiers", "base", "crit"],
       "additionalProperties": false,
       "description": "战后一行签名画像（#019 出池）：tiers 按主导伤害档出画句；base/crit 为整行模板（crit 版多会心段）",
       "properties": {
-        "tiers": { "$ref": "#/definitions/flavorTiers" },
+        "tiers": { "$ref": "#/definitions/flavorTiers", "title": "三阶表" },
         "base": {
           "$ref": "#/definitions/templateLines",
           "description": "无会心整行模板",
@@ -131,6 +141,7 @@
         },
         "crit": {
           "$ref": "#/definitions/templateLines",
+          "title": "暴击",
           "description": "带会心整行模板",
           "pattern": "(?=.*\\{rounds\\})(?=.*\\{flavor\\})(?=.*\\{crits\\})"
         }
@@ -138,6 +149,7 @@
     },
     "compare": {
       "type": "object",
+      "title": "对照句",
       "required": ["revenge", "faster", "slower", "even"],
       "additionalProperties": false,
       "description": "同对手再战对照语（#019 出池）：雪耻 / 更快 / 更慢 / 持平",
@@ -166,6 +178,7 @@
     },
     "elementFlavor": {
       "type": "object",
+      "title": "系别风味",
       "minProperties": 1,
       "description": "系别风味句池（#15，可选节，ADR-012 只读日志盲测的文案载体）：键 = elements 注册系别（语义校验 xref）。引擎按「被克 resists / 克制 counters（受击者亲和反应）> 暴击专属 crits（雷·霆爆）> 普通 attacks」路由，抽一条追加为独立句；槽位 {defender}/{enemy}/{d}。缺省 = 该包无系别风味（战斗文案零扰动）",
       "patternProperties": {
@@ -184,12 +197,14 @@
         "properties": {
           "v": {
             "type": "string",
+            "title": "动词短语",
             "minLength": 1,
             "maxLength": 12,
             "description": "动作动词（官方包单字为主；上限按非 CJK 等义文本放宽，#027）"
           },
           "limbs": {
             "type": "array",
+            "title": "部位",
             "minItems": 1,
             "items": { "type": "string", "minLength": 1, "maxLength": 18 }
           }
@@ -222,10 +237,10 @@
       "additionalProperties": false,
       "description": "画句按主导伤害档分池",
       "properties": {
-        "light": { "$ref": "#/definitions/lines" },
-        "mid": { "$ref": "#/definitions/lines" },
-        "heavy": { "$ref": "#/definitions/lines" },
-        "deadly": { "$ref": "#/definitions/lines" }
+        "light": { "$ref": "#/definitions/lines", "title": "轻创" },
+        "mid": { "$ref": "#/definitions/lines", "title": "中创" },
+        "heavy": { "$ref": "#/definitions/lines", "title": "重创" },
+        "deadly": { "$ref": "#/definitions/lines", "title": "致命" }
       }
     },
     "hitTiers": {
@@ -233,10 +248,10 @@
       "required": ["light", "mid", "heavy", "deadly"],
       "additionalProperties": false,
       "properties": {
-        "light": { "$ref": "#/definitions/hitLines" },
-        "mid": { "$ref": "#/definitions/hitLines" },
-        "heavy": { "$ref": "#/definitions/hitLines" },
-        "deadly": { "$ref": "#/definitions/hitLines" }
+        "light": { "$ref": "#/definitions/hitLines", "title": "轻创" },
+        "mid": { "$ref": "#/definitions/hitLines", "title": "中创" },
+        "heavy": { "$ref": "#/definitions/hitLines", "title": "重创" },
+        "deadly": { "$ref": "#/definitions/hitLines", "title": "致命" }
       }
     },
     "hurtTiers": {
@@ -244,10 +259,10 @@
       "required": ["light", "mid", "heavy", "deadly"],
       "additionalProperties": false,
       "properties": {
-        "light": { "$ref": "#/definitions/hurtLines" },
-        "mid": { "$ref": "#/definitions/hurtLines" },
-        "heavy": { "$ref": "#/definitions/hurtLines" },
-        "deadly": { "$ref": "#/definitions/hurtLines" }
+        "light": { "$ref": "#/definitions/hurtLines", "title": "轻创" },
+        "mid": { "$ref": "#/definitions/hurtLines", "title": "中创" },
+        "heavy": { "$ref": "#/definitions/hurtLines", "title": "重创" },
+        "deadly": { "$ref": "#/definitions/hurtLines", "title": "致命" }
       }
     },
     "hitLines": {
@@ -278,24 +293,28 @@
       "properties": {
         "attacks": {
           "type": "array",
+          "title": "普攻",
           "minItems": 1,
           "items": { "type": "string", "minLength": 1, "maxLength": 120 },
           "description": "普通系别击风味句（起手/后果皆可；建议叙述该系机制签名，如破防/滞缓/迅疾）"
         },
         "crits": {
           "type": "array",
+          "title": "暴击",
           "minItems": 1,
           "items": { "type": "string", "minLength": 1, "maxLength": 120 },
           "description": "暴击专属风味句（雷·霆爆：暴击金框文案的载体）"
         },
         "counters": {
           "type": "array",
+          "title": "克制",
           "minItems": 1,
           "items": { "type": "string", "minLength": 1, "maxLength": 120 },
           "description": "克制专属风味句（受击者对该系亲和 > 0，易伤）"
         },
         "resists": {
           "type": "array",
+          "title": "抗性",
           "minItems": 1,
           "items": { "type": "string", "minLength": 1, "maxLength": 120 },
           "description": "被克专属风味句（受击者对该系亲和 < 0，抗性挫败感）"

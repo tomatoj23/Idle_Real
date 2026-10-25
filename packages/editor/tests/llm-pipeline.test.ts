@@ -4,6 +4,7 @@ import { xiuxianPackJson } from '@wendao/content/packs/xiuxian';
 import { extractJsonArray, type LlmClient } from '../src/llm/client.js';
 import { createFetchClient } from '../src/llm/client.js';
 import { applyCandidates, generateCandidates, packContextOf } from '../src/llm/pipeline.js';
+import { GEN_LABELS, genKinds } from '../src/llm/prompts.js';
 import { createStore } from '../src/core/state.js';
 import type { ChatMessage } from '../src/llm/client.js';
 
@@ -213,5 +214,15 @@ describe('createFetchClient（请求形态守卫，fetch 注入假实现）', ()
     expect(captured!.url).toBe('http://mock/v1/chat/completions');
     expect((captured!.init.headers as Record<string, string>)['Authorization']).toBe('Bearer test-key');
     expect(JSON.parse(captured!.init.body as string)).toMatchObject({ model: 'mock-model' });
+  });
+});
+
+describe('#45 可生成旗标（x-llm）与模板域同步', () => {
+  it('genKinds 从节 schema 扫描发现的目标 = GenKind 模板域（漂移即红：schema 新增旗标必须配模板）', () => {
+    const kinds = genKinds();
+    expect([...kinds].sort()).toEqual(['enemies', 'items', 'verbs']);
+    for (const kind of kinds) {
+      expect(GEN_LABELS[kind], `${kind} 缺下拉展示名`).toBeTruthy();
+    }
   });
 });

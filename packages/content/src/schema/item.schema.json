@@ -1,7 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "ItemsSection",
-  "description": "content 包 items 节：物品定义。oneOf 按 type 分流五类形态：mat 材料 / consumable 消耗品 / equip 装备 / blank 器胚（装备底材模板）/ inscription 铭纹（装备词缀模板）。equip/consumable 的按型必填（slot+bonuses、effect|heal）仍由 validateContentPack 语义检查补全（ADR-010 分工）；器胚/铭纹的核心形态在 schema 分支内直接必填（issue #16）。",
+  "title": "物品",
+  "x-llm": "items",
+  "description": "content 包 items 节：物品定义。oneOf 按 type 分流五类形态：mat 材料 / consumable 消耗品 / equip 装备 / blank 器胚（装备底材模板）/ inscription 铭纹（装备词缀模板）。equip 的结构必填（slot+bonuses）已入 schema 分支 required（#45 对齐 blank 先例）；consumable 的按型必填（effect|heal 二选一）schema 表达不了，仍由 validateContentPack 语义检查补全（ADR-010 分工）；器胚/铭纹的核心形态在 schema 分支内直接必填（issue #16）。",
   "type": "array",
   "minItems": 1,
   "items": { "$ref": "#/definitions/item" },
@@ -17,6 +18,7 @@
     },
     "mat": {
       "type": "object",
+      "title": "材料",
       "required": ["id", "name", "icon", "type", "sell"],
       "additionalProperties": false,
       "description": "材料：只携带公共字段",
@@ -24,7 +26,7 @@
         "id": { "$ref": "#/definitions/id" },
         "name": { "$ref": "#/definitions/name" },
         "icon": { "$ref": "#/definitions/icon" },
-        "type": { "enum": ["mat"] },
+        "type": { "enum": ["mat"], "title": "类型" },
         "sell": { "$ref": "#/definitions/sell" },
         "description": { "$ref": "#/definitions/description" },
         "prototypeKey": { "$ref": "#/definitions/prototypeKey" },
@@ -33,6 +35,7 @@
     },
     "consumable": {
       "type": "object",
+      "title": "消耗品",
       "required": ["id", "name", "icon", "type", "sell"],
       "additionalProperties": false,
       "description": "消耗品：effect（持续增益）或 heal（即时恢复）至少其一（语义检查）",
@@ -40,7 +43,7 @@
         "id": { "$ref": "#/definitions/id" },
         "name": { "$ref": "#/definitions/name" },
         "icon": { "$ref": "#/definitions/icon" },
-        "type": { "enum": ["consumable"] },
+        "type": { "enum": ["consumable"], "title": "类型" },
         "sell": { "$ref": "#/definitions/sell" },
         "description": { "$ref": "#/definitions/description" },
         "prototypeKey": { "$ref": "#/definitions/prototypeKey" },
@@ -51,14 +54,15 @@
     },
     "equip": {
       "type": "object",
-      "required": ["id", "name", "icon", "type", "sell"],
+      "title": "装备",
+      "required": ["id", "name", "icon", "type", "sell", "slot", "bonuses"],
       "additionalProperties": false,
-      "description": "装备：slot 必须指向 config.slots 已定义的槽位 id（语义检查）",
+      "description": "装备：slot+bonuses 结构必填（schema 关卡，#45 对齐 blank 先例）；slot 须指向 config.slots 已定义的槽位 id、verbStyle 须命中动词池（语义检查）",
       "properties": {
         "id": { "$ref": "#/definitions/id" },
         "name": { "$ref": "#/definitions/name" },
         "icon": { "$ref": "#/definitions/icon" },
-        "type": { "enum": ["equip"] },
+        "type": { "enum": ["equip"], "title": "类型" },
         "sell": { "$ref": "#/definitions/sell" },
         "description": { "$ref": "#/definitions/description" },
         "prototypeKey": { "$ref": "#/definitions/prototypeKey" },
@@ -71,6 +75,7 @@
     },
     "blank": {
       "type": "object",
+      "title": "器胚",
       "required": ["id", "name", "icon", "type", "sell", "slot", "floorRange", "tierRange"],
       "additionalProperties": false,
       "description": "器胚（装备底材模板）：槽位 + 掉落层数段 + 纹阶天花板；分层掉不同器胚，否决 itemLevel 缩放",
@@ -78,7 +83,7 @@
         "id": { "$ref": "#/definitions/id" },
         "name": { "$ref": "#/definitions/name" },
         "icon": { "$ref": "#/definitions/icon" },
-        "type": { "enum": ["blank"] },
+        "type": { "enum": ["blank"], "title": "类型" },
         "sell": { "$ref": "#/definitions/sell" },
         "description": { "$ref": "#/definitions/description" },
         "prototypeKey": { "$ref": "#/definitions/prototypeKey" },
@@ -93,6 +98,7 @@
     },
     "inscription": {
       "type": "object",
+      "title": "铭纹",
       "required": ["id", "name", "icon", "type", "sell", "tiers"],
       "additionalProperties": false,
       "description": "铭纹（装备词缀模板）：纹阶数值表（表长 = 深度上限，引擎数据派生）+ 可选机制型 feature + tags（供器胚 preferredTags 加权抽取）",
@@ -100,7 +106,7 @@
         "id": { "$ref": "#/definitions/id" },
         "name": { "$ref": "#/definitions/name" },
         "icon": { "$ref": "#/definitions/icon" },
-        "type": { "enum": ["inscription"] },
+        "type": { "enum": ["inscription"], "title": "类型" },
         "sell": { "$ref": "#/definitions/sell" },
         "description": { "$ref": "#/definitions/description" },
         "prototypeKey": { "$ref": "#/definitions/prototypeKey" },
@@ -112,55 +118,68 @@
     },
     "id": {
       "type": "string",
+      "title": "标识",
       "pattern": "^[a-z][a-z0-9_]*$",
       "description": "稳定标识符：掉落表/配方/存档引用均用它"
     },
     "name": {
       "type": "string",
+      "title": "名称",
       "minLength": 1,
       "maxLength": 12
     },
     "icon": {
       "type": "string",
+      "title": "图标",
       "minLength": 1,
       "maxLength": 2
     },
     "sell": {
       "type": "integer",
+      "title": "出售价",
       "minimum": 0,
       "description": "出售价（灵石）"
     },
     "description": {
       "type": "string",
+      "title": "描述",
       "maxLength": 120
     },
     "prototypeKey": {
       "type": "string",
+      "title": "原型键",
       "pattern": "^[a-z][a-z0-9_]*$",
       "description": "ADR-015 原型继承：声明本条目可被同集合条目继承；值必须等于自身 id（语义校验）"
     },
     "prototypeParent": {
       "type": "string",
+      "title": "继承自",
       "pattern": "^[a-z][a-z0-9_]*$",
       "description": "ADR-015 原型继承：继承同集合内已声明 prototypeKey 的父条目；父不存在或未声明即大声失败（语义校验）"
     },
     "slot": {
       "type": "string",
+      "title": "槽位",
+      "x-xref": "slotIds",
       "pattern": "^[a-z][a-z0-9_]*$",
       "description": "佩戴槽位 id（config.slots 数据化，起步 weapon/body/accessory，为法宝/外袍留门）"
     },
     "verbStyle": {
       "type": "string",
+      "x-xref": "verbsKeys",
       "pattern": "^[a-z][a-zA-Z0-9_]*$",
       "description": "动词池键（#021 批 4 开放键域，combatText.verbs）：仅 weapon 槽位物品被引擎消费；未注册即语义校验 xref；缺省 = 引擎兜底键 basic 池"
     },
     "elementKey": {
       "type": "string",
+      "title": "系别",
+      "x-xref": "elements",
       "pattern": "^[a-z][a-zA-Z0-9_]*$",
       "description": "系别键（#15，elements 键域开放）：须在包 elements 节注册（语义校验 xref）。引擎只消费武器槽物品的 element——佩戴后玩家攻击携带该系（机制签名/亲和度/风味句路由的攻方来源）；其余槽位声明为未来留门"
     },
     "bonuses": {
       "type": "object",
+      "title": "属性加成",
       "minProperties": 1,
       "additionalProperties": false,
       "description": "装备基础加成（#021 批 4 键域开放）：键 = stat id（键形态：小写字母开头，允许驼峰/下划线，gatherXp 先例），值 = flat 基础量（整数 ≥ 0），经 ADR-011 管线投影；新增 stat 键 = 纯 JSON 改动，生效须引擎消费点（消费点注册表见 docs/agents/content.md）",
@@ -168,26 +187,29 @@
         "^[a-z][a-zA-Z0-9_]*$": { "type": "integer", "minimum": 0 }
       },
       "properties": {
-        "crit": { "type": "integer", "minimum": 0, "maximum": 100, "description": "暴击率（百分点）；100 = 百分点量纲物理上限，非引擎钳制值——有效上限由 config.combat.critCap 钳制（#021 批 4 单一来源澄清）" }
+        "crit": { "type": "integer", "title": "暴击", "minimum": 0, "maximum": 100, "description": "暴击率（百分点）；100 = 百分点量纲物理上限，非引擎钳制值——有效上限由 config.combat.critCap 钳制（#021 批 4 单一来源澄清）" }
       }
     },
     "effect": {
       "type": "object",
+      "title": "持续效果",
       "required": ["duration"],
       "additionalProperties": false,
       "description": "消耗品持续增益",
       "properties": {
         "duration": {
           "type": "number",
+          "title": "时长",
           "exclusiveMinimum": 0,
           "description": "增益时长（毫秒）"
         },
         "multipliers": { "$ref": "#/definitions/multipliers" },
-        "crit": { "type": "integer", "minimum": 0, "maximum": 100, "description": "额外暴击率（百分点）；100 = 量纲物理上限，有效上限由 config.combat.critCap 钳制（与 bonuses.crit 同律，#021 批 4）" }
+        "crit": { "type": "integer", "title": "暴击", "minimum": 0, "maximum": 100, "description": "额外暴击率（百分点）；100 = 量纲物理上限，有效上限由 config.combat.critCap 钳制（与 bonuses.crit 同律，#021 批 4）" }
       }
     },
     "multipliers": {
       "type": "object",
+      "title": "倍率",
       "minProperties": 1,
       "additionalProperties": false,
       "description": "属性倍率区（#021 批 4 键域开放）：键 = stat id（键形态：小写字母开头，允许驼峰/下划线），值必须 > 1；键域 = 引擎消费点清单（gatherXp/atk/def 等已接线，见 docs/agents/content.md 注册表），全新 stat 生效须引擎新增消费点",
@@ -197,45 +219,51 @@
     },
     "heal": {
       "type": "object",
+      "title": "即时恢复",
       "required": ["percent"],
       "additionalProperties": false,
       "description": "即时恢复：按气血上限百分比",
       "properties": {
-        "percent": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
+        "percent": { "type": "number", "title": "比例", "exclusiveMinimum": 0, "maximum": 1 }
       }
     },
     "floorRange": {
       "type": "object",
+      "title": "掉落层段",
       "required": ["min", "max"],
       "additionalProperties": false,
       "description": "掉落层数段（秘境层数，1 起）；方向性 min ≤ max 由语义检查保证",
       "properties": {
-        "min": { "type": "integer", "minimum": 1 },
-        "max": { "type": "integer", "minimum": 1 }
+        "min": { "type": "integer", "title": "最小", "minimum": 1 },
+        "max": { "type": "integer", "title": "最大", "minimum": 1 }
       }
     },
     "tierRange": {
       "type": "object",
+      "title": "纹阶区间",
       "required": ["min", "max"],
       "additionalProperties": false,
       "description": "纹阶天花板区间 T1~T3；方向性 min ≤ max 由语义检查保证",
       "properties": {
-        "min": { "type": "integer", "minimum": 1, "maximum": 3 },
-        "max": { "type": "integer", "minimum": 1, "maximum": 3 }
+        "min": { "type": "integer", "title": "最小", "minimum": 1, "maximum": 3 },
+        "max": { "type": "integer", "title": "最大", "minimum": 1, "maximum": 3 }
       }
     },
     "preferredTags": {
       "type": "array",
+      "title": "偏好标签",
       "description": "偏好标签：铭纹抽取按「基础 × (1+匹配数×加成)」加权；空数组=无偏好",
       "items": { "$ref": "#/definitions/tag" }
     },
     "inherentModifiers": {
       "type": "array",
+      "title": "胚纹",
       "description": "胚纹：器胚固有词条，固定非随机，实例化时直接附加；空数组=无胚纹",
       "items": { "$ref": "#/definitions/modifier" }
     },
     "tiers": {
       "type": "array",
+      "title": "三阶表",
       "minItems": 1,
       "description": "纹阶数值表：下标 i 对应纹阶 T(i+1)，表长即该铭纹的纹阶深度上限（引擎数据派生，#61 边界收口——加深纹阶 = 加行，引擎零改动）；实例化时按器胚 tierRange ∩ 表长掷出",
       "items": {
@@ -247,21 +275,24 @@
     },
     "feature": {
       "type": "object",
+      "title": "特色铭纹",
       "required": ["primitive"],
       "additionalProperties": false,
       "description": "机制型特色铭纹：condition+primitive 表达（引擎原语池零新增，未注册原语忽略）",
       "properties": {
         "primitive": {
           "type": "string",
+          "title": "机制原语",
           "minLength": 1,
           "description": "引擎机制原语名（如燃爆/疫毒/滞缓）"
         },
         "condition": { "$ref": "#/definitions/condition" },
-        "value": { "type": "number", "description": "原语数值参数（如传染概率）；无参数原语省略" }
+        "value": { "type": "number", "title": "数值", "description": "原语数值参数（如传染概率）；无参数原语省略" }
       }
     },
     "tags": {
       "type": "array",
+      "title": "标签",
       "description": "标签加权抽取归类（ADR-015 tags/flags 分工：归类批量捞）；空数组=不参与加权",
       "items": { "$ref": "#/definitions/tag" }
     },
@@ -278,30 +309,36 @@
       "properties": {
         "stat": {
           "type": "string",
+          "title": "属性键",
           "pattern": "^[a-z][a-zA-Z0-9_]*$",
           "description": "目标属性 id（atk/def/hp/crit/gatherXp…；键形态与 bonuses/affixPool.stat 同源，#021 批 4 对齐——旧形态误拒驼峰键 gatherXp）"
         },
         "zone": {
+          "title": "聚合区",
           "enum": ["flat", "addPct", "mult"],
           "description": "聚合区：flat 固定值 / addPct 加法百分比 / mult 乘法区"
         },
-        "value": { "type": "number", "description": "数值；乘法区须 > 0、加法%区 ≥ −100（语义检查）" },
+        "value": { "type": "number", "title": "数值", "description": "数值；乘法区须 > 0、加法%区 ≥ −100（语义检查）" },
         "condition": { "$ref": "#/definitions/condition" }
       }
     },
     "condition": {
       "type": "object",
+      "title": "条件",
       "minProperties": 1,
       "additionalProperties": false,
       "description": "定向条件：至少声明一维，命中才生效（如受火系伤害、某招式命中）",
       "properties": {
         "element": {
           "type": "string",
+          "title": "系别",
+          "x-xref": "elements",
           "pattern": "^[a-z][a-zA-Z0-9_]*$",
           "description": "系别键（#25 键域开放，循 #21 先例）：取值须在包 elements 节注册（语义校验 xref）；金木水火土风雷仅为官方包约定"
         },
         "moveId": {
           "type": "string",
+          "title": "招式键",
           "pattern": "^[a-z][a-z0-9_]*$",
           "description": "招式 id（combatText.moves 注册键）"
         }

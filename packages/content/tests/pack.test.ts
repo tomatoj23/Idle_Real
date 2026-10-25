@@ -262,14 +262,14 @@ describe('validateContentPack · 去重与形态', () => {
     expectError(validateContentPack(pack), '/items/5', 'duplicate');
   });
 
-  it('equip 缺 slot / 缺 bonuses → shape', () => {
+  it('equip 缺 slot / 缺 bonuses → schema required（#45 结构必填升 schema 分支 required，语义层 shape 检查退役）', () => {
     const noSlot = makePack();
     delete noSlot.items[2].slot;
-    expectError(validateContentPack(noSlot), '/items/2/slot', 'shape');
+    expectError(validateContentPack(noSlot), '/items/2/slot', 'required');
 
     const noBonuses = makePack();
     delete noBonuses.items[2].bonuses;
-    expectError(validateContentPack(noBonuses), '/items/2/bonuses', 'shape');
+    expectError(validateContentPack(noBonuses), '/items/2/bonuses', 'required');
   });
 
   it('consumable 无 effect 也无 heal → shape', () => {
