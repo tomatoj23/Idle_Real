@@ -280,7 +280,14 @@ function checkObject(json: Record<string, unknown>, schema: JsonSchema, path: st
   for (const [key, value] of Object.entries(json)) {
     const childPath = `${path}/${key}`;
     // 子 schema 优先级：properties > patternProperties > additionalProperties。
-    const childSchema = schema.properties?.[key] ?? matchPatternProperty(key, schema);
+    // properties 查取须 own-properties 语义（#90）：键名来自不可信内容包，
+    // 普通取值沿原型链——`__proto__`/`constructor` 键命中 Object.prototype
+    // 成员真值，冒充「有子 schema」绕过 additionalProperties 分支（JSON.parse
+    // 把 "__proto__" 造为 own 数据键，Object.entries 可枚举，污染键可达此处）。
+    const properties = schema.properties;
+    const declared =
+      properties !== undefined && Object.hasOwn(properties, key) ? properties[key] : undefined;
+    const childSchema = declared ?? matchPatternProperty(key, schema);
     if (childSchema) {
       ctx.depth += 1;
       validateNode(value, childSchema, childPath, ctx);
