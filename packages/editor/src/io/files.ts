@@ -27,8 +27,10 @@ const PROTOTYPE_POLLUTION_KEYS: ReadonlySet<string> = new Set([
  * 深度净化 JSON.parse 产物：递归数组与普通对象，剔除危险自有键后重建
  * 容器。只读 own enumerable 键（Object.entries 语义，不触原型链），
  * 键名带冒号等形态不受影响；剔除键的子树一并丢弃。
+ * 导出面（#89）：文件导入与 LLM 候选两条不可信 JSON 入口同键集同深度
+ * 语义共用本函数；顺带即深拷（容器重建）。
  */
-function sanitizeParsed(value: unknown): unknown {
+export function sanitizeParsed(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => sanitizeParsed(item));
   }

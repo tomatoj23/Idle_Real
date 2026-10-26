@@ -6,6 +6,8 @@
  * change 即重绘（逐条勾选主路径曾堵死）；对外 refresh() 接口退役，
  * 调用方无需知道本面板。生成中可取消（AbortController 透传 pipeline）。
  * API Key 可选「仅本会话内存态」（#74 项 6 威胁模型：localStorage 明文）。
+ * #89：候选值树由 pipeline 生成时净化（原型污染键剔除）；勾选入包
+ * try/catch/finally 兜底——抛错状态行报错、候选保留，finally 复位两态。
  */
 
 import { GEN_LABELS, genKinds, type GenKind } from '../llm/prompts.js';
@@ -126,14 +128,28 @@ export function createLlmPanel(
     const approved = candidates.filter((candidate) => candidate.approved);
     if (approved.length === 0) return;
     const kind = kindSelect.value as GenKind;
-    const result = applyCandidates(store, kind, approved);
-    candidates = [];
-    repaintCandidates();
-    statusLine.textContent =
-      `已入包 ${result.applied} 条` +
-      (result.movesRegistered > 0 ? `（${result.movesRegistered} 个新敌人已自动注册缺省招式名，可在战斗文案节润色）` : '') +
-      (result.skipped.length > 0 ? `（跳过 ${result.skipped.join('、')}）` : '');
-    opts.onApplied?.();
+    let succeeded = false;
+    try {
+      const result = applyCandidates(store, kind, approved);
+      candidates = [];
+      statusLine.textContent =
+        `已入包 ${result.applied} 条` +
+        (result.movesRegistered > 0 ? `（${result.movesRegistered} 个新敌人已自动注册缺省招式名，可在战斗文案节润色）` : '') +
+        (result.skipped.length > 0 ? `（跳过 ${result.skipped.join('、')}）` : '');
+      succeeded = true;
+    } catch (cause) {
+      // 防御纵深（#89 项 2）：现树无可达抛点，兜跨模块不变式未来被破——
+      // store.update 抛错已整树回滚（#73 rollback），此处只兜 UI 面：
+      // 状态行报错、候选现场保留（可勾选重试）。
+      statusLine.textContent = `✗ 入包失败：${cause instanceof Error ? cause.message : String(cause)}`;
+    } finally {
+      // 按钮两态单点复位：成功（候选清空→计数归零）与失败（现场保留→
+      // 计数原样）都由 repaintCandidates 按最新 candidates 收口。
+      repaintCandidates();
+    }
+    // onApplied 不划入兜底面（catch 只兜 applyCandidates/store.update）：
+    // 它在包已写入后触发，自身抛错入 catch 会被误报「入包失败」。
+    if (succeeded) opts.onApplied?.();
   });
 
   root.append(

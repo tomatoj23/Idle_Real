@@ -1,6 +1,6 @@
 /**
- * LLM 批量生成管道（#11）：提示词模板 → chat 补全 → JSON 数组提取 →
- * 逐条节级 schema 校验 → 候选列表（人工勾选）→ 入包。
+ * LLM 批量生成管道（#11）：提示词模板 → chat 补全 → JSON 数组提取（净化）
+ * → 逐条节级 schema 校验 → 候选列表（人工勾选）→ 入包。
  *
  * 入包语义：enemies/items 追加到对应节；verbs 合并进 combatText.verbs
  * （撞键候选在节级校验处报 duplicate，不入包）。入包后的整包校验由
@@ -11,6 +11,7 @@ import { validateContent, sectionSchemas, type ContentError, type JsonSchema } f
 import type { EditorStore } from '../core/state.js';
 import { entrySchemaOf } from '../core/model.js';
 import { packRecordOf, packSectionArray } from '../core/packSection.js';
+import { sanitizeParsed } from '../io/files.js';
 import { extractJsonArray, type LlmClient } from './client.js';
 import { buildMessages, type GenKind, type PackContext } from './prompts.js';
 
@@ -124,6 +125,11 @@ export async function generateCandidates(opts: {
   } catch (cause) {
     return { ok: false, error: cause instanceof Error ? cause.message : String(cause) };
   }
+  // LLM 回复与包文件同为不可信 JSON（#89）：parse 产物先过与文件导入同一
+  // 净化（原型污染键剔除）再成候选——节级校验（其逐键查表对 __proto__ 有
+  // 原型链 quirk，拦不住）、人工勾选、入包（verbs 引用直赋 / enemies·items
+  // 克隆两分支）全链只见净化后形态。
+  entries = sanitizeParsed(entries) as readonly unknown[];
 
   const schema = candidateSchemaOf(opts.kind);
   const candidates = entries.map((value) => {
