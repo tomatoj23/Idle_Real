@@ -53,12 +53,18 @@ function parsePackJson(text: string): unknown {
  * 包文件字节 → 文本（#74 项 3）：UTF-8 解码 + 显式剥 BOM（strFromU8 现行
  * 为已剥，此处防依赖漂移自证语义）+ 非 UTF-8 字节检测——GBK/ANSI 包宽松
  * 解码产出 U+FFFD，照旧 parse 只会得到 mojibake 后的不可读 SyntaxError，
- * 不如在此拒绝并指路转存。
+ * 不如在此拒绝并指路转存。检测须前置（parse 前）：GBK mojibake 落在字符串
+ * 值内时 JSON 仍合法，parse 后再查会放行坏数据。
+ * 已知取舍（审计 F2 申报）：文件合法含字面 U+FFFD 字符（作者误贴的替换符）
+ * 会被一并拒绝——JSON.stringify 不转义该字符，自导出自拒；概率极低且文案
+ * 两可解释，不值得为此引入 parse 前后双通道。
  */
 function decodePackText(bytes: Uint8Array): string {
   const text = strFromU8(bytes);
   if (text.includes('\uFFFD')) {
-    throw new Error('文件不是 UTF-8 编码（Windows 记事本 ANSI/GBK？）：请转存为 UTF-8 后重新导入');
+    throw new Error(
+      '文件含乱码替换符（U+FFFD）：通常是源文件不是 UTF-8 编码（Windows 记事本 ANSI/GBK？）——请转存为 UTF-8 后重新导入；若内容本身含乱码字符请先修正',
+    );
   }
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }

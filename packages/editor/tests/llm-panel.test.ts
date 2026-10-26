@@ -17,6 +17,9 @@ import { xiuxianStore } from './helpers.js';
  * - 勾选 change 丢 repaintCandidates() → 勾选后按钮仍 disabled/计数不变，本文件红；
  * - 取消按钮丢 abort() 或 finally 丢 busy 复位 → 状态行不落「已取消」/生成钮不解锁，红；
  * - saveLlmConfig 丢 rememberApiKey 剥离 → 不勾记住时 localStorage 里仍有明文 key，红。
+ * 测试手法注：happy-dom 下 checkbox click() 激活行为时序不稳（交付时观测
+ * click 后 checked 不变，审计复跑未复现、机制未定），勾选一律手动置
+ * checked + dispatchEvent，不依赖 click 激活行为。
  */
 
 /** 两条跨引用闭合的假敌应答（同 app-assembly 打法）。 */
@@ -92,9 +95,10 @@ describe('#74-11 · 候选勾选 ↔ 入包按钮两态同步', () => {
     expect(applyBtn().textContent).toBe('勾选入包（0）');
 
     const checkboxes = [...document.querySelectorAll<HTMLInputElement>('.candidate input[type="checkbox"]')];
-    // happy-dom 的 checkbox click() 在 label 内被二次转发（翻转两次回原值）
-    // 且不派发 change——测试直接置 checked + 显式派发；真浏览器点击路径由
-    // 真机首跑覆盖。
+    // happy-dom 下 click() 的翻转/change 派发时序不稳（#74 交付时观测到
+    // click 后 checked 不变；审计复跑未能复现该行为，机制未定）——测试直接
+    // 置 checked + 显式派发 change，不依赖激活行为实现细节；真浏览器点击
+    // 路径由真机首跑覆盖。
     const toggle = (checkbox: HTMLInputElement): void => {
       checkbox.checked = !checkbox.checked;
       checkbox.dispatchEvent(new Event('change', { bubbles: true }));
