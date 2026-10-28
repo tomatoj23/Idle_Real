@@ -12,3 +12,26 @@ import { createStore, type EditorStore } from '../src/core/state.js';
 export function xiuxianStore(): EditorStore {
   return createStore(xiuxianPackJson);
 }
+
+/**
+ * 跨引用闭合的测试敌人夹具（#56）：kind/drops 缺省引用真包既有域（入包
+ * 即合法）；dropItem 传悬空 id（ghost_item 类）即得「节级零错、整包语义
+ * 拦截」的事务门禁试验品。llm-pipeline / llm-panel 两处共用，勿再手抄
+ * 整套敌人 JSON（评审收口：DANGLING_DROP_REPLY 手写形态退役）。
+ */
+export function testEnemy(id: string, name: string, dropItem: string): Record<string, unknown> {
+  return {
+    id,
+    name,
+    icon: '测',
+    level: 1,
+    kind: 'claw',
+    hp: 40,
+    atk: 8,
+    def: 2,
+    attackInterval: 2400,
+    exp: 10,
+    gold: { min: 1, max: 3 },
+    drops: [{ item: dropItem, chance: 0.3 }],
+  };
+}

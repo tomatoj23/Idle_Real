@@ -4,7 +4,7 @@
  */
 
 import './style.css';
-import { sectionSchemas } from '@wendao/content';
+import { sectionSchemas, validateContentPack } from '@wendao/content';
 import { xiuxianPackJson } from '@wendao/content/packs/xiuxian';
 import { confirmDirtyLoad, createStore } from './core/state.js';
 import { sectionTitle } from './core/model.js';
@@ -294,15 +294,15 @@ if (app) {
   }
 
   document.querySelector('#btn-export-json')?.addEventListener('click', () => {
-    if (!requirePack()) return;
+    if (!requirePack() || !confirmExportDespiteErrors()) return;
     showToast(`已导出 ${exportJsonDownload(store)}`);
   });
   document.querySelector('#btn-export-zip')?.addEventListener('click', () => {
-    if (!requirePack()) return;
+    if (!requirePack() || !confirmExportDespiteErrors()) return;
     showToast(`已导出 ${exportZipDownload(store)}`);
   });
   document.querySelector('#btn-to-game')?.addEventListener('click', () => {
-    if (!requirePack()) return;
+    if (!requirePack() || !confirmExportDespiteErrors()) return;
     void exportToGame(store).then((result) => {
       if (!result.ok) {
         showToast(`✗ 写入失败：${result.error}`);
@@ -315,6 +315,23 @@ if (app) {
   function requirePack(): boolean {
     if (!store.hasPack()) {
       showToast('请先加载内容包');
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * 出口门禁（#56 项 2）：编辑中允许带错（右栏校验实时红是常态），但
+   * 导出 JSON/zip、一键导入游戏是出口——游戏壳对坏包启动期 fail-fast
+   * 拒启。带错导出先二次确认（取消则不动），干净包静默放行。
+   */
+  function confirmExportDespiteErrors(): boolean {
+    const result = validateContentPack(store.state.pack);
+    if (result.ok) {
+      return true;
+    }
+    if (!window.confirm(`当前包有 ${result.errors.length} 处校验错误，导出后可能无法通过游戏加载校验。仍要导出？`)) {
+      showToast('已取消导出：请先在校验面板修正错误');
       return false;
     }
     return true;

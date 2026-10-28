@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { validateContentPack } from '@wendao/content';
+import { sectionSchemas, validateContentPack, type JsonSchema } from '@wendao/content';
 import { xiuxianPackJson } from '@wendao/content/packs/xiuxian';
 import { extractJsonArray, type LlmClient } from '../src/llm/client.js';
 import { createFetchClient } from '../src/llm/client.js';
-import { applyCandidates, generateCandidates, packContextOf } from '../src/llm/pipeline.js';
+import {
+  applyCandidates,
+  candidateSchemaOf,
+  generateCandidates,
+  packContextOf,
+  verbKeyPatternOf,
+} from '../src/llm/pipeline.js';
 import { GEN_LABELS, genKinds } from '../src/llm/prompts.js';
-import { xiuxianStore } from './helpers.js';
+import { testEnemy, xiuxianStore } from './helpers.js';
 import type { ChatMessage } from '../src/llm/client.js';
 
 /** 假 LLM client：按脚本回固定文本（验收 2 的「配置假 LLM client」）。 */
@@ -194,6 +200,108 @@ describe('packContextOf', () => {
     expect(ctx.enemyIds.length).toBeGreaterThan(0);
     expect(ctx.slotIds.length).toBeGreaterThan(0);
     expect(ctx.elementKeys.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * 变异对照（改完必须验红再还原，别信「测试在场」；集：
+ * scripts/mutation-sets/editor-exit-gates-56.mjs）：
+ * - 事务把关失效（added.length 恒假）→ 悬空 drops 用例抛错消失、包被写坏，红；
+ * - 对照底清空（baselineKeys 恒空集）→ 存量错误被误判新增、带错编辑期入包
+ *   被堵死，「不误伤」用例红；
+ * - 撞名入包口拦截失效 → 撞名候选混入（靠事务兜底整批回滚），applied/
+ *   skipped 断言红。
+ */
+describe('#56 项 1 · 入包口语义门禁（撞名逐条拦截 + 事务式整包回滚）', () => {
+  it('撞名 id 候选入包口逐条跳过（含同批撞名），好候选不受拖累', async () => {
+    const store = xiuxianStore();
+    const existing = (store.state.pack['enemies'] as { id: string }[])[0]!.id;
+    const reply = JSON.stringify({
+      items: [
+        testEnemy(existing, '撞名怪', 'core1'),
+        testEnemy('fresh_one', '新怪', 'core1'),
+        testEnemy('fresh_one', '同批撞名', 'core1'),
+      ],
+    });
+    const result = await generateCandidates({
+      kind: 'enemies', client: fakeClient(reply), config: CONFIG, count: 3, hint: '', pack: store.state.pack,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    for (const candidate of result.candidates) {
+      // 条目级 schema 看不见包：撞名候选自身零错（这正是原先漏放的原因）。
+      expect(candidate.errors, candidate.label).toEqual([]);
+      candidate.approved = true;
+    }
+    const report = applyCandidates(store, 'enemies', result.candidates);
+    expect(report.applied).toBe(1);
+    expect(report.skipped).toEqual([existing, 'fresh_one']);
+    const enemies = store.state.pack['enemies'] as { id: string; name: string }[];
+    expect(enemies.filter((entry) => entry.id === 'fresh_one')).toHaveLength(1);
+    expect(enemies.some((entry) => entry.name === '新怪')).toBe(true);
+    expect(validateContentPack(store.state.pack).ok).toBe(true);
+  });
+
+  it('悬空 drops 入包 → 整包校验拦下、抛错整体回滚、包未改动不进历史', async () => {
+    const store = xiuxianStore();
+    const before = JSON.stringify(store.state.pack);
+    const reply = JSON.stringify({ items: [testEnemy('dangler', '悬空怪', 'ghost_item')] });
+    const result = await generateCandidates({
+      kind: 'enemies', client: fakeClient(reply), config: CONFIG, count: 1, hint: '', pack: store.state.pack,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.candidates[0]!.errors).toEqual([]);
+    for (const candidate of result.candidates) candidate.approved = true;
+    expect(() => applyCandidates(store, 'enemies', result.candidates)).toThrow(/回滚/);
+    // 事务性：包回到入包前时点（候选 1 条也没进来）。
+    expect(JSON.stringify(store.state.pack)).toBe(before);
+    // 回滚不入历史（#73）：撤销栈无痕迹、不脏。
+    expect(store.canUndo()).toBe(false);
+    expect(store.state.dirty).toBe(false);
+  });
+
+  it('带存量错误的包（编辑中带错）入包不误伤：事务核对只拦本次新增错误', async () => {
+    const store = xiuxianStore();
+    store.update((pack) => {
+      (pack['enemies'] as { hp: unknown }[])[0]!.hp = 'oops';
+    });
+    const result = await generateCandidates({
+      kind: 'enemies', client: fakeClient(TEN_ENEMIES_REPLY), config: CONFIG, count: 10, hint: '', pack: store.state.pack,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    for (const candidate of result.candidates) candidate.approved = true;
+    const report = applyCandidates(store, 'enemies', result.candidates);
+    expect(report.applied).toBe(10);
+    expect(report.skipped).toEqual([]);
+    // 存量错误原样保留（门禁不修错也不因它堵门）。
+    expect(validateContentPack(store.state.pack).ok).toBe(false);
+  });
+});
+
+/**
+ * 变异对照（集：scripts/mutation-sets/editor-exit-gates-56.mjs）：
+ * pattern 取值断链（verbKeyPatternOf 恒 undefined）→ 单一来源钉住用例红。
+ */
+describe('#56 项 4 · verbs 候选键 pattern 单一来源', () => {
+  it('候选 schema 的 key pattern = combat-text schema verbs.patternProperties 键（漂移即红）', () => {
+    const schemaPattern = verbKeyPatternOf(sectionSchemas['combatText'] as JsonSchema);
+    expect(schemaPattern).toBeDefined();
+    expect(candidateSchemaOf('verbs').properties?.['key']?.pattern).toBe(schemaPattern);
+  });
+
+  it('坏键形态候选：候选级即报 pattern 错（行为面回归，pattern 来源退役手写字面量）', async () => {
+    const store = xiuxianStore();
+    const reply = JSON.stringify({ items: [{ key: 'Bad_Key', list: [{ v: '坏键', limbs: ['拳'] }] }] });
+    const result = await generateCandidates({
+      kind: 'verbs', client: fakeClient(reply), config: CONFIG, count: 1, hint: '', pack: store.state.pack,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(
+      result.candidates[0]!.errors.some((error) => error.path === '/key' && error.keyword === 'pattern'),
+    ).toBe(true);
   });
 });
 

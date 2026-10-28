@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * 装配级冒烟（#88 AC1，兼 #74-10 首块）：import main.ts 真装配（空包起步）
@@ -374,6 +374,106 @@ describe('#74-8 · 错误定位 gotoError 装配（CSS.escape 路径）', () => 
     expect(document.querySelectorAll('.entry-body').length).toBe(1);
     const target = document.querySelector<HTMLElement>('[data-path="/enemies/0/id"]')!;
     expect(target.classList.contains('flash')).toBe(true);
+  });
+});
+
+/**
+ * #56 项 2 装配级：导出 JSON/zip、一键导入游戏的校验门禁——编辑中允许
+ * 带错（右栏实时红），出口把关：干净包静默放行零确认；带错包先二次确认，
+ * 取消则不出包、放行才出（游戏壳对坏包启动期 fail-fast 拒启）。
+ * 下载观察面：垫桩 URL.createObjectURL 计数（happy-dom 无真实下载），
+ * revokeObjectURL 一并垫掉防未定义。
+ *
+ * 变异对照（改完必须验红再还原，别信「测试在场」）：
+ * - 三个导出按钮任一丢 confirmExportDespiteErrors() 守卫 → 带错导出不弹
+ *   确认直接出包（confirms 空 / downloads 增长），红；
+ * - confirmExportDespiteErrors 丢 validateContentPack 判定恒放行 → 同上红。
+ */
+describe('#56 项 2 · 装配级：导出/写游戏校验门禁', () => {
+  const realCreate = URL.createObjectURL;
+  const realRevoke = URL.revokeObjectURL;
+  let downloads: number;
+
+  beforeEach(() => {
+    downloads = 0;
+    URL.createObjectURL = (() => {
+      downloads += 1;
+      return 'blob:mock';
+    }) as typeof URL.createObjectURL;
+    URL.revokeObjectURL = (() => {}) as typeof URL.revokeObjectURL;
+  });
+
+  afterEach(() => {
+    URL.createObjectURL = realCreate;
+    URL.revokeObjectURL = realRevoke;
+    vi.restoreAllMocks();
+    document.body.replaceChildren();
+  });
+
+  /** 把包弄红（version 写成非 semver，恰 1 处校验错误）。 */
+  function breakPack(): void {
+    const versionInput = document.querySelector<HTMLInputElement>('#pack-version')!;
+    versionInput.value = 'not-semver';
+    versionInput.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  it('干净包导出不弹确认；带错导出先确认，取消不出包、放行才出', async () => {
+    vi.resetModules();
+    document.body.innerHTML = '<div id="app"></div>';
+    const confirms: string[] = [];
+    let allow = false;
+    (window as unknown as { confirm?: (message: string) => boolean }).confirm = (message: string) => {
+      confirms.push(message);
+      return allow;
+    };
+    await import('../src/main.js');
+
+    (document.querySelector('#btn-sample') as HTMLButtonElement).click();
+    // 干净包：直接导出，零确认（json/zip 两口都放行）。
+    (document.querySelector('#btn-export-json') as HTMLButtonElement).click();
+    expect(confirms).toEqual([]);
+    expect(downloads).toBe(1);
+    expect(document.querySelector('#toast')!.textContent).toContain('已导出');
+    (document.querySelector('#btn-export-zip') as HTMLButtonElement).click();
+    expect(confirms).toEqual([]);
+    expect(downloads).toBe(2);
+
+    // 带错包：导出先确认；取消不出包（zip/json 两口各验一次取消面）。
+    breakPack();
+    (document.querySelector('#btn-export-zip') as HTMLButtonElement).click();
+    expect(confirms).toHaveLength(1);
+    expect(confirms[0]).toContain('1 处校验错误');
+    expect(downloads).toBe(2);
+    expect(document.querySelector('#toast')!.textContent).toContain('已取消导出');
+    (document.querySelector('#btn-export-json') as HTMLButtonElement).click();
+    expect(confirms).toHaveLength(2);
+    expect(downloads).toBe(2);
+
+    // 确认放行：带错导出（作者自担）。
+    allow = true;
+    (document.querySelector('#btn-export-json') as HTMLButtonElement).click();
+    expect(confirms).toHaveLength(3);
+    expect(downloads).toBe(3);
+    expect(document.querySelector('#toast')!.textContent).toContain('已导出');
+  });
+
+  it('带错包一键导入游戏：同门禁，确认才写（无桥降级下载路径）', async () => {
+    vi.resetModules();
+    document.body.innerHTML = '<div id="app"></div>';
+    let allow = false;
+    (window as unknown as { confirm?: (message: string) => boolean }).confirm = () => allow;
+    await import('../src/main.js');
+
+    (document.querySelector('#btn-sample') as HTMLButtonElement).click();
+    breakPack();
+
+    (document.querySelector('#btn-to-game') as HTMLButtonElement).click();
+    expect(downloads).toBe(0); // 取消：不写游戏
+
+    allow = true;
+    (document.querySelector('#btn-to-game') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(downloads).toBe(1));
+    expect(document.querySelector('#toast')!.textContent).toContain('已下载包');
   });
 });
 

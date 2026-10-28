@@ -561,10 +561,23 @@ function numberControl(
   input.value = typeof current === 'number' ? String(current) : '';
   input.addEventListener('input', () => {
     const parsed = node.kind === 'integer' ? Number.parseInt(input.value, 10) : Number.parseFloat(input.value);
-    if (Number.isNaN(parsed)) return; // 清空输入中：不写回，避免破类型。
+    if (Number.isNaN(parsed)) {
+      // 清空输入中（#56 项 3）：不写回避免破类型（数据仍持旧值），但 UI
+      // 必须让人看见分叉——输入框标红提示，失焦按数据回填收口。
+      input.classList.add('input-pending');
+      return;
+    }
+    input.classList.remove('input-pending');
     commit.touch(() => {
       container[key] = parsed;
     });
+  });
+  // 失焦回填（#56 项 3）：清空后导出带旧值、作者以为已删的静默分叉就此
+  // 收口——blur 时显示值一律对齐数据真值（合法输入时二者本就一致，无感）。
+  input.addEventListener('blur', () => {
+    input.classList.remove('input-pending');
+    const value = container[key];
+    input.value = typeof value === 'number' ? String(value) : '';
   });
   return input;
 }

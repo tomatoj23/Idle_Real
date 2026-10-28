@@ -16,7 +16,9 @@ import { xiuxianStore } from './helpers.js';
  *   纯函数用例与 DOM 回归用例双红；
  * - remapExpanded 移动分支只迁 from→to（区间不旋转）→ 拖拽用例红；
  * - mutate 丢 insert 展开（或改回 value.length off-by-one）→ 新增用例红；
- * - replace 改为写错下标 / switchBranch 后丢 replace 落空 → 换支用例红。
+ * - replace 改为写错下标 / switchBranch 后丢 replace 落空 → 换支用例红；
+ * - #56 项 3：清空态标红丢 input-pending → 清空用例红；blur 回填断链
+ *   （恒空串）→ 失焦回填断言红。
  */
 
 function renderWith(store: EditorStore, section: string, expand: readonly number[] = []): void {
@@ -212,5 +214,53 @@ describe('#74-2 · 坏形态包的渲染守卫（update 旁门写坏后不 TypeE
     // 靠 'rollback' 事件 toast + 重绘；此处钉错误可读 + 回滚后包仍是删除态）。
     expect(() => removeBtn.click()).toThrow('包形态损坏');
     expect('enemies' in store.state.pack).toBe(false);
+  });
+});
+
+describe('#56 项 3 · 数字清空态：标红提示 + 失焦回填（UI 与数据不再静默分叉）', () => {
+  const hpOf = (store: EditorStore): unknown =>
+    (store.state.pack['enemies'] as { hp: unknown }[])[0]!.hp;
+
+  function hpInput(): HTMLInputElement {
+    const input = document.querySelector<HTMLInputElement>('[data-path="/enemies/0/hp"] input');
+    if (input === null) {
+      throw new Error('hp 字段行未渲染');
+    }
+    return input;
+  }
+
+  it('清空输入：数据持旧值不破类型、输入框标红；失焦回填旧值并熄灭', () => {
+    const store = xiuxianStore();
+    renderWith(store, 'enemies', [0]);
+    const input = hpInput();
+    const before = hpOf(store);
+
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(hpOf(store)).toBe(before);
+    expect(store.state.dirty).toBe(false);
+    expect(input.classList.contains('input-pending')).toBe(true);
+
+    input.dispatchEvent(new Event('blur'));
+    expect(input.value).toBe(String(before));
+    expect(input.classList.contains('input-pending')).toBe(false);
+  });
+
+  it('清空后续输合法值：标红即熄、数据写回；blur 后显示与数据一致', () => {
+    const store = xiuxianStore();
+    renderWith(store, 'enemies', [0]);
+    const input = hpInput();
+
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(input.classList.contains('input-pending')).toBe(true);
+
+    input.value = '77';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(input.classList.contains('input-pending')).toBe(false);
+    expect(hpOf(store)).toBe(77);
+
+    input.dispatchEvent(new Event('blur'));
+    expect(input.value).toBe('77');
   });
 });

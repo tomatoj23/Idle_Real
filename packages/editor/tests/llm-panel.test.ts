@@ -5,7 +5,7 @@ import type { LlmClient } from '../src/llm/client.js';
 import { loadLlmConfig, saveLlmConfig } from '../src/llm/config.js';
 import type { GenKind } from '../src/llm/prompts.js';
 import { createLlmPanel } from '../src/ui/llmPanel.js';
-import { xiuxianStore } from './helpers.js';
+import { testEnemy, xiuxianStore } from './helpers.js';
 
 /**
  * LLM 面板 DOM 级行为（#74 项 6/7/11、#89）：
@@ -20,6 +20,8 @@ import { xiuxianStore } from './helpers.js';
  * - #89-2：勾选入包 try/catch/finally 防御兜底——注入 store.update 抛错 →
  *   状态行报错、候选现场保留、按钮态复位（现树无可达抛点，无自然红，
  *   测试即规格）；成功路径回归一条钉「候选清空 + onApplied 仍触发」。
+ * - #56 项 1：入包事务门禁（pipeline 抛错）的自然红路径——状态行呈现
+ *   回滚口径与错误路径、候选保留；pipeline 门禁失效或面板 catch 断线即红。
  *
  * 变异对照（改完必须验红再还原，别信「测试在场」）：
  * - 勾选 change 丢 repaintCandidates() → 勾选后按钮仍 disabled/计数不变，本文件红；
@@ -66,6 +68,11 @@ const POLLUTED_ENEMY_REPLY =
 /** 污染回复（#89-1）：verbs 候选 list 内嵌对象带 __proto__ own 键（verbs 分支无克隆）。 */
 const POLLUTED_VERB_REPLY =
   '{"items":[{"key":"polluted_verb","list":[{"v":"污招式","limbs":["掌"],"__proto__":{"x":1}}]}]}';
+
+/** 悬空引用候选（#56 项 1）：条目级 schema 零错（查不到包），整包语义才拦。 */
+const DANGLING_DROP_REPLY = JSON.stringify({
+  items: [testEnemy('dangler', '悬空怪', 'ghost_item')],
+});
 
 /** 挂起型假 client：complete 永不 resolve，只等 abort（取消路径测试）。 */
 function hangingClient(captured: { signal?: AbortSignal }): LlmClient {
@@ -314,5 +321,25 @@ describe('#89-2 · 勾选入包 try/catch/finally 防御兜底', () => {
     const enemies = store.state.pack['enemies'] as { id: string }[];
     expect(enemies.some((enemy) => enemy.id === 'fake_beast_1')).toBe(true);
     expect(onApplied).toHaveBeenCalledTimes(1);
+  });
+
+  it('#56 项 1 自然红路径：悬空 drops 候选入包 → 状态行报错带原因、候选保留、包不动', async () => {
+    const onApplied = vi.fn();
+    const store = mountPanel({ client: fakeClient(DANGLING_DROP_REPLY), onApplied });
+    const applyBtn = await generateApproveAll(store, 'enemies');
+    const enemiesBefore = (store.state.pack['enemies'] as unknown[]).length;
+
+    applyBtn.click();
+
+    // 事务式门禁（pipeline）抛错 → 面板 catch 呈现：错误原因（含回滚口径
+    // 与具体错误路径）可见、候选现场保留可改后再试、包一条未进。
+    const status = document.querySelector('.llm-status')!;
+    expect(status.textContent).toContain('✗ 入包失败');
+    expect(status.textContent).toContain('已整体回滚');
+    expect(status.textContent).toContain('/enemies/8/drops/0/item');
+    expect(document.querySelectorAll('.candidate')).toHaveLength(1);
+    expect(applyBtn.textContent).toBe('勾选入包（1）');
+    expect((store.state.pack['enemies'] as unknown[]).length).toBe(enemiesBefore);
+    expect(onApplied).not.toHaveBeenCalled();
   });
 });

@@ -351,6 +351,11 @@ body {
   border-color: var(--cinnabar);
 }
 
+/* 数字输入清空态提示（#56 项 3）：清空中数据仍持旧值，标红让人看见分叉。 */
+.input.input-pending {
+  border-color: var(--cinnabar);
+}
+
 .field-row.has-error > .field-label {
   color: var(--cinnabar);
   font-weight: 600;
