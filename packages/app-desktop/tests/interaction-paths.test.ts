@@ -38,7 +38,6 @@ describe('#58 项 6 · 壳层交互路径', () => {
     ] as const) {
       const btnOf = (): HTMLButtonElement =>
         root.querySelector<HTMLButtonElement>(`[data-act="${act}"]`)!;
-      expect(btnOf).not.toBeNull();
       expect(game.snapshot().state[stateKey]).toBe(true);
       expect(btnOf().className).toContain('on');
       btnOf().click();
