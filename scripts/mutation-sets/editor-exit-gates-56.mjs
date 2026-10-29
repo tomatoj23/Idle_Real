@@ -55,7 +55,7 @@ export default {
       path: pipelinePath,
       before: "      if (typeof entry.id === 'string' && claimedIds.has(entry.id)) {",
       after: "      if (false && typeof entry.id === 'string' && claimedIds.has(entry.id)) {",
-      note: '撞名入包口拦截失效：撞名候选混入同批（靠事务兜底整批回滚）——applied/skipped 断言红。',
+      note: '撞名入包口拦截失效：撞名候选混入同批（靠事务兜底整批回滚）——撞名用例经门禁抛错红（抛错路径击杀，同 02 号口径）。',
     },
     {
       id: '04-verb-pattern-source-severed',

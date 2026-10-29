@@ -138,9 +138,10 @@ export function createLlmPanel(
         (result.skipped.length > 0 ? `（跳过 ${result.skipped.join('、')}）` : '');
       succeeded = true;
     } catch (cause) {
-      // 防御纵深（#89 项 2）：现树无可达抛点，兜跨模块不变式未来被破——
-      // store.update 抛错已整树回滚（#73 rollback），此处只兜 UI 面：
-      // 状态行报错、候选现场保留（可勾选重试）。
+      // 防御纵深（#89 项 2）＋自然抛点承接（#56 项 1）：入包事务门禁
+      // （pipeline 整包校验）会在此真实抛错——状态行报错、候选现场保留
+      // （可勾选重试）；store.update 抛错已整树回滚（#73 rollback），
+      // 此处只兜 UI 面。
       statusLine.textContent = `✗ 入包失败：${cause instanceof Error ? cause.message : String(cause)}`;
     } finally {
       // 按钮两态单点复位：成功（候选清空→计数归零）与失败（现场保留→
