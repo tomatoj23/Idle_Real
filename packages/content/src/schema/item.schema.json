@@ -284,10 +284,10 @@
           "type": "string",
           "title": "机制原语",
           "minLength": 1,
-          "description": "引擎机制原语名（如燃爆/疫毒/滞缓）"
+          "description": "引擎铭纹 feature 原语名（闭集：poisonSpread/chainBolt，#58 项 2 键域校验；未注册原语引擎忽略）"
         },
         "condition": { "$ref": "#/definitions/condition" },
-        "value": { "type": "number", "title": "数值", "description": "原语数值参数（如传染概率）；无参数原语省略" }
+        "value": { "type": "number", "title": "数值", "description": "原语数值参数（值域按原语类别收口：概率型 0~1，语义校验 #58 项 2）；无参数原语省略" }
       }
     },
     "tags": {

@@ -414,3 +414,211 @@ describe('#39 · 道韵账本与访问段信号', () => {
     expect(game.events.drain()[0]).toMatchObject({ type: 'reject', data: { action: 'visit:begin', reason: 'bad-payload' } });
   });
 });
+
+/* ---------- #58 项 1：五来源事件形状直测（dungeon/achievement/sell/smelt/reforge） ---------- */
+
+/**
+ * #39 咽喉的来源 12 键里，此前 ledger.test 只直测了 gather/craft/combat/buy/
+ * eat/rebirth/talent 七来源；#33 修行录消费的协议面在 dungeon/achievement/
+ * sell(gear)/smelt(手动)/reforge 五来源上零直接断言。本组逐来源钉事件形状
+ * （kind/id/count/value/origin/offline 缺省全形状，toEqual 隐式钉 offline 缺省
+ * ——五来源均无离线路径：秘境离线即弃置、成就离线评估不带 offline 面、
+ * 卖/熔/重铸是前台手动动作）。
+ */
+describe('#58 · 五来源账本事件形状直测', () => {
+  /** 事件汇（防 256 上限截断）里取指定来源的账本条目。 */
+  const sourceEntries = (sink: GameEvent[], source: LedgerData['source']): LedgerData[] =>
+    sink
+      .filter((e) => e.type === 'ledger')
+      .map((e) => e.data as LedgerData)
+      .filter((e) => e.source === source);
+
+  /** 高斗法修为存档（xp 20000 = 一击杀，全程免伤；dungeon.test strongSave 同款）。 */
+  const strongSave = (extra: Record<string, unknown> = {}): SaveData =>
+    ({
+      version: 1,
+      time: 0,
+      state: { skills: { fight: { xp: 20000 } }, items: {}, ...extra },
+    }) as unknown as SaveData;
+
+  it('dungeon 层奖励三路：gold 冻结 value=1 / item 冻结卖价 / daoYun value=0，origin=idle', () => {
+    const pack = {
+      ...makeCombatPack(),
+      dungeons: [
+        {
+          id: 'crypt', name: '妖窟秘境', icon: '窟', floors: 1,
+          entry: { daoYun: 2 },
+          layers: [
+            {
+              floor: { min: 1, max: 1 },
+              enemies: [{ enemy: 'e1', weight: 1 }],
+              rewards: { gold: 10, daoYun: 1, items: [{ item: 'core1', count: 1 }] },
+            },
+          ],
+        },
+      ],
+    } as GameContent;
+    const clock = new ManualClock();
+    const game = createGame({
+      content: pack,
+      clock,
+      rng: () => 0.4,
+      // 高斗法修为存档（xp 20000）：一击杀，全程免伤（dungeon.test strongSave 同款）。
+      save: strongSave({ daoYunEarned: 2 }),
+    });
+    game.dispatch({ type: 'dungeon:enter', payload: { dungeonId: 'crypt' } });
+    const sink: GameEvent[] = [];
+    for (let i = 0; i < 600 && stateOf(game.snapshot()).dungeon; i++) {
+      clock.advance(1000);
+      game.tick(1000);
+      sink.push(...game.events.drain());
+    }
+    expect(stateOf(game.snapshot()).dungeon).toBeNull(); // 单层通关离境
+    expect(sourceEntries(sink, 'dungeon')).toEqual([
+      { kind: 'currency', source: 'dungeon', origin: 'idle', id: 'gold', count: 10, value: 1 },
+      { kind: 'item', source: 'dungeon', origin: 'idle', id: 'core1', count: 1, value: 25 },
+      { kind: 'currency', source: 'dungeon', origin: 'idle', id: 'daoYun', count: 1, value: 0 },
+    ]);
+  });
+
+  it('achievement 奖励：gold + 物品入袋（value 冻结卖价），解锁一次只入账一次', () => {
+    const eweak = {
+      id: 'eweak', name: '白羊', icon: '羊', level: 1, kind: 'claw',
+      hp: 5, atk: 0, def: 0, attackInterval: 100000, exp: 2, gold: { min: 1, max: 1 }, drops: [],
+    };
+    const pack = {
+      ...makeCombatPack(),
+      enemies: [...makeCombatPack().enemies, eweak],
+      achievements: [
+        {
+          id: 'first_kill', name: '初阵', icon: '战', description: '首次击杀',
+          condition: { stat: 'kills', target: 1 },
+          reward: { gold: 500, items: [{ item: 'core1', count: 2 }] },
+        },
+      ],
+    } as GameContent;
+    const clock = new ManualClock();
+    const game = createGame({
+      content: pack,
+      clock,
+      rng: () => 0.4,
+      save: strongSave(),
+    });
+    game.dispatch({ type: 'combat:start', payload: { enemyId: 'eweak' } });
+    const sink: GameEvent[] = [];
+    for (let i = 0; i < 600; i++) {
+      clock.advance(1000);
+      game.tick(1000);
+      sink.push(...game.events.drain());
+      if ((stateOf(game.snapshot()).stats as { kills?: number }).kills !== undefined) break;
+    }
+    // 战后评估（tick 末）入账：金先物后（evaluateAchievements 单序）。
+    expect(sourceEntries(sink, 'achievement')).toEqual([
+      { kind: 'currency', source: 'achievement', origin: 'idle', id: 'gold', count: 500, value: 1 },
+      { kind: 'item', source: 'achievement', origin: 'idle', id: 'core1', count: 2, value: 25 },
+    ]);
+  });
+
+  it('sell(gear)：装备实例出袋 count=-1 带 uid/rarity + 灵石按档位折算，origin=user', () => {
+    const clock = new ManualClock();
+    const game = createGame({
+      content: makeLedgerPack(),
+      clock,
+      rng: () => 0.4,
+      save: {
+        version: 1,
+        time: 0,
+        state: {
+          gold: 0,
+          hp: 50,
+          items: {},
+          skills: {},
+          activity: null,
+          gear: [{ uid: 1, itemId: 'sword1', rarity: 'common', affixes: [] }],
+        },
+      },
+    });
+    game.dispatch({ type: 'gear:sell', payload: { uid: 1 } });
+    // sword1 卖价 30 × common 倍率 1 = 30（gearSell 冻结在 removal 行 value）。
+    expect(sourceEntries(game.events.drain(), 'sell')).toEqual([
+      { kind: 'gear', source: 'sell', origin: 'user', id: 'sword1', uid: 1, rarity: 'common', count: -1, value: 30 },
+      { kind: 'currency', source: 'sell', origin: 'user', id: 'gold', count: 30, value: 1 },
+    ]);
+    expect(stateOf(game.snapshot()).gear).toHaveLength(0);
+  });
+
+  it('smelt(手动)：装备实例出袋 count=-1 + 器屑按稀有度 smelt 字段入袋，origin=user', () => {
+    const clock = new ManualClock();
+    const game = createGame({
+      content: makeLedgerPack(),
+      clock,
+      rng: () => 0.4,
+      save: {
+        version: 1,
+        time: 0,
+        state: {
+          gold: 0,
+          hp: 50,
+          items: {},
+          skills: {},
+          activity: null,
+          gear: [{ uid: 1, itemId: 'sword1', rarity: 'common', affixes: [] }],
+        },
+      },
+    });
+    game.dispatch({ type: 'gear:smelt', payload: { uid: 1 } });
+    // common smelt=1 → 器屑 ×1（value=器屑卖价 3）；出袋行 value 仍是装备卖价折算（30）。
+    expect(sourceEntries(game.events.drain(), 'smelt')).toEqual([
+      { kind: 'gear', source: 'smelt', origin: 'user', id: 'sword1', uid: 1, rarity: 'common', count: -1, value: 30 },
+      { kind: 'item', source: 'smelt', origin: 'user', id: 'shard', count: 1, value: 3 },
+    ]);
+    expect(stateOf(game.snapshot()).items.shard).toBe(1);
+  });
+
+  it('reforge：器屑消耗 count=-cost 带 value=器屑卖价（唯一入账是扣耗），origin=user', () => {
+    const core = smithCraftCore();
+    const pack = {
+      ...core,
+      items: [
+        ...core.items,
+        {
+          id: 'blank1', name: '剑坯', icon: '坯', type: 'blank', slot: 'weapon', sell: 0,
+          tierRange: { min: 1, max: 3 },
+        },
+        {
+          id: 'insc1', name: '锋锐', icon: '锐', type: 'inscription', sell: 0,
+          tiers: [
+            [{ stat: 'atk', zone: 'flat', value: 1 }],
+            [{ stat: 'atk', zone: 'flat', value: 2 }],
+            [{ stat: 'atk', zone: 'flat', value: 3 }],
+          ],
+        },
+      ],
+    } as unknown as GameContent;
+    const clock = new ManualClock();
+    const game = createGame({
+      content: pack,
+      clock,
+      rng: () => 0.4, // 纹阶掷点：1 + floor(0.4 × 3) = 2
+      save: {
+        version: 1,
+        time: 0,
+        state: {
+          gold: 0,
+          hp: 50,
+          items: { shard: 10 },
+          skills: {},
+          activity: null,
+          gear: [{ uid: 1, itemId: 'blank1', rarity: 'common', affixes: [], inscriptions: [{ id: 'insc1', tier: 1 }] }],
+        },
+      },
+    });
+    game.dispatch({ type: 'gear:reforge', payload: { uid: 1, index: 0 } });
+    expect(sourceEntries(game.events.drain(), 'reforge')).toEqual([
+      { kind: 'item', source: 'reforge', origin: 'user', id: 'shard', count: -5, value: 3 },
+    ]);
+    const gear = stateOf(game.snapshot()).gear[0];
+    expect(gear?.inscriptions?.[0]?.tier).toBe(2); // 重随生效（reforgeCost 5 已扣）
+    expect(stateOf(game.snapshot()).items.shard).toBe(5);
+  });
+});

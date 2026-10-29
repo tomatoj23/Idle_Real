@@ -85,7 +85,7 @@ export function createCombatPage(env: PageEnv): PageView {
                 ? `<em class="act-badge">${esc(T('pages.combat.engagedBadge'))}</em>`
                 : locked
                 ? `<span class="act-lockmsg">${esc(lockMsg)}</span>`
-                : `<button class="btn" data-act="fight" data-enemy="${enemy.id}">${esc(T('pages.combat.fightBtn'))}</button>`
+                : `<button class="btn" data-act="fight" data-enemy="${esc(enemy.id)}">${esc(T('pages.combat.fightBtn'))}</button>`
             }
             ${autoRuleHtml({
               T,
@@ -167,7 +167,7 @@ export function createCombatPage(env: PageEnv): PageView {
               <span class="bag-ops">${
                 gate.locked
                   ? `<span class="act-lockmsg">${esc(dungeonLockMsgOf(T, content, st, dungeon.id))}</span>`
-                  : `<button class="btn" data-act="dungeon-enter" data-dungeon="${dungeon.id}">${esc(T('pages.dungeon.enterBtn'))}</button>`
+                  : `<button class="btn" data-act="dungeon-enter" data-dungeon="${esc(dungeon.id)}">${esc(T('pages.dungeon.enterBtn'))}</button>`
               }</span>
             </div>`;
             })

@@ -386,3 +386,54 @@ describe('#15 · 武器 element 与 elementFlavor 引用面', () => {
     expectError(validateContentPack(pack), '/combatText/elementFlavor/thunder/openers', 'additionalProperties');
   });
 });
+
+/* ==================== 铭纹 feature 原语（#58 项 2） ==================== */
+
+describe('#58 · 铭纹 feature 原语键域与概率值域', () => {
+  /** rune_edge 是 makeBasePack 里唯一的 inscription 条目（items[1]）。 */
+  const withFeature = (feature: Record<string, unknown>): Record<string, any> => {
+    const pack = makeBasePack();
+    pack.items[1].feature = feature;
+    return pack;
+  };
+
+  it('在册原语 + 概率值在域（0.25）→ 通过（xiuxian 包两铭纹同款）', () => {
+    expect(validateContentPack(withFeature({ primitive: 'poisonSpread', value: 0.25 })).ok).toBe(true);
+    expect(validateContentPack(withFeature({ primitive: 'chainBolt', value: 0.2 })).ok).toBe(true);
+  });
+
+  it('概率域边界值 0 与 1 合法（闭区间）', () => {
+    expect(validateContentPack(withFeature({ primitive: 'poisonSpread', value: 0 })).ok).toBe(true);
+    expect(validateContentPack(withFeature({ primitive: 'poisonSpread', value: 1 })).ok).toBe(true);
+  });
+
+  it('typo 原语 → xref 大声拒绝（引擎静默忽略 = 废牌铭纹，加载期拦）', () => {
+    expectError(
+      validateContentPack(withFeature({ primitive: 'poisonSpreed', value: 0.25 })),
+      '/items/1/feature/primitive',
+      'xref',
+    );
+  });
+
+  it('概率语义越界（1.5 / 负值）→ shape（此前无界放行）', () => {
+    expectError(
+      validateContentPack(withFeature({ primitive: 'chainBolt', value: 1.5 })),
+      '/items/1/feature/value',
+      'shape',
+    );
+    expectError(
+      validateContentPack(withFeature({ primitive: 'chainBolt', value: -0.1 })),
+      '/items/1/feature/value',
+      'shape',
+    );
+  });
+
+  it('无参数形态（value 省略）合法——键域照查，值域不涉', () => {
+    expect(validateContentPack(withFeature({ primitive: 'poisonSpread' })).ok).toBe(true);
+    expectError(
+      validateContentPack(withFeature({ primitive: 'noSuchPrimitive' })),
+      '/items/1/feature/primitive',
+      'xref',
+    );
+  });
+});

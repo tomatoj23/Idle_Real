@@ -309,6 +309,8 @@ function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
   checkElementRefs(pack, elementIds, moveKeys, errors);
   // 系别机制签名（#15，ADR-012）：原语闭集镜像 + 机械原语参数必填。
   checkElementSignatures(pack.elements, errors);
+  // 铭纹 feature 原语（#58 项 2）：键域闭集镜像 + 概率值域。
+  checkInscriptionFeatures(pack.items, errors);
 
   // 转生节（#6）：可选节，存在则查清单键域、天赋树 xref/查环、解锁表 xref、境界词表。
   checkRebirth(pack, enemyIndex, skillIndex, errors);
@@ -1021,6 +1023,19 @@ function checkElementRefs(
 export const ELEMENT_COMBAT_PRIMITIVES: ReadonlySet<string> = new Set(['defenseBreak', 'slow', 'swift']);
 
 /**
+ * 铭纹 feature 原语注册表镜像（#58 项 2，与 engine contentView.ts
+ * INSCRIPTION_FEATURE_PRIMITIVES 同值闭集）：键 = 原语名，值 = value 域类别
+ * （probability = 概率语义，feature.value 须落在 [0,1]）。未注册原语 = 引擎
+ * 静默忽略的废牌铭纹（引擎对该原语的既有语义 = 忽略，无 loud 路径），加载期
+ * 大声拒绝；值域越界同律（概率传 1.5 此前无界放行）。机制激活状态不在校验
+ * 职责内（在册 = 键域/值域锚定，战斗消费实现属引擎后续票）。
+ */
+export const INSCRIPTION_FEATURE_PRIMITIVES: Readonly<Record<string, 'probability'>> = {
+  poisonSpread: 'probability',
+  chainBolt: 'probability',
+};
+
+/**
  * 系别机制签名检查（#15，可选字段，声明才查）：
  * - primitive 须命中引擎原语注册表镜像（假系大声失败）；
  * - 机械原语 value/duration 必填（schema 边界只钉 (0,1)/>0 的形态，
@@ -1053,6 +1068,43 @@ function checkElementSignatures(
         path: at('duration'),
         keyword: 'shape',
         message: `机械原语（${signature.primitive}）缺 duration（临时态时长，毫秒）`,
+      });
+    }
+  });
+}
+
+/* ==================== 铭纹 feature 原语（#58 项 2） ==================== */
+
+/**
+ * 铭纹 feature 检查（#58 项 2，可选字段，声明才查；condition 引用合法性
+ * 已在 checkElementRefs 三落点收口，此处只收原语键域与 value 域）：
+ * - primitive 须命中引擎铭纹 feature 注册表镜像（未注册 = 引擎静默忽略的
+ *   废牌铭纹，加载期大声拒绝）；
+ * - probability 类原语的 value 有值时须落 [0,1]（概率语义域；此前无界，
+ *   传 1.5 照单全收）。
+ */
+function checkInscriptionFeatures(
+  items: ContentPack['items'],
+  errors: ContentError[],
+): void {
+  items.forEach((item, i) => {
+    const feature = item.feature;
+    if (feature === undefined) return;
+    const at = (field: string) => `/items/${i}/feature/${field}`;
+    const domain = INSCRIPTION_FEATURE_PRIMITIVES[feature.primitive];
+    if (domain === undefined) {
+      errors.push({
+        path: at('primitive'),
+        keyword: 'xref',
+        message: `机制原语 "${feature.primitive}" 不在引擎铭纹 feature 注册表（${Object.keys(INSCRIPTION_FEATURE_PRIMITIVES).join('/')}）`,
+      });
+      return; // 键域已坏，值域不再对号（错误信息保持单点可定位）
+    }
+    if (feature.value !== undefined && domain === 'probability' && !(feature.value >= 0 && feature.value <= 1)) {
+      errors.push({
+        path: at('value'),
+        keyword: 'shape',
+        message: `概率原语（${feature.primitive}）value 须落在 0~1，得 ${feature.value}`,
       });
     }
   });

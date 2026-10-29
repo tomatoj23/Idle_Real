@@ -259,7 +259,7 @@ export function createJournalPage(env: PageEnv): PageView {
       .filter((text) => text.length > 0);
     const linesHtml = lines.join(`<span class="jr-sep">${esc(T('common.itemListSep'))}</span>`);
     const hidden = filter !== 'all' && filterKeyOf(rec) !== filter;
-    return `<div class="jr-row" data-seq="${rec.seq}" data-kind="${filterKeyOf(rec)}"${hidden ? ' style="display:none"' : ''}>
+    return `<div class="jr-row" data-seq="${rec.seq}" data-kind="${esc(filterKeyOf(rec))}"${hidden ? ' style="display:none"' : ''}>
       <span class="jr-badge jr-${filterKeyOf(rec)}">${esc(badgeOf(rec))}</span>
       <div class="jr-body">
         <div class="jr-title">${title}${sub ? `<span class="jr-sub">${sub}</span>` : ''}</div>
@@ -336,7 +336,7 @@ export function createJournalPage(env: PageEnv): PageView {
 
     const chips = FILTER_KEYS.map(
       (key) =>
-        `<button class="chip${filter === key ? ' selected' : ''}" data-act="jr-filter" data-filter="${key}">${esc(
+        `<button class="chip${filter === key ? ' selected' : ''}" data-act="jr-filter" data-filter="${esc(key)}">${esc(
           T(`pages.journal.filter${key[0]!.toUpperCase()}${key.slice(1)}`),
         )}</button>`,
     ).join('');

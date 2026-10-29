@@ -332,7 +332,7 @@ export function buildUi(
           ? hasAchievements
           : true;
   $('#tabs').innerHTML = TAB_ORDER.filter(tabAvailable)
-    .map((id) => `<button class="tab" data-act="tab" data-tab="${id}">${esc(T(pages[id].label))}</button>`)
+    .map((id) => `<button class="tab" data-act="tab" data-tab="${esc(id)}">${esc(T(pages[id].label))}</button>`)
     .join('');
   const tabButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('#tabs .tab'));
 
@@ -968,7 +968,7 @@ export function buildUi(
       buffbarEl.innerHTML = entries
         .map(([id]) => {
           const item = itemById.get(id);
-          return `<span class="buff-chip" data-buff="${id}" title="${esc(T('common.buffTimerOnlineOnly'))}">${esc(item?.icon ?? T('icons.buff'))} ${esc(item?.name ?? id)} <b></b></span>`;
+          return `<span class="buff-chip" data-buff="${esc(id)}" title="${esc(T('common.buffTimerOnlineOnly'))}">${esc(item?.icon ?? T('icons.buff'))} ${esc(item?.name ?? id)} <b></b></span>`;
         })
         .join('');
     }

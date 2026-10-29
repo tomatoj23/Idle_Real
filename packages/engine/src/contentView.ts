@@ -409,6 +409,28 @@ export interface BlankView {
   readonly inherentModifiers?: readonly Modifier[];
 }
 
+/**
+ * 铭纹 feature 原语值域类别（#58 项 2）：probability = 概率语义（value ∈ [0,1]，
+ * 如传染/连锁的触发概率）；后续非参数原语注册时扩类别（如 'none' = 省略 value）。
+ */
+export type InscriptionFeatureValueDomain = 'probability';
+
+/**
+ * 铭纹 feature 原语注册表（#58 项 2，消费点 = 下方 InscriptionView.feature 的
+ * 引擎面）：引擎铭纹 feature 协议认得的机制原语闭集，键 = 原语名，值 = value
+ * 域类别。与 ELEMENT_COMBAT_PRIMITIVES 同律——content 侧校验器持同值镜像
+ * （pack.ts），typo 原语加载期大声拒绝（引擎对未注册原语的既有语义 = 静默
+ * 忽略，整条机制铭纹变废牌，校验是唯一 loud 关卡）。在册 ≠ 机制已激活：两
+ * 原语的战斗消费实现属后续票，注册表先行锚定键域与值域（官方包已按此命名
+ * 发布，见 xiuxian.json「原语待启」注）。
+ */
+export const INSCRIPTION_FEATURE_PRIMITIVES: Readonly<
+  Record<string, InscriptionFeatureValueDomain>
+> = {
+  poisonSpread: 'probability',
+  chainBolt: 'probability',
+};
+
 /** 铭纹视图（items 节 type=inscription 条目）：纹阶数值表 + feature + tags。 */
 export interface InscriptionView {
   readonly id: string;
@@ -416,7 +438,7 @@ export interface InscriptionView {
   readonly icon: string;
   /** 纹阶数值表：下标 i = 纹阶 T(i+1)，表长即该铭纹纹阶深度上限（#61 边界收口：引擎数据派生）。 */
   readonly tiers: readonly (readonly Modifier[])[];
-  /** 机制型特色表达（原语未注册时引擎忽略，零新增）。 */
+  /** 机制型特色表达（原语域 = 上方 INSCRIPTION_FEATURE_PRIMITIVES 注册表闭集，未注册原语引擎忽略，零新增）。 */
   readonly feature?: { readonly primitive: string; readonly condition?: Modifier['condition']; readonly value?: number };
   /** 标签加权抽取归类（ADR-015）。 */
   readonly tags?: readonly string[];

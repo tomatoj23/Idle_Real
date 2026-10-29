@@ -21,6 +21,11 @@ import {
 } from '@wendao/engine';
 import type { PageCtx, ShellText } from './pages/types';
 
+/**
+ * HTML 转义（#58 项 8 用户裁决）：动态模板里**字符串值**进 data-* 属性一律过
+ * 本函数——防御纵深，不依赖 schema pattern 担保 id 域；数值插值
+ * （data-uid/data-count 等）不在此列。
+ */
 export const esc = (text: string): string =>
   text.replace(/[&<>"']/g, (ch) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch] ?? ch,
@@ -75,7 +80,7 @@ export function skillChipHtml(parts: {
 }): string {
   const { T, id, icon, name, level, selected, action } = parts;
   return `<button class="chip${selected ? ' selected' : ''}"
-          data-act="${action}" data-skill="${id}">
+          data-act="${esc(action)}" data-skill="${esc(id)}">
           <span class="sigil sigil-sm">${esc(icon)}</span><span>${esc(name)}</span>
           <b class="chip-lv">${esc(T('units.level', { v: level }))}</b>
         </button>`;
@@ -92,8 +97,8 @@ export function statusActHtml(parts: {
     return `<div class="act-now idle"><span>${esc(parts.idleText)}</span></div>`;
   }
   const { label, key, pct, stopLabel } = parts.running;
-  return `<div class="act-now"><span>${esc(label)}</span><b data-act-pct data-key="${key}">${Math.floor(pct)}%</b></div>
-           <div class="bar bar-jade"><i data-bar="activity" data-key="${key}" style="width:${pct}%"></i></div>
+  return `<div class="act-now"><span>${esc(label)}</span><b data-act-pct data-key="${esc(key)}">${Math.floor(pct)}%</b></div>
+           <div class="bar bar-jade"><i data-bar="activity" data-key="${esc(key)}" style="width:${pct}%"></i></div>
            ${actStopBtnHtml(stopLabel)}`;
 }
 
@@ -160,10 +165,10 @@ export function actYieldHtml(parts: {
 
 /** 活动细进度条（键控充能，update 差量刷新的锚点）。 */
 export const actBarHtml = (key: string, pct: number): string =>
-  `<div class="bar bar-thin"><i data-bar="activity" data-key="${key}" style="width:${pct}%"></i></div>`;
+  `<div class="bar bar-thin"><i data-bar="activity" data-key="${esc(key)}" style="width:${pct}%"></i></div>`;
 
 export const actStartBtnHtml = (skillId: string, index: number, label: string): string =>
-  `<button class="btn" data-act="start" data-skill="${skillId}" data-index="${index}">${esc(label)}</button>`;
+  `<button class="btn" data-act="start" data-skill="${esc(skillId)}" data-index="${index}">${esc(label)}</button>`;
 
 export const actStopBtnHtml = (label: string): string =>
   `<button class="btn btn-ghost" data-act="stop">${esc(label)}</button>`;
@@ -299,7 +304,7 @@ export const consumablesHtml = (content: ContentPack, st: GameState): string =>
     .filter((item) => item.type === 'consumable' && (st.items[item.id] ?? 0) > 0)
     .map(
       (item) =>
-        `<button class="btn btn-consumable" data-act="eat" data-item="${item.id}">${esc(item.icon)} ${esc(item.name)} ×${st.items[item.id]}</button>`,
+        `<button class="btn btn-consumable" data-act="eat" data-item="${esc(item.id)}">${esc(item.icon)} ${esc(item.name)} ×${st.items[item.id]}</button>`,
     )
     .join('');
 

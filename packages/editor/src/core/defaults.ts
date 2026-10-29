@@ -79,12 +79,17 @@ function sampleString(node: StringNode): string {
  * 数值缺省：min 优先，exclusiveMinimum（0 极常见，如 attackInterval）给出
  * 其上的最小整数，否则 0；排他上界收敛（概率域 exclusiveMinimum:0 +
  * exclusiveMaximum:1 时地板+1=1 顶界，取区间中点）。
+ * min + exclusiveMinimum 同节点（现役 schema 无此组合的潜伏缺口，#58 项 4）：
+ * 两下界取更严者——min 分支胜出时仍须越过排他下界，否则骨架值出生即违例。
  */
 function defaultNumber(node: NumberNode): number {
   const min = skeletonAttr<number>(node, 'numberFloor');
   const exclMin = skeletonAttr<number>(node, 'numberFloorExcl');
   const exclMax = skeletonAttr<number>(node, 'numberFloorCap');
   let value = min ?? (exclMin !== undefined ? Math.floor(exclMin) + 1 : 0);
+  if (exclMin !== undefined && value <= exclMin) {
+    value = Math.floor(exclMin) + 1;
+  }
   if (exclMax !== undefined && value >= exclMax) {
     value = exclMin !== undefined ? (exclMin + exclMax) / 2 : exclMax - 1;
   }

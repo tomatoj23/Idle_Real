@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ManualClock } from '../src/clock.js';
-import { createGame } from '../src/index.js';
+import { createGame, playerMaxHp, restoreState } from '../src/index.js';
 
 /** 最小内容包：引擎零内容感知，空壳即可开局。 */
 const minimalContent = {};
@@ -59,5 +59,29 @@ describe('createGame', () => {
     game.tick(Number.NaN);
 
     expect(game.events.drain()).toEqual([]);
+  });
+});
+
+describe('#58 项 5 · restoreState 直调契约（文档性钉子，防无声漂移）', () => {
+  /**
+   * state.ts hp 行的导出面契约：restoreState 单独调用产出的 hp **未钳顶**
+   * （声明序在 gear 前，装备/增益投影不可见，此处补钳会误伤合法头寸），
+   * 唯一上限钳点在 createGame 的完整属性投影。本组两面对拍把契约钉成
+   * 断言——哪一侧无声改变（restore 内补钳 / createGame 丢钳）即红。
+   */
+  const overflowingSave = {
+    version: 1 as const,
+    time: 0,
+    state: { hp: 9999 }, // 远超空技能基线 cap（clv1 = 112）
+  };
+
+  it('restoreState 直调：hp 超上限原值收编、不钳顶（只供 createGame 消费）', () => {
+    const state = restoreState(minimalContent, overflowingSave, 7);
+    expect(state.hp).toBe(9999);
+  });
+
+  it('createGame 恢复：同一存档 hp 被完整投影钳回上限（唯一钳点在装配层）', () => {
+    const game = createGame({ content: minimalContent, save: overflowingSave, clock: new ManualClock() });
+    expect(game.snapshot().state.hp).toBe(playerMaxHp(minimalContent, {}, []));
   });
 });

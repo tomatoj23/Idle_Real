@@ -162,3 +162,35 @@ describe('#44 · dungeon:enter 门（同一序列，秘境侧参数差异）', (
     expect(st.combat).toEqual(freshCombat());
   });
 });
+
+describe('#58 项 3 · mid-combat 换敌（不同敌）：整态替换语义（#31）', () => {
+  it('战团进行中换不同敌：战斗态整态替换（新敌满血、累计归零、系别临时态清），开战 note 重发', () => {
+    const game = createGame({ content: makeCombatPack(), clock: new ManualClock(), seed: 7 });
+    game.dispatch({ type: 'combat:start', payload: { enemyId: 'e1' } });
+    game.events.drain();
+    game.tick(4000); // 推进数合：对 e1 的 ehp/rounds/伤档累计已非零
+    game.events.drain();
+    const before = game.snapshot().state.combat as { ehp: number; rounds: number };
+    expect(before.ehp).toBeLessThan(60);
+    expect(before.rounds).toBeGreaterThan(0);
+
+    // 换敌（e3：等级门控基线偏移 2 下 clv1 可战，见 makeCombatPack 注）→ 整态替换：
+    // 旧战团累计不延续——新敌满血开团、合数/暴击/伤档/系别临时态全部回空位。
+    game.dispatch({ type: 'combat:start', payload: { enemyId: 'e3' } });
+    const events = game.events.drain();
+    expect(reasonsOf(events)).toEqual([]); // 不走 reject（幂等分支只拦同敌）
+    expect(events.some((e) => e.type === 'combat-note' && e.data?.enemyId === 'e3')).toBe(true);
+    expect(game.snapshot().state.combat).toEqual({
+      enemyId: 'e3',
+      ehp: 90,
+      pt: 0,
+      et: 0,
+      respT: 0,
+      rounds: 0,
+      crits: 0,
+      tiers: { light: 0, mid: 0, heavy: 0, deadly: 0 },
+      bossPhase: -1,
+      summons: [],
+    });
+  });
+});

@@ -129,7 +129,11 @@ export interface Modifier {
   readonly condition?: ModifierCondition;
 }
 
-/** 机制型特色铭纹：condition+primitive 表达，引擎原语池零新增（未注册原语忽略）。 */
+/**
+ * 机制型特色铭纹：condition+primitive 表达。原语键域 = 引擎铭纹 feature 注册表
+ * 闭集（INSCRIPTION_FEATURE_PRIMITIVES 镜像，#58 项 2 语义校验收口；未注册原语
+ * 引擎静默忽略，故加载期大声拒绝）。
+ */
 export interface Feature {
   readonly primitive: string;
   readonly condition?: ModifierCondition;

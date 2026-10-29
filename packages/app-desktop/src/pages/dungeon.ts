@@ -84,7 +84,7 @@ export function createDungeonPage(env: PageEnv): PageView {
             ${
               gate.locked
                 ? `<span class="act-lockmsg">${esc(dungeonLockMsgOf(T, content, st, dungeon.id))}</span>`
-                : `<button class="btn" data-act="dungeon-enter" data-dungeon="${dungeon.id}">${esc(T('pages.dungeon.enterBtn'))}</button>`
+                : `<button class="btn" data-act="dungeon-enter" data-dungeon="${esc(dungeon.id)}">${esc(T('pages.dungeon.enterBtn'))}</button>`
             }
           </div>
         </article>`;

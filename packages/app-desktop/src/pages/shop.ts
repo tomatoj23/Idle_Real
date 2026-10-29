@@ -20,7 +20,7 @@ export function createShopPage(env: PageEnv): PageView {
           <span class="bag-name">${esc(item?.name ?? entry.item)}<small>${esc(item?.description ?? '')}</small></span>
           <b class="bag-price">${esc(T('pages.shop.price', { price: entry.price }))}</b>
           <span class="bag-count">${esc(T('pages.shop.owned', { count: owned }))}</span>
-          <span class="bag-ops"><button class="btn${afford ? '' : ' btn-disabled'}" data-act="buy" data-item="${entry.item}">${esc(T('pages.shop.buyBtn'))}</button></span>
+          <span class="bag-ops"><button class="btn${afford ? '' : ' btn-disabled'}" data-act="buy" data-item="${esc(entry.item)}">${esc(T('pages.shop.buyBtn'))}</button></span>
         </div>`;
       })
       .join('');

@@ -28,6 +28,9 @@ describe('#53 · 骨架合成器跨关键词过验（defaults ↔ validate 同�
     { name: 'minLength 长于样例词（待填补足）', schema: { type: 'string', minLength: 12 } },
     { name: 'minimum 地板', schema: { type: 'integer', minimum: 5 } },
     { name: 'exclusiveMinimum 地板（0 之上取 1）', schema: { type: 'integer', exclusiveMinimum: 0 } },
+    // min + exclusiveMinimum 同节点（现役 schema 无此组合的潜伏缺口，#58 项 4）：
+    // min 分支胜出不许越过排他下界——骨架值出生即违例的防御面。
+    { name: 'min + exclusiveMinimum 同节点（两下界取更严者）', schema: { type: 'integer', minimum: 0, exclusiveMinimum: 0 } },
     { name: 'maximum 上界（min 地板已覆盖）', schema: { type: 'integer', minimum: 2, maximum: 9 } },
     // 概率域真形态（boss phase threshold / element primitive value 同款约束）：
     // 合法域是开区间 (0,1)，floor(exclMin)+1=1 顶到排他上界，须收敛区间中点。
@@ -59,4 +62,13 @@ describe('#53 · 骨架合成器跨关键词过验（defaults ↔ validate 同�
       expectPasses(schema, skeletonFor(schema));
     });
   }
+
+  it('#58 项 4 · min+exclusiveMinimum 同节点：取值越过排他下界（防御取值面直钉）', () => {
+    // min=0 分支原样胜出会产出 0，违 exclusiveMinimum:0——防御后必须越过排他界。
+    expect(skeletonFor({ type: 'integer', minimum: 0, exclusiveMinimum: 0 })).toBe(1);
+    // min 本就严于排他下界时不受防御扰动（min 10 保留，排他界 0 不生效面）。
+    expect(skeletonFor({ type: 'integer', minimum: 10, exclusiveMinimum: 0 })).toBe(10);
+    // 排他下界非整数（0.5）：越界取 1。
+    expect(skeletonFor({ type: 'integer', minimum: 0, exclusiveMinimum: 0.5 })).toBe(1);
+  });
 });

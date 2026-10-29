@@ -33,6 +33,7 @@ export type {
 // 镜像同值由 app-desktop 装配层对拍测试钉死（content 不引 engine 纪律不动）。
 export {
   ELEMENT_COMBAT_PRIMITIVES,
+  INSCRIPTION_FEATURE_PRIMITIVES,
   REBIRTH_KEEP_KEYS,
   REBIRTH_RESET_KEYS,
   STAT_KEYS,

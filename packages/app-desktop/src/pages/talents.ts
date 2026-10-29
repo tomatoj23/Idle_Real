@@ -23,7 +23,7 @@ export function createTalentsPage(env: PageEnv): PageView {
         else if (!gate.affordable)
           op = `<span class="act-lockmsg">${esc(T('pages.talents.needDaoYun', { cost: node.cost }))}</span>`;
         else
-          op = `<button class="btn" data-act="talent-buy" data-node="${node.id}">${esc(T('pages.talents.buyBtn'))}</button>`;
+          op = `<button class="btn" data-act="talent-buy" data-node="${esc(node.id)}">${esc(T('pages.talents.buyBtn'))}</button>`;
         return `<article class="act-card talent-card${gate.owned ? ' owned' : ''}${!gate.owned && (gate.prereqMissing || !gate.affordable) ? ' locked' : ''}">
           <header><b><span class="sigil sigil-sm">${esc(node.icon ?? T('icons.unknown'))}</span> ${esc(node.name)}</b></header>
           ${node.description ? `<div class="talent-desc">${esc(node.description)}</div>` : ''}

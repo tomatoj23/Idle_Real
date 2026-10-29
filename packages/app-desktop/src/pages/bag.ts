@@ -55,8 +55,8 @@ export function createBagPage(env: PageEnv): PageView {
               <b class="bag-count">×${count}</b>
               <span class="bag-price">${esc(T('pages.bag.priceEach', { price: item.sell }))}</span>
               <span class="bag-ops">
-                <button class="btn" data-act="sell" data-item="${item.id}" data-count="1">${esc(T('pages.bag.sellOneBtn'))}</button>
-                <button class="btn btn-ghost" data-act="sell" data-item="${item.id}" data-count="${count}">${esc(T('pages.bag.sellAllBtn'))}</button>
+                <button class="btn" data-act="sell" data-item="${esc(item.id)}" data-count="1">${esc(T('pages.bag.sellOneBtn'))}</button>
+                <button class="btn btn-ghost" data-act="sell" data-item="${esc(item.id)}" data-count="${count}">${esc(T('pages.bag.sellAllBtn'))}</button>
               </span>
             </div>`;
           })
@@ -95,7 +95,7 @@ export function createBagPage(env: PageEnv): PageView {
       )
       .join('');
     const clearBtn = (act: string, label: string, ghost: boolean): string =>
-      `<button class="btn${ghost ? ' btn-ghost' : ''}${eligible === 0 ? ' btn-disabled' : ''}"${eligible === 0 ? ' disabled' : ''} data-act="${act}">${esc(label)}</button>`;
+      `<button class="btn${ghost ? ' btn-ghost' : ''}${eligible === 0 ? ' btn-disabled' : ''}"${eligible === 0 ? ' disabled' : ''} data-act="${esc(act)}">${esc(label)}</button>`;
     const toolbar =
       stacks.size > 0
         ? `<div class="bag-clear">
@@ -171,21 +171,21 @@ export function createBagPage(env: PageEnv): PageView {
     const selAttrs = stack.length > 1 ? `data-uids="${uids}"` : `data-uid="${gear.uid}"`;
     const sellBtn = worn
       ? ''
-      : `<button class="btn btn-ghost${disCls}"${disAttr} data-act="${sellAct}" ${selAttrs}>${esc(T(stack.length > 1 ? 'pages.bag.sellStackBtn' : 'pages.bag.sellBtn'))}</button>`;
+      : `<button class="btn btn-ghost${disCls}"${disAttr} data-act="${esc(sellAct)}" ${selAttrs}>${esc(T(stack.length > 1 ? 'pages.bag.sellStackBtn' : 'pages.bag.sellBtn'))}</button>`;
     const smeltBtn =
       worn || !env.canSmelt
         ? ''
-        : `<button class="btn btn-ghost${disCls}"${disAttr} data-act="${smeltAct}" ${selAttrs}>${esc(T(stack.length > 1 ? 'pages.bag.smeltStackBtn' : 'pages.bag.smeltBtn'))}</button>`;
+        : `<button class="btn btn-ghost${disCls}"${disAttr} data-act="${esc(smeltAct)}" ${selAttrs}>${esc(T(stack.length > 1 ? 'pages.bag.smeltStackBtn' : 'pages.bag.smeltBtn'))}</button>`;
     return `<div class="gear-card ${env.rarityClass(gear.rarity)}">
       <span class="sigil sigil-sm">${esc(item?.icon ?? T('icons.gear'))}</span>
       <span class="gear-name"><span>${esc(displayName)}${countBadge}</span><small>${rows}</small></span>
       <span class="bag-ops">
         ${worn
-          ? `<button class="btn btn-ghost" data-act="take-off" data-slot="${worn[0]}">${esc(T('pages.bag.takeOffBtn'))}</button>`
+          ? `<button class="btn btn-ghost" data-act="take-off" data-slot="${esc(worn[0])}">${esc(T('pages.bag.takeOffBtn'))}</button>`
           : `<button class="btn" data-act="wear" data-uid="${gear.uid}">${esc(T('pages.bag.wearBtn'))}</button>`}
         ${sellBtn}
         ${smeltBtn}
-        <button class="btn btn-mini" data-act="${locked ? 'unlock' : 'lock'}" data-uids="${uids}">${esc(T(locked ? 'pages.bag.unlockBtn' : 'pages.bag.lockBtn'))}</button>
+        <button class="btn btn-mini" data-act="${esc(locked ? 'unlock' : 'lock')}" data-uids="${uids}">${esc(T(locked ? 'pages.bag.unlockBtn' : 'pages.bag.lockBtn'))}</button>
       </span>
     </div>`;
   };
