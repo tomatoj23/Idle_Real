@@ -27,10 +27,25 @@ export type TabId =
   | 'rebirth'
   | 'talents'
   | 'achievements'
-  | 'journal';
+  | 'journal'
+  | 'settings';
 
 /** texts.shell 取词 + {slot} 填槽（缺键回显键名，防御可见）。 */
 export type ShellText = (key: string, vars?: Readonly<Record<string, string | number>>) => string;
+
+/**
+ * 存档管理服务（#62 P1-1）：设置页的保存/导出/导入三个壳层能力。
+ * main.ts 持有 adapter/autoSave/受控重载旗标——引擎零平台依赖，槽位字节
+ * 只有壳看得见。importText 返回 false = 形状/版本门禁拒绝（页内联报错）。
+ */
+export interface ShellSaveService {
+  /** 立即保存一次（等价自动保存 flush）。 */
+  saveNow(): void;
+  /** 当前存档的导出密文（base64）。 */
+  exportText(): string;
+  /** 校验并写入导入密文；成功后受控重载（返回前不落当前局）。 */
+  importText(raw: string): boolean;
+}
 
 /** 渲染上下文（D2）：每次渲染现建，页面不自持快照（st 为只读快照面，#50）。 */
 export interface PageCtx {
@@ -80,6 +95,12 @@ export interface PageEnv {
   readonly rebirthSection: RebirthSectionView | undefined;
   /** 器屑经济可用性（config.gear.shardItem 未配置 = 无熔炼/重铸）。 */
   readonly canSmelt: boolean;
+  /**
+   * 存档管理服务（#62 P1-1 设置页消费；main.ts 装配，桥接 adapter/autoSave）。
+   * 缺省（未装配）= 设置页只渲染玩法说明（保存/携档卡收起）——测试与轻量
+   * 装配面友好；真装配恒提供。
+   */
+  readonly saveService?: ShellSaveService;
   /** 页面挂载点（innerHTML 由壳核写入；update 差量刷新查询用）。 */
   readonly pageEl: HTMLElement;
   /** 引擎动作下发（bindActions 前静默丢弃，与事件委托同律）。 */
@@ -88,6 +109,8 @@ export interface PageEnv {
   render(): void;
   /** 页内动作请求换页（dungeon-enter 入门即切秘境页；含 visit 转发与撤防语义）。 */
   nav(tab: TabId): void;
+  /** 壳级 toast（#62 设置页 shell 服务反馈专用：已保存/已复制；无引擎事件可搭的页面不消费）。 */
+  toast?(text: string): void;
 }
 
 /**

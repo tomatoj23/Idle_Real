@@ -141,11 +141,12 @@ describe('#26 · 购买力走引擎 shopAffordOf（与判定同源）', () => {
   it('gold=100：改 price 45 → 可买；改 price 150 → 禁用（纯 JSON 联动）', () => {
     const cheap = mount(makePack({ price: 45 }), makeSave(100));
     cheap.querySelector<HTMLButtonElement>('.tab[data-tab="shop"]')!.click();
-    expect(cheap.querySelector('.bag-row .btn.btn-disabled')).toBeNull();
+    // 断言收窄到买一按钮（#62 P2-7 起同行有买 10——禁用态按 price×count 独立联动）
+    expect(cheap.querySelector('.bag-row button[data-count="1"].btn-disabled')).toBeNull();
 
     const dear = mount(makePack({ price: 150 }), makeSave(100));
     dear.querySelector<HTMLButtonElement>('.tab[data-tab="shop"]')!.click();
-    expect(dear.querySelector('.bag-row .btn.btn-disabled')).not.toBeNull();
+    expect(dear.querySelector('.bag-row button[data-count="1"].btn-disabled')).not.toBeNull();
   });
 });
 

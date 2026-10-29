@@ -458,3 +458,43 @@ describe('#14 · 存档：铭纹实例的恢复规范化', () => {
     expect(gear[0]!.inscriptions).toBeUndefined();
   });
 });
+
+/* ---------- 掉落侧稀有度偏置（#62 P1-2） ---------- */
+
+describe('#62 · rollGear 掉落侧偏置', () => {
+  /** 双档位包：low 90 / high 10——bias 拉动下 high 占比变化可统计观测。 */
+  const makeBiasPack = () => ({
+    ...makeLoopPack(0),
+    rarities: [
+      { id: 'low', name: '低阶', weight: 90, mult: 1, affix: 0, sell: 1, smelt: 1 },
+      { id: 'high', name: '高阶', weight: 10, mult: 2, affix: 0, sell: 9, smelt: 9 },
+    ],
+  });
+
+  it('bias 缺省与显式 0：同 RNG 链逐点同分布（实例序列全等，旧签名回归钉）', () => {
+    const pack = makeBiasPack();
+    const run = (bias?: number): (GearInstance | undefined)[] => {
+      const rand = createRng(2026).next;
+      return Array.from({ length: 40 }, (_, i) => rollGear(pack, dropDef(pack), i + 1, rand, bias === undefined ? {} : { bias }));
+    };
+    expect(run()).toEqual(run(0));
+  });
+
+  it('bias > 0：高档位实际占比单调上升（旧版 r - lvBonus 方向语义）', () => {
+    const pack = makeBiasPack();
+    const highShare = (bias: number): number => {
+      const rand = createRng(7).next;
+      let high = 0;
+      const n = 2000;
+      for (let i = 0; i < n; i++) {
+        const gear = rollGear(pack, dropDef(pack), i + 1, rand, { bias });
+        if (gear?.rarity === 'high') high += 1;
+      }
+      return high / n;
+    };
+    expect(highShare(0)).toBeLessThan(highShare(0.5));
+    expect(highShare(0.5)).toBeLessThan(highShare(2));
+    // bias 2 = 200 个权重点 ≫ 总权重 100：全部越表压到末档。
+    expect(highShare(2)).toBe(1);
+  });
+});

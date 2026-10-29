@@ -14,6 +14,7 @@ import {
   type SaveData,
 } from '@wendao/engine';
 import { buildUi } from '../../src/ui';
+import type { ShellSaveService } from '../../src/pages/types';
 
 export interface MountOptions {
   /** 内容包；缺省 = 修仙包（套件默认题材包）。 */
@@ -28,6 +29,8 @@ export interface MountOptions {
   readonly rng?: () => number;
   /** dispatch 前置钩子（动作记录类夹具用，缺省零搬运）。 */
   readonly onAction?: (action: GameAction) => void;
+  /** 存档管理服务（#62 P1-1 设置页；缺省不装配 = 页面只渲染玩法说明）。 */
+  readonly saveService?: ShellSaveService;
 }
 
 export interface Mounted {
@@ -50,7 +53,7 @@ export function mountGame(options: MountOptions = {}): Mounted {
   });
   const root = document.createElement('div');
   document.body.appendChild(root);
-  const ui = buildUi(root, content, () => game.snapshot(), game.events);
+  const ui = buildUi(root, content, () => game.snapshot(), game.events, options.saveService);
   ui.bindActions((action: GameAction) => {
     options.onAction?.(action);
     game.dispatch(action);

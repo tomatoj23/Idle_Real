@@ -98,6 +98,7 @@ function makePack(): ContentPack {
         events: {},
         pages: {
           skills: skillsTexts({
+            title: '修', subtitle: '离线亦不辍',
             empty: '空', expSub: '{into}/{need}', expMax: '满', actNow: '{name}',
             idle: '闲', stopBtn: '停', running: '中', byproduct: '{name}', actMeta: '{interval}',
             startBtn: '始', realmLine: '{realm}',

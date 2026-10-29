@@ -129,6 +129,8 @@ export function createSkillsPage(env: PageEnv): PageView {
 
     return `
       <section class="page">
+        <h2 class="page-title">${esc(T('pages.skills.title'))}</h2>
+        <p class="page-sub">${esc(T('pages.skills.subtitle'))}</p>
         <div class="chips">${chips}</div>
         ${statusCard}
         ${cards ? `<div class="act-grid">${cards}</div>` : ''}

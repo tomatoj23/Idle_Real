@@ -329,7 +329,7 @@
   "rarities": [
     { "id": "common", "name": "寻常", "weight": 70, "mult": 1, "affix": 0, "sell": 1, "smelt": 1 },
     { "id": "fine", "name": "精良", "weight": 20, "mult": 1.15, "affix": 1, "sell": 2, "smelt": 2 },
-    { "id": "rare", "name": "罕见", "weight": 8, "mult": 1.3, "affix": 2, "sell": 4, "smelt": 4 },
+    { "id": "rare", "name": "罕见", "weight": 8, "mult": 1.3, "affix": 2, "sell": 4, "smelt": 4, "announce": true },
     { "id": "epic", "name": "绝世", "weight": 2, "mult": 1.5, "affix": 3, "sell": 10, "smelt": 8, "showcase": true }
   ],
   "affixPool": [
@@ -610,7 +610,8 @@
         "talents": "道韵",
         "dungeon": "秘境",
         "achievements": "成就",
-        "journal": "修行录"
+        "journal": "修行录",
+        "settings": "设置"
       },
       "stats": {
         "labels": {
@@ -653,9 +654,9 @@
         "sellLog": "卖出 {name}，得 {gained} 灵石",
         "buyLog": "购入 {name}×{count}，花去 {cost} 灵石",
         "rejectFallback": "此路不通",
-        "offlineToast": "离线 {away}归来：{activity} ×{cycles}",
+        "offlineToast": "离线 {away}归来：{activity} ×{cycles}{exp}",
         "offlineLog": "离线修行 {away}：{items}{exp}",
-        "offlineCappedToast": "离开 {away}，闭关所限、按 {settled} 结算：{activity} ×{cycles}",
+        "offlineCappedToast": "离开 {away}，闭关所限、按 {settled} 结算：{activity} ×{cycles}{exp}",
         "offlineCappedLog": "离线修行 {away}（上限 {settled}，超出不入账）：{items}{exp}",
         "offlineNoYield": "无所获",
         "offlineExpSuffix": "，修为 +{exp}",
@@ -679,10 +680,16 @@
         "smeltAllLog": "熔炼 {count} 件，得 {shard}×{shards}",
         "batchLockedSkip": "（跳过锁定 {count} 件）",
         "floatSum": "{name} +{count}",
-        "expGain": "修为 +{amount}"
+        "expGain": "修为 +{amount}",
+        "lootAnnounce": "妖物遗落【{name}】",
+        "lootShowcaseCraft": "神兵天成！炼得【{name}】",
+        "victorySeized": "于{enemy}手中夺得【{name}】",
+        "gameReset": "前尘尽散，重入道途。"
       },
       "pages": {
         "skills": {
+          "title": "修炼",
+          "subtitle": "选择一处修炼，人物会自动循环，离线亦不辍。",
           "empty": "内容包中没有可修的技艺。",
           "expSub": "修为 {into}/{need} · 距下一层还需 {left}",
           "expMax": "修为已臻化境",
@@ -698,6 +705,7 @@
         "craft": {
           "title": "炼制",
           "subtitle": "丹器之道，当前 {level} 层。",
+          "hint": "丹成可续命、可增益，丹术越高，成丹率越高（+0.4%/层）；器成必得，炼器之道越高，越易出绝世之器。",
           "empty": "内容包中没有可炼制的配方。",
           "expSub": "修为 {into}/{need} · 距下一层还需 {left}",
           "expMax": "修为已臻化境",
@@ -707,6 +715,7 @@
           "running": "炼制中",
           "startBtn": "开炉",
           "successRate": "成功率 {rate}%（失败损料）",
+          "certain": "器成必得",
           "matRow": "{name} {have}/{need}",
           "recipeMeta": "{interval} / 炉 · 修为 +{exp} · 需 {level} 层",
           "autoNone": "不处理",
@@ -717,6 +726,7 @@
         "combat": {
           "title": "斗法",
           "subtitle": "斩妖除魔，问道长生。当前斗法 {level} 层。",
+          "hint": "胜妖可得灵石、妖丹与炼丹之材，更有机缘夺其随身异宝（皆不可炼制，稀有度随缘）。斗法修为越高，气血与攻击越强。败则重伤被救，无性命之忧。",
           "enemyMissing": "妖物不知所踪。",
           "resting": "休整中",
           "enemyHp": "敌 {ehp}/{hp}",
@@ -730,6 +740,9 @@
           "enemyStats": "气血 {hp} · 攻 {atk} · 防 {def} · 修为 +{exp}",
           "enemyGold": "灵石 {min}~{max}",
           "dropsSuffix": " · 掉落 {drops}",
+          "dropChance": "{name} {pct}%",
+          "gearDropRow": " · 异宝：{names} {pct}%",
+          "enemyInterval": " · 出手间隔 {interval}",
           "fightBtn": "挑战",
           "expSub": "修为 {into}/{need} · 距下一层还需 {left}",
           "engagedBadge": "交战中",
@@ -771,7 +784,8 @@
           "subtitle": "以灵石易物，解燃眉之需。",
           "price": "{price} 灵石",
           "owned": "持有 {count}",
-          "buyBtn": "买一"
+          "buyBtn": "买一",
+          "buyTenBtn": "买 10"
         },
         "rebirth": {
           "title": "转生",
@@ -903,6 +917,28 @@
           "pageBag": "乾坤袋",
           "openNow": "进行中 · {name}",
           "expSuffix": "修为 +{exp}"
+        },
+        "settings": {
+          "title": "设置",
+          "subtitle": "存档、备份与修行总纲。",
+          "saveTitle": "存档",
+          "saveHint": "游戏每 15 秒自动保存于本机；关闭页面不影响进度，离线时挂机修炼照常结算（上限 24 小时）。",
+          "saveNowBtn": "立即保存",
+          "savedToast": "已保存。",
+          "resetBtn": "散功重修（清档）",
+          "resetConfirmTip": "散功重修将清除全部进度（含法宝与秘境记录），且不可逆。当真要斩断前尘吗？",
+          "resetConfirmBtn": "斩断前尘",
+          "resetCancelBtn": "再想想",
+          "transferTitle": "携档云游",
+          "transferHint": "复制下方密文可备份存档；将密文粘贴至输入框即可读档（读档将覆盖当前进度）。",
+          "exportLabel": "存档密文",
+          "copyBtn": "复制密文",
+          "copiedToast": "密文已复制。",
+          "importLabel": "读档密文",
+          "importBtn": "读档",
+          "importBad": "密文无效——请核对是否完整复制了本游戏导出的存档密文。",
+          "guideTitle": "玩法说明",
+          "guide": "炼气、采药、挖矿：点击开始即自动循环产出材料与修为，离线亦不辍；\n炼丹：草木妖丹入炉，炼出回气丹与增益丹（丹术越高成丹率越高）；\n炼器：以矿石灵气锻剑织甲，佩于乾坤袋增强斗法（器成必得，炼器越高越易出绝世之器）；\n斗法：挑战妖物，自动战斗、自动嗑丹、自动再战；妖丹与材料用于炼丹炼器，更有机缘夺得异宝；\n秘境：层境相叠，步步凶险，层层有赏；\n兵解：散尽修与世界，唯道韵与法宝长存，天赋越点越强。\n愿你大道可期。"
         }
       }
     }
@@ -970,6 +1006,7 @@
     },
     "gear": {
       "shardItem": "gear_shard",
+      "biasSkillId": "smith",
       "reforgeCost": 3,
       "tagWeightPerMatch": 1
     },

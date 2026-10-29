@@ -329,15 +329,27 @@ export function makeInscribedGear(
 
 /** 掉落管线语境（#14）：秘境层数驱动管线 ② 的器胚 floorRange 筛选。 */
 export interface GearDropContext {
-  /** 当前秘境层数（1 起）；缺省 = 无层语境（野战），不筛层。 */
+  /**
+   * 当前秘境层数（1 起）；缺省 = 无层语境（野战），不筛层。
+   */
   readonly floor?: number;
+  /**
+   * 稀有度掷点正向偏置（#62 P1-2 掉落侧恢复）：旧版 js/game.js:95
+   * `r - lvBonus` 同义，方向适配「数组序即档位序、末位最高」约定；由
+   * game 侧按 config.gear.biasSkillId 声明的供体技能层数 × config.crafting
+   * .rarityBiasPerLevel 计算后注入（引擎零内容感知）；缺省/0 = 与旧签名
+   * 逐点同分布。
+   */
+  readonly bias?: number;
 }
 
 /**
  * 掉落管线（#14 补全 ①②③⑦，ADR-0012 八步的项目版）：
  * ① 掉不掉（chance 掷点）→ ② 按秘境层数筛器胚池（equip 条目不受层筛，
  * 兼容旧池）→ ③ 均匀选底材 → ④⑤⑥⑦ 分流实例化（equip 走词条池旧管线；
- * 器胚走铭纹管线，稀有度掷点不传偏置 = 与旧签名逐点同分布，#5 接缝）。
+ * 器胚走铭纹管线）。稀有度掷点吃 context.bias（#62 P1-2 掉落侧恢复，旧版
+ * makeGear 缺省参数同样作用于敌掉的语义；不传 = 与旧签名逐点同分布）；
+ * uid 只在实得时入账（不空烧序号）。
  * 未掉落/池空/引用全失效返回 undefined（缺内容降级，绝不崩溃）。
  */
 export function rollGear(
@@ -360,13 +372,18 @@ export function rollGear(
   const itemId = candidates[Math.floor(random() * candidates.length) % candidates.length]!; // ③ 选底材
   const item = findItem(content, itemId);
   if (!item) return undefined;
+  // 掷档显式化（#62）：显式 roll 与「缺省参数位求值」同序（craft 路径同款
+  // 写法）——RNG 流逐点不因本改动漂移，bias=0/缺省时与旧调用逐点同分布。
+  const rarity = rollRarity(content, random, context.bias ?? 0);
   if (item.type === 'blank') {
     return makeInscribedGear(content, item.id, uid, random, {
-      tagWeightPerMatch: gearParamsOf(content).tagWeightPerMatch, // ④~⑦ 铭纹管线
+      rarity, // ④~⑦ 铭纹管线
+      tagWeightPerMatch: gearParamsOf(content).tagWeightPerMatch,
     });
   }
   // ④~⑥ 词条池旧管线：标尺/波动与炼制路径同调 config.affix（同包双路径一把尺）。
   return makeGear(content, item.id, item.bonuses ?? {}, uid, random, {
+    rarity,
     affix: affixParamsOf(content),
   });
 }

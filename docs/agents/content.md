@@ -136,6 +136,7 @@ content 包定义，引擎不持任何默认表。两节均为**必需节**（va
 | `sell` | number（> 0） | 卖价倍率：卖价 = max(1, round(物品卖价 × sell)) |
 | `smelt` | integer（≥ 0，可选，#14） | 熔炼产出：熔炼该档装备所得器屑数量；缺省 = 引擎基线 1（config.gear.shardItem 未配置时无意义） |
 | `showcase` | bool（可选） | **UI 特判开关（裁决 ④）**：true 时 UI 作「天降异宝」级特判；UI 不再用 id 字面量（如 `'epic'`）特判 |
+| `announce` | bool（可选，#62 P2-6） | **掉落播报开关（裁决 ④ 同款显式 bool）**：true 时该档装备**敌掉**弹 toast 播报（低于 showcase 一档的次级播报，如「妖物遗落」）；缺省 = 静默入袋 |
 
 数组顺序即档位顺序：缺档回退取**第一项**；旧档位从词表移除后，存量存档的该档
 装备恢复时自动回退第一档（存档不炸，数值按第一档重投影）。**档位高低 = 数组序
@@ -228,7 +229,7 @@ schema 无 rank 字段）；validate 语义关卡保证 `mult` 随序单调不�
 | `basicName` | string（1~18 字，#027 按 CJK 密度假设放宽） | 无佩戴武器时的兵刃展示名（weaponName 槽兜底值） |
 | `reject` | 动作协议键 → 理由 code → 文案模板 | 展示文案映射。动作键域 schema 钉死：activity:start / bag:sell / shop:buy / combat:start / consumable:eat / dungeon:enter（#7）/ gear:equip / gear:sell / gear:smelt / gear:reforge（#14）/ gear:lock / gear:unlock / gear:sell-all / gear:smelt-all（#37）/ rebirth:perform / talent:buy（#6）/ `'*'`（跨动作兜底，bad-payload 等通用文案）；理由 code 键域开放 |
 | `reject` 槽位 | `{level}` `{activity}` `{item}` `{owned}` `{cost}` `{gold}` `{daoYun}` `{need}` `{xp}` | 由引擎按协议语境填入； combat:start 的 `{level}` = `enemy.level − 门控偏移`（偏移量只在引擎判定处单一来源，文案侧零副本——N1 文案侧裁决）；rebirth:perform 的 no-progress 带 `{need}/{xp}`、rebirth-locked 与 talent:buy 的 no-daoyun 带 `{daoYun}`/`{cost}`；dungeon:enter 的 locked 带 `{daoYun}`、no-key 带 `{item}`（#7） |
-| `shell`（#26） | ShellTexts 结构化节 | **壳层全部题材文案**（ADR-017 裁决 9：壳零题材字符串）：brand（sigil/name/locale/bootError）、topbar、tabs、stats.labels、units、icons、common、events（45 键；#34 起 side 节随侧栏退役、floatSum/expGain 新增，且零消费旧行键 lootGear/victoryLog/achievementLog/eatBuffToast/equipWearToast/expCombat 一并裁掉——旧包带上述任一键会因 additionalProperties:false 被拦，属预期；#37 起 sellAllLog/smeltAllLog/batchLockedSkip 新增）、pages（skills/craft/combat/dungeon/bag/shop/rebirth/talents/achievements/journal，#9 起九页、#33 起十页；#38 起 skills.chipLocked 随锁定斗法 chip 退役一并裁掉——旧包带此键会因 additionalProperties:false 被拦，属预期）、footer。schema required + additionalProperties:false 全程钉死 |
+| `shell`（#26） | ShellTexts 结构化节 | **壳层全部题材文案**（ADR-017 裁决 9：壳零题材字符串）：brand（sigil/name/locale/bootError）、topbar、tabs、stats.labels、units、icons、common、events（45 键 + #62 起 4 键 = 49；#34 起 side 节随侧栏退役、floatSum/expGain 新增，且零消费旧行键 lootGear/victoryLog/achievementLog/eatBuffToast/equipWearToast/expCombat 一并裁掉——旧包带上述任一键会因 additionalProperties:false 被拦，属预期；#37 起 sellAllLog/smeltAllLog/batchLockedSkip 新增；#62 起 lootAnnounce/lootShowcaseCraft/victorySeized/gameReset 新增）、pages（skills/craft/combat/dungeon/bag/shop/rebirth/talents/achievements/journal/settings，#9 起九页、#33 起十页、#62 起十一页含 settings；#38 起 skills.chipLocked 随锁定斗法 chip 退役一并裁掉——旧包带此键会因 additionalProperties:false 被拦，属预期；#62 起新键清单见上 texts.shell 节）、footer。schema required + additionalProperties:false 全程钉死 |
 
 - 命中序：精确动作 → `'*'` → **键名回显**（`{action}/{reason}`，防御可见）。
 - 协议 code 本体归引擎，本节只承载展示文案；code 未命中/缺节绝不崩，toast
@@ -264,10 +265,17 @@ schema 无 rank 字段）；validate 语义关卡保证 `mult` 随序单调不�
   的 lootCraft；#6 起含 rebirth 事件的 rebirthToast/rebirthLog 与
   talent:buy 事件的 talentBuyToast/talentBuyLog；#7 起含 dungeon:enter/floor/
   clear/leave 事件的 dungeonEnter/dungeonFloor/dungeonDaoYun/dungeonClear/
-  dungeonLeave）；
+  dungeonLeave；#62 起含 lootAnnounce（announce 档敌掉播报）/
+  lootShowcaseCraft（炼制 showcase 分流：神兵天成非天降异宝）/victorySeized
+  （夺得异宝行，槽 {enemy}/{name}）/gameReset（散功重修完成，槽 {rebirths}））；
   `pages.*` 键 = 壳 TabId 协议面（skills/craft/combat/dungeon/bag/shop/rebirth/
-  talents/achievements/journal，#5 起五页、#6 起七页、#7 起八页、#9 起九页、
-  #33 起十页）；
+  talents/achievements/journal/settings，#5 起五页、#6 起七页、#7 起八页、
+  #9 起九页、#33 起十页、**#62 起十一页（settings 设置页，恒渲染）**；
+  #62 起新增键：skills.title/subtitle、craft.hint/certain（必成配方分支）、
+  combat.hint/dropChance/gearDropRow/enemyInterval（敌卡掉率/异宝/出手间隔回迁）、
+  shop.buyTenBtn、pages.settings 整组（存档/携档云游/散功重修两段式/承诺文案/
+  玩法说明；`guide` 与各 hint 说明类键用 `para` 长段落定义——600 字上限、
+  无槽位、段内换行以字面 `\n` 表达壳按行拆分）)；
   `units.*` 承载层级/时长读数的单位模板（`{v}` 数值、`{m}` 分、`{h}` 时）；
   `topbar.*Sigil` 承载顶栏资源图章字；`common.itemListSep` 为物品名列表
   分隔符（掉落预览/离线产出共用）；`common.buffTimerOnlineOnly` 为增益条
@@ -306,11 +314,17 @@ schema 无 rank 字段）；validate 语义关卡保证 `mult` 随序单调不�
 ### config.gear 装备构筑循环参数（#14）
 
 ```json
-"gear": { "shardItem": "gear_shard", "reforgeCost": 3, "tagWeightPerMatch": 1 }
+"gear": { "shardItem": "gear_shard", "biasSkillId": "smith", "reforgeCost": 3, "tagWeightPerMatch": 1 }
 ```
 
 - `shardItem`：器屑物品 id（**语义校验 xref items 且须为 mat 类**）；缺省 =
   无器屑经济——引擎 `gear:smelt`/`gear:reforge` 拒绝 not-available（零降级路径）。
+- `biasSkillId`（#62 P1-2 用户裁决）：**掉落侧稀有度偏置的供体技能 id**
+  （语义校验 xref skills）——敌掉掷档点数上移 供体技能层 ×
+  `config.crafting.rarityBiasPerLevel`（旧版 js/game.js:95 炼器等级偏置作用于
+  敌掉的接缝一般化：内容声明供体，引擎零内容感知）；缺省 = 无掉落偏置
+  （rollRarity 与旧签名逐点同分布）。**炼制侧偏置沿用配方自身技能层，不读本
+  声明**——两路同系数（`crafting.rarityBiasPerLevel` 单一旋钮，旧版两路本同值）。
 - `reforgeCost`：单条铭纹重铸消耗（器屑数量），引擎基线 1。
 - `tagWeightPerMatch`：标签加权系数（权重 = 基础 × (1+匹配数×该值)），引擎基线 1。
 - 熔炼产出按稀有度：`rarities[].smelt`（整数 ≥ 0，缺省基线 1）——器屑经济
@@ -320,10 +334,11 @@ schema 无 rank 字段）；validate 语义关卡保证 `mult` 随序单调不�
 
 - **rollGear 八步管线**（engine gear.ts 单一来源）：①掉不掉（chance）→
   ②按秘境层数筛器胚池（equip 条目不受层筛，兼容旧池）→ ③均匀选底材 →
-  ④掷稀有度（掉落侧不传 bias，与旧签名逐点同分布，#5 接缝）→ ⑤按稀有度
-  affix 数定铭纹条数 → ⑥标签加权抽铭纹（倒排索引查 preferredTags ∩ tags
-  交集；同实例不重复铭纹 id）→ ⑦按器胚 tierRange 掷纹阶 → ⑧胚纹随投影附加。
-  口诀：**稀有度是因（词条数），纹阶是果（质量）**。
+  ④掷稀有度（#62 P1-2 起吃 `GearDropContext.bias`：game 侧按
+  `config.gear.biasSkillId` 供体技能层现读注入，缺省/0 = 与旧签名逐点同分布）
+  → ⑤按稀有度 affix 数定铭纹条数 → ⑥标签加权抽铭纹（倒排索引查
+  preferredTags ∩ tags 交集；同实例不重复铭纹 id）→ ⑦按器胚 tierRange 掷纹阶
+  → ⑧胚纹随投影附加。口诀：**稀有度是因（词条数），纹阶是果（质量）**。
 - **实例形状**：`GearInstance` 增可选 `inscriptions: [{id, tier}]`（器胚实例
   专用；空/缺省不落盘，ADR-013）。数值/胚纹不进实例——展示与投影按内容表
   读（改 tiers 表 = 改全部同纹阶实例）。旧存档不迁移（ADR-008）。

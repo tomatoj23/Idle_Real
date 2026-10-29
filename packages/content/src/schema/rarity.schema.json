@@ -59,6 +59,11 @@
           "type": "boolean",
           "title": "UI 特判开关",
           "description": "UI 特判开关（ADR-016 裁决 ④）：true 时 UI 作「天降异宝」级特判（弹 toast/着色加强）；缺省 = 普通档（bool 缺省即 false，不写即不落盘包体积）"
+        },
+        "announce": {
+          "type": "boolean",
+          "title": "掉落播报开关",
+          "description": "掉落播报开关（#62 P2-6，ADR-016 裁决 ④ 同款显式 bool）：true 时该档装备掉落弹 toast 播报（低于 showcase 一档的次级播报）；缺省 = 静默入袋"
         }
       }
     }

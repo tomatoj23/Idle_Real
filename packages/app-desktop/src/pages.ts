@@ -14,6 +14,7 @@ import { createCraftPage } from './pages/craft';
 import { createDungeonPage } from './pages/dungeon';
 import { createJournalPage } from './pages/journal';
 import { createRebirthPage } from './pages/rebirth';
+import { createSettingsPage } from './pages/settings';
 import { createShopPage } from './pages/shop';
 import { createSkillsPage } from './pages/skills';
 import { createTalentsPage } from './pages/talents';
@@ -30,6 +31,7 @@ export const TAB_ORDER: readonly TabId[] = [
   'talents',
   'achievements',
   'journal',
+  'settings',
 ];
 
 /** 运行时 tab 值校验（D7：未知串 → false，壳核 warn + 回落）。 */
@@ -49,5 +51,6 @@ export function createPages(env: PageEnv): Record<TabId, PageView> {
     talents: createTalentsPage(env),
     achievements: createAchievementsPage(env),
     journal: createJournalPage(env),
+    settings: createSettingsPage(env),
   };
 }

@@ -305,6 +305,11 @@ export interface RarityDef {
   readonly smelt?: number;
   /** UI 特判开关（ADR-016 裁决 ④）：true 时 UI 作「天降异宝」级特判；缺省 = 普通档。 */
   readonly showcase?: boolean;
+  /**
+   * 掉落播报开关（#62 P2-6，ADR-016 裁决 ④ 同款显式 bool）：true 时该档
+   * 装备掉落弹 toast 播报（低于 showcase 一档的次级播报）；缺省 = 静默入袋。
+   */
+  readonly announce?: boolean;
 }
 
 /**
@@ -495,6 +500,8 @@ export interface ShellTabs {
   readonly achievements: string;
   /** 修行录页签（#33，随档记录页）。 */
   readonly journal: string;
+  /** 设置页签（#62 P1-1 存档管理页，恒渲染）。 */
+  readonly settings: string;
 }
 
 /** stat 展示标签表：键 = stat id（开放键域）。 */
@@ -602,10 +609,22 @@ export interface ShellEvents {
   readonly floatSum: string;
   /** 修为读数飘字（#34：仅升级与离线汇总出现；槽位 {amount}）。 */
   readonly expGain: string;
+  /** 掉落播报浮提示（#62 P2-6，announce 档装备掉落；槽位 {name}）。 */
+  readonly lootAnnounce: string;
+  /** 炼制 showcase 档浮提示（#62 P2-6：与掉落侧 lootShowcase 分流——「神兵天成」非「天降异宝」；槽位 {name}）。 */
+  readonly lootShowcaseCraft: string;
+  /** 夺得异宝战斗日志行（#62 P2-6 旧版「于{敌名}手中夺得」回迁；槽位 {enemy}/{name}）。 */
+  readonly victorySeized: string;
+  /** 散功重修完成浮提示（#62 P1-1，game-reset 事件；槽位 {rebirths}）。 */
+  readonly gameReset: string;
 }
 
 /** 修炼页文案。 */
 export interface ShellPageSkills {
+  /** 页题（#62 P2-4 hint 回迁：页题/副标题行随 #46 页框统一面）。 */
+  readonly title: string;
+  /** 副标题（#62 P2-4：旧版「离线亦不辍」承诺文案回迁）。 */
+  readonly subtitle: string;
   readonly empty: string;
   readonly expSub: string;
   readonly expMax: string;
@@ -624,6 +643,8 @@ export interface ShellPageSkills {
 export interface ShellPageCombat {
   readonly title: string;
   readonly subtitle: string;
+  /** 承诺文案副行（#62 P2-4：旧版斗法 hint——异宝说明/败阵无虞——回迁，列表视图渲染）。 */
+  readonly hint: string;
   readonly enemyMissing: string;
   readonly resting: string;
   readonly enemyHp: string;
@@ -637,6 +658,12 @@ export interface ShellPageCombat {
   readonly enemyStats: string;
   readonly enemyGold: string;
   readonly dropsSuffix: string;
+  /** 掉落单项（#62 P2-5 掉率百分比回迁）；槽位 {name}/{pct}。 */
+  readonly dropChance: string;
+  /** 异宝掉落行（#62 P2-5：器胚池 + 掉率回迁）；槽位 {names}/{pct}。 */
+  readonly gearDropRow: string;
+  /** 出手间隔行（#62 P2-5 回迁，列表/交战两视图共用）；槽位 {interval}（壳 fmtSeconds 读数）。 */
+  readonly enemyInterval: string;
   readonly fightBtn: string;
   /** 斗法修为进度副行（战斗中信息面）；槽位 {into}/{need}/{left}。 */
   readonly expSub: string;
@@ -700,6 +727,8 @@ export interface ShellPageShop {
   readonly price: string;
   readonly owned: string;
   readonly buyBtn: string;
+  /** 批量购买按钮（#62 P2-7 买 10 回迁）。 */
+  readonly buyTenBtn: string;
 }
 
 /**
@@ -711,6 +740,8 @@ export interface ShellPageCraft {
   readonly title: string;
   /** 副标题；槽位 {level} = 当前选中的炼制技艺层数。 */
   readonly subtitle: string;
+  /** 承诺文案副行（#62 P2-4：旧版炼丹/炼器 hint 合并回迁）。 */
+  readonly hint: string;
   readonly empty: string;
   readonly expSub: string;
   readonly expMax: string;
@@ -719,8 +750,10 @@ export interface ShellPageCraft {
   readonly stopBtn: string;
   readonly running: string;
   readonly startBtn: string;
-  /** 成功率行；槽位 {rate}（引擎数值 × 100）。 */
+  /** 成功率行（rate < 1）；槽位 {rate}（引擎数值 × 100）。 */
   readonly successRate: string;
+  /** 必成配方行（#62 P2-3：successRate = 1 分支文案，旧版「器成必得」承诺；无槽位）。 */
+  readonly certain: string;
   /** 材料行；槽位 {name}/{have}/{need}。 */
   readonly matRow: string;
   /** 配方元信息行；槽位 {interval}/{exp}/{level}。 */
@@ -926,7 +959,54 @@ export interface ShellPageJournal {
   readonly expSuffix: string;
 }
 
-/** 页面文案分组（键 = TabId 协议键；craft 随 #5、rebirth/talents 随 #6、dungeon 随 #7、achievements 随 #9、journal 随 #33 加入）。 */
+/**
+ * 设置页文案（#62 P1-1 存档管理页回迁）：手动保存/携档云游（导出密文/导入
+ * 读档）/散功重修两段式确认/自动保存与离线上限承诺/玩法说明。承诺口径
+ * （自动保存间隔/离线上限）与 config.offline 同属内容侧，措辞自洽由包作者
+ * 保证；导入/导出的密文编解码与槽位写入归壳层服务（引擎零平台依赖）。
+ */
+export interface ShellPageSettings {
+  readonly title: string;
+  readonly subtitle: string;
+  /** 存档卡标题。 */
+  readonly saveTitle: string;
+  /** 自动保存与离线结算承诺文案（24h 口径随 config.offline.capBaseMs）。 */
+  readonly saveHint: string;
+  /** 立即保存按钮。 */
+  readonly saveNowBtn: string;
+  /** 保存完成浮提示（旧版「已保存」回迁）。 */
+  readonly savedToast: string;
+  /** 散功重修（清档）按钮——两段式确认首段。 */
+  readonly resetBtn: string;
+  /** 二段确认提示（展示后果）。 */
+  readonly resetConfirmTip: string;
+  /** 二段确认按钮。 */
+  readonly resetConfirmBtn: string;
+  /** 二段取消按钮。 */
+  readonly resetCancelBtn: string;
+  /** 携档云游卡标题。 */
+  readonly transferTitle: string;
+  /** 导出/导入说明（复制密文备份、粘贴读档）。 */
+  readonly transferHint: string;
+  /** 导出密文只读框标签。 */
+  readonly exportLabel: string;
+  /** 复制密文按钮。 */
+  readonly copyBtn: string;
+  /** 复制完成浮提示。 */
+  readonly copiedToast: string;
+  /** 导入密文框标签。 */
+  readonly importLabel: string;
+  /** 导入按钮。 */
+  readonly importBtn: string;
+  /** 导入密文无效提示（形状/版本门禁拒绝）。 */
+  readonly importBad: string;
+  /** 玩法说明区标题。 */
+  readonly guideTitle: string;
+  /** 玩法说明正文（段内换行由壳按行拆分渲染）。 */
+  readonly guide: string;
+}
+
+/** 页面文案分组（键 = TabId 协议键；craft 随 #5、rebirth/talents 随 #6、dungeon 随 #7、achievements 随 #9、journal 随 #33、settings 随 #62 加入）。 */
 export interface ShellPages {
   readonly skills: ShellPageSkills;
   readonly craft: ShellPageCraft;
@@ -938,6 +1018,7 @@ export interface ShellPages {
   readonly dungeon: ShellPageDungeon;
   readonly achievements: ShellPageAchievements;
   readonly journal: ShellPageJournal;
+  readonly settings: ShellPageSettings;
 }
 
 /** 壳层文案节（#26）：模板槽 {slot} 由壳按语境填入，缺键回显键名（裁决 ④ 同策略）。 */
@@ -1310,10 +1391,17 @@ export interface CraftingConfig {
  * 装备构筑循环参数（config.gear 子节，#14）。缺省 = 引擎基线：
  * 重铸耗器屑 1、标签加权系数 1（权重 = 基础 × (1+匹配数×加成)）。
  * shardItem 缺省 = 无器屑经济（熔炼/重铸拒绝 not-available，零降级路径）。
+ * biasSkillId 缺省 = 掉落侧无稀有度偏置（#62 P1-2）。
  */
 export interface GearConfig {
   /** 器屑物品 id（熔炼产物/重铸消耗，语义校验 xref items 且须为 mat 类）。 */
   readonly shardItem?: string;
+  /**
+   * 掉落侧稀有度偏置的供体技能 id（#62 P1-2 用户裁决，语义校验 xref skills）：
+   * 敌掉掷档点数上移 该技能层 × config.crafting.rarityBiasPerLevel；缺省 =
+   * 无掉落偏置。炼制侧偏置沿用配方自身技能层，不读本声明。
+   */
+  readonly biasSkillId?: string;
   /** 单条铭纹重铸消耗（器屑数量）。 */
   readonly reforgeCost?: number;
   /** 标签加权系数：铭纹抽取权重 = 基础 × (1+匹配数×该值)。 */

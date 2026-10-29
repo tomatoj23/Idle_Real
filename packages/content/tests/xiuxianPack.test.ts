@@ -419,11 +419,12 @@ describe('修仙题材包 · 数值基线', () => {
     expect(pack.rarities).toEqual([
       { id: 'common', name: '寻常', weight: 70, mult: 1, affix: 0, sell: 1, smelt: 1 },
       { id: 'fine', name: '精良', weight: 20, mult: 1.15, affix: 1, sell: 2, smelt: 2 },
-      { id: 'rare', name: '罕见', weight: 8, mult: 1.3, affix: 2, sell: 4, smelt: 4 },
+      { id: 'rare', name: '罕见', weight: 8, mult: 1.3, affix: 2, sell: 4, smelt: 4, announce: true },
       { id: 'epic', name: '绝世', weight: 2, mult: 1.5, affix: 3, sell: 10, smelt: 8, showcase: true },
     ]);
-    // ADR-016 裁决 ④：UI 特判走显式 bool，不写 = 普通档。
+    // ADR-016 裁决 ④：UI 特判走显式 bool，不写 = 普通档；announce（#62 P2-6）同理。
     expect(pack.rarities.filter((r) => r.showcase).map((r) => r.id)).toEqual(['epic']);
+    expect(pack.rarities.filter((r) => r.announce).map((r) => r.id)).toEqual(['rare']);
   });
 
   it('词条池全表（scale 对照旧引擎量级系数，#018 数据化）', () => {
@@ -467,7 +468,8 @@ describe('修仙题材包 · 数值基线', () => {
   });
 
   it('装备构筑协议面：config.gear 显式基线 + 熔炼/重铸文案在案（#14）', () => {
-    expect(pack.config?.gear).toEqual({ shardItem: 'gear_shard', reforgeCost: 3, tagWeightPerMatch: 1 });
+    // biasSkillId（#62 P1-2）：掉落侧稀有度偏置供体 = 炼器技能（内容声明）。
+    expect(pack.config?.gear).toEqual({ shardItem: 'gear_shard', biasSkillId: 'smith', reforgeCost: 3, tagWeightPerMatch: 1 });
     expect(pack.texts.shell.pages.bag.smeltBtn).toBe('熔炼');
     expect(pack.texts.shell.pages.bag.reforgeBtn).toBe('重铸');
     expect(pack.texts.shell.pages.bag.inscTier).toContain('{tier}');

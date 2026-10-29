@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ManualClock } from '../src/clock.js';
 import { createGame, playerMaxHp, restoreState } from '../src/index.js';
+import { makeCombatPack } from './fixtures.js';
 
 /** 最小内容包：引擎零内容感知，空壳即可开局。 */
 const minimalContent = {};
@@ -83,5 +84,44 @@ describe('#58 项 5 · restoreState 直调契约（文档性钉子，防无声�
   it('createGame 恢复：同一存档 hp 被完整投影钳回上限（唯一钳点在装配层）', () => {
     const game = createGame({ content: minimalContent, save: overflowingSave, clock: new ManualClock() });
     expect(game.snapshot().state.hp).toBe(playerMaxHp(minimalContent, {}, []));
+  });
+});
+
+/* ---------- #62 保真收尾批 ---------- */
+
+describe('#62 · 存档自愈与散功重修', () => {
+  it('hp ≤ 0 坏档自愈：恢复面回满投影上限（旧版 load() 语义；正当局 hp 恒正不受影响）', () => {
+    const save = { version: 1 as const, time: 100, state: { hp: 0 } };
+    const game = createGame({ content: minimalContent, save, clock: new ManualClock(500) });
+    const snap = game.snapshot();
+    expect(snap.state.hp).toBe(snap.stats?.maxHp);
+    expect(snap.state.hp).toBeGreaterThan(0);
+  });
+
+  it('game:reset 散功重修：整态重置回新开局 + 时间归零 + game-reset 事件', () => {
+    const pack = makeCombatPack();
+    const clock = new ManualClock();
+    const game = createGame({ content: pack, clock, seed: 42 });
+
+    // 先造出可观测进度：开采集跑三轮（物品/修为入账）。
+    game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
+    game.tick(10000);
+    const before = game.snapshot().state as unknown as Record<string, unknown>;
+    const items = before.items as Record<string, number>;
+    expect(items['herb1'] ?? 0).toBeGreaterThan(0);
+
+    game.dispatch({ type: 'game:reset' });
+
+    const events = game.events.drain();
+    expect(events.some((event) => event.type === 'game-reset')).toBe(true);
+    expect(game.snapshot().time).toBe(0);
+
+    // 整态对拍：与同种子新开局逐键全等（rngSeed 除外——RNG 流延续非回卷）。
+    const fresh = createGame({ content: pack, clock: new ManualClock(), seed: 42 });
+    const after = { ...(game.snapshot().state as unknown as Record<string, unknown>) };
+    const base = { ...(fresh.snapshot().state as unknown as Record<string, unknown>) };
+    delete after.rngSeed;
+    delete base.rngSeed;
+    expect(after).toEqual(base);
   });
 });

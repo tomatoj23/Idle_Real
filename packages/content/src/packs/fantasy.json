@@ -256,7 +256,7 @@
   ],
   "rarities": [
     { "id": "plain", "name": "Plain", "weight": 70, "mult": 1, "affix": 0, "sell": 1 },
-    { "id": "fine", "name": "Fine", "weight": 25, "mult": 1.4, "affix": 1, "sell": 2 },
+    { "id": "fine", "name": "Fine", "weight": 25, "mult": 1.4, "affix": 1, "sell": 2, "announce": true },
     { "id": "mythic", "name": "Mythic", "weight": 5, "mult": 2, "affix": 2, "sell": 4, "showcase": true }
   ],
   "affixPool": [
@@ -538,7 +538,8 @@
         "talents": "Talents",
         "dungeon": "Delve",
         "achievements": "Feats",
-        "journal": "Chronicle"
+        "journal": "Chronicle",
+        "settings": "Settings"
       },
       "stats": {
         "labels": {
@@ -586,9 +587,9 @@
         "sellLog": "Sold {name} for {gained} gold.",
         "buyLog": "Bought {name} x{count} for {cost} gold.",
         "rejectFallback": "That action is not allowed.",
-        "offlineToast": "Away {away}: {activity} ran {cycles} times.",
+        "offlineToast": "Away {away}: {activity} ran {cycles} times.{exp}",
         "offlineLog": "Away {away}: gained {items}. {exp}",
-        "offlineCappedToast": "Away {away} (capped at {settled}): {activity} ran {cycles} times.",
+        "offlineCappedToast": "Away {away} (capped at {settled}): {activity} ran {cycles} times.{exp}",
         "offlineCappedLog": "Away {away}, settled at cap {settled}: gained {items}. {exp}",
         "offlineNoYield": "nothing",
         "offlineExpSuffix": "+{exp} exp",
@@ -612,10 +613,16 @@
         "smeltAllLog": "Smelted {count} pieces into {shard} x{shards}.",
         "batchLockedSkip": " (skipped {count} locked)",
         "floatSum": "{name} +{count}",
-        "expGain": "Cultivation +{amount}"
+        "expGain": "Cultivation +{amount}",
+        "lootAnnounce": "A rare find: {name}.",
+        "lootShowcaseCraft": "A masterwork: {name}!",
+        "victorySeized": "Claimed {name} from {enemy}.",
+        "gameReset": "A new life begins."
       },
       "pages": {
         "skills": {
+          "title": "Training",
+          "subtitle": "Pick a discipline — the work continues while you are away.",
           "empty": "No disciplines known yet.",
           "expSub": "{into}/{need} exp ({left} to go)",
           "expMax": "Mastered",
@@ -631,6 +638,7 @@
         "craft": {
           "title": "Crafting",
           "subtitle": "The workbench — level {level}.",
+          "hint": "Potions sustain the journey; blades are always won, and finer blades come to finer smiths.",
           "empty": "No recipes known.",
           "expSub": "{into}/{need} exp ({left} to go)",
           "expMax": "Mastered",
@@ -640,6 +648,7 @@
           "running": "Working",
           "startBtn": "Craft",
           "successRate": "Success {rate}%",
+          "certain": "Always succeeds",
           "matRow": "{name} {have}/{need}",
           "recipeMeta": "{interval} a try · {exp} exp · Lv {level}",
           "autoNone": "Leave as is",
@@ -650,6 +659,7 @@
         "combat": {
           "title": "Combat",
           "subtitle": "Blade level {level}",
+          "hint": "Victors take gold, reagents and gear; felled foes may drop relics. Falling costs a wound, never a life.",
           "enemyMissing": "No foes known.",
           "resting": "Resting...",
           "enemyHp": "Foe {ehp}/{hp}",
@@ -663,6 +673,9 @@
           "enemyStats": "HP {hp} · AT {atk} · DF {def} · EXP {exp}",
           "enemyGold": "Gold {min}~{max}",
           "dropsSuffix": " Also drops: {drops}",
+          "dropChance": "{name} {pct}%",
+          "gearDropRow": " · Relic: {names} {pct}%",
+          "enemyInterval": " · Strikes every {interval}",
           "fightBtn": "Challenge",
           "expSub": "XP {into}/{need} · {left} to next level",
           "engagedBadge": "In battle",
@@ -704,7 +717,8 @@
           "subtitle": "The traveling merchant's cart",
           "price": "{price} g",
           "owned": "Owned: {count}",
-          "buyBtn": "Buy 1"
+          "buyBtn": "Buy 1",
+          "buyTenBtn": "Buy 10"
         },
         "rebirth": {
           "title": "Rebirth",
@@ -836,6 +850,28 @@
           "pageBag": "Pouch",
           "openNow": "In progress - {name}",
           "expSuffix": "+{exp} exp"
+        },
+        "settings": {
+          "title": "Settings",
+          "subtitle": "Saves, backups and the field guide.",
+          "saveTitle": "Save",
+          "saveHint": "The game autosaves every 15 seconds; progress survives closing the window, and idle work settles while away (up to 24 hours).",
+          "saveNowBtn": "Save now",
+          "savedToast": "Saved.",
+          "resetBtn": "Dissolve (wipe save)",
+          "resetConfirmTip": "Dissolving wipes all progress — gear and delve records included. This cannot be undone. Truly sever everything?",
+          "resetConfirmBtn": "Sever everything",
+          "resetCancelBtn": "Not yet",
+          "transferTitle": "Travel with your save",
+          "transferHint": "Copy the cipher below to back up your save; paste a cipher into the box to load it (loading overwrites current progress).",
+          "exportLabel": "Save cipher",
+          "copyBtn": "Copy cipher",
+          "copiedToast": "Cipher copied.",
+          "importLabel": "Save cipher",
+          "importBtn": "Load",
+          "importBad": "That cipher is not valid — make sure you copied a complete save cipher exported by this game.",
+          "guideTitle": "Field guide",
+          "guide": "Gather herbs and ore: pick a discipline and the work loops on its own, even while away;\nCrafting: brew potions and forge gear at the workbench (finer smiths, finer blades);\nCombat: challenge foes — auto-fight, auto-potion, auto-rematch; the fallen drop reagents and relics;\nDelves: floor upon floor, danger and reward in kind;\nRebirth: dissolve this life — attunement and gear endure, talents grow forever.\nWalk well."
         }
       }
     }

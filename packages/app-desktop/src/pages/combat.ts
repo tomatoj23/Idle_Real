@@ -54,6 +54,16 @@ export function createCombatPage(env: PageEnv): PageView {
         </section>`;
     }
 
+    /** 敌卡信息回迁（#62 P2-5）拼装小件：掉率/异宝/出手间隔在列表与交战
+     *  两视图同式，收敛在此（Duplicated Code 收口，评审 smelling 批）。 */
+    const dropChanceOf = (drop: { item: string; chance: number }): string =>
+      T('pages.combat.dropChance', {
+        name: env.itemById.get(drop.item)?.name ?? drop.item,
+        pct: Math.round(drop.chance * 100),
+      });
+    const intervalRowOf = (attackInterval: number | undefined): string =>
+      T('pages.combat.enemyInterval', { interval: env.fmtSeconds(attackInterval ?? 0) });
+
     /** 敌人卡列表：列表视图与战斗中信息面共用。engagedId = 当前目标——徽标化且
      *  不渲染挑战按钮（换敌 = 引擎 combat:start 幂等替换语义，点其他怪即切换，
      *  战斗不中断；点当前怪引擎幂等拒绝，UI 直接收掉入口）。 */
@@ -68,16 +78,23 @@ export function createCombatPage(env: PageEnv): PageView {
         const locked = levelGate.locked || yunGate.locked;
         const lockMsg = levelLockMsgOf(T, yunGate, levelGate.requiredLevel);
         const gold = enemy.gold ?? { min: 0, max: 0 };
-        const drops = (enemy.drops ?? [])
-          .map((drop) => env.itemById.get(drop.item)?.name ?? drop.item)
-          .slice(0, 3)
-          .join(sep);
+        // 敌卡信息回迁（#62 P2-5）：掉率百分比逐项拼装（不再截前 3）+
+        // 异宝掉落行（器胚池 + 掉率）+ 出手间隔（旧版 atkTime 行）。
+        const dropRows = (enemy.drops ?? []).map(dropChanceOf).join(sep);
+        const gearDrop = content.gearDrops.find((gd) => gd.enemy === enemy.id);
+        const gearRow = gearDrop
+          ? T('pages.combat.gearDropRow', {
+              names: (gearDrop.pool ?? []).map((id) => env.itemById.get(id)?.name ?? id).join(sep),
+              pct: Math.round(gearDrop.chance * 100),
+            })
+          : '';
+        const intervalRow = intervalRowOf(enemy.attackInterval);
         return `<article class="enemy-card${locked ? ' locked' : ''}${enemy.id === engagedId ? ' running' : ''}">
           <div class="enemy-face"><span class="sigil sigil-big">${esc(enemy.icon)}</span></div>
           <div class="enemy-main">
             <div class="enemy-head"><b>${esc(enemy.name)}</b><span class="enemy-lv">${esc(T('units.level', { v: enemy.level }))}</span></div>
-            <div class="enemy-sub">${esc(T('pages.combat.enemyStats', { hp: enemy.hp, atk: enemy.atk, def: enemy.def, exp: enemy.exp }))}</div>
-            <div class="enemy-sub">${esc(T('pages.combat.enemyGold', { min: gold.min, max: gold.max }))}${drops ? esc(T('pages.combat.dropsSuffix', { drops })) : ''}</div>
+            <div class="enemy-sub">${esc(T('pages.combat.enemyStats', { hp: enemy.hp, atk: enemy.atk, def: enemy.def, exp: enemy.exp }))}${esc(intervalRow)}</div>
+            <div class="enemy-sub">${esc(T('pages.combat.enemyGold', { min: gold.min, max: gold.max }))}${dropRows ? esc(T('pages.combat.dropsSuffix', { drops: dropRows })) : ''}${esc(gearRow)}</div>
           </div>
           <div class="enemy-ops">
             ${
@@ -132,6 +149,9 @@ export function createCombatPage(env: PageEnv): PageView {
             decoTicks: deco.ticks,
             ehpPct,
             ehpText: ehpTextOf(T, combat.ehp, enemy.hp),
+            // 出手间隔行（#62 P2-5 回迁）：生效值 = snap.enemy 投影（Boss 阶段
+            // 修正在案随阶段走；快照换相进签名重建，静态行不滞相）。
+            intervalText: intervalRowOf(enemy.attackInterval),
             minions: minionsHtml(T, snap),
             minionRowsKey: minionRowsKeyOf(snap),
             hpPct,
@@ -178,6 +198,7 @@ export function createCombatPage(env: PageEnv): PageView {
       <section class="page">
         <h2 class="page-title">${esc(T('pages.combat.title'))}</h2>
         <p class="page-sub">${esc(T('pages.combat.subtitle', { level: clv }))}</p>
+        <p class="page-sub">${esc(T('pages.combat.hint'))}</p>
         ${dungeonEntries}
         <div class="enemy-grid">${enemyCardsHtml()}</div>
         <div class="consumable-bar">${consumables || ''}</div>

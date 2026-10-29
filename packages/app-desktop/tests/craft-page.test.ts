@@ -29,15 +29,16 @@ function mount(save: SaveData = makeSave()) {
 }
 
 describe('#5 · 炼制页（craft 页）渲染', () => {
-  it('页签齐备（#33 起十页签）：craft/转生/道韵/成就/修行录页签出现且文案 texts 驱动', () => {
+  it('页签齐备（#62 起十一页签）：craft/转生/道韵/成就/修行录/设置页签出现且文案 texts 驱动', () => {
     const { root } = mount();
-    expect(root.querySelectorAll('#tabs .tab')).toHaveLength(10);
+    expect(root.querySelectorAll('#tabs .tab')).toHaveLength(11);
     expect(root.querySelector('.tab[data-tab="craft"]')?.textContent).toBe('炼制');
     expect(root.querySelector('.tab[data-tab="combat"]')?.textContent).toBe('斗法');
     expect(root.querySelector('.tab[data-tab="rebirth"]')?.textContent).toBe('转生');
     expect(root.querySelector('.tab[data-tab="talents"]')?.textContent).toBe('道韵');
     expect(root.querySelector('.tab[data-tab="achievements"]')?.textContent).toBe('成就');
     expect(root.querySelector('.tab[data-tab="journal"]')?.textContent).toBe('修行录');
+    expect(root.querySelector('.tab[data-tab="settings"]')?.textContent).toBe('设置');
   });
 
   it('配方卡渲染：产出/成功率/材料行/元信息，材料足缺着色', () => {

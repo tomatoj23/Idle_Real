@@ -343,6 +343,8 @@ export interface RarityView {
   readonly smelt?: number;
   /** UI 特判开关（ADR-016 裁决 ④）。 */
   readonly showcase?: boolean;
+  /** 掉落播报开关（#62 P2-6：次级播报，低于 showcase 一档）。 */
+  readonly announce?: boolean;
 }
 
 /** 随机词条池条目视图（content 包 affixPool 节条目）。 */
@@ -647,6 +649,13 @@ export function craftParamsOf(content: GameContent): CraftParamsView {
 export interface GearParamsView {
   /** 器屑物品 id（熔炼产物/重铸消耗）；undefined = 该包无熔炼/重铸玩法。 */
   readonly shardItem?: string;
+  /**
+   * 掉落侧稀有度偏置的供体技能 id（#62 P1-2 用户裁决）：内容声明哪个技能
+   * 提供偏置（旧版炼器等级的接缝一般化），引擎零内容感知；undefined =
+   * 无掉落偏置（与旧签名逐点同分布）。偏置系数归 config.crafting
+   * .rarityBiasPerLevel 单一旋钮（旧版两路同系数）。
+   */
+  readonly biasSkillId?: string;
   /** 单条铭纹重铸消耗（器屑数量）。 */
   readonly reforgeCost: number;
   /** 标签加权系数：铭纹抽取权重 = 基础 × (1+匹配数×该值)。 */
@@ -654,23 +663,26 @@ export interface GearParamsView {
 }
 
 /** 引擎基线；config.gear 缺省字段逐项回落到此。 */
-export const BASE_GEAR_PARAMS: Omit<GearParamsView, 'shardItem'> = {
+export const BASE_GEAR_PARAMS: Omit<GearParamsView, 'shardItem' | 'biasSkillId'> = {
   reforgeCost: 1,
   tagWeightPerMatch: 1,
 };
 
-/** 装备构筑循环参数：config.gear 覆盖基线（可选子节；shardItem 缺省 = 无器屑经济）。 */
+/** 装备构筑循环参数：config.gear 覆盖基线（可选子节；shardItem/biasSkillId 缺省 = 无）。 */
 export function gearParamsOf(content: GameContent): GearParamsView {
   const gear = (content as { config?: { gear?: unknown } }).config?.gear;
   const source =
     gear !== null && typeof gear === 'object' && !Array.isArray(gear)
       ? (gear as Record<string, unknown>)
       : undefined;
-  const rawShard = source?.shardItem;
+  const refOf = (key: string): string | undefined => {
+    const raw = source?.[key];
+    return typeof raw === 'string' && raw.length > 0 ? raw : undefined;
+  };
   return {
     ...resolveParams(source, BASE_GEAR_PARAMS),
-    shardItem:
-      typeof rawShard === 'string' && rawShard.length > 0 ? rawShard : undefined,
+    shardItem: refOf('shardItem'),
+    biasSkillId: refOf('biasSkillId'),
   };
 }
 
@@ -762,13 +774,14 @@ function resolveParams<T extends object>(raw: unknown, base: T): T {
 /* ---------- 坊市购买力（N4 判定侧单一来源，#26） ---------- */
 
 /**
- * 坊市购买力视图：可否买一件。与引擎 shop:buy 拒绝判定同一比较式
- * （gold ≥ price，单件 cost = price × 1）——UI 禁壳内复制 gold >= price
- * 公式（先例 enemyGateOf 的 N1 收敛）。货架未收录的物品按不可购买兜底。
+ * 坊市购买力视图：可否买 count 件（#62 买 10 入口恢复；缺省 1 = 旧签名）。
+ * 与引擎 shop:buy 拒绝判定同一比较式（gold ≥ price × count）——UI 禁壳内
+ * 复制 gold >= price 公式（先例 enemyGateOf 的 N1 收敛）。货架未收录的
+ * 物品按不可购买兜底。
  */
-export function shopAffordOf(content: GameContent, gold: number, itemId: string): boolean {
+export function shopAffordOf(content: GameContent, gold: number, itemId: string, count = 1): boolean {
   const entry = findShopEntry(content, itemId);
-  return entry !== undefined && gold >= entry.price;
+  return entry !== undefined && gold >= entry.price * Math.max(1, Math.floor(count));
 }
 
 /* ---------- 开战门控（N1 判定侧单一来源，#020） ---------- */

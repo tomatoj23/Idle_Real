@@ -137,6 +137,7 @@ function makeHarness(pack: GameContent, opts?: { atk?: number }) {
       daoYun: () => {},
     },
     combatSkill: () => undefined,
+    gearDropBias: () => 0,
     gearSeq: {
       next: () => 1,
       commit: () => {},

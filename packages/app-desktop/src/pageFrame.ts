@@ -272,6 +272,8 @@ export function fightingEnemyCardHtml(parts: {
   readonly ehpPct: number;
   /** 敌血行文案（pages.combat.enemyHp 填充结果）。 */
   readonly ehpText: string;
+  /** 出手间隔行（#62 P2-5 回迁；静态——生效值随快照换相走整页重建）。 */
+  readonly intervalText?: string;
   readonly minions: string;
   /** 召唤行组结构键（minionRowsKeyOf）：render 即落 data-minion-rows——
    *  重建帧首帧 update 直走补丁路径，不再幂等重挂行组（#50 复核收口）。 */
@@ -288,6 +290,7 @@ export function fightingEnemyCardHtml(parts: {
               <div class="enemy-head"><b>${esc(p.name)}</b><span class="enemy-lv">${esc(p.T('units.level', { v: p.level }))}</span>${p.headBadges}</div>
               <div class="bar bar-red">${p.decoTicks}<i data-bar="enemy" style="width:${p.ehpPct}%"></i></div>
               <div class="enemy-sub" data-ehp-text>${esc(p.ehpText)}</div>
+              ${p.intervalText ? `<div class="enemy-sub">${esc(p.intervalText)}</div>` : ''}
               <div class="minion-rows" data-minion-rows="${esc(p.minionRowsKey)}">${p.minions}</div>
               <div class="bar bar-jade"><i data-bar="self" style="width:${p.hpPct}%"></i></div>
               <div class="enemy-sub" data-self-stats>${esc(p.selfStatsText)}</div>

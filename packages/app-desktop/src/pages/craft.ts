@@ -95,6 +95,12 @@ export function createCraftPage(env: PageEnv): PageView {
         // 壳零公式复算（#5 票评：成功率展示禁二次硬编码，round3 A4）。
         const rate = craftSuccessRateOf(content, st.skills, recipe);
         const ratePct = String(Math.round(rate * 1000) / 10);
+        // 必成分支（#62 P2-3）：successRate = 1 的配方显示「器成必得」承诺，
+        // 不再落入「成功率 100%（失败损料）」的矛盾模板。
+        const rateLabel =
+          rate >= 1
+            ? T('pages.craft.certain')
+            : T('pages.craft.successRate', { rate: ratePct });
         const missing = new Set(craftMissingOf(recipe, st.items));
         const mats = Object.entries(recipe.materials)
           .map(([id, matNeed]) => {
@@ -117,7 +123,7 @@ export function createCraftPage(env: PageEnv): PageView {
             icon: out?.icon ?? T('icons.unknown'),
             name: out?.name ?? recipe.output.item,
             count: recipe.output.count,
-            bonusHtml: `<span class="act-bonus">${esc(T('pages.craft.successRate', { rate: ratePct }))}</span>`,
+            bonusHtml: `<span class="act-bonus">${esc(rateLabel)}</span>`,
           })}
           <div class="craft-mats">${mats}</div>
           <div class="act-meta">${esc(T('pages.craft.recipeMeta', { interval: env.fmtSeconds(recipe.interval), exp: recipe.exp, level: recipe.unlockLevel }))}</div>
@@ -146,6 +152,7 @@ export function createCraftPage(env: PageEnv): PageView {
       <section class="page">
         <h2 class="page-title">${esc(T('pages.craft.title'))}</h2>
         <p class="page-sub">${esc(T('pages.craft.subtitle', { level: read.level }))}</p>
+        <p class="page-sub">${esc(T('pages.craft.hint'))}</p>
         <div class="chips">${chips}</div>
         ${statusCard}
         <div class="act-grid">${cards || `<p class="empty">${esc(T('pages.craft.empty'))}</p>`}</div>

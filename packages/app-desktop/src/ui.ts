@@ -45,7 +45,7 @@ import {
 } from '@wendao/engine';
 import { esc, pctClamped } from './pageFrame';
 import { createPages, isTabId, TAB_ORDER } from './pages';
-import type { TabId } from './pages/types';
+import type { ShellSaveService, TabId } from './pages/types';
 
 // 壳核公开面保持不变（main.ts/测试消费 buildUi；esc 主壳引导页消费）。
 export { esc };
@@ -93,6 +93,8 @@ export function buildUi(
   // #50 类型化快照：读数面取 GameSnapshot（state = Readonly<GameState>）。
   getSnapshot: () => GameSnapshot,
   events: EventBus,
+  // 存档管理服务（#62 P1-1 设置页）：main.ts 装配；缺省 = 设置页只渲染玩法说明。
+  saveService?: ShellSaveService,
 ): Ui {
   const itemById = new Map(content.items.map((item) => [item.id, item]));
   const gatherSkills = content.skills.filter((skill) => skill.kind === 'gather');
@@ -292,6 +294,7 @@ export function buildUi(
     dungeonList,
     rebirthSection,
     canSmelt,
+    saveService,
     pageEl,
     dispatch: (action) => handler?.(action),
     // 页面 UI 状态（选中/撤防）变化走强制重绘：等价今天 click 路径的
@@ -301,6 +304,7 @@ export function buildUi(
       render();
     },
     nav: navigate,
+    toast,
   });
 
   /** 秒时长读数（units.seconds 模板，{v} 槽）。 */
@@ -548,6 +552,8 @@ export function buildUi(
       const spoilNames = data.drops.map((id) => nameOf(id));
       if (typeof data.gearDropName === 'string' && data.gearDropName) {
         spoilNames.push(`【${data.gearDropName}】`);
+        // 旧版「于{敌名}手中夺得」回迁（#62 P2-6）：异宝行带敌名入战斗日志。
+        flog(T('events.victorySeized', { enemy: data.enemyName, name: data.gearDropName }), 't-gold');
       }
       const spoil = T('events.victorySpoil', {
         gold: String(data.gold),
@@ -604,9 +610,21 @@ export function buildUi(
       } else if (data.source === 'craft') {
         acquireFloat(T('events.lootCraft', { name, count }), name, count);
       }
-      // 天降异宝特判由内容 def 的 showcase bool 驱动（ADR-016 裁决 ④）。
-      if ((data.source === 'gear' || data.source === 'craft') && data.rarity !== undefined && rarityDefOf(data.rarity)?.showcase) {
-        toast(T('events.lootShowcase', { name }));
+      // 稀有度播报（#62 P2-6，档位词表显式 bool 驱动，ADR-016 裁决 ④）：
+      // showcase 档 = 「天降异宝」级特判；announce 档 = 次级播报（旧版 rare
+      // 「妖物遗落」回迁）；炼制 showcase 走 lootShowcaseCraft 分流（旧版
+      // 「神兵天成」非「天降异宝」）。
+      if ((data.source === 'gear' || data.source === 'craft') && data.rarity !== undefined) {
+        const def = rarityDefOf(data.rarity);
+        if (def?.showcase) {
+          toast(
+            data.source === 'craft'
+              ? T('events.lootShowcaseCraft', { name })
+              : T('events.lootShowcase', { name }),
+          );
+        } else if (data.source === 'gear' && def?.announce) {
+          toast(T('events.lootAnnounce', { name }));
+        }
       }
     },
     ledger: () => {
@@ -776,6 +794,8 @@ export function buildUi(
       const away = fmtDuration(capped ? awaySeconds : seconds);
       const settled = fmtDuration(seconds);
       const items = itemsLine(data.items);
+      // 修为后缀（#62 P2-7 旧版「修为 +X」回迁）：toast 摘要与飘字明细同槽口径。
+      const expSuffix = data.exp > 0 ? T('events.offlineExpSuffix', { exp: data.exp }) : '';
       if (capped) {
         toast(
           T('events.offlineCappedToast', {
@@ -783,6 +803,7 @@ export function buildUi(
             settled,
             activity: data.activityName,
             cycles: data.cycles,
+            exp: expSuffix,
           }),
         );
         flowFloat(
@@ -790,7 +811,7 @@ export function buildUi(
             away,
             settled,
             items: items || T('events.offlineNoYield'),
-            exp: data.exp > 0 ? T('events.offlineExpSuffix', { exp: data.exp }) : '',
+            exp: expSuffix,
           }),
         );
       } else {
@@ -799,16 +820,21 @@ export function buildUi(
             away,
             activity: data.activityName,
             cycles: data.cycles,
+            exp: expSuffix,
           }),
         );
         flowFloat(
           T('events.offlineLog', {
             away,
             items: items || T('events.offlineNoYield'),
-            exp: data.exp > 0 ? T('events.offlineExpSuffix', { exp: data.exp }) : '',
+            exp: expSuffix,
           }),
         );
       }
+    },
+    'game-reset': (event) => {
+      // 散功重修完成（#62 P1-1）：整态已重置，醒目 toast 告知（旧版「前尘尽散」）。
+      toast(T('events.gameReset', { rebirths: event.data.rebirths }));
     },
     reject: (event) => {
       toast(String(event.data.message ?? T('events.rejectFallback')), 'red');

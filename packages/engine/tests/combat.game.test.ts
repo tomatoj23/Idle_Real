@@ -184,3 +184,48 @@ describe('验收 · 战斗 500 场回归', () => {
     expect(game.events.drain().length).toBeLessThanOrEqual(256);
   });
 });
+
+/* ---------- 掉落侧稀有度偏置·游戏级（#62 P1-2：biasSkillId 内容声明） ---------- */
+
+/**
+ * 连打 efatal 收集异宝掉落档位（atk 1 无消耗，autoFight 休整后自动再战；
+ * efatal 掉率覆写 1 —— 每胜必掉，档位统计不被掉落掷点稀释）。
+ */
+function collectGearRarities(pack: unknown, seed: number, want: number): string[] {
+  const game = createGame({ content: pack as never, clock: new ManualClock(), seed });
+  game.dispatch({ type: 'combat:start', payload: { enemyId: 'efatal' } });
+  const rarities: string[] = [];
+  for (let i = 0; i < 200 && rarities.length < want; i++) {
+    game.tick(5000);
+    for (const event of game.events.drain()) {
+      if (event.type === 'loot' && event.data.source === 'gear') {
+        rarities.push(event.data.rarity ?? '');
+      }
+    }
+  }
+  return rarities;
+}
+
+describe('#62 · biasSkillId 掉落偏置（游戏级）', () => {
+  it('声明供体技能：敌掉稀有度整体上移（偏置系数读 config.crafting.rarityBiasPerLevel）', () => {
+    const pack = {
+      ...makeCombatPack(),
+      gearDrops: [{ enemy: 'efatal', chance: 1, pool: ['scorp_tail'] }],
+      config: { gear: { biasSkillId: 'fight' }, crafting: { rarityBiasPerLevel: 2 } },
+    };
+    const rarities = collectGearRarities(pack, 42, 15);
+    expect(rarities.length).toBeGreaterThanOrEqual(15);
+    // 供体层 ≥1 × 系数 2 = 偏置 ≥ 2 = 200 权重点 ≫ 总权重 100：全落末档。
+    expect(rarities.every((rarity) => rarity === 'epic')).toBe(true);
+  });
+
+  it('未声明供体 = 无偏置（档位混合，与旧签名同分布回归钉）', () => {
+    const pack = {
+      ...makeCombatPack(),
+      gearDrops: [{ enemy: 'efatal', chance: 1, pool: ['scorp_tail'] }],
+    };
+    const rarities = collectGearRarities(pack, 42, 15);
+    expect(rarities.length).toBeGreaterThanOrEqual(15);
+    expect(rarities.some((rarity) => rarity !== 'epic')).toBe(true);
+  });
+});

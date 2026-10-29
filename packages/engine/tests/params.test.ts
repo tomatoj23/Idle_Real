@@ -339,6 +339,15 @@ describe('#26 · 坊市购买力视图（N4 判定侧单一来源）', () => {
     expect(shopAffordOf(pack, 999, 'ghost_item')).toBe(false);
   });
 
+  it('shopAffordOf count 泛化（#62 买 10）：与 shop:buy 的 price×count 判定同式', () => {
+    const pack = makeCombatPack();
+    // 10 × 45 = 450：边界两态与单件同律
+    expect(shopAffordOf(pack, 449, 'consumable_heal', 10)).toBe(false);
+    expect(shopAffordOf(pack, 450, 'consumable_heal', 10)).toBe(true);
+    // 缺省 count = 1（旧签名不变）
+    expect(shopAffordOf(pack, 45, 'consumable_heal')).toBe(true);
+  });
+
   it('dispatch 侧同式验证：gold=45 购买成功，gold=44 拒绝 no-gold', () => {
     const pack = makeCombatPack();
     const rich = createGame({

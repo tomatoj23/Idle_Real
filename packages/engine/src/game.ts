@@ -215,12 +215,30 @@ export function createGame(options: CreateGameOptions): Game {
   const hpCap = (): number => playerStats(hpContext()).maxHp;
   const xpOf = (skillId: string): number => state.skills[skillId]?.xp ?? 0;
   const levelOf = (skillId: string): number => levelFromXp(xpOf(skillId), pparams);
+  /**
+   * 掉落侧稀有度偏置（#62 P1-2 用户裁决）：config.gear.biasSkillId 声明的
+   * 供体技能层数 × config.crafting.rarityBiasPerLevel（旧版 js/game.js:95
+   * 炼器等级 × 0.0004 的接缝一般化——内容声明供体，引擎零内容感知；炼制侧
+   * 偏置沿用配方自身技能层，不读本声明）。供体未声明/技能无记录 = 0。
+   */
+  const gearDropBias = (): number => {
+    const skillId = gparams.biasSkillId;
+    if (skillId === undefined) return 0;
+    const record = state.skills[skillId];
+    if (record === undefined) return 0;
+    return levelFromXp(record.xp, pparams) * crparams.rarityBiasPerLevel;
+  };
   if (options.save) {
     // 恢复后按完整属性投影钳气血（#41，唯一上限钳点）：state.ts 只做收编校验
     //（hp 行声明序在 gear 前、投影不可见），佩戴/增益/天赋投影出的上限在此
     // 统一生效——存档超顶（含装备抬升头寸）压回当前真实上限；只降不升，
-    // 回满属回血/settleOffline 语义。
-    state.hp = Math.min(state.hp, Math.max(1, playerStats({ moveId: weaponMoveKey() }).maxHp));
+    // 回满属回血/settleOffline 语义。hp ≤ 0 例外自愈（#62 票评补充项，旧版
+    // js/game.js:61 语义）：正当局内存活 hp 恒 > 0（败退已设 30% 上限回撤），
+    // 0/负值是坏档自证，回满足血属恢复面兜底而非回血语义，不破 #41 只降不升。
+    state.hp =
+      state.hp <= 0
+        ? Math.max(1, playerStats({ moveId: weaponMoveKey() }).maxHp)
+        : Math.min(state.hp, Math.max(1, playerStats({ moveId: weaponMoveKey() }).maxHp));
   }
 
   const combatSkill = (): SkillView | undefined => skillsOf(content).find((skill) => skill.kind === 'combat');
@@ -1198,6 +1216,9 @@ export function createGame(options: CreateGameOptions): Game {
       daoYun: (delta, source) => ledgerDaoYun(delta, source, META_IDLE),
     },
     combatSkill: () => combatSkill(),
+    // 掉落侧稀有度偏置（#62 P1-2）：供体技能层数 × crafting 偏置系数，
+    // 现读（升级即时生效）；包未声明供体/技能无记录 = 0（逐点同分布）。
+    gearDropBias: gearDropBias,
     gearSeq: {
       next: () => state.gearSeq + 1,
       commit: (uid) => {
@@ -2323,6 +2344,18 @@ export function createGame(options: CreateGameOptions): Game {
             return;
           }
           state.enemyAuto[enemyId] = enemyAutoRuleOf(parsed.mode, parsed.maxRarity);
+          return;
+        }
+
+        case 'game:reset': {
+          // 散功重修·清档（#62 P1-1 旧版保真，js/game.js:895 defaultState 语义）：
+          // 整态重置回新开局——区别于兵解（保留集长存的转生），本动作连保留集
+          // 与秘境最深记录一并清空，游戏内时间归零。RNG 流延续当前位置（状态
+          // 载体换新，流不断——确定性纪律只要求可复现，不要求重开换流）。
+          const prevRebirths = state.rebirths;
+          Object.assign(state, initialState(content, state.rngSeed, contributions));
+          time = 0;
+          events.emit({ type: 'game-reset', time, data: { rebirths: prevRebirths } });
           return;
         }
 

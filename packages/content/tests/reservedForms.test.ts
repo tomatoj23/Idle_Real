@@ -398,6 +398,31 @@ describe('#16 · config 槽位节', () => {
 
 /* ==================== config 玩法参数子节（#020） ==================== */
 
+describe('#62 · config.gear.biasSkillId（掉落偏置供体声明）', () => {
+  it('声明在册技能 → 通过；缺省（不写）照常通过', () => {
+    const ok = makeBasePack();
+    ok.config = { slots: [{ id: 'weapon', name: '法器' }], gear: { biasSkillId: 'smith' } };
+    expect(validateContentPack(ok).ok).toBe(true);
+    expect(validateContentPack(makeBasePack()).ok).toBe(true);
+  });
+
+  it('技能不存在 → 字段级 xref（引擎侧缺技能静默无偏置，拼写错加载期大声拒绝）', () => {
+    const negative = makeBasePack();
+    negative.config = { slots: [{ id: 'weapon', name: '法器' }], gear: { biasSkillId: 'smth' } };
+    expectError(validateContentPack(negative), '/config/gear/biasSkillId', 'xref');
+  });
+
+  it('形态非法（非字符串/空串）→ schema 层拒绝', () => {
+    const negative = makeBasePack();
+    negative.config = { slots: [{ id: 'weapon', name: '法器' }], gear: { biasSkillId: 7 } };
+    expectError(validateContentPack(negative), '/config/gear/biasSkillId', 'type');
+    const blank = makeBasePack();
+    blank.config = { slots: [{ id: 'weapon', name: '法器' }], gear: { biasSkillId: '' } };
+    expectError(validateContentPack(blank), '/config/gear/biasSkillId', 'pattern');
+  });
+});
+
+
 describe('#020 · config combat/progression/affix 子节', () => {
   it('三子节全可选：缺省照常通过（参数走引擎基线）', () => {
     const pack = makeBasePack();

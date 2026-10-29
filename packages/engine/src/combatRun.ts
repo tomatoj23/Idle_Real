@@ -154,6 +154,13 @@ export interface CombatRunDeps {
   /** 斗法技能（修为发放载体；包未定义 = undefined）。 */
   readonly combatSkill: () => SkillView | undefined;
 
+  /**
+   * 掉落侧稀有度偏置（#62 P1-2）：config.gear.biasSkillId 供体技能层数 ×
+   * config.crafting.rarityBiasPerLevel，game 侧现读（升级即时生效）；
+   * 包未声明供体 = 恒 0（与旧签名逐点同分布）。
+   */
+  readonly gearDropBias: () => number;
+
   /** 装备 uid 序列器窄门（state.gearSeq）：掷定前取号、实得后落账。 */
   readonly gearSeq: {
     next(): number;
@@ -541,10 +548,12 @@ export function createCombatRun(deps: CombatRunDeps): CombatRun {
     const gearDrop = findGearDrop(content, enemy.id);
     if (gearDrop) {
       // 掉落管线（#14 补全 ①②③⑦）：①掉不掉 → ②按秘境层数筛器胚池 → ③选底材
-      // → ④~⑦实例化（equip 走词条池旧管线；器胚走铭纹管线）。稀有度掷点不传
-      // 偏置（#5 接缝：掉落侧与旧签名逐点同分布）；uid 只在实得时入账（不空烧序号）。
+      // → ④~⑦实例化（equip 走词条池旧管线；器胚走铭纹管线）。稀有度掷点吃
+      // gearDropBias（#62 P1-2 掉落侧偏置恢复，旧版炼器等级偏置作用于敌掉的
+      // 语义）；uid 只在实得时入账（不空烧序号）。
       const gear = rollGear(content, gearDrop, deps.gearSeq.next(), random, {
         floor: deps.dungeon.current()?.floor,
+        bias: deps.gearDropBias(),
       });
       if (gear) {
         deps.gearSeq.commit(gear.uid);

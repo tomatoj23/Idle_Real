@@ -20,11 +20,12 @@ afterEach(() => {
 });
 
 describe('#33 · 修行录页', () => {
-  it('页签位于成就右侧（末位）；进页出空流水空态', () => {
+  it('页签位于成就右侧（倒数第二，#62 起设置页居末）；进页出空流水空态', () => {
     const { root, ui } = mount();
     const tabs = Array.from(root.querySelectorAll<HTMLButtonElement>('#tabs .tab'));
-    expect(tabs[tabs.length - 1]?.dataset.tab).toBe('journal');
-    expect(tabs[tabs.length - 2]?.dataset.tab).toBe('achievements');
+    expect(tabs[tabs.length - 1]?.dataset.tab).toBe('settings');
+    expect(tabs[tabs.length - 2]?.dataset.tab).toBe('journal');
+    expect(tabs[tabs.length - 3]?.dataset.tab).toBe('achievements');
 
     root.querySelector<HTMLButtonElement>('.tab[data-tab="journal"]')!.click();
     ui.render();

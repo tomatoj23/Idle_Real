@@ -2,6 +2,7 @@ import './style.css';
 import {
   attachAutoSave,
   createGame,
+  decodeSave,
   fillTemplate,
   localStorageSaveAdapter,
   type GameAction,
@@ -13,6 +14,7 @@ import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
 import { buildUi, esc } from './ui';
 import { desktopBridgeOf, desktopSaveAdapter, wireAchievementReporting } from './desktop';
 import { SAVE_KEY } from './saveKey';
+import type { ShellSaveService } from './pages/types';
 
 const TICK_MS = 250;
 const AUTOSAVE_MS = 15000;
@@ -28,6 +30,25 @@ function brandText(shell: unknown, key: 'name' | 'bootError'): string {
       : undefined;
   const value = brand?.[key];
   return typeof value === 'string' && value.length > 0 ? value : `shell.brand.${key}`;
+}
+
+/* ---------- 存档密文编解码（#62 P1-1 携档云游）：base64(UTF-8 JSON) ---------- */
+
+function encodeSaveText(data: SaveData): string {
+  const bytes = new TextEncoder().encode(JSON.stringify(data));
+  let bin = '';
+  for (const byte of bytes) bin += String.fromCharCode(byte);
+  return btoa(bin);
+}
+
+/** 密文 → JSON 串；非 base64/含空白折行容错；失败 null（导入侧内联报错）。 */
+function decodeSaveCipher(text: string): string | null {
+  try {
+    const bin = atob(text.replace(/\s+/g, ''));
+    return new TextDecoder().decode(Uint8Array.from(bin, (char) => char.charCodeAt(0)));
+  } catch {
+    return null;
+  }
 }
 
 let content: ContentPack | undefined;
@@ -67,14 +88,35 @@ try {
   if (bridge) wireAchievementReporting(game.events, bridge);
 
   const autoSave = attachAutoSave(game, adapter, AUTOSAVE_MS);
+  // 导入读档 = 写槽 + 受控重载（#62 P1-1）：走整条启动校验链（decodeSave 门禁/
+  // restoreState/钳血/离线结算），不做运行时换档。重载路径上 beforeunload 的
+  // 关闭即保存必须让路——否则当前局会把刚写入的导入档覆掉。
+  let reloading = false;
+  let ui: ReturnType<typeof buildUi> | undefined;
+  const saveService: ShellSaveService = {
+    saveNow: () => autoSave.flush(),
+    exportText: () => encodeSaveText(game.snapshot()),
+    importText(raw) {
+      const decoded = decodeSave(decodeSaveCipher(raw));
+      if (!decoded.save) return false;
+      reloading = true;
+      // 同步通道落槽（flushSync 优先；localStorage 适配器本就同步写），
+      // 退出竞态下异步 send 可能不达主进程（与关闭即保存同一纪律）。
+      if (adapter.flushSync) adapter.flushSync(decoded.save);
+      else adapter.save(decoded.save);
+      window.location.reload();
+      return true;
+    },
+  };
   window.addEventListener('beforeunload', () => {
+    if (reloading) return;
     autoSave.flush();
     // 关闭即保存兜底（#10）：同步通道，退出竞态下异步 send 可能不达主进程。
     adapter.flushSync?.(game.snapshot());
   });
 
   // UI 只消费 events + snapshot + texts.shell（事件→日志/浮提示/重绘的接线在 buildUi 内）。
-  const ui = buildUi(app, content, () => game.snapshot(), game.events);
+  ui = buildUi(app, content, () => game.snapshot(), game.events, saveService);
   ui.bindActions((action: GameAction) => game.dispatch(action));
 
   // 关闭期间的离线欠账：UI 订阅就绪后按墙钟差一次性补偿（ADR-013 观察时补偿）。

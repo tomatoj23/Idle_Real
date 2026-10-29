@@ -266,7 +266,7 @@ function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
     }
   }
   checkIds(pack.elements, '/elements', errors);
-  const slotIds = checkConfig(pack.config, itemIndex, pack.items, errors);
+  const slotIds = checkConfig(pack.config, itemIndex, pack.items, skillIndex, errors);
 
   // 武器语义槽位（#14 role 放宽，与引擎 weaponSlotOf 同律）：role === 'weapon'
   // 优先，未声明 role 的包按 id === 'weapon' 兜底；无 config（旧包形态）回落
@@ -400,6 +400,7 @@ function checkConfig(
   config: Config | undefined,
   items: ReadonlyMap<string, number>,
   itemDefs: readonly Item[],
+  skills: ReadonlyMap<string, number>,
   errors: ContentError[],
 ): ReadonlySet<string> | undefined {
   if (config === undefined) {
@@ -435,6 +436,16 @@ function checkConfig(
         message: `器屑物品 "${shardItem}" 须为 mat 类（熔炼产物入袋堆叠）`,
       });
     }
+  }
+  // 掉落侧稀有度偏置供体（#62 P1-2）：xref skills——引擎侧缺技能静默无偏置
+  //（零降级路径），声明了不存在的技能是包作者的拼写错，加载期大声拒绝。
+  const biasSkillId = config.gear?.biasSkillId;
+  if (biasSkillId !== undefined && !skills.has(biasSkillId)) {
+    errors.push({
+      path: '/config/gear/biasSkillId',
+      keyword: 'xref',
+      message: `掉落偏置供体技能 "${biasSkillId}" 不存在于 skills`,
+    });
   }
   return new Set(config.slots.map((slot) => slot.id));
 }

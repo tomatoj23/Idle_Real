@@ -59,7 +59,14 @@ export type GameAction =
   | TalentBuyAction
   | JournalAnchorAction
   | CraftAutoAction
-  | EnemyAutoAction;
+  | EnemyAutoAction
+  | GameResetAction;
+
+/** 散功重修·清档（#62 P1-1 旧版保真）：整态重置回新开局（区别于兵解的
+ *  保留式转生——本动作连保留集一并清空，旧版 js/game.js:895 defaultState 语义）。 */
+export interface GameResetAction {
+  readonly type: 'game:reset';
+}
 
 /** 战斗入场来源动作域（enterCombat/enterFloor 的 actionType 参数，#44 入场单序列）。 */
 export type CombatEntryAction = 'combat:start' | 'dungeon:enter';
@@ -311,7 +318,8 @@ export type GameEvent =
   | DungeonClearEvent
   | DungeonLeaveEvent
   | VisitBeginEvent
-  | VisitEndEvent;
+  | VisitEndEvent
+  | GameResetEvent;
 
 /** 事件公共底座：发生时刻（游戏内时间，自开局累计毫秒）。 */
 interface GameEventBase {
@@ -747,6 +755,12 @@ export interface VisitBeginEvent extends GameEventBase {
 export interface VisitEndEvent extends GameEventBase {
   readonly type: 'visit:end';
   readonly data: { readonly page: string };
+}
+
+/** 散功重修完成（#62 P1-1）：状态已整态重置，壳层 toast 呈现。 */
+export interface GameResetEvent extends GameEventBase {
+  readonly type: 'game-reset';
+  readonly data: { readonly rebirths: number };
 }
 
 /** 玩家属性面板（#4）：经修饰符管线聚合后的快照读数。 */
