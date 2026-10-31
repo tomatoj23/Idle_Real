@@ -2,7 +2,6 @@ import './style.css';
 import {
   attachAutoSave,
   createGame,
-  decodeSave,
   fillTemplate,
   localStorageSaveAdapter,
   type GameAction,
@@ -14,7 +13,7 @@ import { loadXiuxianPack } from '@wendao/content/packs/xiuxian';
 import { buildUi, esc } from './ui';
 import { desktopBridgeOf, desktopSaveAdapter, wireAchievementReporting } from './desktop';
 import { SAVE_KEY } from './saveKey';
-import type { ShellSaveService } from './pages/types';
+import { createSaveService } from './saveService';
 
 const TICK_MS = 250;
 const AUTOSAVE_MS = 15000;
@@ -30,25 +29,6 @@ function brandText(shell: unknown, key: 'name' | 'bootError'): string {
       : undefined;
   const value = brand?.[key];
   return typeof value === 'string' && value.length > 0 ? value : `shell.brand.${key}`;
-}
-
-/* ---------- 存档密文编解码（#62 P1-1 携档云游）：base64(UTF-8 JSON) ---------- */
-
-function encodeSaveText(data: SaveData): string {
-  const bytes = new TextEncoder().encode(JSON.stringify(data));
-  let bin = '';
-  for (const byte of bytes) bin += String.fromCharCode(byte);
-  return btoa(bin);
-}
-
-/** 密文 → JSON 串；非 base64/含空白折行容错；失败 null（导入侧内联报错）。 */
-function decodeSaveCipher(text: string): string | null {
-  try {
-    const bin = atob(text.replace(/\s+/g, ''));
-    return new TextDecoder().decode(Uint8Array.from(bin, (char) => char.charCodeAt(0)));
-  } catch {
-    return null;
-  }
 }
 
 let content: ContentPack | undefined;
@@ -89,25 +69,21 @@ try {
 
   const autoSave = attachAutoSave(game, adapter, AUTOSAVE_MS);
   // 导入读档 = 写槽 + 受控重载（#62 P1-1）：走整条启动校验链（decodeSave 门禁/
-  // restoreState/钳血/离线结算），不做运行时换档。重载路径上 beforeunload 的
-  // 关闭即保存必须让路——否则当前局会把刚写入的导入档覆掉。
+  // restoreState/钳血/离线结算），不做运行时换档。服务本体在 saveService.ts
+  // （审计 F2/F4/N1 修复抽取）：写后回读验保槽闩、先摘 autoSave 再重载。
+  // 重载路径上 beforeunload 的关闭即保存必须让路——否则当前局会把刚写入的
+  // 导入档覆掉（reloading 旗标只在 reload 闭包内置位，异常路径不卡闸）。
   let reloading = false;
   let ui: ReturnType<typeof buildUi> | undefined;
-  const saveService: ShellSaveService = {
-    saveNow: () => autoSave.flush(),
-    exportText: () => encodeSaveText(game.snapshot()),
-    importText(raw) {
-      const decoded = decodeSave(decodeSaveCipher(raw));
-      if (!decoded.save) return false;
+  const saveService = createSaveService({
+    snapshot: () => game.snapshot(),
+    adapter,
+    autoSave,
+    reload: () => {
       reloading = true;
-      // 同步通道落槽（flushSync 优先；localStorage 适配器本就同步写），
-      // 退出竞态下异步 send 可能不达主进程（与关闭即保存同一纪律）。
-      if (adapter.flushSync) adapter.flushSync(decoded.save);
-      else adapter.save(decoded.save);
       window.location.reload();
-      return true;
     },
-  };
+  });
   window.addEventListener('beforeunload', () => {
     if (reloading) return;
     autoSave.flush();
