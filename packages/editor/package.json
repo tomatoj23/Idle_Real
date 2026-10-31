@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@wendao/content": "*",
-    "fflate": "^0.8.2"
+    "fflate": "^0.8.3"
   },
   "devDependencies": {
     "happy-dom": "^20.14.5",

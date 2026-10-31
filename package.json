@@ -12,6 +12,12 @@
     "packages/editor",
     "packages/app-desktop"
   ],
+  "overrides": {
+    "typescript": "7.0.2",
+    "vitest": "4.1.12",
+    "happy-dom": "20.14.5",
+    "vite": "8.3.5"
+  },
   "scripts": {
     "prepare": "git config core.hooksPath .githooks || exit 0",
     "setup": "git config core.hooksPath .githooks",
@@ -22,12 +28,13 @@
     "dist": "npm run build --workspaces --if-present && npm run dist -w @wendao/app-desktop",
     "build:desktop": "npm run dist",
     "check": "npm run check --workspaces --if-present",
+    "audit": "npm audit --registry=https://registry.npmjs.org",
     "policy": "node scripts/policy-check.mjs",
     "lint": "oxlint"
   },
   "devDependencies": {
     "oxlint": "^1.83.0",
-    "typescript": "^7.0.2",
-    "vitest": "^4.1.11"
+    "typescript": "7.0.2",
+    "vitest": "4.1.12"
   }
 }

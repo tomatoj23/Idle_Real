@@ -1,5 +1,7 @@
 # 引擎/内容隔离审计 · 第三轮增补（2026-09-03）
 
+> **【已归档】** 本文是历史审计快照（主审计增补篇），非现行规格：所引 SPEC.md 已不存在，所服务票均已关闭。现行边界以 `CONTEXT.md` 硬原则 + `docs/adr/` 为准。
+
 > 触发：主审计（`2026-09-03-engine-content-isolation-audit.md`，下称"主审计"）§十 明列三块未覆盖角落（GitHub 票正文、js/ 旧版、dist），外加 smoke.yaml 与 .scratch 全目录清点两项新增指令。
 > 方法：16 张票 JSON 全文通读（含全部关票评论）；js/ 两文件逐行 + data.js→default.json 逐节收编对照；.gitignore/dist/vite/五份 package.json 核验；.scratch 全目录清点；SPEC.md 交叉核实。
 > 状态：**纯分析，未改动任何代码**。本文是主审计的增补，不独立成篇；判定尺子沿用主审计 §二 两条线表。
