@@ -496,7 +496,8 @@
         "not-available": "Talents are not part of this realm.",
         "not-found": "No such talent.",
         "prereq": "Light its prerequisites first.",
-        "no-daoyun": "Not enough attunement: need {cost}, you have {daoYun}."
+        "no-daoyun": "Not enough attunement: need {cost}, you have {daoYun}.",
+        "maxed": "That talent is already at its maximum stacks."
       },
       "dungeon:enter": {
         "not-found": "No such delve is known.",
@@ -752,7 +753,9 @@
           "needDaoYun": "Not enough attunement (need {cost})",
           "needPrereq": "Light its prerequisites first",
           "owned": "Lit",
-          "buyBtn": "Light"
+          "buyBtn": "Light",
+          "stackRow": "Lit {cur}/{max} stacks",
+          "maxed": "Fully stacked"
         },
         "dungeon": {
           "title": "Delve",

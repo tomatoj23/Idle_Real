@@ -213,7 +213,9 @@ function generateState(rand: () => number, content: Parameters<typeof initialSta
   state.rebirths = int(rand, 0, 50);
   state.daoYun = int(rand, 0, 500);
   state.daoYunEarned = state.daoYun + int(rand, 0, 500); // 只增不减域：累计 ≥ 余额
-  state.talents = ['t_a', 't_b'].slice(0, int(rand, 0, 2)); // 无重复（去重域内生成）
+  state.talents = {}; // #61 计数形态：孤儿 id 域内生成（restore 对孤儿原样收编）
+  if (int(rand, 0, 2) > 0) state.talents['t_a'] = int(rand, 1, 6);
+  if (int(rand, 0, 2) > 1) state.talents['t_b'] = int(rand, 1, 6);
   if (state.combat !== null && bool(rand, 0.5)) state.dungeon = { dungeonId: 'crypt', floor: 1 };
   if (bool(rand, 0.5)) state.dungeonBest['crypt'] = int(rand, 0, 5);
   for (const key of STAT_KEYS) {
@@ -252,7 +254,7 @@ describe('#42 roundtrip 安全网（字段表的恒等契约）', () => {
       expect(cloneState(state), `clone @case ${i}`).toEqual(state);
       // save → restore 恒等（state 快照面与 snapshot() 同构：cloneState 产物）。
       const save = {
-        version: 1 as const,
+        version: 2 as const,
         time: 1000,
         state: cloneState(state) as unknown as Readonly<Record<string, unknown>>,
       };
@@ -302,7 +304,7 @@ describe('#42 roundtrip 安全网（字段表的恒等契约）', () => {
     clone.combat!.tiers.light = 999;
     clone.combat!.summons[0]!.hp = 999;
     clone.lastEncounter['e1'] = { rounds: 999, won: false, at: 999 };
-    clone.talents.push('渗');
+    clone.talents['渗'] = 999;
     clone.dungeon!.floor = 999;
     clone.dungeonBest['crypt'] = 999;
     clone.stats['kills'] = 999;
@@ -322,7 +324,7 @@ describe('#42 roundtrip 安全网（字段表的恒等契约）', () => {
     expect(state.combat!.summons[0]!.hp).not.toBe(999);
     expect(state.lastEncounter['e1']).toEqual({ rounds: expect.any(Number), won: expect.any(Boolean), at: expect.any(Number) });
     expect(state.lastEncounter['e1']!.rounds).not.toBe(999);
-    expect(state.talents).not.toContain('渗');
+    expect(Object.keys(state.talents)).not.toContain('渗');
     expect(state.dungeon!.floor).not.toBe(999);
     expect(state.dungeonBest['crypt']).not.toBe(999);
     expect(state.stats['kills']).not.toBe(999);
@@ -334,7 +336,7 @@ describe('#42 roundtrip 安全网（字段表的恒等契约）', () => {
     const raw = JSON.parse(
       '{ "gold": 42, "futureFlag": { "a": 1 }, "__proto__": { "polluted": 1 }, "constructor": 5, "prototype": 6 }',
     ) as Record<string, unknown>;
-    const save = { version: 1 as const, time: 0, state: raw } as unknown as SaveData;
+    const save = { version: 2 as const, time: 0, state: raw } as unknown as SaveData;
 
     const restored = restoreState(content, save, 7);
     expect((restored as unknown as Record<string, unknown>).futureFlag).toEqual({ a: 1 });
@@ -347,7 +349,7 @@ describe('#42 roundtrip 安全网（字段表的恒等契约）', () => {
     const game = createGame({ content, clock: new ManualClock(), save });
     expect((game.snapshot().state as Record<string, unknown>).futureFlag).toEqual({ a: 1 });
     const again = restoreState(content, {
-      version: 1,
+      version: 2,
       time: 0,
       state: cloneState(restored) as unknown as Readonly<Record<string, unknown>>,
     }, 7);

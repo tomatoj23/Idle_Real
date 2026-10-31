@@ -123,7 +123,7 @@ function makeElementPack() {
 /** 佩戴指定武器的存档（寻常档无词条 → atk = 基线 11 + 6 = 17）。 */
 function saveWith(itemId: string) {
   return {
-    version: 1 as const,
+    version: 2 as const,
     time: 0,
     state: {
       gold: 0,

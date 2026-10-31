@@ -18,7 +18,7 @@ import type { SaveData } from '@wendao/engine';
 
 /** 有钱有货的开局档：坊市购买与乾坤袋卖出不受经济约束。 */
 const fundedSave = {
-  version: 1 as const,
+  version: 2 as const,
   time: 0,
   state: { gold: 1000, items: { herb1: 5 } },
 } as unknown as SaveData;

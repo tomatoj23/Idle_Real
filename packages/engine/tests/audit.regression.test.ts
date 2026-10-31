@@ -108,7 +108,7 @@ describe('自查 · 修为口径：xpMult 每循环舍入（在线/离线恒等�
         },
       ],
     } as unknown as GameContent;
-    const materialSave = { version: 1, time: 0, state: { items: { mat1: 50 } } } as unknown as SaveData;
+    const materialSave = { version: 2, time: 0, state: { items: { mat1: 50 } } } as unknown as SaveData;
     const run = (offline: boolean) => {
       const clock = new ManualClock();
       const game = createGame({
@@ -152,7 +152,7 @@ describe('自查 · 修为口径：xpMult 每循环舍入（在线/离线恒等�
         },
       ],
     } as unknown as GameContent;
-    const materialSave = { version: 1, time: 0, state: { items: { mat1: 50 } } } as unknown as SaveData;
+    const materialSave = { version: 2, time: 0, state: { items: { mat1: 50 } } } as unknown as SaveData;
     const run = (offline: boolean) => {
       const clock = new ManualClock();
       const game = createGame({ content: pack, clock, rng: () => 0.9, save: materialSave });
@@ -225,7 +225,7 @@ describe('自查 · 离线入口与恢复防御', () => {
         },
       ],
     } as unknown as GameContent;
-    const save = { version: 1, time: 0, state: { hp: 1 } } as unknown as SaveData;
+    const save = { version: 2, time: 0, state: { hp: 1 } } as unknown as SaveData;
     const game = createGame({ content: pack, clock: new ManualClock(), save, seed: 7 });
     const seedBefore = stateOf(game.snapshot()).rngSeed;
     game.dispatch({ type: 'dungeon:enter', payload: { dungeonId: 'crypt' } });
@@ -256,7 +256,7 @@ describe('自查 · 离线入口与恢复防御', () => {
   });
 
   it('存档顶层 time 非有限值拒收归零（字符串档防 time += dt 拼接污染时间语义）', () => {
-    const save = { version: 1, time: '999' } as unknown as SaveData;
+    const save = { version: 2, time: '999' } as unknown as SaveData;
     const game = createGame({ content: makeCombatPack() as GameContent, clock: new ManualClock(), save, seed: 7 });
     game.tick(1000);
     expect(game.snapshot().time).toBe(1000);
@@ -279,7 +279,7 @@ describe('自查 · 运行时兜底（坏包不致错误行为）', () => {
       ],
     } as unknown as GameContent;
     const save = {
-      version: 1,
+      version: 2,
       time: 0,
       state: { hp: 50, items: { bad_pill: 2 } },
     } as unknown as SaveData;
@@ -307,7 +307,7 @@ describe('自查 · 运行时兜底（坏包不致错误行为）', () => {
     } as unknown as GameContent;
     // clv1 基线 cap 112；buff 态 168。存档满血 168 + buff until 5000（time 0 收编）。
     const save = {
-      version: 1,
+      version: 2,
       time: 0,
       state: { hp: 168, buffs: { buff_hp: 5000 } },
     } as unknown as SaveData;

@@ -70,7 +70,7 @@ describe('#39 · 入账咽喉：统一账本事件（与旧形状并行发射）
       content: makePack(),
       clock,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: { gold: 100, hp: 50, items: { herb1: 10, consumable_heal: 2 }, skills: {}, activity: null },
       },
@@ -97,7 +97,7 @@ describe('#39 · 入账咽喉：统一账本事件（与旧形状并行发射）
       rng: () => 0.4,
       // 关自动再战：恰好一场胜利，事件队列不被 256 上限裁剪，可精确断言。
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: { gold: 0, hp: 112, items: {}, skills: { fight: { xp: 0 } }, activity: null, autoFight: false },
       },
@@ -210,7 +210,7 @@ describe('#39 · 入账咽喉：统一账本事件（与旧形状并行发射）
       clock,
       rng: () => 0.4,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,
@@ -240,7 +240,7 @@ describe('#39/#35 · 入账即折（D10 成对事件；规则本体 = 配方规�
       clock,
       rng: () => 0.1,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,
@@ -282,7 +282,7 @@ describe('#39/#35 · 入账即折（D10 成对事件；规则本体 = 配方规�
       clock,
       rng: () => 0.4, // rarity roll → common（smelt 1）
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,
@@ -335,7 +335,7 @@ describe('#39/#35 · 入账即折（D10 成对事件；规则本体 = 配方规�
       clock,
       rng: () => 0.5,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,
@@ -379,7 +379,7 @@ describe('#39 · 道韵账本与访问段信号', () => {
       clock,
       seed: 7,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,
@@ -436,7 +436,7 @@ describe('#58 · 五来源账本事件形状直测', () => {
   /** 高斗法修为存档（xp 20000 = 一击杀，全程免伤；dungeon.test strongSave 同款）。 */
   const strongSave = (extra: Record<string, unknown> = {}): SaveData =>
     ({
-      version: 1,
+      version: 2,
       time: 0,
       state: { skills: { fight: { xp: 20000 } }, items: {}, ...extra },
     }) as unknown as SaveData;
@@ -526,7 +526,7 @@ describe('#58 · 五来源账本事件形状直测', () => {
       clock,
       rng: () => 0.4,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,
@@ -554,7 +554,7 @@ describe('#58 · 五来源账本事件形状直测', () => {
       clock,
       rng: () => 0.4,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,
@@ -601,7 +601,7 @@ describe('#58 · 五来源账本事件形状直测', () => {
       clock,
       rng: () => 0.4, // 纹阶掷点：1 + floor(0.4 × 3) = 2
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,

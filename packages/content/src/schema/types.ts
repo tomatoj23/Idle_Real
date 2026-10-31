@@ -798,21 +798,26 @@ export interface ShellPageRebirth {
 }
 
 /**
- * 道韵天赋树页文案（#6）：节点名/图标/描述/消耗全部来自 rebirth.talents
- * （树数据 100% content），壳只承载结构性文案。
+ * 道韵天赋树页文案（#6；#61 起含叠层读数）：节点名/图标/描述/消耗全部来自
+ * rebirth.talents（树数据 100% content），壳只承载结构性文案。
  */
 export interface ShellPageTalents {
   readonly title: string;
   /** 副标题；槽位 {daoYun} = 道韵余额。 */
   readonly subtitle: string;
   readonly empty: string;
-  /** 消耗行；槽位 {cost}。 */
+  /** 消耗行；槽位 {cost}（可重复节点 = 下一层价）。 */
   readonly costRow: string;
-  /** 道韵不足锁定文案；槽位 {cost}。 */
+  /** 道韵不足锁定文案；槽位 {cost}（可重复节点 = 下一层价）。 */
   readonly needDaoYun: string;
   readonly needPrereq: string;
+  /** 已点亮徽标——一次性节点用。 */
   readonly owned: string;
   readonly buyBtn: string;
+  /** 层数读数行（#61，可重复节点）；槽位 {cur}/{max}。 */
+  readonly stackRow: string;
+  /** 已满层徽标（#61，可重复节点达 maxStacks）。 */
+  readonly maxed: string;
 }
 
 /** 秘境页文案（#7）。 */
@@ -1045,21 +1050,31 @@ export interface ShellFooter {
 
 /**
  * 天赋树节点（rebirth.talents 条目）：树数据 100% 来自 content（换包换整棵树）。
- * id 一经发布不可变（state.talents 存档键，ADR-015）；效果 = 引擎标准修饰符
- * 走 ADR-011 聚合管线（来源 kind=talent），生效须引擎消费点
- * （docs/agents/content.md stat 消费点注册表）。
+ * id 一经发布不可变（state.talents 存档键，ADR-015；#61 起形态 = id → 层数）；
+ * 效果 = 引擎标准修饰符走 ADR-011 聚合管线（来源 kind=talent，每层一份），
+ * 生效须引擎消费点（docs/agents/content.md stat 消费点注册表）。
  */
 export interface TalentNode {
   readonly id: string;
   readonly name: string;
   readonly icon?: string;
   readonly description?: string;
-  /** 点亮消耗（道韵余额）。 */
+  /** 首层点亮消耗（道韵余额）；repeatable 的后续层价走 costs 价梯（缺省恒价）。 */
   readonly cost: number;
   /** 前置节点 id 列表：全部点亮才可购买（校验 xref + 查环）。 */
   readonly requires?: readonly string[];
-  /** 点亮后常驻的效果修饰符组。 */
+  /** 点亮后常驻的效果修饰符组（每层各产出一份）。 */
   readonly effects?: readonly Modifier[];
+  /**
+   * 可重复购买叠层（#61）：购买一次叠一层，层数域 1..maxStacks（含首层）；
+   * 兵解回落 1 层（引擎机制，首层随档保留）；效果每层一份走聚合管线。
+   */
+  readonly repeatable?: {
+    /** 可购买总层数（含首层 1）；存档恢复超阶计数回落此天花板。 */
+    readonly maxStacks: number;
+    /** 第 2..maxStacks 层价梯（长度 = maxStacks − 1，语义校验把关）；缺省恒价。 */
+    readonly costs?: readonly number[];
+  };
 }
 
 /** 道韵公式参数（rebirth.formula）：缺省字段逐项回落引擎基线（#020 同款分策）。 */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ManualClock } from '../src/clock.js';
-import { createGame, playerMaxHp, restoreState } from '../src/index.js';
+import { createGame, playerMaxHp, restoreState, SAVE_VERSION } from '../src/index.js';
 import { makeCombatPack } from './fixtures.js';
 
 /** 最小内容包：引擎零内容感知，空壳即可开局。 */
@@ -30,11 +30,11 @@ describe('createGame', () => {
 
   it('从存档恢复状态，快照可再次导出（含 savedAt；未知键透传）', () => {
     const clock = new ManualClock(500);
-    const save = { version: 1 as const, time: 1234, savedAt: 500, state: { gold: 42, realm: '练气' } };
+    const save = { version: 2 as const, time: 1234, savedAt: 500, state: { gold: 42, realm: '练气' } };
     const game = createGame({ content: minimalContent, save, clock });
 
     const snapshot = game.snapshot();
-    expect(snapshot.version).toBe(1);
+    expect(snapshot.version).toBe(SAVE_VERSION);
     expect(snapshot.time).toBe(1234);
     expect(snapshot.savedAt).toBe(500);
     expect(snapshot.state).toMatchObject({ gold: 42, realm: '练气' });
@@ -71,7 +71,7 @@ describe('#58 项 5 · restoreState 直调契约（文档性钉子，防无声�
    * 断言——哪一侧无声改变（restore 内补钳 / createGame 丢钳）即红。
    */
   const overflowingSave = {
-    version: 1 as const,
+    version: 2 as const,
     time: 0,
     state: { hp: 9999 }, // 远超空技能基线 cap（clv1 = 112）
   };
@@ -91,7 +91,7 @@ describe('#58 项 5 · restoreState 直调契约（文档性钉子，防无声�
 
 describe('#62 · 存档自愈与散功重修', () => {
   it('hp ≤ 0 坏档自愈：恢复面回满投影上限（旧版 load() 语义；正当局 hp 恒正不受影响）', () => {
-    const save = { version: 1 as const, time: 100, state: { hp: 0 } };
+    const save = { version: 2 as const, time: 100, state: { hp: 0 } };
     const game = createGame({ content: minimalContent, save, clock: new ManualClock(500) });
     const snap = game.snapshot();
     expect(snap.state.hp).toBe(snap.stats?.maxHp);

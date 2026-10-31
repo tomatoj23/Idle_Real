@@ -84,9 +84,9 @@ function makeProjectionPack(): GameContent {
 }
 
 /** 斗法修为存档（xp 100 → atk 17；talents 直写恢复侧，孤儿静默跳过）。 */
-function makeSave(talents?: string[]): SaveData {
+function makeSave(talents?: Record<string, number>): SaveData {
   return {
-    version: 1,
+    version: 2,
     time: 0,
     state: { skills: { fight: { xp: 100 } }, items: {}, ...(talents ? { talents } : {}) },
   } as unknown as SaveData;
@@ -106,7 +106,7 @@ describe('#40 · snapshot 战斗/活动视图投影', () => {
     const game = createGame({
       content: makeProjectionPack(),
       clock: new ManualClock(),
-      save: makeSave(['t_speed']),
+      save: makeSave({ t_speed: 1 }),
     });
     const snap = game.snapshot();
     expect(snap.activityIntervals).toEqual({ 'herb:0': 1500, 'herb:1': 2000, 'alchemy:0': 5000 });

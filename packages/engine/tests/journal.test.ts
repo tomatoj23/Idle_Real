@@ -107,7 +107,7 @@ describe('#33 · 行为段落账（条目=行为段，不记逐件流水）', ()
       clock,
       rng: () => 0.4,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: { gold: 0, hp: 112, items: {}, skills: { fight: { xp: 0 } }, activity: null, autoFight: false },
       },
@@ -168,7 +168,7 @@ describe('#33 · 行为段落账（条目=行为段，不记逐件流水）', ()
       clock,
       rng: () => 0.3,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: { gold: 0, hp: 112, items: {}, skills: { fight: { xp: 0 } }, activity: null, autoFight: false },
       },
@@ -199,7 +199,7 @@ describe('#33 · 行为段落账（条目=行为段，不记逐件流水）', ()
       content: makePack(),
       clock,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: { gold: 100, hp: 50, items: { herb1: 10 }, skills: {}, activity: null },
       },
@@ -242,7 +242,7 @@ describe('#33 · 行为段落账（条目=行为段，不记逐件流水）', ()
       content: pack,
       clock,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,
@@ -288,7 +288,7 @@ describe('#33 · 行为段落账（条目=行为段，不记逐件流水）', ()
       content: makePack(),
       clock,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: { gold: 100, hp: 50, items: { herb1: 10 }, skills: {}, activity: null },
       },
@@ -328,7 +328,7 @@ describe('#33 · 行为段落账（条目=行为段，不记逐件流水）', ()
       clock,
       rng: () => 0.4,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,
@@ -400,7 +400,7 @@ describe('#33 · 离线段与自动折叠聚合', () => {
       clock,
       rng: () => 0.9,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,
@@ -438,7 +438,7 @@ describe('#35 · 在线自动转化记账（AC1：逐项自动条目）', () => 
       clock,
       rng: () => 0.9,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,
@@ -497,7 +497,7 @@ describe('#36 · 战斗自动转化记账（AC1：修行录自动条目红线）
       clock,
       rng: () => 0.1, // core1 材料掉中（<0.25）、器胚掉中（<0.5）、稀有度掷寻常（0.1×100=10<70）
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,
@@ -551,7 +551,7 @@ describe('#36 · 战斗自动转化记账（AC1：修行录自动条目红线）
       clock,
       rng: () => 0.1,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,
@@ -610,7 +610,7 @@ describe('#33 · 流量计数器与锚点', () => {
       clock,
       rng: () => 0.9, // 无副产出
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: { gold: 0, hp: 50, items: { herb1: 10 }, skills: {}, activity: null },
       },
@@ -645,7 +645,7 @@ describe('#33 · 流量计数器与锚点', () => {
       content: makePack(),
       clock,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: { gold: 1_000_000, hp: 50, items: {}, skills: {}, activity: null },
       },
@@ -687,7 +687,7 @@ describe('#33 · 兵解处置', () => {
       content: pack,
       clock,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,
@@ -719,7 +719,7 @@ describe('#33 · 存档持久化（显式消毒恢复，禁透明收编）', () 
     const game = createGame({
       content: makePack(),
       clock,
-      save: { version: 1, time: 0, state: { gold: 5, hp: 50, items: {}, skills: {} } },
+      save: { version: 2, time: 0, state: { gold: 5, hp: 50, items: {}, skills: {} } },
     });
     const st = stateOf(game.snapshot());
     expect(st.journal).toEqual({ records: [], seq: 0 });
@@ -749,7 +749,7 @@ describe('#33 · 存档持久化（显式消毒恢复，禁透明收编）', () 
 
   it('开放访问段跨存档：恢复时强制闭段成条（t1 = 存档墙钟），行为段随档恢复', () => {
     const save: SaveData = {
-      version: 1,
+      version: 2,
       time: 100,
       savedAt: 999,
       state: {
@@ -796,7 +796,7 @@ describe('#33 · 存档持久化（显式消毒恢复，禁透明收编）', () 
     const game = createGame({
       content: makePack(),
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,
@@ -904,7 +904,7 @@ describe('#33 · 存档持久化（显式消毒恢复，禁透明收编）', () 
       content: makePack(),
       clock,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: { gold: 0, hp: 50, items: { herb1: 6 }, skills: { herb: { xp: 0 } }, activity: null },
       },

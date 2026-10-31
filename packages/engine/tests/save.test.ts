@@ -17,7 +17,7 @@ describe('SaveAdapter（issue #3）', () => {
     const adapter = memorySaveAdapter();
     expect(adapter.load()).toBeNull();
 
-    const data = { version: 1 as const, time: 5, state: { gold: 7 } };
+    const data = { version: 2 as const, time: 5, state: { gold: 7 } };
     adapter.save(data);
     expect(adapter.load()).toEqual(data);
   });
@@ -32,7 +32,7 @@ describe('SaveAdapter（issue #3）', () => {
       const adapter = localStorageSaveAdapter('wendao_test_key');
       expect(adapter.load()).toBeNull();
 
-      const data = { version: 1 as const, time: 9, state: { gold: 3 } };
+      const data = { version: 2 as const, time: 9, state: { gold: 3 } };
       adapter.save(data);
       expect(adapter.load()).toEqual(data);
 
@@ -66,13 +66,13 @@ describe('SaveAdapter（issue #3）', () => {
 
 describe('restoreState 恢复守卫契约（#42 字段表复审收口）', () => {
   it('畸形档缺 time：buffs 一律不收编（与字段表前 NaN 比较语义一致）', () => {
-    const save = { version: 1 as const, state: { buffs: { consumable_atk: 5000 } } } as unknown as SaveData;
+    const save = { version: 2 as const, state: { buffs: { consumable_atk: 5000 } } } as unknown as SaveData;
     const state = restoreState(makeCombatPack(), save, 1);
     expect(state.buffs).toEqual({});
   });
 
   it('畸形档缺 time：其余字段不受影响（gold 按守卫缺省收编）', () => {
-    const save = { version: 1 as const, state: { gold: 33.7, buffs: {} } } as unknown as SaveData;
+    const save = { version: 2 as const, state: { gold: 33.7, buffs: {} } } as unknown as SaveData;
     const state = restoreState(makeCombatPack(), save, 1);
     expect(state.gold).toBe(33);
   });
@@ -85,7 +85,7 @@ describe('restoreState 气血钳制顺序（#41）', () => {
 
   it('高修为存档（hp>112）恢复后不被零修为基线压回 112：cap 按收编后的 skills 推算', () => {
     const save = {
-      version: 1 as const,
+      version: 2 as const,
       time: 0,
       state: { skills: highXp, hp: capOf() },
     } as unknown as SaveData;
@@ -95,14 +95,14 @@ describe('restoreState 气血钳制顺序（#41）', () => {
   });
 
   it('未写 hp 的存档按恢复后修为满血（缺省值 = 收编后的 cap）', () => {
-    const save = { version: 1 as const, time: 0, state: { skills: highXp } } as unknown as SaveData;
+    const save = { version: 2 as const, time: 0, state: { skills: highXp } } as unknown as SaveData;
     const state = restoreState(makeCombatPack(), save, 1);
     expect(state.hp).toBe(capOf());
   });
 
   it('超顶 hp 收编原值（state.ts 只查有限/非负），createGame 按完整投影钳回', () => {
     const save = {
-      version: 1 as const,
+      version: 2 as const,
       time: 0,
       state: { skills: highXp, hp: 99999 },
     } as unknown as SaveData;
@@ -114,7 +114,7 @@ describe('restoreState 气血钳制顺序（#41）', () => {
 
   it('createGame 全路径同样不压顶：恢复后补钳按完整投影，只降不升', () => {
     const save = {
-      version: 1 as const,
+      version: 2 as const,
       time: 0,
       state: { skills: highXp, hp: capOf() },
     } as unknown as SaveData;
@@ -132,7 +132,7 @@ describe('restoreState 气血钳制顺序（#41）', () => {
       ],
     } as GameContent;
     const save = {
-      version: 1 as const,
+      version: 2 as const,
       time: 0,
       state: {
         skills: { fight: { xp: 300 } },

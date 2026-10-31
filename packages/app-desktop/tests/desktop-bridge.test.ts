@@ -74,7 +74,7 @@ describe('#10 · desktopSaveAdapter', () => {
   it('save → 桥收 JSON 串；load null → null；坏档 JSON → null', () => {
     const bridge = fakeBridge();
     const adapter = desktopSaveAdapter('slot', bridge);
-    const save = { version: 1, time: 7, state: { gold: 1 } } as unknown as SaveData;
+    const save = { version: 2, time: 7, state: { gold: 1 } } as unknown as SaveData;
     adapter.save(save);
     expect(bridge.saves).toEqual([{ key: 'slot', json: JSON.stringify(save) }]);
 
@@ -89,7 +89,7 @@ describe('#10 · desktopSaveAdapter', () => {
   it('flushSync 走同步通道（关闭即保存兜底）', () => {
     const bridge = fakeBridge();
     const adapter = desktopSaveAdapter('slot', bridge);
-    const save = { version: 1, time: 1, state: {} } as unknown as SaveData;
+    const save = { version: 2, time: 1, state: {} } as unknown as SaveData;
     adapter.flushSync(save);
     expect(bridge.flushes).toEqual(['slot']);
   });
@@ -119,10 +119,10 @@ describe('#69 · desktopSaveAdapter 诊断面与坏档保槽', () => {
 
   it('异型档保槽：save 与 flushSync 两条写通道都不许过桥，且只报一次', () => {
     const problems: string[] = [];
-    const bridge = bridgeWith(JSON.stringify({ version: 2, time: 0, state: { gold: 1 } }));
+    const bridge = bridgeWith(JSON.stringify({ version: 3, time: 0, state: { gold: 1 } }));
     const adapter = desktopSaveAdapter('slot', bridge, { onProblem: (m) => problems.push(m) });
     expect(adapter.load()).toBeNull();
-    expect(problems.join('\n')).toMatch(/version 2/); // 拒绝原因指名版本
+    expect(problems.join('\n')).toMatch(/version 3/); // 拒绝原因指名版本
 
     adapter.save({ version: SAVE_VERSION, time: 0, state: {} });
     adapter.flushSync({ version: SAVE_VERSION, time: 0, state: {} });
@@ -133,7 +133,7 @@ describe('#69 · desktopSaveAdapter 诊断面与坏档保槽', () => {
   });
 
   it('保槽非单向棘轮：桥上的字节换成合法档后写通道恢复', () => {
-    const bridge = bridgeWith(JSON.stringify({ version: 2, time: 0 }));
+    const bridge = bridgeWith(JSON.stringify({ version: 3, time: 0 }));
     const adapter = desktopSaveAdapter('slot', bridge, { onProblem: () => {} });
     expect(adapter.load()).toBeNull();
     adapter.save({ version: SAVE_VERSION, time: 0, state: {} });

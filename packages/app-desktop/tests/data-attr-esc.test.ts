@@ -34,7 +34,7 @@ describe('#58 项 8 · data-* 属性插值过 esc', () => {
       ],
     } as typeof pack;
     const save = {
-      version: 1 as const,
+      version: 2 as const,
       time: 0,
       state: { items: { [HOSTILE]: 1 } },
     } as unknown as SaveData;

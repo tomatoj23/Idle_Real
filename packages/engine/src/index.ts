@@ -222,6 +222,7 @@ export {
   BASE_REBIRTH_FORMULA,
   applyRebirthReset,
   daoYunGainOf,
+  clearTalentStacks,
   effectiveIntervalOf,
   gatherSpeedOf,
   offlineCapOf,
@@ -233,6 +234,7 @@ export {
   talentContributionsOf,
   talentGateOf,
   talentNodeOf,
+  talentStackCostOf,
   totalXpOf,
   xpMultOf,
 } from './rebirth.js';

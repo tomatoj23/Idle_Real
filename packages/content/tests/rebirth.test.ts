@@ -113,3 +113,50 @@ describe('#6 · rebirth 节校验', () => {
     expect(errorsOf(dup)).toContain('/rebirth/realms/1 [duplicate]');
   });
 });
+
+describe('#61 · repeatable 叠层协议', () => {
+  // 修仙包样张：龟息功（talents[6]）六层价梯 6/9/12/15/18/21（首层 = cost，票评裁决数值）。
+  it('修仙包龟息功 repeatable 六层价梯样张；两包照常过校验', () => {
+    const t = (xiuxianPackJson as { rebirth: { talents: any[] } }).rebirth.talents.find(
+      (node) => node.id === 't_guixi',
+    );
+    expect(t.repeatable).toEqual({ maxStacks: 6, costs: [9, 12, 15, 18, 21] });
+    expect(t.cost).toBe(6);
+    for (const pack of [xiuxianPackJson, fantasyPackJson]) {
+      expect(validateContentPack(pack).ok).toBe(true);
+    }
+  });
+
+  it('价梯长度 ≠ maxStacks − 1 → shape（costs = 第 2..maxStacks 层，首层归 cost）', () => {
+    const short = mutate((pack) => {
+      pack.rebirth.talents[6].repeatable.costs = [9, 12];
+    });
+    expect(errorsOf(short)).toContain('/rebirth/talents/6/repeatable [shape]');
+
+    const long = mutate((pack) => {
+      pack.rebirth.talents[6].repeatable.costs = [9, 12, 15, 18, 21, 24];
+    });
+    expect(errorsOf(long)).toContain('/rebirth/talents/6/repeatable [shape]');
+  });
+
+  it('恒价形态（repeatable 无 costs）：合法（每层同 cost，引擎 talentStackCostOf 回落）', () => {
+    const ok = mutate((pack) => {
+      pack.rebirth.talents[6].repeatable = { maxStacks: 3 };
+    });
+    expect(ok.ok).toBe(true);
+  });
+
+  it('maxStacks < 1 / costs 非正整数 → schema 形态拦截', () => {
+    const zero = mutate((pack) => {
+      pack.rebirth.talents[6].repeatable.maxStacks = 0;
+    });
+    expect(errorsOf(zero).some((line) => line.startsWith('/rebirth/talents/6/repeatable'))).toBe(
+      true,
+    );
+
+    const free = mutate((pack) => {
+      pack.rebirth.talents[6].repeatable.costs = [9, 0, 15, 18, 21];
+    });
+    expect(errorsOf(free).some((line) => line.includes('/repeatable/costs/1'))).toBe(true);
+  });
+});

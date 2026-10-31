@@ -49,7 +49,7 @@ interface GearSpec {
 /** 带指定装备实例的存档（佩戴表可选）；sword1 = 青锋剑（卖价 30）。 */
 function saveWithGear(specs: GearSpec[], equips: Record<string, number> = {}): SaveData {
   return {
-    version: 1,
+    version: 2,
     time: 0,
     state: {
       gold: 0,

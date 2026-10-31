@@ -273,7 +273,7 @@ describe('#14 · makeInscribedGear 与 gearContributions', () => {
 
 function saveWithGear(gear: GearInstance[], items: Record<string, number> = {}): SaveData {
   return {
-    version: 1,
+    version: 2,
     time: 0,
     state: {
       gold: 0,

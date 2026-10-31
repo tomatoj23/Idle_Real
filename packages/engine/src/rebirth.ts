@@ -19,7 +19,13 @@
 
 import type { GameContent } from './types.js';
 import { REBIRTH_RESET_ACTIONS, type GameState } from './state.js';
+// rebirthOf/talentNodeOf 自 #61 起落 contentView（内容读者归结构视图模块；
+// state.ts 恢复钳制要读天赋节点域，直接引 rebirth.ts 会成 state↔rebirth
+// 运行时环）。此处原样再出口，公共 API 面（index barrel）零变化。
+import { rebirthOf, talentNodeOf } from './contentView.js';
+export { rebirthOf, talentNodeOf } from './contentView.js';
 import { aggregateStats, type Contribution, type Modifier } from './modifiers.js';
+
 
 /* ---------- 内容视图（按形状读取，缺节/缺字段安全兜底） ---------- */
 
@@ -32,6 +38,15 @@ export interface TalentNodeView {
   readonly cost: number;
   readonly requires?: readonly string[];
   readonly effects?: readonly Modifier[];
+  /**
+   * 可重复购买叠层（#61）：maxStacks 含首次购买（1..maxStacks）；costs =
+   * 第 2..maxStacks 层的道韵价（长度须 = maxStacks − 1，包语义校验把关），
+   * 缺省 = 恒价（每层同 cost）。引擎只保留机制语义——价梯数值归 content。
+   */
+  readonly repeatable?: {
+    readonly maxStacks: number;
+    readonly costs?: readonly number[];
+  };
 }
 
 /** 解锁表条目视图。 */
@@ -60,19 +75,6 @@ export interface RebirthSectionView {
   readonly talents?: readonly TalentNodeView[];
   readonly unlocks?: readonly RebirthUnlockView[];
   readonly realms?: readonly RealmDefView[];
-}
-
-/** 转生节读取：缺节返回 undefined（无转生玩法的唯一判据）。 */
-export function rebirthOf(content: GameContent): RebirthSectionView | undefined {
-  const rebirth = (content as { rebirth?: unknown }).rebirth;
-  return rebirth !== null && typeof rebirth === 'object' && !Array.isArray(rebirth)
-    ? (rebirth as RebirthSectionView)
-    : undefined;
-}
-
-/** 按节点 id 取天赋节点；未注册（存档遗留/坏包）返回 undefined。 */
-export function talentNodeOf(content: GameContent, nodeId: string): TalentNodeView | undefined {
-  return rebirthOf(content)?.talents?.find((node) => node.id === nodeId);
 }
 
 /* ---------- 道韵公式（形状归引擎机制，系数归 content） ---------- */
@@ -154,17 +156,19 @@ export function rebirthPreviewOf(
 /* ---------- 天赋效果 → 聚合管线投影（单一来源，引擎与测试共用） ---------- */
 
 /**
- * 已点亮天赋 → 常驻贡献：effect 逐条产出 Contribution（来源 kind=talent），
- * 一律走 ADR-011 聚合管线（禁绕管直改）。
+ * 已购天赋（id → 层数）→ 常驻贡献：每层一份 effect 产出 Contribution
+ * （来源 kind=talent），一律走 ADR-011 聚合管线（禁绕管直改）——flat 区
+ * 线性叠加、mult 区逐层连乘，选区语义由内容自担（#61 叠层形态）。
  * 孤儿 id（内容包已移除节点）防御性跳过——存档不炸，效果自然消失。
  * 引擎内 playerContributions 与测试/第二题材验证共用本实现（无第二份投影）。
  */
 export function talentContributionsOf(
   content: GameContent,
-  purchasedIds: readonly string[],
+  owned: Readonly<Record<string, number>>,
 ): Contribution[] {
   const out: Contribution[] = [];
-  for (const nodeId of purchasedIds) {
+  for (const [nodeId, count] of Object.entries(owned)) {
+    if (!(typeof count === 'number' && count >= 1)) continue; // 坏计数不投影
     const node = talentNodeOf(content, nodeId);
     if (!node) continue; // 孤儿引用：静默跳过（bad save 防御路径）
     const source = {
@@ -173,43 +177,81 @@ export function talentContributionsOf(
       ...(node.name !== undefined ? { name: node.name } : {}),
     };
     for (const effect of node.effects ?? []) {
-      out.push({ modifier: effect, source });
+      for (let stack = 0; stack < count; stack++) {
+        out.push({ modifier: effect, source });
+      }
     }
   }
   return out;
 }
 
 /**
+ * 下一层购买价（价梯单一来源，#61）：未购 = 首层价 node.cost；已购第 s 层 =
+ * 价梯第 s 档 costs[s−1]；价梯缺档（包语义校验漏洞的防御面）回落 node.cost
+ * （恒价降级，不崩不挂起）。价梯数值全归 content，引擎不持公式。
+ */
+export function talentStackCostOf(node: TalentNodeView, ownedStacks: number): number {
+  if (!(ownedStacks >= 1)) return node.cost;
+  return node.repeatable?.costs?.[ownedStacks - 1] ?? node.cost;
+}
+
+/**
  * 天赋节点购买门控（引擎单一来源，N4 收敛）：exists/owned/prereqMissing/
- * affordable 四态与引擎 talent:buy 判定同式同源，UI 锁定态展示禁另写比较式
- * （shopAffordOf 先例）。
+ * affordable 与引擎 talent:buy 判定同式同源，UI 锁定态展示禁另写比较式
+ * （shopAffordOf 先例）。#61 叠层延伸：stacks/maxStacks/nextCost/maxed
+ * 四读数同源产出（层数与满层态展示、下一层价全部由此，壳零第二份价梯）。
  */
 export interface TalentGateView {
   /** 节点不存在于当前包（孤儿 id）。 */
   readonly exists: boolean;
   readonly owned: boolean;
-  /** 前置未点亮（requires 逐一对照已点亮集）。 */
+  /** 前置未点亮（requires 逐一对照已购集）。 */
   readonly prereqMissing: boolean;
-  /** 道韵余额足额（与 talent:buy 的 no-daoyun 判定同式）。 */
+  /** 下一层购买价道韵余额足额（与 talent:buy 的 no-daoyun 判定同式）。 */
   readonly affordable: boolean;
+  /** 已购层数（未购 = 0）。 */
+  readonly stacks: number;
+  /** 可重复层数上限；undefined = 一次性节点。 */
+  readonly maxStacks: number | undefined;
+  /** 不可再购买：一次性已点亮，或可重复已满层。 */
+  readonly maxed: boolean;
+  /** 下一层购买价；不可再购买 = undefined。 */
+  readonly nextCost: number | undefined;
 }
 
 export function talentGateOf(
   content: GameContent,
   daoYun: number,
-  purchasedIds: readonly string[],
+  owned: Readonly<Record<string, number>>,
   nodeId: string,
 ): TalentGateView {
   const node = talentNodeOf(content, nodeId);
   if (!node) {
-    return { exists: false, owned: false, prereqMissing: false, affordable: false };
+    return {
+      exists: false,
+      owned: false,
+      prereqMissing: false,
+      affordable: false,
+      stacks: 0,
+      maxStacks: undefined,
+      maxed: false,
+      nextCost: undefined,
+    };
   }
-  const owned = purchasedIds.includes(nodeId);
+  const stacks = owned[nodeId] ?? 0;
+  const maxStacks = node.repeatable?.maxStacks;
+  const maxed = stacks >= (maxStacks ?? 1);
+  const nextCost = maxed ? undefined : talentStackCostOf(node, stacks);
   return {
     exists: true,
-    owned,
-    prereqMissing: !owned && (node.requires ?? []).some((req) => !purchasedIds.includes(req)),
-    affordable: daoYun >= node.cost,
+    owned: stacks >= 1,
+    prereqMissing:
+      stacks === 0 && (node.requires ?? []).some((req) => (owned[req] ?? 0) < 1),
+    affordable: nextCost !== undefined && daoYun >= nextCost,
+    stacks,
+    maxStacks,
+    maxed,
+    nextCost,
   };
 }
 
@@ -306,6 +348,21 @@ export function applyRebirthReset(
   }
   // keep 清单由引擎绑定保留语义（gear 保留 = 实例/佩戴表/序列器原样）；
   // 保留集键域 KEEP_KEYS 由字段表 rebirth='keep' 行派生，此处无动作。
+}
+
+/**
+ * 兵解清层（#61，引擎机制非 content 声明）：可重复节点层数回落 1（首层
+ * 随 default-keep 保留——学过的不没收，ADR-014 同律；叠层随世重修），
+ * 一次性节点与孤儿 id 计数不动。不经账本（生命周期清洗，与瞬态清场同律）；
+ * 不入 reset/keep 键域——talents 整键仍 default-keep，清层只动层数维度，
+ * content 无权把天赋整键声明进重置集（语义校验镜像同值，不受此影响）。
+ */
+export function clearTalentStacks(content: GameContent, state: GameState): void {
+  for (const id of Object.keys(state.talents)) {
+    if (talentNodeOf(content, id)?.repeatable !== undefined) {
+      state.talents[id] = 1;
+    }
+  }
 }
 
 /* ---------- 天赋新增 stat 消费点：采集速度 / 离线上限 ---------- */

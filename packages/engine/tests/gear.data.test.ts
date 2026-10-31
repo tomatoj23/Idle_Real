@@ -168,7 +168,7 @@ describe('#018 · 存档规范化解引用内容档位表', () => {
   it('坏键回退第一档；合法键原样保留', () => {
     const pack = makePack();
     const save = {
-      version: 1 as const,
+      version: 2 as const,
       time: 0,
       state: {
         gear: [
@@ -186,7 +186,7 @@ describe('#018 · 存档规范化解引用内容档位表', () => {
   it('词表整体缺失时坏档降级为空串（不崩溃，中性数值）', () => {
     const pack = makePack({ rarities: [] });
     const save = {
-      version: 1 as const,
+      version: 2 as const,
       time: 0,
       state: { gear: [{ uid: 1, itemId: 'sword', rarity: 'ghost', affixes: [] }] },
     };
@@ -228,7 +228,7 @@ describe('#61 边界收口 · 纹阶域数据派生（tiers 表长 = 深度上�
       }) as unknown as GameContent;
     const save = (tier: number) =>
       ({
-        version: 1 as const,
+        version: 2 as const,
         time: 0,
         state: {
           gear: [

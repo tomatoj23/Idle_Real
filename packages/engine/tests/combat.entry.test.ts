@@ -14,7 +14,7 @@ import { makeCombatPack } from './fixtures.js';
 
 /** 残血存档：hp 1 远低于 low-hp 线（clv1 上限 112 × 30%）。 */
 const woundedSave = (extra: Record<string, unknown> = {}): SaveData =>
-  ({ version: 1, time: 0, state: { items: {}, hp: 1, ...extra } }) as unknown as SaveData;
+  ({ version: 2, time: 0, state: { items: {}, hp: 1, ...extra } }) as unknown as SaveData;
 
 /** 一层妖窟：daoYun 2 门槛，第 1 层仅 e1（秘境侧序列不变量用）。 */
 const makeCryptPack = (): GameContent =>
@@ -121,7 +121,7 @@ describe('#44 · dungeon:enter 门（同一序列，秘境侧参数差异）', (
     const game = createGame({
       content: pack,
       clock: new ManualClock(),
-      save: { version: 1, time: 0, state: { items: {} } } as unknown as SaveData,
+      save: { version: 2, time: 0, state: { items: {} } } as unknown as SaveData,
       seed: 7,
     });
     game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
@@ -142,7 +142,7 @@ describe('#44 · dungeon:enter 门（同一序列，秘境侧参数差异）', (
       content: makeCryptPack(),
       clock: new ManualClock(),
       save: {
-        version: 1, time: 0,
+        version: 2, time: 0,
         state: { skills: { fight: { xp: 20000 } }, items: {}, daoYunEarned: 2 },
       } as unknown as SaveData,
       seed: 7,

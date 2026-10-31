@@ -252,6 +252,8 @@ export const textsSample: TextsSection = {
         needPrereq: '前置未成',
         owned: '已点亮',
         buyBtn: '点亮',
+        stackRow: '已点亮 {cur}/{max} 层',
+        maxed: '已满层',
       },
       dungeon: {
         title: '秘境',

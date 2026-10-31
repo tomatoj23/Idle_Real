@@ -19,7 +19,7 @@ import { SAVE_KEY } from '../src/saveKey';
 import { createSaveService, decodeSaveCipher, encodeSaveText } from '../src/saveService';
 
 const FOREIGN_SAVE = JSON.stringify({ version: 999, time: 0, state: { gold: 1 } });
-const VALID_SAVE: SaveData = { version: 1, time: 42, state: { gold: 777 } };
+const VALID_SAVE: SaveData = { version: 2, time: 42, state: { gold: 777 } };
 
 /** 服务夹具：写槽/stop/reload 全记录（calls 序断言用）。 */
 function makeHarness(adapter: SaveAdapter) {
@@ -118,8 +118,8 @@ describe('#62 审计修复 · 存档管理服务', () => {
     service.saveNow();
     expect(saved).toHaveLength(1);
     const utf8 = '密文中文✓';
-    expect(decodeSaveCipher(encodeSaveText({ version: 1, time: 0, state: { k: utf8 } }))).toBe(
-      JSON.stringify({ version: 1, time: 0, state: { k: utf8 } }),
+    expect(decodeSaveCipher(encodeSaveText({ version: 2, time: 0, state: { k: utf8 } }))).toBe(
+      JSON.stringify({ version: 2, time: 0, state: { k: utf8 } }),
     );
   });
 });

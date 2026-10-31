@@ -79,7 +79,7 @@ describe('Game 修饰符注入点（静态全局产出方：天赋/宗门/测试
       { modifier: { stat: 'hp', zone: 'flat', value: 88 }, source },
     ];
     const save = {
-      version: 1 as const,
+      version: 2 as const,
       time: 0,
       savedAt: 0,
       state: { hp: 250 }, // 基线上限 112，注入后上限 200

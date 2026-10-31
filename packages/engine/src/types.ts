@@ -660,6 +660,10 @@ export interface TalentBuyEvent extends GameEventBase {
     readonly cost: number;
     /** 购买后道韵余额。 */
     readonly daoYun: number;
+    /** 购买后层数（#61；一次性节点恒 1）。 */
+    readonly stacks: number;
+    /** 可重复层数上限；一次性节点缺省（#61）。 */
+    readonly maxStacks?: number;
   };
 }
 
@@ -773,14 +777,17 @@ export interface PlayerStatsView {
 }
 
 /**
- * 存档格式版本（#69）：写侧标记（game.ts snapshot）与读侧门禁（save.ts
- * saveRejection/decodeSave、state.ts restoreState）的单一事实源。
+ * 存档格式版本（#69 立机制；#61 首次动号 1→2）：写侧标记（game.ts snapshot）
+ * 与读侧门禁（save.ts saveRejection/decodeSave、state.ts restoreState）的
+ * 单一事实源。
  *
- * 有号必须有检：版本号只做标记、读侧不校验，等于未来 v2 档被 v1 引擎按
- * v1 语义静默错解（字段改名/删除时恢复守卫会「合法地」读出错的态）。
- * 真正的 v1→v2 迁移机制（迁移表 + 幂等）不在本票范围——本常量是它的挂载点。
+ * 有号必须有检：版本号只做标记、读侧不校验，等于新形档被旧引擎按旧语义
+ * 静默错解（字段改名/删除时恢复守卫会「合法地」读出错的态）。真正的迁移
+ * 机制（迁移表 + 幂等）不在票面范围——本常量是它的挂载点。
+ * 形状变更史：v2 = state.talents 由 string[] 改 Record<id, 层数>（#61，
+ * 叠层形态；壳层 SAVE_KEY 同步 v3→v4 键名 bump，旧档不迁移）。
  */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 /** 存档快照。 */
 export interface SaveData {

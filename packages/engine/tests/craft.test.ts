@@ -116,7 +116,7 @@ describe('#5 · 配方执行循环（成功率掷点/失败损料/exp 入技能�
       rng: () => 0.4,
       // 材料 11 轮量：10 轮正常推进，不断料不停炉。
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: { gold: 0, items: { ore1: 44, qi1: 55 }, skills: { smith: { xp: 0 } }, activity: null },
       },
@@ -155,7 +155,7 @@ describe('#5 · 配方执行循环（成功率掷点/失败损料/exp 入技能�
       clock,
       rng: () => 0.99, // successRate 0.75 < 0.99 → 恒败
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: { gold: 0, items: { herb1: 100 }, skills: { smith: { xp: 0 } }, activity: null },
       },
@@ -182,7 +182,7 @@ describe('#5 · 配方执行循环（成功率掷点/失败损料/exp 入技能�
       clock,
       // save 直接给 2 轮材料（herb1×4），开炉后必然断料。
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: { gold: 0, items: { herb1: 4 }, skills: { smith: { xp: 0 } }, activity: null },
       },
@@ -207,7 +207,7 @@ describe('#5 · 配方执行循环（成功率掷点/失败损料/exp 入技能�
       clock,
       rng: () => 0.99,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: { gold: 0, items: { herb1: 4 }, skills: { smith: { xp: 0 } }, activity: null },
       },
@@ -227,7 +227,7 @@ describe('#5 · 配方执行循环（成功率掷点/失败损料/exp 入技能�
       clock,
       rng: () => 0.4,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: { gold: 0, items: { ore1: 400, qi1: 500 }, skills: { smith: { xp: 0 } }, activity: null },
       },
@@ -248,7 +248,7 @@ describe('#5 · 配方执行循环（成功率掷点/失败损料/exp 入技能�
       content: pack,
       clock: new ManualClock(),
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: { gold: 0, items: {}, skills: { smith: { xp: 0 } }, activity: null },
       },
@@ -357,7 +357,7 @@ describe('#5 · 炼器等级加权 rollRarity（#14 接缝：不传 = 现行为�
         clock,
         seed: 20260907,
         save: {
-          version: 1,
+          version: 2,
           time: 0,
           state: {
             gold: 0,
@@ -388,7 +388,7 @@ describe('#5 · 炼制离线补偿（O(1) 统计式，欠账不丢）', () => {
   it('必得配方：cycles 全折算，产出/修为/进度一次算清，单条汇总事件', () => {
     const clock = new ManualClock();
     const save: SaveData = {
-      version: 1,
+      version: 2,
       time: 1000,
       state: {
         gold: 0,
@@ -428,7 +428,7 @@ describe('#5 · 炼制离线补偿（O(1) 统计式，欠账不丢）', () => {
       clock,
       rng: () => 0.5,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,
@@ -459,7 +459,7 @@ describe('#5 · 炼制离线补偿（O(1) 统计式，欠账不丢）', () => {
       clock,
       rng: () => 0.5,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,
@@ -492,7 +492,7 @@ describe('#5 · 炼制离线补偿（O(1) 统计式，欠账不丢）', () => {
       clock,
       rng: () => 0.5,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,
@@ -516,7 +516,7 @@ describe('#5 · 炼制离线补偿（O(1) 统计式，欠账不丢）', () => {
 
 describe('#5 · 存档恢复：craft 活动稳定引用（ADR-015）', () => {
   const baseSave = (name: string, index: number): SaveData => ({
-    version: 1,
+    version: 2,
     time: 0,
     state: {
       gold: 0,
@@ -550,7 +550,7 @@ describe('#5 · 存档恢复：craft 活动稳定引用（ADR-015）', () => {
       content: makeCraftPack(),
       clock,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,
@@ -571,7 +571,7 @@ describe('#5 · 内容包变更安全弃置（防崩回归）', () => {
       content: makeCraftPack(),
       clock,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 0,
@@ -604,7 +604,7 @@ describe('#5 · 增益丹 buff 窗口回归（票面验收；#4 无显式断言�
       clock,
       seed: 7,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: { gold: 0, items: { consumable_atk: 1 }, skills: { fight: { xp: 0 } }, activity: null },
       },

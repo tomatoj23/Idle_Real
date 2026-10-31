@@ -83,7 +83,7 @@ function makeVariedPack(): GameContent {
 /** 斗法修为 3 层存档（atk 17）：召唤物 hp 45 恰 3 击，击杀前窗口充裕。 */
 function midSave(): SaveData {
   return {
-    version: 1,
+    version: 2,
     time: 0,
     state: { skills: { fight: { xp: 100 } }, items: {} },
   } as unknown as SaveData;

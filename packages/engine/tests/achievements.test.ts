@@ -121,7 +121,7 @@ describe('#9 · 统计聚合器：事件流累积', () => {
       },
     } as GameContent;
     const save = {
-      version: 1,
+      version: 2,
       time: 0,
       state: { skills: { fight: { xp: 20000 } }, items: {} },
     } as unknown as SaveData;
@@ -271,7 +271,7 @@ describe('#9 · 状态树：恢复规范化与兵解 default-keep', () => {
     const content = makeCombatPack() as GameContent;
     const base = initialState(content, 1);
     const save = {
-      version: 1,
+      version: 2,
       time: 0,
       state: {
         ...base,

@@ -88,7 +88,7 @@ function makeAchPack(): GameContent {
 
 function saveWith(extra: Record<string, unknown> = {}): SaveData {
   return {
-    version: 1,
+    version: 2,
     time: 0,
     state: {
       gold: 0,

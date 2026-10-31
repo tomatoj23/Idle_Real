@@ -21,7 +21,7 @@ import { makeCombatPack } from './fixtures.js';
 /** 带佩戴武器的存档（武器随包声明 verbStyle）。 */
 function saveWithWeapon(): SaveData {
   return {
-    version: 1,
+    version: 2,
     time: 0,
     state: {
       gold: 0,

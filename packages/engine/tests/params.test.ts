@@ -235,7 +235,7 @@ describe('#020 · createGame 读 config 参数（纯 JSON 改动）', () => {
     const restored = createGame({
       content: pack,
       clock: new ManualClock(),
-      save: { version: 1, time: 0, state: { gold: 1 } },
+      save: { version: 2, time: 0, state: { gold: 1 } },
     });
     expect((restored.snapshot().state as unknown as GameState).autoFight).toBe(false);
     expect((restored.snapshot().state as unknown as GameState).autoEat).toBe(false);
@@ -353,7 +353,7 @@ describe('#26 · 坊市购买力视图（N4 判定侧单一来源）', () => {
     const rich = createGame({
       content: pack,
       clock: new ManualClock(),
-      save: { version: 1, time: 0, state: { gold: 45 } },
+      save: { version: 2, time: 0, state: { gold: 45 } },
     });
     rich.dispatch({ type: 'shop:buy', payload: { item: 'consumable_heal' } });
     expect(rich.events.drain().some((event) => event.type === 'buy')).toBe(true);
@@ -361,7 +361,7 @@ describe('#26 · 坊市购买力视图（N4 判定侧单一来源）', () => {
     const poor = createGame({
       content: pack,
       clock: new ManualClock(),
-      save: { version: 1, time: 0, state: { gold: 44 } },
+      save: { version: 2, time: 0, state: { gold: 44 } },
     });
     poor.dispatch({ type: 'shop:buy', payload: { item: 'consumable_heal' } });
     const rejected = poor.events.drain().find((event) => event.type === 'reject');

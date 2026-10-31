@@ -124,6 +124,19 @@ describe('form model：节 schema → 控件树', () => {
       expect(['array', 'object'], `${section} 投影失败`).toContain(node.kind);
     }
   });
+
+  it('#61 repeatable：天赋条目可选对象字段，maxStacks 必填整数、costs 可选整数组（schema 驱动免费面）', () => {
+    const rebirth = formOf('rebirth') as ObjectNode;
+    const talents = (rebirth.fields.find((f) => f.field === 'talents')) as ArrayNode;
+    const repeatable = (talents.item as ObjectNode).fields.find((f) => f.field === 'repeatable');
+    expect(repeatable?.kind).toBe('object');
+    expect(repeatable?.required).toBe(false); // 可选字段走「添加字段」入口
+    const byField = Object.fromEntries((repeatable as ObjectNode).fields.map((f) => [f.field, f]));
+    expect(byField['maxStacks']!.kind).toBe('integer');
+    expect(byField['maxStacks']!.required).toBe(true);
+    expect(byField['costs']?.kind).toBe('array');
+    expect((byField['costs'] as ArrayNode | undefined)?.item.kind).toBe('integer');
+  });
 });
 
 describe('骨架值', () => {

@@ -62,7 +62,7 @@ function makeStonePack(): GameContent {
 /** 斗法修为 3 层存档：对 e1 恰 4-5 击——两阶段在击杀前确定性触发（15~18 伤/击）。 */
 function midSave(): SaveData {
   return {
-    version: 1,
+    version: 2,
     time: 0,
     state: { skills: { fight: { xp: 100 } }, items: {} },
   } as unknown as SaveData;

@@ -1,6 +1,7 @@
 /**
  * 天赋树页（#6，#46 页面注册表）：树数据 100% 来自 rebirth.talents。
- * 购买门控走引擎 talentGateOf（与 talent:buy 判定同式同源，N4 收敛）。
+ * 购买门控走引擎 talentGateOf（与 talent:buy 判定同式同源，N4 收敛）；
+ * #61 起层数/满层态/下一层价全部读同一 gate 视图（壳零第二份价梯）。
  */
 import { talentGateOf } from '@wendao/engine';
 import { esc } from '../pageFrame';
@@ -17,17 +18,32 @@ export function createTalentsPage(env: PageEnv): PageView {
       .map((node) => {
         // 购买门控走引擎 talentGateOf（与 talent:buy 判定同式同源，N4 收敛）。
         const gate = talentGateOf(content, st.daoYun, st.talents, node.id);
+        const repeatable = gate.maxStacks !== undefined;
+        // 层数读数行：可重复节点恒显（未购 0/N 也是状态）。
+        const stackRow = repeatable
+          ? `<div class="act-meta">${esc(T('pages.talents.stackRow', { cur: gate.stacks, max: gate.maxStacks }))}</div>`
+          : '';
+        // 消耗行 = 下一层价（不可再购买时无价可标，整行收掉——满层卡不带死价签）。
+        const costRow =
+          gate.nextCost !== undefined
+            ? `<div class="act-meta">${esc(T('pages.talents.costRow', { cost: gate.nextCost }))}</div>`
+            : '';
         let op: string;
-        if (gate.owned) op = `<em class="act-badge">${esc(T('pages.talents.owned'))}</em>`;
-        else if (gate.prereqMissing) op = `<span class="act-lockmsg">${esc(T('pages.talents.needPrereq'))}</span>`;
-        else if (!gate.affordable)
-          op = `<span class="act-lockmsg">${esc(T('pages.talents.needDaoYun', { cost: node.cost }))}</span>`;
-        else
+        if (gate.maxed) {
+          op = `<em class="act-badge">${esc(T(repeatable ? 'pages.talents.maxed' : 'pages.talents.owned'))}</em>`;
+        } else if (gate.prereqMissing) {
+          op = `<span class="act-lockmsg">${esc(T('pages.talents.needPrereq'))}</span>`;
+        } else if (!gate.affordable) {
+          // maxed 支已先行，此支 nextCost 恒有值；?? 为保形防御（game.ts 同款）。
+          op = `<span class="act-lockmsg">${esc(T('pages.talents.needDaoYun', { cost: gate.nextCost ?? node.cost }))}</span>`;
+        } else {
           op = `<button class="btn" data-act="talent-buy" data-node="${esc(node.id)}">${esc(T('pages.talents.buyBtn'))}</button>`;
+        }
         return `<article class="act-card talent-card${gate.owned ? ' owned' : ''}${!gate.owned && (gate.prereqMissing || !gate.affordable) ? ' locked' : ''}">
           <header><b><span class="sigil sigil-sm">${esc(node.icon ?? T('icons.unknown'))}</span> ${esc(node.name)}</b></header>
           ${node.description ? `<div class="talent-desc">${esc(node.description)}</div>` : ''}
-          <div class="act-meta">${esc(T('pages.talents.costRow', { cost: node.cost }))}</div>
+          ${stackRow}
+          ${costRow}
           ${op}
         </article>`;
       })

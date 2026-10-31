@@ -24,6 +24,8 @@ import {
   type Contribution,
   type Modifier,
 } from './modifiers.js';
+// 类型只引（erased）：rebirth.ts 持视图声明，本模块持读者函数——无运行时环。
+import type { RebirthSectionView, TalentNodeView } from './rebirth.js';
 
 export interface StackView {
   readonly item: string;
@@ -856,4 +858,21 @@ export function powerOf(stats: PlayerStatsView, params: PowerParamsView = BASE_P
       stats.maxHp / divisor +
       stats.crit * params.critWeight,
   );
+}
+
+/* ---------- 转生节读者（#61 自 rebirth.ts 迁入：内容读者归结构视图模块，
+   state.ts 恢复钳制读天赋节点域不至成 state↔rebirth 运行时环；视图类型
+   与再出口仍在 rebirth.ts，公共 API 面零变化） ---------- */
+
+/** 转生节读取：缺节返回 undefined（无转生玩法的唯一判据）。 */
+export function rebirthOf(content: GameContent): RebirthSectionView | undefined {
+  const rebirth = (content as { rebirth?: unknown }).rebirth;
+  return rebirth !== null && typeof rebirth === 'object' && !Array.isArray(rebirth)
+    ? (rebirth as RebirthSectionView)
+    : undefined;
+}
+
+/** 按节点 id 取天赋节点；未注册（存档遗留/坏包）返回 undefined。 */
+export function talentNodeOf(content: GameContent, nodeId: string): TalentNodeView | undefined {
+  return rebirthOf(content)?.talents?.find((node) => node.id === nodeId);
 }

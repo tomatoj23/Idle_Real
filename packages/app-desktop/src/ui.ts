@@ -917,7 +917,9 @@ export function buildUi(
       st.rebirths,
       st.daoYun,
       st.daoYunEarned,
-      [...st.talents].sort(),
+      // 天赋购买计数形态（#61）：id+层数入签名（叠层购买触发重绘，强刷兜底
+      // 与 recipeAuto 同律）。
+      Object.entries(st.talents ?? {}).sort(),
       st.dungeon ? [st.dungeon.dungeonId, st.dungeon.floor] : null,
       Object.entries(st.dungeonBest).sort(),
       Object.entries(st.stats ?? {}).sort(),

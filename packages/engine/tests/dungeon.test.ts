@@ -107,7 +107,7 @@ function makeKeyedPack(): GameContent {
  */
 function strongSave(): SaveData {
   return {
-    version: 1,
+    version: 2,
     time: 0,
     state: { skills: { fight: { xp: 20000 } }, items: {}, daoYun: 0, daoYunEarned: 2 },
   } as unknown as SaveData;
@@ -221,7 +221,7 @@ describe('#7 · AC1 假时钟推塔 10 层（事件序列/层奖励/通关）', 
   it('败退离境：defeat → dungeon:leave，最高层记录保留', () => {
     // 净基线削血（clv1 hp 112 − 105 = 7）：e1 首击即倒；道韵门槛随存档放行。
     const mortal = {
-      version: 1,
+      version: 2,
       time: 0,
       state: { items: {}, daoYunEarned: 2 },
     } as unknown as SaveData;
@@ -332,7 +332,7 @@ describe('#7 · 进入门控与互斥（dungeonGateOf 单一来源）', () => {
 
   it('钥匙门槛：未持 no-key；持有放行', () => {
     const without = {
-      version: 1,
+      version: 2,
       time: 0,
       state: { skills: { fight: { xp: 20000 } }, items: {} },
     } as unknown as SaveData;
@@ -341,7 +341,7 @@ describe('#7 · 进入门控与互斥（dungeonGateOf 单一来源）', () => {
     expect(reasonOf(locked)).toBe('no-key');
 
     const withKey = {
-      version: 1,
+      version: 2,
       time: 0,
       state: { skills: { fight: { xp: 20000 } }, items: { core1: 1 } },
     } as unknown as SaveData;
@@ -369,7 +369,7 @@ describe('#7 · 进入门控与互斥（dungeonGateOf 单一来源）', () => {
 
   it('低气血 low-hp；未知秘境 not-found；坏载荷 bad-payload；活动互斥照常清槽', () => {
     const weak = {
-      version: 1,
+      version: 2,
       time: 0,
       state: { skills: { fight: { xp: 20000 } }, items: {}, hp: 1, daoYunEarned: 2 },
     } as unknown as SaveData;
@@ -420,7 +420,7 @@ describe('#7 · AC2 层表换包生效（引擎零改动验证）', () => {
     expect(dungeonFloorEnemyOf(makeAbyssPack(), 'ghost', 1, 'e1')).toBeUndefined();
 
     const save = {
-      version: 1,
+      version: 2,
       time: 0,
       state: { skills: { fight: { xp: 20000 } }, items: {} },
     } as unknown as SaveData;

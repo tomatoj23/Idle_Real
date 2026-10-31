@@ -201,7 +201,7 @@ describe('挂机采集（issue #3 验收）', () => {
   it('脱战回血：气血向上限恢复（4%/秒）', () => {
     const clock = new ManualClock();
     const save: SaveData = {
-      version: 1,
+      version: 2,
       time: 0,
       state: { gold: 0, hp: 50, items: {}, skills: { combat: { xp: 0 } }, activity: null },
     };

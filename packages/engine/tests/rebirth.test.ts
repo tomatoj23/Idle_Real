@@ -3,6 +3,7 @@ import { ManualClock } from '../src/clock.js';
 import {
   createGame,
   realmOf,
+  talentContributionsOf,
   talentGateOf,
   type GameContent,
   type GameEvent,
@@ -38,6 +39,8 @@ function makeRebirthPack(): GameContent {
         { id: 't_spd', name: '罡风步', cost: 1, requires: ['t_atk'], effects: [{ stat: 'gatherSpeed', zone: 'mult', value: 1.5 }] },
         { id: 't_xp', name: '聆音', cost: 1, effects: [{ stat: 'gatherXp', zone: 'mult', value: 2 }] },
         { id: 't_off', name: '龟息功', cost: 1, effects: [{ stat: 'offlineCap', zone: 'flat', value: 60000 }] },
+        // #61 可重复购买叠层：首层价 6，价梯 9/12（第 2/3 层），满层 3。
+        { id: 't_stack', name: '叠层试', cost: 6, repeatable: { maxStacks: 3, costs: [9, 12] }, effects: [{ stat: 'offlineCap', zone: 'flat', value: 60000 }] },
       ],
       unlocks: [{ requires: { daoYun: 2 }, enemies: ['e3'] }],
       realms: [
@@ -53,7 +56,7 @@ function makeRebirthPack(): GameContent {
  *  收编修为推 cap，不再回落零修为基线 112）。 */
 function makeRichSave(): SaveData {
   return {
-    version: 1,
+    version: 2,
     time: 0,
     state: {
       gold: 123,
@@ -133,7 +136,7 @@ describe('#6 · AC2 天赋：攻击节点永久提升 + 推进速度模拟对比
   it('点亮 t_atk（flat +3）→ snapshot stats.atk 基底永久 +3（跨兵解存活）', () => {
     // 净基线存档（无装备/无 buff）：clv 4 → atk = 8 + 3×4 = 20，天赋 flat 直加。
     const save = {
-      version: 1,
+      version: 2,
       time: 0,
       state: { skills: { fight: { xp: 300 } }, items: {}, daoYun: 1, daoYunEarned: 1, rebirths: 1 },
     } as unknown as SaveData;
@@ -148,7 +151,7 @@ describe('#6 · AC2 天赋：攻击节点永久提升 + 推进速度模拟对比
       daoYun: 0,
     });
     expect(game.snapshot().stats!.atk).toBe(23);
-    expect(game.snapshot().state.talents).toEqual(['t_atk']);
+    expect(game.snapshot().state.talents).toEqual({ t_atk: 1 });
   });
 
   it('模拟对比：同种子同内容，双天赋（gatherXp ×2）下一轮修为翻倍', () => {
@@ -161,7 +164,7 @@ describe('#6 · AC2 天赋：攻击节点永久提升 + 推进速度模拟对比
       content: makeRebirthPack(),
       clock: new ManualClock(),
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: { skills: { herb: { xp: 2000 } }, items: {}, activity: null },
       },
@@ -187,7 +190,7 @@ describe('#6 · AC2 天赋：攻击节点永久提升 + 推进速度模拟对比
       content: makeRebirthPack(),
       clock: new ManualClock(),
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: { skills: { herb: { xp: 3000 } }, items: {}, activity: null },
       },
@@ -217,17 +220,17 @@ describe('#6 · AC3 换包换树：投影随 content.rebirth.talents 走', () =>
         ],
       },
     } as unknown as GameContent;
-    const save = { version: 1, time: 0, state: { talents: ['t_atk'], daoYun: 0 } } as unknown as SaveData;
+    const save = { version: 2, time: 0, state: { talents: { t_atk: 1 }, daoYun: 0 } } as unknown as SaveData;
     const a = createGame({ content: packA, clock: new ManualClock(), save, seed: 7 });
     const b = createGame({ content: packB, clock: new ManualClock(), save, seed: 7 });
     // A 树 t_atk = +3；B 树同名节点 = +7（cost/name 全随包）——引擎零改动。
     expect(b.snapshot().stats!.atk - a.snapshot().stats!.atk).toBe(4);
   });
 
-  it('孤儿天赋 id（内容包已移除节点）：存档不炸，效果自然消失', () => {
-    const save = { version: 1, time: 0, state: { talents: ['t_ghost'] } } as unknown as SaveData;
+  it('孤儿天赋 id（内容包已移除节点）：存档不炸，效果自然消失（计数原样保留）', () => {
+    const save = { version: 2, time: 0, state: { talents: { t_ghost: 2 } } } as unknown as SaveData;
     const game = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save, seed: 7 });
-    expect(game.snapshot().state.talents).toEqual(['t_ghost']);
+    expect(game.snapshot().state.talents).toEqual({ t_ghost: 2 });
     expect(game.snapshot().state.gold).toBe(0); // 无崩溃、无幽灵贡献（基线读数）
   });
 });
@@ -236,18 +239,19 @@ describe('#6 · 天赋购买拒绝面', () => {
   it('talentGateOf 四态视图与 dispatch 判定同式（N4 收敛单一来源）', () => {
     const pack = makeRebirthPack();
     // 未点亮、无前置、余额足 → 可购；余额不足 → !affordable；前置缺 → prereqMissing；孤儿 → !exists。
-    expect(talentGateOf(pack, 1, [], 't_atk')).toEqual({
+    expect(talentGateOf(pack, 1, {}, 't_atk')).toEqual({
       exists: true, owned: false, prereqMissing: false, affordable: true,
+      stacks: 0, maxStacks: undefined, maxed: false, nextCost: 1,
     });
-    expect(talentGateOf(pack, 0, [], 't_atk')).toMatchObject({ affordable: false });
-    expect(talentGateOf(pack, 5, [], 't_spd')).toMatchObject({ prereqMissing: true });
-    expect(talentGateOf(pack, 5, ['t_atk'], 't_spd')).toMatchObject({ prereqMissing: false, affordable: true });
-    expect(talentGateOf(pack, 5, ['t_atk'], 't_ghost')).toMatchObject({ exists: false });
+    expect(talentGateOf(pack, 0, {}, 't_atk')).toMatchObject({ affordable: false });
+    expect(talentGateOf(pack, 5, {}, 't_spd')).toMatchObject({ prereqMissing: true });
+    expect(talentGateOf(pack, 5, { t_atk: 1 }, 't_spd')).toMatchObject({ prereqMissing: false, affordable: true });
+    expect(talentGateOf(pack, 5, { t_atk: 1 }, 't_ghost')).toMatchObject({ exists: false });
   });
 
   function gameWithDaoYun(daoYun: number): ReturnType<typeof createGame> {
     const save = {
-      version: 1,
+      version: 2,
       time: 0,
       state: { daoYun, daoYunEarned: daoYun },
     } as unknown as SaveData;
@@ -281,7 +285,7 @@ describe('#6 · 天赋购买拒绝面', () => {
     game.dispatch({ type: 'talent:buy', payload: { nodeId: 't_atk' } });
     expect(game.events.drain()).toHaveLength(0);
     expect(game.snapshot().state.daoYun).toBe(2);
-    expect(game.snapshot().state.talents).toEqual(['t_atk']);
+    expect(game.snapshot().state.talents).toEqual({ t_atk: 1 });
   });
 });
 
@@ -293,14 +297,14 @@ describe('#6 · 解锁表：累计道韵门槛（只增不减）', () => {
       locked.events.drain().find((event) => event.type === 'reject')?.data?.reason,
     ).toBe('rebirth-locked');
 
-    const save = { version: 1, time: 0, state: { daoYun: 0, daoYunEarned: 2 } } as unknown as SaveData;
+    const save = { version: 2, time: 0, state: { daoYun: 0, daoYunEarned: 2 } } as unknown as SaveData;
     const unlocked = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save, seed: 7 });
     unlocked.dispatch({ type: 'combat:start', payload: { enemyId: 'e3' } });
     expect(unlocked.events.drain().some((event) => event.type === 'combat-note')).toBe(true);
   });
 
   it('花掉的道韵不回锁：余额 0、累计 2 仍可挑战（解锁按累计判定）', () => {
-    const save = { version: 1, time: 0, state: { daoYun: 0, daoYunEarned: 2, talents: ['t_atk'] } } as unknown as SaveData;
+    const save = { version: 2, time: 0, state: { daoYun: 0, daoYunEarned: 2, talents: { t_atk: 1 } } } as unknown as SaveData;
     const game = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save, seed: 7 });
     game.dispatch({ type: 'combat:start', payload: { enemyId: 'e3' } });
     expect(game.events.drain().some((event) => event.type === 'combat-note')).toBe(true);
@@ -312,9 +316,9 @@ describe('#6 · 新 stat 消费点（round3 E3 注册表收口）', () => {
     const DAY = 24 * 60 * 60 * 1000;
     const activity = { skillId: 'herb', index: 0, name: '采青灵草', progress: 0 };
     const saveWithTalent = {
-      version: 1,
+      version: 2,
       time: 0,
-      state: { activity: { ...activity }, items: {}, talents: ['t_off'] },
+      state: { activity: { ...activity }, items: {}, talents: { t_off: 1 } },
     } as unknown as SaveData;
     // 短离线（2 分钟）远小于基线：不钳（天赋在基线之上叠加，不再反向缩限）
     const game = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save: saveWithTalent, seed: 7 });
@@ -332,7 +336,7 @@ describe('#6 · 新 stat 消费点（round3 E3 注册表收口）', () => {
 
     // 长离线无天赋：基线 24h 本身生效 = 28800 轮（旧版 8h 上限语义的现代化恢复）
     const plain = {
-      version: 1,
+      version: 2,
       time: 0,
       state: { activity: { ...activity }, items: {} },
     } as unknown as SaveData;
@@ -362,7 +366,7 @@ describe('#6 · 新 stat 消费点（round3 E3 注册表收口）', () => {
     const game = createGame({
       content: pack,
       clock: new ManualClock(),
-      save: { version: 1, time: 0, state: { activity, items: {}, talents: ['t_off_cond'] } } as unknown as SaveData,
+      save: { version: 2, time: 0, state: { activity, items: {}, talents: { t_off_cond: 1 } } } as unknown as SaveData,
       seed: 7,
     });
     game.settleOffline(120000); // 条件不命中 → 上限不生效 → 40 轮
@@ -370,7 +374,7 @@ describe('#6 · 新 stat 消费点（round3 E3 注册表收口）', () => {
   });
 
   it('xpMult：全经验倍率在 grantExp 单点消费（采集/斗法同路）', () => {
-    const save = { version: 1, time: 0, state: { talents: ['t_xpm'] } } as unknown as SaveData;
+    const save = { version: 2, time: 0, state: { talents: { t_xpm: 1 } } } as unknown as SaveData;
     const pack = {
       ...makeRebirthPack(),
       rebirth: {
@@ -385,7 +389,7 @@ describe('#6 · 新 stat 消费点（round3 E3 注册表收口）', () => {
   });
 
   it('gatherXp 与 xpMult 叠乘（采集特化 × 全局）', () => {
-    const save = { version: 1, time: 0, state: { talents: ['t_xp'] } } as unknown as SaveData;
+    const save = { version: 2, time: 0, state: { talents: { t_xp: 1 } } } as unknown as SaveData;
     const game = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save, seed: 7 });
     game.dispatch({ type: 'activity:start', payload: { skillId: 'herb', index: 0 } });
     game.tick(3000); // exp 6 × gatherXp 2（t_xp）× xpMult 1 = 12
@@ -404,7 +408,7 @@ describe('#6 · 境界词表（B2 收编）与存档规范化', () => {
 
   it('旧档升级：无转生键 → 全部缺省；daoYunEarned 未落盘时以余额兜底', () => {
     const legacy = {
-      version: 1,
+      version: 2,
       time: 0,
       state: { gold: 0, hp: 100, items: {}, skills: {}, activity: null },
     } as unknown as SaveData;
@@ -413,10 +417,10 @@ describe('#6 · 境界词表（B2 收编）与存档规范化', () => {
     expect(st.rebirths).toBe(0);
     expect(st.daoYun).toBe(0);
     expect(st.daoYunEarned).toBe(0);
-    expect(st.talents).toEqual([]);
+    expect(st.talents).toEqual({});
 
     const onlyBalance = {
-      version: 1,
+      version: 2,
       time: 0,
       state: { daoYun: 3 },
     } as unknown as SaveData;
@@ -425,15 +429,131 @@ describe('#6 · 境界词表（B2 收编）与存档规范化', () => {
   });
 
   it('兵解后存档往返：snapshot → restore 保留转生进度（rebirths/道韵/天赋）', () => {
-    const save = { version: 1, time: 0, state: { daoYun: 4, daoYunEarned: 9, rebirths: 2, talents: ['t_atk'] } } as unknown as SaveData;
+    const save = { version: 2, time: 0, state: { daoYun: 4, daoYunEarned: 9, rebirths: 2, talents: { t_atk: 1 } } } as unknown as SaveData;
     const first = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save, seed: 7 });
     const roundTrip = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save: first.snapshot(), seed: 7 });
     const st = roundTrip.snapshot().state;
     expect(st.rebirths).toBe(2);
     expect(st.daoYun).toBe(4);
     expect(st.daoYunEarned).toBe(9);
-    expect(st.talents).toEqual(['t_atk']);
+    expect(st.talents).toEqual({ t_atk: 1 });
     // 天赋效果随档恢复：t_atk +3 在重载后依然生效（clv1 基线 11 → 14）。
     expect(roundTrip.snapshot().stats!.atk).toBe(14);
+  });
+});
+
+describe('#61 · 天赋可重复购买叠层（repeatable）', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  it('talentGateOf 叠层视图：stacks/maxStacks/nextCost/maxed 与购买判定同式（单一来源延伸）', () => {
+    const pack = makeRebirthPack();
+    // 未购：nextCost = 首层价（node.cost）。
+    expect(talentGateOf(pack, 6, {}, 't_stack')).toEqual({
+      exists: true, owned: false, prereqMissing: false, affordable: true,
+      stacks: 0, maxStacks: 3, maxed: false, nextCost: 6,
+    });
+    // 1 层：nextCost = 价梯第 1 档 9；余额 8 不足、9 足额。
+    expect(talentGateOf(pack, 8, { t_stack: 1 }, 't_stack'))
+      .toMatchObject({ owned: true, stacks: 1, nextCost: 9, affordable: false });
+    expect(talentGateOf(pack, 9, { t_stack: 1 }, 't_stack')).toMatchObject({ affordable: true });
+    // 满层：maxed + nextCost 收口 undefined + 恒 !affordable（再多的道韵也买不动）。
+    expect(talentGateOf(pack, 99, { t_stack: 3 }, 't_stack'))
+      .toMatchObject({ owned: true, stacks: 3, maxed: true, nextCost: undefined, affordable: false });
+    // 一次性节点：点亮即 maxed（不可再购买语义统一）。
+    expect(talentGateOf(pack, 1, {}, 't_atk')).toMatchObject({ maxed: false, nextCost: 1 });
+    expect(talentGateOf(pack, 1, { t_atk: 1 }, 't_atk'))
+      .toMatchObject({ owned: true, maxed: true, nextCost: undefined, maxStacks: undefined });
+    // 缺省恒价（repeatable 无 costs）：每层同 node.cost。
+    const base = makeRebirthPack() as { rebirth: Record<string, unknown> };
+    const flat = {
+      ...base,
+      rebirth: {
+        ...base.rebirth,
+        talents: [{ id: 't_flat', name: '恒价', cost: 2, repeatable: { maxStacks: 2 }, effects: [] }],
+      },
+    } as unknown as GameContent;
+    expect(talentGateOf(flat, 4, { t_flat: 1 }, 't_flat')).toMatchObject({ nextCost: 2, maxed: false });
+  });
+
+  it('叠层购买：价梯逐层扣费，事件带 stacks/maxStacks；满层 reject maxed（不扣费）', () => {
+    const save = { version: 2, time: 0, state: { daoYun: 30, daoYunEarned: 30 } } as unknown as SaveData;
+    const game = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save, seed: 7 });
+    game.dispatch({ type: 'talent:buy', payload: { nodeId: 't_stack' } }); // -6
+    game.dispatch({ type: 'talent:buy', payload: { nodeId: 't_stack' } }); // -9
+    game.dispatch({ type: 'talent:buy', payload: { nodeId: 't_stack' } }); // -12
+    const buys = game.events.drain().filter((e) => e.type === 'talent:buy');
+    expect(buys.map((e) => e.data.cost)).toEqual([6, 9, 12]);
+    expect(buys.map((e) => e.data.stacks)).toEqual([1, 2, 3]);
+    expect(buys[2]?.data).toMatchObject({ nodeId: 't_stack', maxStacks: 3, daoYun: 3 });
+    expect(game.snapshot().state.daoYun).toBe(3);
+    expect(game.snapshot().state.talents).toEqual({ t_stack: 3 });
+
+    game.dispatch({ type: 'talent:buy', payload: { nodeId: 't_stack' } }); // 已满层
+    const reject = game.events.drain().find((e) => e.type === 'reject');
+    expect(reject?.data?.reason).toBe('maxed');
+    expect(game.snapshot().state.daoYun).toBe(3); // 满层不扣费
+    expect(game.snapshot().state.talents).toEqual({ t_stack: 3 });
+  });
+
+  it('效果按层叠乘：每层一份效果走同一聚合管线（offlineCap 24h + 2×60s）', () => {
+    // 直接投影：层数 N = N 份贡献（flat 叠加的管线语义本体）。
+    expect(talentContributionsOf(makeRebirthPack(), { t_stack: 2 })).toHaveLength(2);
+    expect(talentContributionsOf(makeRebirthPack(), { t_stack: 1, t_atk: 1 })).toHaveLength(2);
+
+    // 集成：两层 t_stack → 上限 24h+120s，settleOffline 钳在此（走 playerContributions 同路）。
+    const activity = { skillId: 'herb', index: 0, name: '采青灵草', progress: 0 };
+    const save = {
+      version: 2,
+      time: 0,
+      state: { activity, items: {}, talents: { t_stack: 2 } },
+    } as unknown as SaveData;
+    const game = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save, seed: 7 });
+    game.settleOffline(DAY + 180000); // 多出的 60s 不入账
+    const event = game.events.drain().find((e) => e.type === 'offline-settled');
+    expect(event?.data?.capped).toBe(true);
+    expect(event?.data?.cycles).toBe((DAY + 120000) / 3000);
+  });
+
+  it('兵解清层：可重复节点回落 1 层；一次性节点与孤儿计数不动；道韵照常结算', () => {
+    const save = {
+      version: 2,
+      time: 0,
+      state: {
+        skills: { herb: { xp: 5000 }, fight: { xp: 300 } },
+        items: {},
+        daoYun: 10,
+        daoYunEarned: 20,
+        talents: { t_stack: 3, t_atk: 1, t_ghost: 2 },
+      },
+    } as unknown as SaveData;
+    const game = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save, seed: 7 });
+    game.events.drain(); // 隔离恢复期事件，只数兵解本笔
+    game.dispatch({ type: 'rebirth:perform' }); // gain = floor(0.001 × 5300) = 5
+    const st = game.snapshot().state;
+    expect(st.talents).toEqual({ t_stack: 1, t_atk: 1, t_ghost: 2 });
+    expect(st.daoYun).toBe(15); // 10 + 5：清层是生命周期清洗，不经账本
+    expect(game.events.drain().filter((e) => e.type === 'ledger')).toHaveLength(1);
+  });
+});
+
+describe('#61 · talents 存档形态（Record<string, number>）', () => {
+  it('restore：计数收编 + 已注册节点钳制（非可重复强制 1 / 可重复回落 maxStacks 天花板）+ 非法计数丢弃', () => {
+    const save = {
+      version: 2,
+      time: 0,
+      state: { talents: { t_stack: 5, t_atk: 4, t_ghost: 7, bad_half: 2.5, bad_zero: 0 } },
+    } as unknown as SaveData;
+    const game = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save, seed: 7 });
+    // t_stack 内容上限 3 → 5 钳回 3（内容调窄回落天花板，纹阶钳制同律）；
+    // t_atk 非可重复 → 强制 1；孤儿 t_ghost 计数原样保留（效果静默跳过）；
+    // 非整数/非正计数丢弃。
+    expect(game.snapshot().state.talents).toEqual({ t_stack: 3, t_atk: 1, t_ghost: 7 });
+  });
+
+  it('往返保真：snapshot → restore 保留层数', () => {
+    const save = { version: 2, time: 0, state: { talents: { t_stack: 2 }, daoYun: 0 } } as unknown as SaveData;
+    const first = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save, seed: 7 });
+    const second = createGame({ content: makeRebirthPack(), clock: new ManualClock(), save: first.snapshot(), seed: 7 });
+    expect(second.snapshot().state.talents).toEqual({ t_stack: 2 });
   });
 });

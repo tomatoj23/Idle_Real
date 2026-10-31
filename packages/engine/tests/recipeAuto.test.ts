@@ -57,7 +57,7 @@ function saveWith(
   extra: Record<string, unknown> = {},
 ): SaveData {
   return {
-    version: 1,
+    version: 2,
     time: 0,
     state: {
       gold: 0,
@@ -390,7 +390,7 @@ describe('#35 · 判定只挂配方产出来源（AC5）', () => {
       } as unknown as GameContent,
       clock,
       save: {
-        version: 1,
+        version: 2,
         time: 0,
         state: {
           gold: 50,

@@ -51,12 +51,12 @@
     "talents": {
       "type": "array",
       "title": "天赋树",
-      "description": "天赋树节点（100% 来自 content：换包换整棵树）；节点一次点亮（state.talents 按 id 稳定引用，ADR-015），效果 = 引擎标准修饰符走 ADR-011 聚合管线（禁绕管直改）；生效须引擎消费点（docs/agents/content.md stat 消费点注册表）",
+      "description": "天赋树节点（100% 来自 content：换包换整棵树）；节点购买后随档常驻（state.talents 按 id 稳定引用，ADR-015；#61 起形态 = id → 层数），效果 = 引擎标准修饰符走 ADR-011 聚合管线（禁绕管直改，每层一份效果）；生效须引擎消费点（docs/agents/content.md stat 消费点注册表）",
       "items": {
         "type": "object",
         "required": ["id", "name", "cost"],
         "additionalProperties": false,
-        "description": "天赋节点：requires 引用同树节点 id（语义校验 xref + 查环）；点亮消耗道韵余额",
+        "description": "天赋节点：requires 引用同树节点 id（语义校验 xref + 查环）；点亮消耗道韵余额；repeatable 声明后可逐层重复购买（兵解回落 1 层，引擎机制）",
         "properties": {
           "id": {
             "type": "string",
@@ -88,7 +88,7 @@
           "cost": {
             "type": "integer",
             "minimum": 1,
-            "description": "点亮消耗（道韵）"
+            "description": "首层点亮消耗（道韵）；repeatable 节点的后续层价走 repeatable.costs 价梯（缺省恒价 = 每层同此值）"
           },
           "requires": {
             "type": "array",
@@ -102,8 +102,29 @@
           "effects": {
             "type": "array",
             "title": "效果",
-            "description": "效果修饰符组：点亮后常驻产出，走引擎聚合管线（来源 kind=talent）",
+            "description": "效果修饰符组：点亮后常驻产出，走引擎聚合管线（来源 kind=talent）；#61 起每层各产出一份（flat 区线性叠加、mult 区逐层连乘——选区语义由内容自担）",
             "items": { "$ref": "#/definitions/modifier" }
+          },
+          "repeatable": {
+            "type": "object",
+            "title": "可重复购买",
+            "required": ["maxStacks"],
+            "additionalProperties": false,
+            "description": "可重复购买叠层（#61）：购买一次叠一层，层数域 1..maxStacks（含首层）；兵解回落 1 层（引擎机制，首层随档保留）；效果每层一份走聚合管线",
+            "properties": {
+              "maxStacks": {
+                "type": "integer",
+                "title": "层数上限",
+                "minimum": 1,
+                "description": "可购买总层数（含首层 1）；存档恢复时超阶计数回落此天花板（内容调窄旧档兼容）"
+              },
+              "costs": {
+                "type": "array",
+                "title": "递增价梯",
+                "items": { "type": "integer", "minimum": 1 },
+                "description": "第 2..maxStacks 层的道韵价（长度须 = maxStacks − 1，语义校验 shape 把关）；缺省 = 恒价（每层同 cost）。价梯数值纯内容数据，引擎零公式"
+              }
+            }
           }
         }
       }

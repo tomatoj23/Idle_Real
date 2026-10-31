@@ -434,18 +434,20 @@
             "talents": {
               "type": "object",
               "title": "天赋页文案",
-              "required": ["title", "subtitle", "empty", "costRow", "needDaoYun", "needPrereq", "owned", "buyBtn"],
+              "required": ["title", "subtitle", "empty", "costRow", "needDaoYun", "needPrereq", "owned", "buyBtn", "stackRow", "maxed"],
               "additionalProperties": false,
-              "description": "道韵天赋树页（#6）：节点名/图标/描述/消耗全部来自 rebirth.talents（树数据 100% content），壳只承载结构性文案",
+              "description": "道韵天赋树页（#6；#61 起含叠层读数）：节点名/图标/描述/消耗全部来自 rebirth.talents（树数据 100% content），壳只承载结构性文案",
               "properties": {
                 "title": { "$ref": "#/definitions/line" },
                 "subtitle": { "$ref": "#/definitions/template", "description": "天赋页副标题；槽位 {daoYun}（道韵余额）" },
                 "empty": { "$ref": "#/definitions/template", "description": "包无天赋树空态（无槽位）" },
-                "costRow": { "$ref": "#/definitions/template", "description": "消耗行；槽位 {cost}" },
-                "needDaoYun": { "$ref": "#/definitions/template", "description": "道韵不足锁定文案；槽位 {cost}" },
+                "costRow": { "$ref": "#/definitions/template", "description": "消耗行；槽位 {cost}（可重复节点 = 下一层价，引擎 talentGateOf 读数）" },
+                "needDaoYun": { "$ref": "#/definitions/template", "description": "道韵不足锁定文案；槽位 {cost}（同上，下一层价）" },
                 "needPrereq": { "$ref": "#/definitions/template", "description": "前置未点亮锁定文案（无槽位）" },
-                "owned": { "$ref": "#/definitions/template", "description": "已点亮徽标（无槽位）" },
-                "buyBtn": { "$ref": "#/definitions/template", "description": "点亮按钮（无槽位）" }
+                "owned": { "$ref": "#/definitions/template", "description": "已点亮徽标——一次性节点用（无槽位）" },
+                "buyBtn": { "$ref": "#/definitions/template", "description": "点亮/叠层购买按钮（无槽位）" },
+                "stackRow": { "$ref": "#/definitions/template", "description": "层数读数行（#61，可重复节点）；槽位 {cur}/{max}" },
+                "maxed": { "$ref": "#/definitions/template", "description": "已满层徽标（#61，可重复节点达 maxStacks；无槽位）" }
               }
             },
             "dungeon": {

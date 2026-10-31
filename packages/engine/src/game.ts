@@ -78,6 +78,7 @@ import type {
 } from './types.js';
 import {
   applyRebirthReset,
+  clearTalentStacks,
   effectiveIntervalOf,
   gatherSpeedOf,
   offlineCapOf,
@@ -2213,6 +2214,9 @@ export function createGame(options: CreateGameOptions): Game {
           // 瞬态清场走字段表（#42 D2）：活动散置（进度一并弃置）、战斗散去、
           // 秘境攻略作废（dungeonBest 为记录资产 default-keep 长存，#7）。
           clearRebirthTransient(state);
+          // 可重复天赋清层（#61）：首层随 default-keep 保留，叠层随世重修；
+          // 须在 hp 重算前——清层改变贡献投影（上限随层数回落）。
+          clearTalentStacks(content, state);
           ledgerDaoYun(preview.gain, 'rebirth', META_USER);
           state.rebirths += 1;
           state.hp = hpCap(); // 新一世气血回满（上限已随重置/天赋重算；投影依赖归 game.ts，字段表外）
@@ -2225,8 +2229,10 @@ export function createGame(options: CreateGameOptions): Game {
         }
 
         case 'talent:buy': {
-          // 点亮天赋（#6）：前置全点亮 + 道韵余额足额；效果经
-          // talentContributionsOf 常驻注入聚合管线（playerContributions）。
+          // 点亮/叠层天赋（#6；#61 起可重复节点逐层购买）：前置全点亮 +
+          // 下一层价足额；效果经 talentContributionsOf 常驻注入聚合管线
+          //（playerContributions）。判定走 talentGateOf（单一来源，UI 锁定
+          // 态同调，N4 收敛）。
           if (!rebirthOf(content)) {
             reject(action.type, 'not-available');
             return;
@@ -2244,23 +2250,37 @@ export function createGame(options: CreateGameOptions): Game {
             reject(action.type, 'not-found');
             return;
           }
-          if (gate.owned) return; // 已点亮幂等
+          if (gate.maxed) {
+            // 一次性节点已点亮（owned ⇒ maxed）：幂等语义保持「无事件静默
+            // 返回」；可重复节点满层 = 明确拒绝（玩家得知道层已满）。
+            if (node.repeatable === undefined) return;
+            reject(action.type, 'maxed');
+            return;
+          }
           if (gate.prereqMissing) {
             reject(action.type, 'prereq');
             return;
           }
+          const cost = gate.nextCost ?? node.cost; // 非 maxed 支 nextCost 恒有值，?? 为保形防御
           if (!gate.affordable) {
-            reject(action.type, 'no-daoyun', { cost: String(node.cost), daoYun: String(state.daoYun) });
+            reject(action.type, 'no-daoyun', { cost: String(cost), daoYun: String(state.daoYun) });
             return;
           }
-          ledgerDaoYun(-node.cost, 'talent', META_USER);
-          state.talents.push(nodeId);
+          ledgerDaoYun(-cost, 'talent', META_USER);
+          state.talents[nodeId] = gate.stacks + 1;
           // 气血上限随天赋变化：负向修饰符时 clamp（正向不回血，旧版同策略）。
           state.hp = Math.min(state.hp, hpCap());
           events.emit({
             type: 'talent:buy',
             time,
-            data: { nodeId, name: node.name, cost: node.cost, daoYun: state.daoYun },
+            data: {
+              nodeId,
+              name: node.name,
+              cost,
+              daoYun: state.daoYun,
+              stacks: gate.stacks + 1,
+              ...(gate.maxStacks !== undefined ? { maxStacks: gate.maxStacks } : {}),
+            },
           });
           return;
         }

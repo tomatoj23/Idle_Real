@@ -36,7 +36,7 @@ describe('验收 · 假时钟 300 游戏秒打狼', () => {
   it('佩戴稀有度武器 → snapshot.stats.atk 反映倍率+词条（经管线聚合）', () => {
     const pack = makeCombatPack();
     const save = {
-      version: 1 as const,
+      version: 2 as const,
       time: 0,
       state: {
         gold: 0,

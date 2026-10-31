@@ -39,8 +39,8 @@ describe('#69 · 存档版本门禁（项 1：有号无检）', () => {
     expect(game.snapshot().version).toBe(SAVE_VERSION);
   });
 
-  it('高版本档（未来引擎写的 v2）在 restoreState 入口显式拒绝', () => {
-    expect(() => restoreState(content, saveOf({ gold: 1 }, 2), 1)).toThrow(/version 2/);
+  it('高版本档（未来引擎写的 v3）在 restoreState 入口显式拒绝', () => {
+    expect(() => restoreState(content, saveOf({ gold: 1 }, 3), 1)).toThrow(/version 3/);
   });
 
   it('缺 version / 非对象档同律拒绝（异型档不止「版本不符」一种形态）', () => {
@@ -70,13 +70,13 @@ describe('#69 · 存档版本门禁（项 1：有号无检）', () => {
     cyclicVersion.self = cyclicVersion;
     expect(saveRejection({ version: cyclicVersion })?.message).toMatch(/<object>/);
     // 正对照：真正的数字异版本才保（解药＝换回能读它的引擎）。
-    expect(saveRejection({ version: 2 })).toMatchObject({ holdSlot: true });
+    expect(saveRejection({ version: 3 })).toMatchObject({ holdSlot: true });
     expect(saveRejection({ version: 0 })).toMatchObject({ holdSlot: true });
   });
 
   it('createGame 全链同律：异型档不产出半新半旧的运行态', () => {
-    expect(() => createGame({ content, clock: new ManualClock(), save: saveOf({ gold: 1 }, 2) })).toThrow(
-      /version 2/,
+    expect(() => createGame({ content, clock: new ManualClock(), save: saveOf({ gold: 1 }, 3) })).toThrow(
+      /version 3/,
     );
     // 合法档不回归。
     const game = createGame({ content, clock: new ManualClock(), save: saveOf({ gold: 42 }) });
@@ -130,12 +130,12 @@ describe('#69 · decodeSave 读侧门禁与保槽判定（项 3 的判定核）'
     expect(broken.holdSlot).toBe(false); // 半写/截断的碎片不证明自己有保住的价值
     expect(problems.join('\n')).toMatch(/parse/);
 
-    const mismatched = decodeSave(JSON.stringify({ version: 2, time: 0, state: {} }), (m) =>
+    const mismatched = decodeSave(JSON.stringify({ version: 3, time: 0, state: {} }), (m) =>
       problems.push(m),
     );
     expect(mismatched.save).toBeNull();
     expect(mismatched.holdSlot).toBe(true); // 自证是别处的真存档
-    expect(problems.at(-1)).toMatch(/version 2/);
+    expect(problems.at(-1)).toMatch(/version 3/);
   });
 
   it('合法档：交出 SaveData、零诊断、不保槽；不传诊断回调时结论一致（默认行为不变）', () => {
@@ -196,27 +196,27 @@ describe('#69 · localStorageSaveAdapter 诊断面 + 异型档保槽', () => {
     expect(problems.some((m) => /refus/i.test(m))).toBe(false);
   });
 
-  it('异型档（v2）保槽：拒绝加载 ≠ 允许抹掉，且只报一次不刷屏', () => {
-    const v2 = JSON.stringify({ version: 2, time: 0, state: { gold: 7 } });
-    const store = stubStorage({ store: new Map([[KEY, v2]]) });
+  it('异型档（旧版号）保槽：拒绝加载 ≠ 允许抹掉，且只报一次不刷屏', () => {
+    const stale = JSON.stringify({ version: 3, time: 0, state: { gold: 7 } });
+    const store = stubStorage({ store: new Map([[KEY, stale]]) });
     const problems: string[] = [];
     const adapter = localStorageSaveAdapter(KEY, { onProblem: (m) => problems.push(m) });
     expect(adapter.load()).toBeNull();
 
     adapter.save(saveOf({ gold: 0 }));
-    expect(store.get(KEY)).toBe(v2); // 那份真档原样留存
+    expect(store.get(KEY)).toBe(stale); // 那份真档原样留存
     expect(problems.filter((m) => /refus/i.test(m))).toHaveLength(1);
     adapter.save(saveOf({ gold: 1 })); // 后续周期自动保存同样被拒，但不再重复报
-    expect(store.get(KEY)).toBe(v2);
+    expect(store.get(KEY)).toBe(stale);
     expect(problems.filter((m) => /refus/i.test(m))).toHaveLength(1);
   });
 
   it('保槽非单向棘轮：槽位换成合法档后读写恢复（换回旧引擎即自愈）', () => {
-    const store = stubStorage({ store: new Map([[KEY, JSON.stringify({ version: 2, time: 0 })]]) });
+    const store = stubStorage({ store: new Map([[KEY, JSON.stringify({ version: 3, time: 0 })]]) });
     const adapter = localStorageSaveAdapter(KEY, { onProblem: () => {} });
     expect(adapter.load()).toBeNull();
     adapter.save(saveOf({ gold: 1 }));
-    expect(store.get(KEY)).toMatch(/version":2/); // 仍在保
+    expect(store.get(KEY)).toMatch(/version":3/); // 仍在保
     store.set(KEY, JSON.stringify({ version: SAVE_VERSION, time: 0, state: { gold: 5 } }));
     expect(adapter.load()?.version).toBe(SAVE_VERSION);
     adapter.save(saveOf({ gold: 6 }));
@@ -248,7 +248,7 @@ describe('#69 · localStorageSaveAdapter 诊断面 + 异型档保槽', () => {
   });
 
   it('保槽事件各自出声一次：解除后再犯会重新报（第二次静默＝复审抓出的缺陷）', () => {
-    const store = stubStorage({ store: new Map([[KEY, JSON.stringify({ version: 2 })]]) });
+    const store = stubStorage({ store: new Map([[KEY, JSON.stringify({ version: 3 })]]) });
     const problems: string[] = [];
     const adapter = localStorageSaveAdapter(KEY, { onProblem: (m) => problems.push(m) });
     const refusals = () => problems.filter((m) => /refus/i.test(m)).length;

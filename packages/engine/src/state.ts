@@ -34,6 +34,7 @@ import {
   raritiesOf,
   rarityRankOf,
   skillsOf,
+  talentNodeOf,
 } from './contentView.js';
 import { findBossOf, isLiveSummon } from './bosses.js';
 import { findDungeon } from './dungeon.js';
@@ -169,8 +170,12 @@ export type GameState = {
   daoYun: number;
   /** 累计道韵（解锁门槛基准，只增不减——花掉的道韵不回锁）。 */
   daoYunEarned: number;
-  /** 已点亮天赋节点 id（内容包 rebirth.talents 稳定引用，ADR-015）。 */
-  talents: string[];
+  /**
+   * 已购天赋（#61 起节点 id → 层数）：内容包 rebirth.talents 稳定引用
+   * （ADR-015）；层数 ≥1 = 已点亮，可重复节点 1..maxStacks，一次性恒 1。
+   * 兵解 default-keep，可重复层数由引擎机制回落 1（rebirth.clearTalentStacks）。
+   */
+  talents: Record<string, number>;
   /** 进行中的秘境攻略；null = 不在秘境（#7，瞬态）。 */
   dungeon: DungeonState | null;
   /** 秘境历史最高到达层：秘境 id → 层号（记录资产，兵解 default-keep，#7）。 */
@@ -759,16 +764,24 @@ const FIELDS: { [K in keyof GameState]: FieldRow<K> } = {
     },
   },
   talents: {
-    def: () => [],
-    clone: (value) => [...value],
-    restore: (raw, state) => {
-      // 逐项字符串去重保序。
-      if (!Array.isArray(raw.talents)) return;
-      const seen = new Set<string>();
-      for (const id of raw.talents) {
-        if (typeof id === 'string' && id.length > 0 && !seen.has(id)) {
-          seen.add(id);
-          state.talents.push(id);
+    def: () => ({}),
+    clone: (value) => ({ ...value }),
+    restore: (raw, state, env) => {
+      // —— 已购天赋表（#61 起计数形态）：键 = 节点 id（内容 id 域档剔污染键），
+      // 计数须正整数；已注册节点按内容域钳制——非可重复强制 1（跨包/手改的
+      // 超额计数无语义），可重复节点回落 maxStacks 天花板（内容调窄后旧档
+      // 超阶回落，纹阶钳制同律）；孤儿 id 计数原样保留（节点已移除 = 效果
+      // 静默跳过，包回装后计数仍在——与 achievements 保留策略同律）。
+      if (!isObj(raw.talents)) return;
+      for (const [id, count] of rawEntries(raw.talents, CONTENT_ID_KEYS)) {
+        if (typeof count !== 'number' || !Number.isInteger(count) || count < 1) continue;
+        const node = talentNodeOf(env.content, id);
+        if (node === undefined) {
+          state.talents[id] = count;
+        } else if (node.repeatable !== undefined) {
+          state.talents[id] = Math.min(count, node.repeatable.maxStacks);
+        } else {
+          state.talents[id] = 1;
         }
       }
     },

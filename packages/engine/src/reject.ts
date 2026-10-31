@@ -45,7 +45,7 @@ export const REJECT_MATRIX = {
   'gear:smelt-all': ['bad-payload', 'no-item', 'not-available'],
   'gear:reforge': ['bad-payload', 'not-found', 'worn', 'locked', 'no-inscription', 'not-available', 'no-shard'],
   'rebirth:perform': ['not-available', 'in-combat', 'no-progress'],
-  'talent:buy': ['not-available', 'bad-payload', 'not-found', 'prereq', 'no-daoyun'],
+  'talent:buy': ['not-available', 'bad-payload', 'not-found', 'prereq', 'no-daoyun', 'maxed'],
   'craft:auto': ['bad-payload'],
   'enemy:auto': ['bad-payload'],
   '*': ['unknown-action'],

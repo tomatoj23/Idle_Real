@@ -1411,7 +1411,8 @@ export const REBIRTH_KEEP_KEYS: ReadonlySet<string> = new Set(['gear']);
  * 转生节语义检查（#6，可选节，存在才查）：
  * - 重置/保留清单键域闭集 + 两集不相交（兵解语义不能同时清零又保留）；
  * - 天赋树：id 去重（state.talents 存档键）、requires xref 同树节点 + 查环、
- *   效果修饰符区约束（乘法区 > 0、加法%区 ≥ −100，与铭纹同律）；
+ *   效果修饰符区约束（乘法区 > 0、加法%区 ≥ −100，与铭纹同律）、
+ *   repeatable 价梯长度 = maxStacks − 1（#61，跨字段一致性）；
  * - 解锁表：enemies/skills 引用 xref（enemies/skills 节）、同目标重复登记拒绝；
  * - 境界词表：同层数重复拒绝（映射歧义）。
  */
@@ -1470,6 +1471,17 @@ function checkRebirth(
       }
     }
     checkModifiers(node.effects ?? [], at('effects'), errors);
+    // —— repeatable 价梯（#61）：costs = 第 2..maxStacks 层各一档，长度须
+    // = maxStacks − 1（首层价 = 节点 cost；无 costs = 恒价，合法）。
+    // maxStacks ≥ 1 / costs 项正整数归 schema 形态，此处只查跨字段一致性。
+    const repeatable = node.repeatable;
+    if (repeatable?.costs !== undefined && repeatable.costs.length !== repeatable.maxStacks - 1) {
+      errors.push({
+        path: at('repeatable'),
+        keyword: 'shape',
+        message: `天赋 "${node.id}" 价梯长度 ${repeatable.costs.length} ≠ maxStacks − 1（${repeatable.maxStacks - 1}：第 2..${repeatable.maxStacks} 层各一档，首层归 cost）`,
+      });
+    }
   });
   // 查环（门禁侧保险，与原型继承同律）：DFS 三色标记，回边即环——
   // 菱形依赖（两节点共享前置）合法，不误报；环上每个成员各报一次。

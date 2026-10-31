@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
+import { SAVE_VERSION } from '@wendao/engine';
 import { SAVE_KEY } from '../src/saveKey';
 
 /**
@@ -30,7 +31,7 @@ describe('#58 项 6 · 渲染入口装配：beforeunload 关闭即保存', () =>
     const raw = localStorage.getItem(SAVE_KEY);
     expect(raw).not.toBeNull();
     const save = JSON.parse(raw!) as { version: number; savedAt?: number; state?: unknown };
-    expect(save.version).toBe(1);
+    expect(save.version).toBe(SAVE_VERSION);
     expect(typeof save.savedAt).toBe('number');
     expect(save.state).toBeTruthy();
   });

@@ -25,7 +25,7 @@ function makeSave(): SaveData {
     daoYun: 2,
     daoYunEarned: 2,
     rebirths: 0,
-    talents: [],
+    talents: {},
   });
 }
 
@@ -99,11 +99,65 @@ describe('#6 · 道韵天赋树页', () => {
     root.querySelector<HTMLButtonElement>('[data-node="t_xueting"]')!.click();
     ui.render();
     expect(root.querySelector('.toast')?.textContent).toContain('天赋【聆音】已点亮');
-    expect(game.snapshot().state.talents).toEqual(['t_xueting']);
+    expect(game.snapshot().state.talents).toEqual({ t_xueting: 1 });
     expect(game.snapshot().state.daoYun).toBe(0);
     // 已点亮卡出现徽标，按钮消失。
     expect(root.querySelector('#page-root')!.textContent).toContain('已点亮');
     expect(root.querySelector('[data-node="t_xueting"]')).toBeNull();
+  });
+});
+
+describe('#61 · 天赋叠层（repeatable）壳层面', () => {
+  /** 存档：龟息功已叠 2 层 + 聆音已点亮，道韵 25（够第 3 层价 15）。 */
+  function makeStackedSave(): SaveData {
+    return baseSave({
+      gold: 0,
+      hp: 112,
+      items: {},
+      skills: { herb: { xp: 0 }, qi: { xp: 0 }, mine: { xp: 0 }, alchemy: { xp: 0 }, smith: { xp: 0 }, combat: { xp: 0 } },
+      daoYun: 25,
+      daoYunEarned: 25,
+      talents: { t_guixi: 2, t_xueting: 1 },
+    });
+  }
+
+  it('可重复节点卡显示层数读数与下一层价（gate 视图同源，壳零价梯副本）', () => {
+    const { root } = mount(makeStackedSave());
+    root.querySelector<HTMLButtonElement>('.tab[data-tab="talents"]')!.click();
+    const page = root.querySelector('#page-root')!.textContent ?? '';
+    // 龟息功 2/6 层 + 下一层价 12（价梯 [9,12,15,18,21] 第 2 档）。
+    expect(page).toContain('已点亮 2/6 层');
+    expect(page).toContain('耗 12 道韵');
+  });
+
+  it('叠层购买链路：点卡购买 → 层数 +1、下一层价随价梯走、签名强刷重绘', () => {
+    const { root, ui, game } = mount(makeStackedSave());
+    root.querySelector<HTMLButtonElement>('.tab[data-tab="talents"]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-node="t_guixi"]')!.click();
+    ui.render();
+    expect(game.snapshot().state.talents).toEqual({ t_guixi: 3, t_xueting: 1 });
+    expect(game.snapshot().state.daoYun).toBe(13); // 25 − 12（第 3 层价）
+    const page = root.querySelector('#page-root')!.textContent ?? '';
+    expect(page).toContain('已点亮 3/6 层');
+    expect(page).toContain('耗 15 道韵'); // 价梯第 2 档
+  });
+
+  it('满层卡：已满层徽标 + 价签收掉 + 无购买按钮', () => {
+    const save = baseSave({
+      gold: 0,
+      hp: 112,
+      items: {},
+      skills: { herb: { xp: 0 }, qi: { xp: 0 }, mine: { xp: 0 }, alchemy: { xp: 0 }, smith: { xp: 0 }, combat: { xp: 0 } },
+      daoYun: 999,
+      daoYunEarned: 999,
+      talents: { t_guixi: 6 },
+    });
+    const { root } = mount(save);
+    root.querySelector<HTMLButtonElement>('.tab[data-tab="talents"]')!.click();
+    const page = root.querySelector('#page-root')!.textContent ?? '';
+    expect(page).toContain('已点亮 6/6 层');
+    expect(page).toContain('已满层');
+    expect(root.querySelector('[data-node="t_guixi"]')).toBeNull();
   });
 });
 

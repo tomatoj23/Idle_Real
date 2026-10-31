@@ -30,7 +30,7 @@ content 包的字段级约定。**schema 变更三处同步纪律（ADR-015）**
 | `texts` | 是 | texts.schema.json | 系统展示文案（#019 批 2）：兵刃兜底名 + reject 协议 code → 文案映射；#26 起含 `shell` 子节（壳层全部题材文案） |
 | `shop` | 是 | shop.schema.json | 坊市货架（无 id 关系行） |
 | `config` | **否** | config.schema.json | 全局配置：槽位（#16）+ 玩法参数四子节 combat/progression/affix（#020，缺省=引擎基线）+ crafting（#5） |
-| `rebirth` | **否** | rebirth.schema.json | 转生系统（#6）：重置/保留清单 + 道韵公式 + 天赋树 + 解锁表 + 境界词表；省略 = 无转生玩法（引擎零降级路径，壳不渲染转生页签） |
+| `rebirth` | **否** | rebirth.schema.json | 转生系统（#6；#61 起天赋树含 repeatable 叠层）：重置/保留清单 + 道韵公式 + 天赋树 + 解锁表 + 境界词表；省略 = 无转生玩法（引擎零降级路径，壳不渲染转生页签） |
 | `dungeons` | **否** | dungeon.schema.json | 秘境分层爬塔（#7）：秘境定义 + 层表（敌人权重/层数倍率/层奖励/推荐战力软提示）+ 进入条件（道韵/钥匙）；省略 = 无秘境玩法（引擎零降级路径，壳不渲染秘境页签） |
 | `bosses` | **否** | boss.schema.json | Boss 战阶段脚本（#8）：敌人条目 + 阶段数组（阈值/阶段名/属性修正/变招/叙事/**召唤脚本**）+ 专属掉落表；省略 = 无 Boss 玩法（全部敌人按普通敌人战斗，零降级路径） |
 | `achievements` | **否** | achievements.schema.json | 成就表（#9）：条件（阈值型/布尔型/反向阈值）+ 奖励（gold/daoYun/items）+ 隐藏；判定只读引擎统计 snapshot；省略 = 无成就玩法（壳不渲染成就页签） |
@@ -229,7 +229,7 @@ schema 无 rank 字段）；validate 语义关卡保证 `mult` 随序单调不�
 | `basicName` | string（1~18 字，#027 按 CJK 密度假设放宽） | 无佩戴武器时的兵刃展示名（weaponName 槽兜底值） |
 | `reject` | 动作协议键 → 理由 code → 文案模板 | 展示文案映射。动作键域 schema 钉死：activity:start / bag:sell / shop:buy / combat:start / consumable:eat / dungeon:enter（#7）/ gear:equip / gear:sell / gear:smelt / gear:reforge（#14）/ gear:lock / gear:unlock / gear:sell-all / gear:smelt-all（#37）/ rebirth:perform / talent:buy（#6）/ `'*'`（跨动作兜底，bad-payload 等通用文案）；理由 code 键域开放 |
 | `reject` 槽位 | `{level}` `{activity}` `{item}` `{owned}` `{cost}` `{gold}` `{daoYun}` `{need}` `{xp}` | 由引擎按协议语境填入； combat:start 的 `{level}` = `enemy.level − 门控偏移`（偏移量只在引擎判定处单一来源，文案侧零副本——N1 文案侧裁决）；rebirth:perform 的 no-progress 带 `{need}/{xp}`、rebirth-locked 与 talent:buy 的 no-daoyun 带 `{daoYun}`/`{cost}`；dungeon:enter 的 locked 带 `{daoYun}`、no-key 带 `{item}`（#7） |
-| `shell`（#26） | ShellTexts 结构化节 | **壳层全部题材文案**（ADR-017 裁决 9：壳零题材字符串）：brand（sigil/name/locale/bootError）、topbar、tabs、stats.labels、units、icons、common、events（45 键 + #62 起 4 键 = 49；#34 起 side 节随侧栏退役、floatSum/expGain 新增，且零消费旧行键 lootGear/victoryLog/achievementLog/eatBuffToast/equipWearToast/expCombat 一并裁掉——旧包带上述任一键会因 additionalProperties:false 被拦，属预期；#37 起 sellAllLog/smeltAllLog/batchLockedSkip 新增；#62 起 lootAnnounce/lootShowcaseCraft/victorySeized/gameReset 新增）、pages（skills/craft/combat/dungeon/bag/shop/rebirth/talents/achievements/journal/settings，#9 起九页、#33 起十页、#62 起十一页含 settings；#38 起 skills.chipLocked 随锁定斗法 chip 退役一并裁掉——旧包带此键会因 additionalProperties:false 被拦，属预期；#62 起新键清单见上 texts.shell 节）、footer。schema required + additionalProperties:false 全程钉死 |
+| `shell`（#26） | ShellTexts 结构化节 | **壳层全部题材文案**（ADR-017 裁决 9：壳零题材字符串）：brand（sigil/name/locale/bootError）、topbar、tabs、stats.labels、units、icons、common、events（45 键 + #62 起 4 键 = 49；#34 起 side 节随侧栏退役、floatSum/expGain 新增，且零消费旧行键 lootGear/victoryLog/achievementLog/eatBuffToast/equipWearToast/expCombat 一并裁掉——旧包带上述任一键会因 additionalProperties:false 被拦，属预期；#37 起 sellAllLog/smeltAllLog/batchLockedSkip 新增；#62 起 lootAnnounce/lootShowcaseCraft/victorySeized/gameReset 新增）、pages（skills/craft/combat/dungeon/bag/shop/rebirth/talents/achievements/journal/settings，#9 起九页、#33 起十页、#62 起十一页含 settings；#38 起 skills.chipLocked 随锁定斗法 chip 退役一并裁掉——旧包带此键会因 additionalProperties:false 被拦，属预期；#62 起新键清单见上 texts.shell 节；#61 起 pages.talents 增 stackRow/maxed 两必填键——旧包带缺会因 required 被拦，属预期）、footer。schema required + additionalProperties:false 全程钉死 |
 
 - 命中序：精确动作 → `'*'` → **键名回显**（`{action}/{reason}`，防御可见）。
 - 协议 code 本体归引擎，本节只承载展示文案；code 未命中/缺节绝不崩，toast
@@ -452,7 +452,9 @@ schema 无 rank 字段）；validate 语义关卡保证 `mult` 随序单调不�
 - **未登记的资产键 default-keep**（兵解不吞资产，未来新键安全）；
 - 瞬态（活动/战斗/气血）由引擎一律清空回满，不进清单；
 - 道韵入账：`state.daoYun`（余额，天赋购买消耗）+ `state.daoYunEarned`
-  （累计，只增不减）+ `state.rebirths`（次数）+ `state.talents`（节点 id 稳定引用，ADR-015）。
+  （累计，只增不减）+ `state.rebirths`（次数）+ `state.talents`
+  （节点 id → 层数，#61 起 `Record<string, number>` 形态，ADR-015 稳定引用；
+  存档版本 v2 = 此形状变更，壳层 SAVE_KEY 同步 v3→v4 键名 bump，旧档不迁移）。
 
 ### 道韵公式（形状归引擎机制，系数归 content）
 
@@ -464,10 +466,18 @@ schema 无 rank 字段）；validate 语义关卡保证 `mult` 随序单调不�
 ### 天赋树（数据 100% 来自 content）
 
 - 节点：`id`（存档键，发布后不可变）/ `name` / `icon?` / `description?` /
-  `cost`（道韵余额，≥1）/ `requires?`（前置节点 id，语义校验 xref + DFS 查环，
+  `cost`（首层道韵价，≥1）/ `requires?`（前置节点 id，语义校验 xref + DFS 查环，
   菱形依赖合法）/ `effects?`（Modifier[]，点亮后常驻）；
+- **repeatable 叠层（#61）**：`repeatable: { maxStacks: ≥1, costs? }` 声明后节点
+  可逐层重复购买，层数域 1..maxStacks（含首层）；`costs` = 第 2..maxStacks 层
+  价梯（长度须 = maxStacks − 1，语义校验 shape 把关），缺省 = 恒价（每层同
+  `cost`）。价梯数值纯内容数据，引擎零公式（`talentStackCostOf` 只做查表）；
+  **兵解清层**：可重复节点层数回落 1（引擎机制，首层随 default-keep 保留，
+  content 无权声明）；存档恢复时已注册节点计数按内容域钳制（非可重复强制 1 /
+  可重复回落 maxStacks 天花板——内容调窄旧档兼容，孤儿 id 计数原样保留）；
 - 效果走 ADR-011 聚合管线（来源 `kind: 'talent'`），**生效须引擎消费点**
-  （上方 stat 消费点注册表；无消费点的效果是死数据）；
+  （上方 stat 消费点注册表；无消费点的效果是死数据）；每层各产出一份
+  （flat 区线性叠加、mult 区逐层连乘——选区语义由内容自担）；
 - 换包可换整棵树：树形状/名称/消耗/效果全部随包（修仙包与魔幻包两棵树互异为样张）。
 
 ### 解锁表（道韵门槛 → 新内容）
@@ -486,9 +496,10 @@ schema 无 rank 字段）；validate 语义关卡保证 `mult` 随序单调不�
 ### 引擎事件与协议
 
 - 事件：`rebirth`（`{daoYun, totalXp, rebirths}`）、`talent:buy`
-  （`{nodeId, name, cost, daoYun}`）；
+  （`{nodeId, name, cost, daoYun, stacks, maxStacks?}`，#61 起带层数读数）；
 - 动作：`rebirth:perform`（reject：not-available / in-combat / no-progress）、
-  `talent:buy`（reject：not-available / not-found / prereq / no-daoyun，已点亮幂等）；
+  `talent:buy`（reject：not-available / not-found / prereq / no-daoyun / maxed，
+  一次性已点亮幂等、可重复满层 maxed 拒绝）；
 - snapshot 展示投影（#40，字段恒在、恢复侧忽略）：`stats`（含天赋贡献）+
   `enemy`/`minions`（战斗生效视图单点组合，无战斗 = null）+
   `activityIntervals`（全活动有效轮间隔映射 `skillId:index` → 毫秒，
