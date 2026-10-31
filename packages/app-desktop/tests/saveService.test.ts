@@ -11,6 +11,7 @@ import {
   attachAutoSave,
   createGame,
   localStorageSaveAdapter,
+  ManualClock,
   type SaveAdapter,
   type SaveData,
 } from '@wendao/engine';
@@ -102,7 +103,10 @@ describe('#62 审计修复 · 存档管理服务', () => {
   });
 
   it('exportText/saveNow 走快照与同步通道；密文编解码 roundtrip（中文含）', () => {
-    const game = createGame({ content: {}, seed: 7 });
+    // 钳钟（审计 F5）：snapshot.savedAt=clock.now()，两次取快照跨毫秒边界会
+    // 使全串 toBe 偶红——ManualClock 定针后 roundtrip 比对确定。
+    const clock = new ManualClock();
+    const game = createGame({ content: {}, seed: 7, clock });
     const saved: SaveData[] = [];
     const service = createSaveService({
       snapshot: () => game.snapshot(),
