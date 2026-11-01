@@ -28,7 +28,7 @@ npm run check      # 全仓类型检查（含各包 tests/）
 ## 打包桌面版
 
 ```bash
-npm run dist       # 全仓 build + electron-builder 出包（release/ 下）
+npm run dist       # 全仓 build + electron-builder 出包（packages/app-desktop/release/ 下）
 ```
 
 ## 验收红线
