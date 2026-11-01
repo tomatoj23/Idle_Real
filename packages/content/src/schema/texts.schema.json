@@ -582,7 +582,7 @@
               "type": "object",
               "title": "设置页文案",
               "description": "存档管理页（#62 P1-1 旧版保真回迁）：手动保存/携档云游/散功重修两段式确认/承诺文案/玩法说明；密文编解码与槽位写入归壳层服务",
-              "required": ["title", "subtitle", "saveTitle", "saveHint", "saveNowBtn", "savedToast", "resetBtn", "resetConfirmTip", "resetConfirmBtn", "resetCancelBtn", "transferTitle", "transferHint", "exportLabel", "copyBtn", "copiedToast", "importLabel", "importBtn", "importBad", "guideTitle", "guide"],
+              "required": ["title", "subtitle", "saveTitle", "saveHint", "saveNowBtn", "savedToast", "resetBtn", "resetConfirmTip", "resetConfirmBtn", "resetCancelBtn", "transferTitle", "transferHint", "exportLabel", "copyBtn", "copiedToast", "importLabel", "importBtn", "importBad", "importHeld", "guideTitle", "guide"],
               "additionalProperties": false,
               "properties": {
                 "title": { "$ref": "#/definitions/line" },
@@ -603,6 +603,7 @@
                 "importLabel": { "$ref": "#/definitions/line", "description": "导入密文输入框标签" },
                 "importBtn": { "$ref": "#/definitions/template", "description": "导入读档按钮（无槽位）" },
                 "importBad": { "$ref": "#/definitions/para", "description": "导入密文无效提示（形状/版本门禁拒绝；静态长段落无槽位）" },
+                "importHeld": { "$ref": "#/definitions/para", "description": "导入未能落盘提示（#93：密文合法但写后回读未验真——槽位被 #69 保槽闩占守（内躺异版本档）或读通道异常，保守同报；含处理指引；静态长段落无槽位）" },
                 "guideTitle": { "$ref": "#/definitions/line", "description": "玩法说明区标题" },
                 "guide": { "$ref": "#/definitions/para", "description": "玩法说明正文（静态长段落，无槽位；段内换行以字面 \n 表达、壳按行拆分渲染）" }
               }

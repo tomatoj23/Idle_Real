@@ -8,15 +8,19 @@
  * 服务未装配（测试/轻量装配面）= 只渲染玩法说明。
  */
 import { esc } from '../pageFrame';
-import type { PageCtx, PageEnv, PageView } from './types';
+import type { ImportResult, PageCtx, PageEnv, PageView } from './types';
 
 export function createSettingsPage(env: PageEnv): PageView {
   /** 散功重修两段式确认（#6 rebirth 同款 arm 形）。 */
   let resetArmed = false;
   /** 导入密文草稿（跨重绘保留：render 先回读现存 textarea，防活动心跳换血吞字）。 */
   let importDraft = '';
-  /** 导入失败内联报错（toast 面留给要紧事，格式错就在框边说清）。 */
-  let importBad = false;
+  /**
+   * 导入失败内联报错（toast 面留给要紧事，失败就在框边说清）。
+   * #93 存失败判别值分文案：'bad-cipher'=密文门禁拒（importBad 原文案），
+   * 'held'=槽被闩/落盘未验真（importHeld 占用指引文案）；null=无错。
+   */
+  let importFail: Exclude<ImportResult, 'ok'> | null = null;
 
   const render = (ctx: PageCtx): string => {
     const { T } = ctx;
@@ -59,7 +63,13 @@ export function createSettingsPage(env: PageEnv): PageView {
                  </div>
                  <p class="settings-label">${esc(T('pages.settings.importLabel'))}</p>
                  <textarea id="imp-box" rows="3">${esc(importDraft)}</textarea>
-                 ${importBad ? `<p class="act-lockmsg">${esc(T('pages.settings.importBad'))}</p>` : ''}
+                 ${
+                   importFail === null
+                     ? ''
+                     : `<p class="act-lockmsg">${esc(
+                         T(importFail === 'held' ? 'pages.settings.importHeld' : 'pages.settings.importBad'),
+                       )}</p>`
+                 }
                  <div class="card-actions">
                    <button class="btn" data-act="import-save">${esc(T('pages.settings.importBtn'))}</button>
                  </div>
@@ -78,7 +88,7 @@ export function createSettingsPage(env: PageEnv): PageView {
     render,
     deactivate() {
       resetArmed = false;
-      importBad = false;
+      importFail = null;
     },
     handleAction(action, target) {
       switch (action) {
@@ -111,7 +121,8 @@ export function createSettingsPage(env: PageEnv): PageView {
         case 'import-save': {
           const box = env.pageEl.querySelector<HTMLTextAreaElement>('#imp-box');
           importDraft = box?.value ?? importDraft;
-          importBad = !(env.saveService?.importText(importDraft) ?? false);
+          const result = env.saveService?.importText(importDraft) ?? 'bad-cipher';
+          importFail = result === 'ok' ? null : result;
           env.render();
           return;
         }

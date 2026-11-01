@@ -1,16 +1,17 @@
 // @vitest-environment happy-dom
 /**
- * 设置页（#62 P1-1 存档管理页回迁）：卡片渲染/手动保存/散功重修两段式/
- * 携档云游（导出密文/导入门禁/内联报错）/服务缺省降级。
+ * 设置页（#62 P1-1 存档管理页回迁；#93 导入失败分文案）：卡片渲染/手动保存/
+ * 散功重修两段式/携档云游（导出密文/导入门禁/bad-cipher 与 held 分文案内联报错）/
+ * 服务缺省降级。
  * 存档字节面全在注入的 ShellSaveService 夹具——本套件钉页面行为与转发面，
  * 编解码与受控重载的装配语义归 main 装配侧（main-entry）。
  */
 import { describe, expect, it } from 'vitest';
 import { mountGame } from './helpers/mount';
-import type { ShellSaveService } from '../src/pages/types';
+import type { ImportResult, ShellSaveService } from '../src/pages/types';
 
-/** 服务夹具：可观察调用 + 可脚本化的导入判定。 */
-function makeService(importOk = true): ShellSaveService & {
+/** 服务夹具：可观察调用 + 可脚本化的导入判别（#93 判别值直配）。 */
+function makeService(importResult: ImportResult = 'ok'): ShellSaveService & {
   saved: number;
   imported: string[];
   exported: number;
@@ -28,7 +29,7 @@ function makeService(importOk = true): ShellSaveService & {
     },
     importText(raw: string) {
       this.imported.push(raw);
-      return importOk;
+      return importResult;
     },
   };
 }
@@ -88,8 +89,8 @@ describe('#62 · 设置页', () => {
     expect(root.querySelector('[data-act="reset-confirm"]')).toBeNull();
   });
 
-  it('导入：门禁拒绝 → 内联报错且草稿保留；通过 → 转发服务（随后受控重载）', () => {
-    const bad = makeService(false);
+  it('导入：bad-cipher → 内联报 importBad（非占用文案）且草稿保留；ok → 转发服务（随后受控重载）', () => {
+    const bad = makeService('bad-cipher');
     const { root } = mountGame({ saveService: bad });
     goSettings(root);
     const box = root.querySelector<HTMLTextAreaElement>('#imp-box')!;
@@ -97,14 +98,27 @@ describe('#62 · 设置页', () => {
     root.querySelector<HTMLButtonElement>('[data-act="import-save"]')!.click();
     expect(bad.imported).toEqual(['S0VZ']);
     expect(root.querySelector('#page-root')?.textContent).toContain('密文无效');
+    expect(root.querySelector('#page-root')?.textContent).not.toContain('其他版本的存档占用');
     // 重绘后草稿不丢（textarea 回填）
     expect(root.querySelector<HTMLTextAreaElement>('#imp-box')!.value).toBe('S0VZ');
 
-    const good = makeService(true);
+    const good = makeService('ok');
     const second = mountGame({ saveService: good });
     goSettings(second.root);
     second.root.querySelector<HTMLButtonElement>('[data-act="import-save"]')!.click();
     expect(good.imported).toHaveLength(1);
+  });
+
+  it('#93：held 判别 → 内联报 importHeld 占用指引，不渲染「密文无效」，草稿保留', () => {
+    const held = makeService('held');
+    const { root } = mountGame({ saveService: held });
+    goSettings(root);
+    const box = root.querySelector<HTMLTextAreaElement>('#imp-box')!;
+    box.value = 'S0VZ';
+    root.querySelector<HTMLButtonElement>('[data-act="import-save"]')!.click();
+    expect(root.querySelector('#page-root')?.textContent).toContain('其他版本的存档占用');
+    expect(root.querySelector('#page-root')?.textContent).not.toContain('密文无效');
+    expect(root.querySelector<HTMLTextAreaElement>('#imp-box')!.value).toBe('S0VZ');
   });
 
   it('导入草稿跨整页重绘保留（活动心跳换血不吞打字中的密文）', () => {

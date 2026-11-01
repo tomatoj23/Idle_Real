@@ -1005,6 +1005,8 @@ export interface ShellPageSettings {
   readonly importBtn: string;
   /** 导入密文无效提示（形状/版本门禁拒绝）。 */
   readonly importBad: string;
+  /** 导入未能落盘提示（#93：密文合法但槽位被异版本档占守/回读未验真，含处理指引）。 */
+  readonly importHeld: string;
   /** 玩法说明区标题。 */
   readonly guideTitle: string;
   /** 玩法说明正文（段内换行由壳按行拆分渲染）。 */

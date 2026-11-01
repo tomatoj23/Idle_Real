@@ -873,6 +873,7 @@
           "importLabel": "Save cipher",
           "importBtn": "Load",
           "importBad": "That cipher is not valid — make sure you copied a complete save cipher exported by this game.",
+          "importHeld": "The save could not be written — the target slot may hold a save from another version, which this version will not overwrite. Open it with the matching version, or back it up and remove it first, then retry.",
           "guideTitle": "Field guide",
           "guide": "Gather herbs and ore: pick a discipline and the work loops on its own, even while away;\nCrafting: brew potions and forge gear at the workbench (finer smiths, finer blades);\nCombat: challenge foes — auto-fight, auto-potion, auto-rematch; the fallen drop reagents and relics;\nDelves: floor upon floor, danger and reward in kind;\nRebirth: dissolve this life — attunement and gear endure, talents grow forever.\nWalk well."
         }

@@ -1,9 +1,12 @@
 // @vitest-environment happy-dom
 /**
- * 存档管理服务（#62 P1-1；审计 20261031-191624 F2/F4/N1 修复面）：
- * - 门禁前置：坏密文 → false，不写不重载；
- * - F2：保槽闩静默拒写 → 写后回读拦截，报失败不重载（假成功清零）；
+ * 存档管理服务（#62 P1-1；审计 20261031-191624 F2/F4/N1 修复面；#93 判别值）：
+ * - 门禁前置：坏密文 → 'bad-cipher'，不写不重载；
+ * - F2：保槽闩静默拒写 → 写后回读拦截，报 'held' 不重载（假成功清零；
+ *   #93 起与 decode 拒分判别——密文合法被闩拒时不得误报「密文无效」）；
  * - F4：成功路径先 autoSave.stop 摘 pagehide flush 再重载（导入档不被当前局覆掉）；
+ * - 判别面（#93）：同一合法密文，槽被闩返 'held'、槽空返 'ok'——判别来自槽态
+ *   而非密文本身；坏密文无论槽态恒 'bad-cipher'；
  * - 机制回归钉：闩拒写语义与 pagehide 覆写语义（引擎 save.ts 侧，服务修复的存在依据）。
  */
 import { describe, expect, it } from 'vitest';
@@ -57,28 +60,44 @@ function memoryAdapter(): SaveAdapter {
 }
 
 describe('#62 审计修复 · 存档管理服务', () => {
-  it('坏密文 → false：不写槽、不 stop、不重载（门禁前置）', () => {
+  it('坏密文 → bad-cipher：不写槽、不 stop、不重载（门禁前置）', () => {
     const { service, calls } = makeHarness(memoryAdapter());
-    expect(service.importText('not-base64!!!')).toBe(false);
+    expect(service.importText('not-base64!!!')).toBe('bad-cipher');
     expect(calls).toEqual([]);
   });
 
-  it('F2：保槽闩静默拒写 → 回读拦截，false + 不重载 + 异版本字节原样', () => {
+  it('F2：保槽闩静默拒写 → 回读拦截，held + 不重载 + 异版本字节原样', () => {
     localStorage.setItem(SAVE_KEY, FOREIGN_SAVE);
     const adapter = localStorageSaveAdapter(SAVE_KEY);
     expect(adapter.load()).toBeNull(); // 闩上
     const { service, calls } = makeHarness(adapter);
-    expect(service.importText(encodeSaveText(VALID_SAVE))).toBe(false);
+    expect(service.importText(encodeSaveText(VALID_SAVE))).toBe('held');
     expect(calls).toEqual(['write']); // 写了但被闩拒——回读拦截
     expect(calls).not.toContain('reload');
     expect(localStorage.getItem(SAVE_KEY)).toBe(FOREIGN_SAVE); // 异版本字节未被覆
+  });
+
+  it('#93 判别面：同一合法密文，槽被闩返 held、槽空返 ok；坏密文无论槽态恒 bad-cipher', () => {
+    const cipher = encodeSaveText(VALID_SAVE);
+    localStorage.setItem(SAVE_KEY, FOREIGN_SAVE);
+    const heldAdapter = localStorageSaveAdapter(SAVE_KEY);
+    heldAdapter.load(); // 闩上
+    const held = makeHarness(heldAdapter);
+    expect(held.service.importText(cipher)).toBe('held');
+    // 坏密文不触碰槽位与闩：同一被闩的服务上，判别仍是 bad-cipher 而非 held。
+    expect(held.service.importText('garbage!!!')).toBe('bad-cipher');
+    expect(held.calls).toEqual(['write']); // 仅闩拒那一次落盘尝试
+    localStorage.removeItem(SAVE_KEY);
+    const free = makeHarness(localStorageSaveAdapter(SAVE_KEY));
+    expect(free.service.importText(cipher)).toBe('ok');
+    expect(free.calls).toEqual(['write', 'stop', 'reload']);
   });
 
   it('成功路径：写入=回读一致 → 先 stop 后 reload（F4 序），槽=导入档', () => {
     localStorage.removeItem(SAVE_KEY);
     const adapter = localStorageSaveAdapter(SAVE_KEY);
     const { service, calls } = makeHarness(adapter);
-    expect(service.importText(encodeSaveText(VALID_SAVE))).toBe(true);
+    expect(service.importText(encodeSaveText(VALID_SAVE))).toBe('ok');
     expect(calls).toEqual(['write', 'stop', 'reload']);
     expect(adapter.load()?.state).toEqual({ gold: 777 });
   });

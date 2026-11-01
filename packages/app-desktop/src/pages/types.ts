@@ -34,9 +34,19 @@ export type TabId =
 export type ShellText = (key: string, vars?: Readonly<Record<string, string | number>>) => string;
 
 /**
+ * 导入结果判别值（#93）：服务层只返判别不返文案（ADR-016 玩家可见串归 content），
+ * 设置页按判别选 texts 键渲染。
+ * - 'ok'：写入并回读验真，受控重载已触发；
+ * - 'bad-cipher'：粘贴密文未过 decodeSave 形状/版本门禁（真·密文无效）；
+ * - 'held'：写入未验真——槽位被 #69 保槽闩占守（内躺异版本档，写被静默拒）
+ *   或读通道异常回读为 null，两成因保守同报（文案含指引，见 texts settings.importHeld）。
+ */
+export type ImportResult = 'ok' | 'bad-cipher' | 'held';
+
+/**
  * 存档管理服务（#62 P1-1）：设置页的保存/导出/导入三个壳层能力。
  * main.ts 持有 adapter/autoSave/受控重载旗标——引擎零平台依赖，槽位字节
- * 只有壳看得见。importText 返回 false = 形状/版本门禁拒绝（页内联报错）。
+ * 只有壳看得见。importText 返判别值（#93）：bad-cipher/held 由页分文案内联报错。
  */
 export interface ShellSaveService {
   /** 立即保存一次（等价自动保存 flush）。 */
@@ -44,7 +54,7 @@ export interface ShellSaveService {
   /** 当前存档的导出密文（base64）。 */
   exportText(): string;
   /** 校验并写入导入密文；成功后受控重载（返回前不落当前局）。 */
-  importText(raw: string): boolean;
+  importText(raw: string): ImportResult;
 }
 
 /** 渲染上下文（D2）：每次渲染现建，页面不自持快照（st 为只读快照面，#50）。 */
