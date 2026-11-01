@@ -18,12 +18,12 @@
 
 ```bash
 npm install        # 安装依赖；prepare 脚本自动配置 git 钩子（core.hooksPath .githooks）
-npm run dev        # 启动桌面游戏（渲染端 dev server）
+npm run dev        # 渲染端 vite dev server（不启动 Electron；整壳跑法见 packages/app-desktop 的 dev:electron）
 npm run test       # 全仓测试（vitest）
 npm run check      # 全仓类型检查（含各包 tests/）
 ```
 
-**换克隆 / 钩子失效时**：`npm install` 会自动重配钩子；也可手动 `npm run setup`（等价于 `git config core.hooksPath .githooks`）。钩子没配上，push 门禁（policy 断言 + check + test）就不会跑。
+**换克隆 / 钩子失效时**：`npm install` 会自动重配钩子；也可手动 `npm run setup`（等价于 `git config core.hooksPath .githooks`）。钩子没配上，push 门禁（policy 断言 + 守卫金丝雀 + check + test）就不会跑。
 
 ## 打包桌面版
 
@@ -33,7 +33,7 @@ npm run dist       # 全仓 build + electron-builder 出包（packages/app-deskt
 
 ## 验收红线
 
-**CI 与钩子全绿 ≠ 验收通过。** `npm run test` 跑在 happy-dom 上，不校验真实浏览器行为（先例：原生方法未 bind 宿主，测试全绿但真机抛 Illegal invocation）。凡动引擎运行时、渲染或壳层，合并前必须在真实浏览器 / Electron 真机首跑冒烟。
+**CI 与钩子全绿 ≠ 验收通过。** `npm run test` 跑在 node / happy-dom 环境上（engine/content=node，editor/app-desktop=happy-dom），不校验真实浏览器行为（先例：原生方法未 bind 宿主，测试全绿但真机抛 Illegal invocation）。凡动引擎运行时、渲染、壳层或**打包器链（vite/electron-builder）**，合并前必须在真实浏览器 / Electron 真机首跑冒烟。
 
 ## 其它常用入口
 
