@@ -125,3 +125,33 @@ describe('#62 · 存档自愈与散功重修', () => {
     expect(after).toEqual(base);
   });
 });
+
+/* ---------- #92 散功重修清透传区 ---------- */
+
+describe('#92 · 散功重修清透传区（整态承诺覆盖未知键桶）', () => {
+  it('透传键随 game:reset 清空：reset 前在档、reset 后落盘载荷无该键', () => {
+    const save = { version: 2 as const, time: 100, state: { gold: 42, futureFlag: { a: 1 } } };
+    const game = createGame({ content: minimalContent, save, clock: new ManualClock() });
+
+    // reset 前透传键在档（#69 非 reset 路径的 round-trip 语义不破）。
+    expect((game.snapshot().state as unknown as Record<string, unknown>).futureFlag).toEqual({ a: 1 });
+
+    game.dispatch({ type: 'game:reset' });
+
+    // reset 后快照面（= 壳层落盘载荷的形状）无该键。
+    expect(
+      Object.keys(game.snapshot().state as unknown as Record<string, unknown>),
+    ).not.toContain('futureFlag');
+
+    // 终点语义而非暂藏：拿 reset 后的载荷再走一次 load→save 往返也不复活。
+    const payload = game.snapshot();
+    const again = restoreState(
+      minimalContent,
+      { version: 2, time: payload.time, state: payload.state as unknown as Record<string, unknown> },
+      7,
+    );
+    expect((again as unknown as Record<string, unknown>).futureFlag).toBeUndefined();
+  });
+  // 已知键不受 clearOpenArea 误伤无需另测：Object.assign(initialState) 结构性回填
+  // 全部字段表键，#62 的「整态对拍」测试即覆盖。
+});

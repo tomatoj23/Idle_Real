@@ -1084,3 +1084,16 @@ export function cloneState(state: GameState): GameState {
   }
   return out as unknown as GameState;
 }
+
+/**
+ * 清空顶层透传区（#92）：删除活态上所有非字段表自有键——透传键的整态终点。
+ * 专供散功重修（game:reset）：透传语义是「原样活到下一次落盘」，reset 后的
+ * 那次落盘即透传键终点，与整态重置承诺一致；非 reset 路径不调它，#69 的
+ * round-trip 透传裁决不动。Object.assign 只覆盖字段表键，透传桶须显式删。
+ */
+export function clearOpenArea(state: GameState): void {
+  const rec = state as unknown as Record<string, unknown>;
+  for (const key of Object.keys(rec)) {
+    if (!RESERVED_KEYS.has(key)) delete rec[key];
+  }
+}

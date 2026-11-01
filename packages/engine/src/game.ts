@@ -55,6 +55,7 @@ import {
   type GearInstance,
 } from './gear.js';
 import {
+  clearOpenArea,
   clearRebirthTransient,
   cloneState,
   initialState,
@@ -2373,6 +2374,9 @@ export function createGame(options: CreateGameOptions): Game {
           // 与秘境最深记录一并清空，游戏内时间归零。RNG 流延续当前位置（状态
           // 载体换新，流不断——确定性纪律只要求可复现，不要求重开换流）。
           const prevRebirths = state.rebirths;
+          // 透传区一并清（#92，审计 F3 裁决=清空）：「前尘尽散」覆盖未知键桶——
+          // Object.assign 只覆盖字段表键，restoreState 收编的透传键会借道存活。
+          clearOpenArea(state);
           Object.assign(state, initialState(content, state.rngSeed, contributions));
           time = 0;
           events.emit({ type: 'game-reset', time, data: { rebirths: prevRebirths } });
