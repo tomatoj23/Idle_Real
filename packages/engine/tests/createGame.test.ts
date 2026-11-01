@@ -129,12 +129,14 @@ describe('#62 · 存档自愈与散功重修', () => {
 /* ---------- #92 散功重修清透传区 ---------- */
 
 describe('#92 · 散功重修清透传区（整态承诺覆盖未知键桶）', () => {
-  it('透传键随 game:reset 清空：reset 前在档、reset 后落盘载荷无该键', () => {
+  it('透传键随 game:reset 清空：reset 前在档、reset 后落盘载荷无该键；保留键 rngSeed 不被过删', () => {
     const save = { version: 2 as const, time: 100, state: { gold: 42, futureFlag: { a: 1 } } };
-    const game = createGame({ content: minimalContent, save, clock: new ManualClock() });
+    const game = createGame({ content: minimalContent, save, clock: new ManualClock(), seed: 12345 });
 
     // reset 前透传键在档（#69 非 reset 路径的 round-trip 语义不破）。
     expect((game.snapshot().state as unknown as Record<string, unknown>).futureFlag).toEqual({ a: 1 });
+    const seedBefore = game.snapshot().state.rngSeed;
+    expect(seedBefore).toBe(12345); // 档缺 rngSeed → 回退注入种子（非 0，过删判别才有效）
 
     game.dispatch({ type: 'game:reset' });
 
@@ -142,6 +144,10 @@ describe('#92 · 散功重修清透传区（整态承诺覆盖未知键桶）', 
     expect(
       Object.keys(game.snapshot().state as unknown as Record<string, unknown>),
     ).not.toContain('futureFlag');
+    // 清桶不得过删保留键：rngSeed 在清桶**之后**被 initialState 读取喂种（game.ts reset 段），
+    // 过删会使 RNG 流归 0 重开——违反「RNG 流延续当前位置」承诺；#62 整态对拍剔 rngSeed 看不见，
+    // 故此处单独钉住（2026-11-01 审计 N2）。其余字段表键由 Object.assign(initialState) 回填缺省，过删不可观测。
+    expect(game.snapshot().state.rngSeed).toBe(seedBefore);
 
     // 终点语义而非暂藏：拿 reset 后的载荷再走一次 load→save 往返也不复活。
     const payload = game.snapshot();
@@ -152,6 +158,4 @@ describe('#92 · 散功重修清透传区（整态承诺覆盖未知键桶）', 
     );
     expect((again as unknown as Record<string, unknown>).futureFlag).toBeUndefined();
   });
-  // 已知键不受 clearOpenArea 误伤无需另测：Object.assign(initialState) 结构性回填
-  // 全部字段表键，#62 的「整态对拍」测试即覆盖。
 });
