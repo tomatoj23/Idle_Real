@@ -80,13 +80,17 @@ describe('#62 · 设置页', () => {
     expect(actions).toEqual(['game-reset']);
   });
 
-  it('换页即撤防：arm 后切走再切回，确认态不复存', () => {
-    const { root } = mountGame({ saveService: makeService() });
+  it('换页即撤防：arm 后切走再切回，确认态不复存；导入报错同撤（#93 审计补钉）', () => {
+    const { root } = mountGame({ saveService: makeService('bad-cipher') });
     goSettings(root);
     root.querySelector<HTMLButtonElement>('[data-act="reset-go"]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-act="import-save"]')!.click();
+    expect(root.querySelector('.act-lockmsg')).not.toBeNull(); // 导入报错已内联
     root.querySelector<HTMLButtonElement>('.tab[data-tab="bag"]')!.click();
     goSettings(root);
     expect(root.querySelector('[data-act="reset-confirm"]')).toBeNull();
+    // 上次导入错误不带到下次进页（变异对照：deactivate 删去 importFail=null 必须红）
+    expect(root.querySelector('.act-lockmsg')).toBeNull();
   });
 
   it('导入：bad-cipher → 内联报 importBad（非占用文案）且草稿保留；ok → 转发服务（随后受控重载）', () => {
