@@ -38,6 +38,7 @@ export {
   REBIRTH_RESET_KEYS,
   STAT_KEYS,
   validateContentPack,
+  validatePackSemantics,
   formatContentErrors,
   sectionSchemas,
 } from './pack.js';

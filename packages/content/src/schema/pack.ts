@@ -54,6 +54,15 @@
  *      对照引擎统计注册表闭集镜像（死条件加载期拒绝）；布尔型条件带 op 拒绝
  *      （语义缝隙）；奖励物品 xref items 且只收 mat/consumable（equip 整袋
  *      发放成不可见死物）。
+ *
+ * #94 起语义检查有第二个入口 validatePackSemantics（语义独立执行）：跳过
+ * schema 面只跑语义，供带 schema 错编辑期使用（validateContentPack 在
+ * schema 错误存在时提前返回、语义面缺席——editor 事务门禁 #56 的差集
+ * 回滚在该状态拦不住悬空 drops 等跨引用新增）。独立入口以「节形态守卫 +
+ * 条目参与守卫」对 schema 已破的包安全执行：畸形节跳过自身语义（读它的
+ * 跨引用检查一并跳过——索引源失真会把好引用误报成悬空，这正是噪音级联
+ * 的根因）、畸形条目跳过语义留给 schema 面，全部守卫在 schema 干净包上
+ * 恒为 no-op（两入口共享同一套 semanticChecks，零第二实现漂移）。
  */
 
 import affixPoolSchemaJson from './affix-pool.schema.json';
@@ -80,7 +89,6 @@ import type {
   AchievementDef,
   Item,
   Modifier,
-  ModifierCondition,
   Range,
   RebirthSection,
   Skill,
@@ -240,96 +248,268 @@ export function formatContentErrors(errors: readonly ContentError[]): string {
     .join('\n');
 }
 
+/* ==================== 语义独立入口（#94） ==================== */
+
+/** 运行时形态守卫（#94）：record 判定（数组不算——数组节另有 Array.isArray 守卫）。 */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * 语义检查信任面（#94）：各节是否「结构完好」——可安全读作数组/对象、
+ * 可作跨引用索引源。validateContentPack 路径 schema 已过，恒全可信
+ * （SEMANTIC_ALL_TRUSTED 缺省）；语义独立入口按节形态现算。
+ */
+interface SemanticScope {
+  readonly skills: boolean;
+  readonly items: boolean;
+  readonly recipes: boolean;
+  readonly enemies: boolean;
+  readonly gearDrops: boolean;
+  readonly elements: boolean;
+  readonly rarities: boolean;
+  readonly shop: boolean;
+  /** combatText 可读：本体 + moves/verbs 为对象（elementFlavor 声明了才查形态）。 */
+  readonly combatText: boolean;
+  /** config 可读：本体为对象且 slots 为数组（缺省 = 旧包形态，可信）。 */
+  readonly config: boolean;
+  readonly rebirth: boolean;
+  readonly dungeons: boolean;
+  readonly bosses: boolean;
+  readonly achievements: boolean;
+}
+
+const SEMANTIC_ALL_TRUSTED: SemanticScope = {
+  skills: true,
+  items: true,
+  recipes: true,
+  enemies: true,
+  gearDrops: true,
+  elements: true,
+  rarities: true,
+  shop: true,
+  combatText: true,
+  config: true,
+  rebirth: true,
+  dungeons: true,
+  bosses: true,
+  achievements: true,
+};
+
+/** 可选数组字段守卫：缺省合法，存在须为数组。 */
+function optArray(value: unknown): boolean {
+  return value === undefined || Array.isArray(value);
+}
+
+/**
+ * 节形态守卫现算（#94）：只做结构级判定（数组/对象形态），不做字段级
+ * schema 校验——字段级破坏由条目参与守卫在检查内部防御。
+ */
+function semanticScopeOf(pack: Record<string, unknown>): SemanticScope {
+  const isArray = (key: string): boolean => Array.isArray(pack[key]);
+  const combatText = pack['combatText'];
+  const config = pack['config'];
+  const rebirth = pack['rebirth'];
+  const elementFlavor = isRecord(combatText) ? combatText['elementFlavor'] : undefined;
+  return {
+    skills: isArray('skills'),
+    items: isArray('items'),
+    recipes: isArray('recipes'),
+    enemies: isArray('enemies'),
+    gearDrops: isArray('gearDrops'),
+    elements: isArray('elements'),
+    rarities: isArray('rarities'),
+    shop: isArray('shop'),
+    combatText:
+      isRecord(combatText) &&
+      isRecord(combatText['moves']) &&
+      isRecord(combatText['verbs']) &&
+      optRecord(elementFlavor),
+    config: config === undefined || (isRecord(config) && Array.isArray(config['slots'])),
+    rebirth:
+      rebirth === undefined ||
+      (isRecord(rebirth) &&
+        Array.isArray(rebirth['reset']) &&
+        Array.isArray(rebirth['keep']) &&
+        Array.isArray(rebirth['talents']) &&
+        optArray(rebirth['unlocks']) &&
+        optArray(rebirth['realms'])),
+    dungeons: optArray(pack['dungeons']),
+    bosses: optArray(pack['bosses']),
+    achievements: optArray(pack['achievements']),
+  };
+}
+
+/** elementFlavor 专项：缺省合法，存在须为对象（池键遍历用 Object.keys）。 */
+function optRecord(value: unknown): boolean {
+  return value === undefined || isRecord(value);
+}
+
+/**
+ * 语义检查独立入口（#94）：跳过 schema 面、只跑跨引用与形态语义，返回
+ * 语义错误集（空集 = 语义面干净；包根非对象时无可语义对象，返回空集）。
+ *
+ * 与 validateContentPack 的分工：后者 schema 破即提前返回（防噪音级联的
+ * 既有裁决），带错编辑期语义面缺席；本入口以节形态守卫（畸形节跳过自身
+ * 语义，读它的跨引用检查一并跳过）+ 条目参与守卫（畸形条目留给 schema
+ * 面）对任意包安全执行——不崩溃、错误集可控。schema 干净包上两入口的
+ * 语义面同集（守卫恒 no-op）。
+ */
+export function validatePackSemantics(json: unknown): readonly ContentError[] {
+  if (!isRecord(json)) {
+    return [];
+  }
+  const errors: ContentError[] = [];
+  semanticChecks(json as unknown as ContentPack, errors, semanticScopeOf(json));
+  return errors;
+}
+
 /* ==================== 语义检查 ==================== */
 
-function semanticChecks(pack: ContentPack, errors: ContentError[]): void {
-  const itemIndex = indexIds(pack.items);
-  const skillIndex = indexIds(pack.skills);
-  const enemyIndex = indexIds(pack.enemies);
+/**
+ * 跨引用与形态语义检查（#94 起带信任面 scope）：scope 缺省 = 全可信
+ * （validateContentPack 路径，schema 已过、各节结构必然完好）；语义独立
+ * 入口（validatePackSemantics）传入按节形态现算的 scope——不可信的节
+ * 跳过自身语义检查，读它作索引源的跨引用检查一并跳过（索引源失真会把
+ * 好引用误报成悬空，即噪音级联的根因），只留 schema 面报告。
+ * 条目级破坏（节是数组但条目畸形）由各检查内部的条目参与守卫防御：
+ * 畸形条目跳过语义留给 schema 面，好条目照查——守卫在 schema 干净包上
+ * 恒为 no-op。
+ */
+function semanticChecks(
+  pack: ContentPack,
+  errors: ContentError[],
+  scope: SemanticScope = SEMANTIC_ALL_TRUSTED,
+): void {
+  const itemIndex = scope.items ? indexIds(pack.items) : new Map<string, number>();
+  const skillIndex = scope.skills ? indexIds(pack.skills) : new Map<string, number>();
+  const enemyIndex = scope.enemies ? indexIds(pack.enemies) : new Map<string, number>();
 
-  checkIds(pack.items, '/items', errors);
-  checkIds(pack.skills, '/skills', errors);
-  checkIds(pack.enemies, '/enemies', errors);
-  checkIds(pack.rarities, '/rarities', errors);
-  // rarities 数组序 = 档位序（低→高，#35 阈值比较严格按此序）：schema 无 rank
-  // 字段，数组序是内容包作者的排档约定——倍率（mult）须随序单调不减，防「高档
-  // 低倍」倒挂让阈值语义与直觉相悖（排档约定的语义守护，三处同步口径见文档）。
-  for (let i = 1; i < pack.rarities.length; i++) {
-    const prev = pack.rarities[i - 1]!;
-    const cur = pack.rarities[i]!;
-    if (cur.mult < prev.mult) {
-      errors.push({
-        path: `/rarities/${i}/mult`,
-        keyword: 'monotonic',
-        message: `稀有度倍率与数组序倒挂：${cur.id}（mult ${cur.mult}）排在 ${prev.id}（mult ${prev.mult}）之后——档位序 = 数组序（低→高），mult 须单调不减`,
-      });
+  if (scope.items) checkIds(pack.items, '/items', errors);
+  if (scope.skills) checkIds(pack.skills, '/skills', errors);
+  if (scope.enemies) checkIds(pack.enemies, '/enemies', errors);
+  if (scope.rarities) {
+    checkIds(pack.rarities, '/rarities', errors);
+    // rarities 数组序 = 档位序（低→高，#35 阈值比较严格按此序）：schema 无 rank
+    // 字段，数组序是内容包作者的排档约定——倍率（mult）须随序单调不减，防「高档
+    // 低倍」倒挂让阈值语义与直觉相悖（排档约定的语义守护，三处同步口径见文档）。
+    // 倍率类型坏（非数值）不比（字典序会误报倒挂），留给 schema 面（#94）。
+    for (let i = 1; i < pack.rarities.length; i++) {
+      const prev = pack.rarities[i - 1]!;
+      const cur = pack.rarities[i]!;
+      if (typeof prev.mult !== 'number' || typeof cur.mult !== 'number') continue;
+      if (cur.mult < prev.mult) {
+        errors.push({
+          path: `/rarities/${i}/mult`,
+          keyword: 'monotonic',
+          message: `稀有度倍率与数组序倒挂：${cur.id}（mult ${cur.mult}）排在 ${prev.id}（mult ${prev.mult}）之后——档位序 = 数组序（低→高），mult 须单调不减`,
+        });
+      }
     }
   }
-  checkIds(pack.elements, '/elements', errors);
-  const slotIds = checkConfig(pack.config, itemIndex, pack.items, skillIndex, errors);
+  if (scope.elements) checkIds(pack.elements, '/elements', errors);
+  const slotIds =
+    scope.config && scope.items && scope.skills
+      ? checkConfig(pack.config, itemIndex, pack.items, skillIndex, errors)
+      : undefined;
 
   // 武器语义槽位（#14 role 放宽，与引擎 weaponSlotOf 同律）：role === 'weapon'
   // 优先，未声明 role 的包按 id === 'weapon' 兜底；无 config（旧包形态）回落
-  // 'weapon' 字面量——既有包零破坏。
+  // 'weapon' 字面量——既有包零破坏。config 不可信（#94 语义独立路径）时武器
+  // 身份无从判定，不推导（空集）——招式注册表家族随之跳过，防把真武器招式
+  // 键误报成悬空键。
   const weaponSlotIds = new Set<string>();
-  if (pack.config === undefined) {
+  if (!scope.config) {
+    // config 形态已破：槽位表不可读，跳过武器推导。
+  } else if (pack.config === undefined) {
     weaponSlotIds.add('weapon');
   } else {
     for (const slot of pack.config.slots) {
+      if (!isRecord(slot)) continue; // 畸形槽位留给 schema 面（#94）
       if (slot.role === 'weapon' || slot.id === 'weapon') weaponSlotIds.add(slot.id);
     }
   }
 
-  const weaponIds = checkItemShapes(pack.items, slotIds, weaponSlotIds, errors);
+  const weaponIds = scope.items
+    ? checkItemShapes(pack.items, slotIds, weaponSlotIds, errors)
+    : new Set<string>();
 
   // 层数上限单一来源（#021 批 4，P2-1）：config.progression.maxLevel 存在时，
   // enemy.level 与活动/配方 unlockLevel 一律对照它（schema 魔法数 99 已清退）。
-  const maxLevel = pack.config?.progression?.maxLevel;
+  // config 不可信或值类型坏时不对照（无从取得可信上限，#94 同「缺省跳过」律）。
+  const rawMaxLevel = pack.config?.progression?.maxLevel;
+  const maxLevel = scope.config && typeof rawMaxLevel === 'number' ? rawMaxLevel : undefined;
 
-  checkSkills(pack.skills, itemIndex, pack.items, maxLevel, errors);
-  checkRecipes(pack.recipes, itemIndex, pack.items, skillIndex, pack.skills, maxLevel, errors);
+  if (scope.skills && scope.items) checkSkills(pack.skills, itemIndex, pack.items, maxLevel, errors);
+  if (scope.recipes && scope.items && scope.skills) {
+    checkRecipes(pack.recipes, itemIndex, pack.items, skillIndex, pack.skills, maxLevel, errors);
+  }
 
-  const moves = pack.combatText.moves;
-  const verbs = pack.combatText.verbs;
-  checkEnemies(pack.enemies, itemIndex, pack.items, moves, maxLevel, errors);
-  checkGearDrops(pack.gearDrops, itemIndex, enemyIndex, pack.items, errors);
-  checkShop(pack.shop, itemIndex, pack.items, errors);
-  checkWeaponMoves(weaponIds, pack.items, moves, errors);
+  // combatText 不可信时以空注册表替代（依赖它的检查全部自空转，#94）。
+  const moves: ContentPack['combatText']['moves'] = scope.combatText ? pack.combatText.moves : {};
+  const verbs: ContentPack['combatText']['verbs'] = scope.combatText ? pack.combatText.verbs : {};
+  if (scope.enemies && scope.items && scope.combatText) {
+    checkEnemies(pack.enemies, itemIndex, pack.items, moves, maxLevel, errors);
+  }
+  if (scope.gearDrops && scope.items && scope.enemies) {
+    checkGearDrops(pack.gearDrops, itemIndex, enemyIndex, pack.items, errors);
+  }
+  if (scope.shop && scope.items) checkShop(pack.shop, itemIndex, pack.items, errors);
+  if (scope.items && scope.combatText) checkWeaponMoves(weaponIds, pack.items, moves, errors);
   // Boss 节（#8）：先于招式注册表检查（变招 moveKey 扩展合法注册键集）。
-  const bossMoveKeys = checkBosses(pack.bosses ?? [], enemyIndex, itemIndex, moves, errors);
-  checkMoveRegistry(moves, weaponIds, enemyIndex, bossMoveKeys, errors);
-  checkBasicFallback(moves, errors);
-  checkVerbStyles(pack.items, pack.enemies, verbs, errors);
+  const bossMoveKeys =
+    scope.bosses && scope.enemies && scope.items && scope.combatText
+      ? checkBosses(pack.bosses ?? [], enemyIndex, itemIndex, moves, errors)
+      : new Set<string>();
+  // 招式注册键合法性依赖全部键源（武器 = items+config、敌人、Boss 变招）
+  // 可信——任一失真即把真键误报成悬空键，整体跳过（#94）。
+  if (scope.combatText && scope.items && scope.config && scope.enemies && scope.bosses) {
+    checkMoveRegistry(moves, weaponIds, enemyIndex, bossMoveKeys, errors);
+  }
+  if (scope.combatText) checkBasicFallback(moves, errors);
+  if (scope.items && scope.enemies && scope.combatText) {
+    checkVerbStyles(pack.items, pack.enemies, verbs, errors);
+  }
 
   // 系别存在性（#25 键域开放）：注册表构建一次，三处引用面统一对照。
-  const elementIds = new Set(pack.elements.map((entry) => entry.id));
+  // elements 不可信时空注册表会把一切引用误报成未注册，检查整体跳过（#94）。
+  const elementIds = scope.elements
+    ? new Set(pack.elements.filter((entry) => isRecord(entry)).map((entry) => entry.id))
+    : new Set<string>();
   // 招式注册键集（审计修复④）：与 checkMoveRegistry 同源同律（basic 兜底 +
   // 武器 + 敌人 + Boss 变招），供铭纹条件 moveId 引用检查复用，零第二份键集逻辑。
   const moveKeys = new Set<string>(['basic', ...weaponIds, ...enemyIndex.keys(), ...bossMoveKeys]);
-  checkElementRefs(pack, elementIds, moveKeys, errors);
+  if (scope.elements && scope.enemies && scope.items && scope.combatText && scope.config && scope.bosses) {
+    checkElementRefs(pack, elementIds, moveKeys, errors);
+  }
   // 系别机制签名（#15，ADR-012）：原语闭集镜像 + 机械原语参数必填。
-  checkElementSignatures(pack.elements, errors);
+  if (scope.elements) checkElementSignatures(pack.elements, errors);
   // 铭纹 feature 原语（#58 项 2）：键域闭集镜像 + 概率值域。
-  checkInscriptionFeatures(pack.items, errors);
+  if (scope.items) checkInscriptionFeatures(pack.items, errors);
 
   // 转生节（#6）：可选节，存在则查清单键域、天赋树 xref/查环、解锁表 xref、境界词表。
-  checkRebirth(pack, enemyIndex, skillIndex, errors);
+  if (scope.rebirth && scope.enemies && scope.skills) checkRebirth(pack, enemyIndex, skillIndex, errors);
 
   // 秘境节（#7）：可选节，存在则查 id 去重、钥匙/敌人/奖励 xref、生命周期覆盖。
-  checkDungeons(pack.dungeons ?? [], enemyIndex, itemIndex, errors);
+  if (scope.dungeons && scope.enemies && scope.items) {
+    checkDungeons(pack.dungeons ?? [], enemyIndex, itemIndex, errors);
+  }
 
   // 成就节（#9）：可选节，存在则查 id 去重、统计键域闭集、奖励物品 xref + 类型关卡。
-  checkAchievements(pack.achievements ?? [], itemIndex, pack.items, errors);
+  if (scope.achievements && scope.items) {
+    checkAchievements(pack.achievements ?? [], itemIndex, pack.items, errors);
+  }
 
-  checkPrototypes(pack.skills, '/skills', errors);
-  checkPrototypes(pack.items, '/items', errors);
-  checkPrototypes(pack.enemies, '/enemies', errors);
+  if (scope.skills) checkPrototypes(pack.skills, '/skills', errors);
+  if (scope.items) checkPrototypes(pack.items, '/items', errors);
+  if (scope.enemies) checkPrototypes(pack.enemies, '/enemies', errors);
 }
 
-/** id → 首次出现的下标。 */
+/** id → 首次出现的下标（#94：畸形条目不参与——留给 schema 面，防崩溃防噪音）。 */
 function indexIds(entries: ReadonlyArray<{ readonly id: string }>): Map<string, number> {
   const map = new Map<string, number>();
   entries.forEach((entry, index) => {
+    if (!isRecord(entry) || typeof entry.id !== 'string') return;
     if (!map.has(entry.id)) {
       map.set(entry.id, index);
     }
@@ -367,6 +547,7 @@ function checkIds(
 ): void {
   const firstSeen = new Map<string, number>();
   entries.forEach((entry, index) => {
+    if (!isRecord(entry) || typeof entry.id !== 'string') return; // 畸形条目留给 schema 面（#94）
     if (UNSAFE_CONTENT_IDS.has(entry.id)) {
       errors.push({
         path: `${basePath}/${index}`,
@@ -447,7 +628,8 @@ function checkConfig(
       message: `掉落偏置供体技能 "${biasSkillId}" 不存在于 skills`,
     });
   }
-  return new Set(config.slots.map((slot) => slot.id));
+  // 槽位 id 集（畸形槽位条目不参与，#94）。
+  return new Set(config.slots.flatMap((slot) => (isRecord(slot) && typeof slot.id === 'string' ? [slot.id] : [])));
 }
 
 /**
@@ -485,6 +667,7 @@ function checkItemShapes(
 ): ReadonlySet<string> {
   const weaponIds = new Set<string>();
   items.forEach((item, index) => {
+    if (!isRecord(item)) return; // 畸形条目留给 schema 面（#94）
     const at = (field: string) => `/items/${index}/${field}`;
     // 槽位数据化跨引用：equip/blank 声明的 slot 须在 config.slots 有定义。
     if (item.slot !== undefined && slotIds !== undefined && !slotIds.has(item.slot)) {
@@ -510,10 +693,14 @@ function checkItemShapes(
     } else if (item.type === 'blank') {
       checkRangeDirection(item.floorRange, at('floorRange'), errors);
       checkRangeDirection(item.tierRange, at('tierRange'), errors);
-      checkModifiers(item.inherentModifiers ?? [], at('inherentModifiers'), errors);
+      if (Array.isArray(item.inherentModifiers)) {
+        checkModifiers(item.inherentModifiers, at('inherentModifiers'), errors);
+      }
     } else if (item.type === 'inscription') {
-      (item.tiers ?? []).forEach((tier, tierIndex) => {
-        checkModifiers(tier, `${at('tiers')}/${tierIndex}`, errors);
+      (Array.isArray(item.tiers) ? item.tiers : []).forEach((tier, tierIndex) => {
+        if (Array.isArray(tier)) {
+          checkModifiers(tier, `${at('tiers')}/${tierIndex}`, errors);
+        }
       });
     }
   });
@@ -522,7 +709,13 @@ function checkItemShapes(
 
 /** 区间方向性：min 不得大于 max（floorRange/tierRange 与敌人 gold 同律）。 */
 function checkRangeDirection(range: Range | undefined, path: string, errors: ContentError[]): void {
-  if (range !== undefined && range.min > range.max) {
+  // 区间端点类型坏（非数值）不比（字典序会误报方向倒挂），留给 schema 面（#94）。
+  if (
+    range !== undefined &&
+    typeof range.min === 'number' &&
+    typeof range.max === 'number' &&
+    range.min > range.max
+  ) {
     errors.push({
       path,
       keyword: 'shape',
@@ -538,6 +731,8 @@ function checkModifiers(
   errors: ContentError[],
 ): void {
   modifiers.forEach((mod, i) => {
+    // 畸形修饰符/值类型坏不比，留给 schema 面（#94）。
+    if (!isRecord(mod) || typeof mod.value !== 'number') return;
     if (mod.zone === 'mult' && mod.value <= 0) {
       errors.push({
         path: `${basePath}/${i}/value`,
@@ -574,9 +769,13 @@ function checkPrototypes(
   basePath: string,
   errors: ContentError[],
 ): void {
-  const byId = new Map(entries.map((entry) => [entry.id, entry]));
+  const byId = new Map<string, PrototypeEntry>();
+  for (const entry of entries) {
+    if (isRecord(entry) && typeof entry.id === 'string') byId.set(entry.id, entry);
+  }
   entries.forEach((entry, index) => {
-    if (entry.prototypeKey !== undefined && entry.prototypeKey !== entry.id) {
+    if (!isRecord(entry) || typeof entry.id !== 'string') return; // 畸形条目留给 schema 面（#94）
+    if (typeof entry.prototypeKey === 'string' && entry.prototypeKey !== entry.id) {
       errors.push({
         path: `${basePath}/${index}/prototypeKey`,
         keyword: 'prototype',
@@ -584,8 +783,8 @@ function checkPrototypes(
       });
     }
     const parent = entry.prototypeParent;
-    if (parent === undefined) {
-      return;
+    if (typeof parent !== 'string') {
+      return; // 未声明或类型坏（后者留给 schema 面，#94）
     }
     const at = `${basePath}/${index}/prototypeParent`;
     const parentEntry = byId.get(parent);
@@ -617,7 +816,8 @@ function checkPrototypes(
         return;
       }
       seen.add(cursor.id);
-      cursor = cursor.prototypeParent !== undefined ? byId.get(cursor.prototypeParent) : undefined;
+      cursor =
+        typeof cursor.prototypeParent === 'string' ? byId.get(cursor.prototypeParent) : undefined;
     }
   });
 }
@@ -630,6 +830,7 @@ function checkSkills(
   errors: ContentError[],
 ): void {
   skills.forEach((skill, i) => {
+    if (!isRecord(skill)) return; // 畸形条目留给 schema 面（#94）
     const hasActivities = skill.activities !== undefined && skill.activities.length > 0;
     if (skill.kind === 'gather' && !hasActivities) {
       errors.push({
@@ -645,15 +846,18 @@ function checkSkills(
         message: `只有 gather 类技能携带活动（${skill.kind} 类的动作由 recipes/斗法定义）`,
       });
     }
-    for (const [j, activity] of (skill.activities ?? []).entries()) {
+    if (!Array.isArray(skill.activities)) return; // 活动表畸形留给 schema 面，逐活动检查跳过（#94）
+    for (const [j, activity] of skill.activities.entries()) {
+      if (!isRecord(activity)) continue; // 畸形活动留给 schema 面（#94）
       // 层数上限单一来源（#021 批 4，P2-1）：schema 魔法数 99 清退后对照 config。
-      if (maxLevel !== undefined && activity.unlockLevel > maxLevel) {
+      if (maxLevel !== undefined && typeof activity.unlockLevel === 'number' && activity.unlockLevel > maxLevel) {
         errors.push({
           path: `/skills/${i}/activities/${j}/unlockLevel`,
           keyword: 'shape',
           message: `解锁层数 ${activity.unlockLevel} 超过层数上限（config.progression.maxLevel = ${maxLevel}）`,
         });
       }
+      if (!isRecord(activity.output) || typeof activity.output.item !== 'string') continue; // 产出形态坏留给 schema 面，xref 跳过（#94）
       if (!items.has(activity.output.item)) {
         errors.push({
           path: `/skills/${i}/activities/${j}/output/item`,
@@ -664,14 +868,16 @@ function checkSkills(
         rejectTemplateItem(itemDefs, items.get(activity.output.item), `/skills/${i}/activities/${j}/output/item`, '产出物品', errors);
       }
       const bonus = activity.byproduct;
-      if (bonus !== undefined && !items.has(bonus.item)) {
+      const bonusItem = bonus !== undefined && isRecord(bonus) ? bonus['item'] : undefined;
+      if (typeof bonusItem !== 'string') continue; // 副产出形态坏留给 schema 面（#94）
+      if (!items.has(bonusItem)) {
         errors.push({
           path: `/skills/${i}/activities/${j}/byproduct/item`,
           keyword: 'xref',
-          message: `副产出物品 "${bonus.item}" 不存在于 items`,
+          message: `副产出物品 "${bonusItem}" 不存在于 items`,
         });
-      } else if (bonus !== undefined) {
-        rejectTemplateItem(itemDefs, items.get(bonus.item), `/skills/${i}/activities/${j}/byproduct/item`, '副产出物品', errors);
+      } else {
+        rejectTemplateItem(itemDefs, items.get(bonusItem), `/skills/${i}/activities/${j}/byproduct/item`, '副产出物品', errors);
       }
     }
   });
@@ -688,25 +894,29 @@ function checkRecipes(
 ): void {
   const recipeNames = new Set<string>();
   recipes.forEach((recipe, i) => {
+    if (!isRecord(recipe)) return; // 畸形条目留给 schema 面（#94）
     // 配方名唯一（#35 复核收口）：recipes 无 id，下标+名是唯二身份（activity 恢复
     // 与配方自动化规则的 ADR-015 对名守卫皆以此为前提）——重名会让守卫对
-    // 「重排+重名」失明、规则静默换目标。
-    if (recipeNames.has(recipe.name)) {
-      errors.push({
-        path: `/recipes/${i}/name`,
-        keyword: 'duplicate',
-        message: `配方名 "${recipe.name}" 重复：配方无 id，下标+名是唯二身份（恢复期对名守卫的前提）`,
-      });
+    // 「重排+重名」失明、规则静默换目标。名类型坏不参与去重（留给 schema 面，#94）。
+    if (typeof recipe.name === 'string') {
+      if (recipeNames.has(recipe.name)) {
+        errors.push({
+          path: `/recipes/${i}/name`,
+          keyword: 'duplicate',
+          message: `配方名 "${recipe.name}" 重复：配方无 id，下标+名是唯二身份（恢复期对名守卫的前提）`,
+        });
+      }
+      recipeNames.add(recipe.name);
     }
-    recipeNames.add(recipe.name);
     // 层数上限单一来源（#021 批 4，P2-1）：同 checkSkills。
-    if (maxLevel !== undefined && recipe.unlockLevel > maxLevel) {
+    if (maxLevel !== undefined && typeof recipe.unlockLevel === 'number' && recipe.unlockLevel > maxLevel) {
       errors.push({
         path: `/recipes/${i}/unlockLevel`,
         keyword: 'shape',
         message: `解锁层数 ${recipe.unlockLevel} 超过层数上限（config.progression.maxLevel = ${maxLevel}）`,
       });
     }
+    if (!isRecord(recipe.output) || typeof recipe.output.item !== 'string') return; // 产出形态坏留给 schema 面（#94）
     if (!items.has(recipe.output.item)) {
       errors.push({
         path: `/recipes/${i}/output/item`,
@@ -716,6 +926,7 @@ function checkRecipes(
     } else {
       rejectTemplateItem(itemDefs, items.get(recipe.output.item), `/recipes/${i}/output/item`, '产出物品', errors);
     }
+    if (!isRecord(recipe.materials)) return; // 材料表形态坏留给 schema 面（Object.keys 对字符串会产索引键噪音，#94）
     for (const [matId] of Object.entries(recipe.materials)) {
       if (!items.has(matId)) {
         errors.push({
@@ -727,6 +938,7 @@ function checkRecipes(
         rejectTemplateItem(itemDefs, items.get(matId), `/recipes/${i}/materials/${matId}`, '材料', errors);
       }
     }
+    if (typeof recipe.skill !== 'string') return; // 所属技艺类型坏留给 schema 面（#94）
     const skillAt = skills.get(recipe.skill);
     if (skillAt === undefined) {
       errors.push({
@@ -758,25 +970,37 @@ function checkEnemies(
   errors: ContentError[],
 ): void {
   enemies.forEach((enemy, i) => {
-    for (const [j, drop] of enemy.drops.entries()) {
-      if (!items.has(drop.item)) {
-        errors.push({
-          path: `/enemies/${i}/drops/${j}/item`,
-          keyword: 'xref',
-          message: `掉落物品 "${drop.item}" 不存在于 items`,
-        });
-      } else {
-        rejectTemplateItem(itemDefs, items.get(drop.item), `/enemies/${i}/drops/${j}/item`, '掉落物品', errors);
+    if (!isRecord(enemy)) return; // 畸形条目留给 schema 面（#94）
+    // 掉落表畸形留给 schema 面，drops xref 跳过（#94）；引用字段类型坏不查
+    // 存在性（同 #94 参与律：类型对的引用照查）。
+    if (Array.isArray(enemy.drops)) {
+      for (const [j, drop] of enemy.drops.entries()) {
+        if (!isRecord(drop) || typeof drop.item !== 'string') continue;
+        if (!items.has(drop.item)) {
+          errors.push({
+            path: `/enemies/${i}/drops/${j}/item`,
+            keyword: 'xref',
+            message: `掉落物品 "${drop.item}" 不存在于 items`,
+          });
+        } else {
+          rejectTemplateItem(itemDefs, items.get(drop.item), `/enemies/${i}/drops/${j}/item`, '掉落物品', errors);
+        }
       }
     }
-    if (!hasMove(moves, enemy.id)) {
+    if (typeof enemy.id === 'string' && !hasMove(moves, enemy.id)) {
       errors.push({
         path: `/enemies/${i}`,
         keyword: 'xref',
         message: `敌人 "${enemy.id}" 未在 combatText.moves 注册招式名`,
       });
     }
-    if (enemy.gold.min > enemy.gold.max) {
+    // 灵石区间端点类型坏不比（字典序会误报方向倒挂），留给 schema 面（#94）。
+    if (
+      isRecord(enemy.gold) &&
+      typeof enemy.gold.min === 'number' &&
+      typeof enemy.gold.max === 'number' &&
+      enemy.gold.min > enemy.gold.max
+    ) {
       errors.push({
         path: `/enemies/${i}/gold`,
         keyword: 'shape',
@@ -786,7 +1010,7 @@ function checkEnemies(
     // 层数上限单一来源（#021 批 4，P2-1）：schema 魔法数 99 清退后，
     // 上限对照 config.progression.maxLevel；config 缺省时无法取得上限，跳过
     // （引擎侧层数只影响开战门控，超高层数内容不可达但不致崩）。
-    if (maxLevel !== undefined && enemy.level > maxLevel) {
+    if (maxLevel !== undefined && typeof enemy.level === 'number' && enemy.level > maxLevel) {
       errors.push({
         path: `/enemies/${i}/level`,
         keyword: 'shape',
@@ -804,14 +1028,17 @@ function checkGearDrops(
   errors: ContentError[],
 ): void {
   gearDrops.forEach((gearDrop, i) => {
-    if (!enemies.has(gearDrop.enemy)) {
+    if (!isRecord(gearDrop)) return; // 畸形条目留给 schema 面（#94）
+    if (typeof gearDrop.enemy === 'string' && !enemies.has(gearDrop.enemy)) {
       errors.push({
         path: `/gearDrops/${i}/enemy`,
         keyword: 'xref',
         message: `掉落归属敌人 "${gearDrop.enemy}" 不存在于 enemies`,
       });
     }
+    if (!Array.isArray(gearDrop.pool)) return; // 池形态坏留给 schema 面（#94）
     for (const [j, itemId] of gearDrop.pool.entries()) {
+      if (typeof itemId !== 'string') continue; // 引用类型坏留给 schema 面（#94）
       const itemAt = items.get(itemId);
       if (itemAt === undefined) {
         errors.push({
@@ -838,6 +1065,7 @@ function checkShop(
   errors: ContentError[],
 ): void {
   shop.forEach((entry, i) => {
+    if (!isRecord(entry) || typeof entry.item !== 'string') return; // 畸形条目留给 schema 面（#94）
     if (!items.has(entry.item)) {
       errors.push({
         path: `/shop/${i}/item`,
@@ -857,6 +1085,7 @@ function checkWeaponMoves(
   errors: ContentError[],
 ): void {
   items.forEach((item, i) => {
+    if (!isRecord(item)) return; // 畸形条目留给 schema 面（#94）
     if (weaponIds.has(item.id) && !hasMove(moves, item.id)) {
       errors.push({
         path: `/items/${i}`,
@@ -919,7 +1148,8 @@ function checkVerbStyles(
     return Array.isArray(pool) && pool.length > 0;
   };
   items.forEach((item, i) => {
-    if (item.verbStyle !== undefined && !hasPool(item.verbStyle)) {
+    if (!isRecord(item)) return; // 畸形条目留给 schema 面（#94）
+    if (typeof item.verbStyle === 'string' && !hasPool(item.verbStyle)) {
       errors.push({
         path: `/items/${i}/verbStyle`,
         keyword: 'xref',
@@ -928,6 +1158,7 @@ function checkVerbStyles(
     }
   });
   enemies.forEach((enemy, i) => {
+    if (!isRecord(enemy) || typeof enemy.kind !== 'string') return; // 畸形条目留给 schema 面（#94）
     if (!hasPool(enemy.kind)) {
       errors.push({
         path: `/enemies/${i}/kind`,
@@ -957,67 +1188,83 @@ function checkElementRefs(
 ): void {
   const message = (id: string): string => `系别 "${id}" 未在包 elements 节注册`;
   pack.enemies.forEach((enemy, i) => {
-    if (enemy.element !== undefined && !registered.has(enemy.element)) {
+    if (!isRecord(enemy)) return; // 畸形条目留给 schema 面（#94）
+    if (typeof enemy.element === 'string' && !registered.has(enemy.element)) {
       errors.push({
         path: `/enemies/${i}/element`,
         keyword: 'xref',
         message: message(enemy.element),
       });
     }
-    for (const key of Object.keys(enemy.affinities ?? {})) {
-      if (!registered.has(key)) {
-        errors.push({
-          path: `/enemies/${i}/affinities/${key}`,
-          keyword: 'xref',
-          message: message(key),
-        });
+    // affinities 形态坏留给 schema 面（Object.keys 对字符串会产索引键噪音，#94）。
+    if (isRecord(enemy.affinities)) {
+      for (const key of Object.keys(enemy.affinities)) {
+        if (!registered.has(key)) {
+          errors.push({
+            path: `/enemies/${i}/affinities/${key}`,
+            keyword: 'xref',
+            message: message(key),
+          });
+        }
       }
     }
   });
   pack.items.forEach((item, i) => {
+    if (!isRecord(item)) return; // 畸形条目留给 schema 面（#94）
     // 武器系别（#15）：equip/blank 分支的 element 引用合法性（schema 已按
     // 分支钉形态，此处只收键域——引擎只消费武器槽，其余槽位为未来留门）。
-    if (item.element !== undefined && !registered.has(item.element)) {
+    if (typeof item.element === 'string' && !registered.has(item.element)) {
       errors.push({
         path: `/items/${i}/element`,
         keyword: 'xref',
         message: message(item.element),
       });
     }
-    const checkCondition = (condition: ModifierCondition | undefined, path: string): void => {
-      if (condition?.element !== undefined && !registered.has(condition.element)) {
-        errors.push({ path: `${path}/element`, keyword: 'xref', message: message(condition.element) });
+    const checkCondition = (condition: unknown, path: string): void => {
+      if (!isRecord(condition)) return; // 条件形态坏留给 schema 面（#94）
+      const element = condition['element'];
+      if (typeof element === 'string' && !registered.has(element)) {
+        errors.push({ path: `${path}/element`, keyword: 'xref', message: message(element) });
       }
       // 条件招式定向（审计修复④）：moveId 悬空 = 永不命中的死条件
       // （引擎 conditionMatches 按战斗语境 moveKey 精确比对），加载期拒绝。
-      if (condition?.moveId !== undefined && !moveKeys.has(condition.moveId)) {
+      const moveId = condition['moveId'];
+      if (typeof moveId === 'string' && !moveKeys.has(moveId)) {
         errors.push({
           path: `${path}/moveId`,
           keyword: 'xref',
-          message: `招式 "${condition.moveId}" 未在招式注册键集（basic/武器/敌人/Boss 变招）中注册`,
+          message: `招式 "${moveId}" 未在招式注册键集（basic/武器/敌人/Boss 变招）中注册`,
         });
       }
     };
-    (item.inherentModifiers ?? []).forEach((mod, j) => {
-      checkCondition(mod.condition, `/items/${i}/inherentModifiers/${j}/condition`);
-    });
-    (item.tiers ?? []).forEach((tier, t) => {
-      tier.forEach((mod, j) => {
-        checkCondition(mod.condition, `/items/${i}/tiers/${t}/${j}/condition`);
+    if (Array.isArray(item.inherentModifiers)) {
+      item.inherentModifiers.forEach((mod, j) => {
+        if (isRecord(mod)) checkCondition(mod.condition, `/items/${i}/inherentModifiers/${j}/condition`);
       });
-    });
-    if (item.feature !== undefined) {
+    }
+    if (Array.isArray(item.tiers)) {
+      item.tiers.forEach((tier, t) => {
+        if (!Array.isArray(tier)) return; // 纹阶行形态坏留给 schema 面（#94）
+        tier.forEach((mod, j) => {
+          if (isRecord(mod)) checkCondition(mod.condition, `/items/${i}/tiers/${t}/${j}/condition`);
+        });
+      });
+    }
+    if (isRecord(item.feature)) {
       checkCondition(item.feature.condition, `/items/${i}/feature/condition`);
     }
   });
   // 系别风味句池键（#15）：combatText.elementFlavor 键 = elements 注册系别。
-  for (const [key] of Object.entries(pack.combatText.elementFlavor ?? {})) {
-    if (!registered.has(key)) {
-      errors.push({
-        path: `/combatText/elementFlavor/${key}`,
-        keyword: 'xref',
-        message: message(key),
-      });
+  const elementFlavor = pack.combatText.elementFlavor ?? {};
+  if (isRecord(elementFlavor)) {
+    for (const [key] of Object.entries(elementFlavor)) {
+      if (!registered.has(key)) {
+        errors.push({
+          path: `/combatText/elementFlavor/${key}`,
+          keyword: 'xref',
+          message: message(key),
+        });
+      }
     }
   }
 }
@@ -1057,14 +1304,16 @@ function checkElementSignatures(
   errors: ContentError[],
 ): void {
   elements.forEach((element, i) => {
+    if (!isRecord(element)) return; // 畸形条目留给 schema 面（#94）
     const signature = element.signature;
     if (signature === undefined) return;
+    if (!isRecord(signature)) return; // 签名形态坏留给 schema 面，不误报原语键域（#94）
     const at = (field: string) => `/elements/${i}/signature/${field}`;
-    if (!ELEMENT_COMBAT_PRIMITIVES.has(signature.primitive)) {
+    if (typeof signature.primitive !== 'string' || !ELEMENT_COMBAT_PRIMITIVES.has(signature.primitive)) {
       errors.push({
         path: at('primitive'),
         keyword: 'xref',
-        message: `机制原语 "${signature.primitive}" 不在引擎签名注册表（${[...ELEMENT_COMBAT_PRIMITIVES].join('/')}）`,
+        message: `机制原语 "${String(signature.primitive)}" 不在引擎签名注册表（${[...ELEMENT_COMBAT_PRIMITIVES].join('/')}）`,
       });
     }
     if (typeof signature.value !== 'number' || !(signature.value > 0)) {
@@ -1099,8 +1348,10 @@ function checkInscriptionFeatures(
   errors: ContentError[],
 ): void {
   items.forEach((item, i) => {
+    if (!isRecord(item)) return; // 畸形条目留给 schema 面（#94）
     const feature = item.feature;
     if (feature === undefined) return;
+    if (!isRecord(feature) || typeof feature.primitive !== 'string') return; // 形态坏留给 schema 面（#94）
     const at = (field: string) => `/items/${i}/feature/${field}`;
     const domain = INSCRIPTION_FEATURE_PRIMITIVES[feature.primitive];
     if (domain === undefined) {
@@ -1140,38 +1391,51 @@ function checkDungeons(
 ): void {
   checkIds(dungeons, '/dungeons', errors);
   dungeons.forEach((dungeon, i) => {
+    if (!isRecord(dungeon)) return; // 畸形条目留给 schema 面（#94）
     const at = (field: string) => `/dungeons/${i}/${field}`;
-    if (dungeon.entry?.key !== undefined && !items.has(dungeon.entry.key)) {
+    if (isRecord(dungeon.entry) && typeof dungeon.entry.key === 'string' && !items.has(dungeon.entry.key)) {
       errors.push({
         path: at('entry/key'),
         keyword: 'xref',
         message: `钥匙物品 "${dungeon.entry.key}" 不存在于 items`,
       });
     }
+    if (!Array.isArray(dungeon.layers)) return; // 层表形态坏留给 schema 面，逐层检查跳过（#94）
 
     // 逐行引用与方向性检查。
     dungeon.layers.forEach((layer, j) => {
+      if (!isRecord(layer)) return; // 畸形层行留给 schema 面（#94）
       const layerAt = (field: string) => `/dungeons/${i}/layers/${j}/${field}`;
-      for (const [k, entry] of layer.enemies.entries()) {
-        if (!enemies.has(entry.enemy)) {
-          errors.push({
-            path: layerAt(`enemies/${k}/enemy`),
-            keyword: 'xref',
-            message: `层敌人 "${entry.enemy}" 不存在于 enemies`,
-          });
+      if (Array.isArray(layer.enemies)) {
+        for (const [k, entry] of layer.enemies.entries()) {
+          if (!isRecord(entry) || typeof entry.enemy !== 'string') continue; // 引用类型坏留给 schema 面（#94）
+          if (!enemies.has(entry.enemy)) {
+            errors.push({
+              path: layerAt(`enemies/${k}/enemy`),
+              keyword: 'xref',
+              message: `层敌人 "${entry.enemy}" 不存在于 enemies`,
+            });
+          }
         }
       }
-      for (const [k, stack] of (layer.rewards?.items ?? []).entries()) {
-        if (!items.has(stack.item)) {
-          errors.push({
-            path: layerAt(`rewards/items/${k}/item`),
-            keyword: 'xref',
-            message: `层奖励物品 "${stack.item}" 不存在于 items`,
-          });
+      const rewardItems = isRecord(layer.rewards) ? layer.rewards.items : undefined;
+      if (Array.isArray(rewardItems)) {
+        for (const [k, stack] of rewardItems.entries()) {
+          if (!isRecord(stack) || typeof stack.item !== 'string') continue; // 引用类型坏留给 schema 面（#94）
+          if (!items.has(stack.item)) {
+            errors.push({
+              path: layerAt(`rewards/items/${k}/item`),
+              keyword: 'xref',
+              message: `层奖励物品 "${stack.item}" 不存在于 items`,
+            });
+          }
         }
       }
+      // 推荐战力方向性：端点类型坏不比（字典序误报），留给 schema 面（#94）。
       if (
-        layer.recommendedPower !== undefined &&
+        isRecord(layer.recommendedPower) &&
+        typeof layer.recommendedPower.min === 'number' &&
+        typeof layer.recommendedPower.max === 'number' &&
         layer.recommendedPower.min > layer.recommendedPower.max
       ) {
         errors.push({
@@ -1184,6 +1448,14 @@ function checkDungeons(
 
     // —— 生命周期覆盖（区间算术，避免逐层步进的巨数循环）：行按 min 排序
     // 后须无缝衔接 1..floors；缝隙 = 覆盖缺口，先行覆盖内再起行 = 重叠歧义。
+    // 层数/层段形态坏（非数值）时区间算术不可信，整段跳过留给 schema 面（#94）。
+    const floorsFormOk =
+      typeof dungeon.floors === 'number' &&
+      dungeon.layers.every((layer) => {
+        const floor = isRecord(layer) ? layer.floor : undefined;
+        return isRecord(floor) && typeof floor.min === 'number' && typeof floor.max === 'number';
+      });
+    if (!floorsFormOk) return;
     const ordered = [...dungeon.layers.keys()].sort(
       (a, b) => dungeon.layers[a]!.floor.min - dungeon.layers[b]!.floor.min,
     );
@@ -1251,35 +1523,46 @@ function checkBosses(
   const moveKeys = new Set<string>();
   const firstSeen = new Map<string, number>();
   bosses.forEach((boss, i) => {
+    if (!isRecord(boss)) return; // 畸形条目留给 schema 面（#94）
     const at = (field: string) => `/bosses/${i}/${field}`;
-    if (!enemies.has(boss.enemy)) {
-      errors.push({
-        path: at('enemy'),
-        keyword: 'xref',
-        message: `Boss 敌人 "${boss.enemy}" 不存在于 enemies`,
-      });
+    if (typeof boss.enemy === 'string') {
+      if (!enemies.has(boss.enemy)) {
+        errors.push({
+          path: at('enemy'),
+          keyword: 'xref',
+          message: `Boss 敌人 "${boss.enemy}" 不存在于 enemies`,
+        });
+      }
+      const first = firstSeen.get(boss.enemy);
+      if (first !== undefined) {
+        errors.push({
+          path: at('enemy'),
+          keyword: 'duplicate',
+          message: `敌人 "${boss.enemy}" 已在第 ${first} 条登记 Boss 定义（每敌人至多一条）`,
+        });
+      } else {
+        firstSeen.set(boss.enemy, i);
+      }
     }
-    const first = firstSeen.get(boss.enemy);
-    if (first !== undefined) {
-      errors.push({
-        path: at('enemy'),
-        keyword: 'duplicate',
-        message: `敌人 "${boss.enemy}" 已在第 ${first} 条登记 Boss 定义（每敌人至多一条）`,
-      });
-    } else {
-      firstSeen.set(boss.enemy, i);
-    }
+    if (!Array.isArray(boss.phases)) return; // 阶段表形态坏留给 schema 面（#94）
     boss.phases.forEach((phase, j) => {
+      if (!isRecord(phase)) return; // 畸形阶段留给 schema 面（#94）
       const phaseAt = (field: string) => `/bosses/${i}/phases/${j}/${field}`;
       const prev = j > 0 ? boss.phases[j - 1] : undefined;
-      if (prev !== undefined && phase.threshold >= prev.threshold) {
+      // 阈值类型坏不比（字典序会误报递减违例），留给 schema 面（#94）。
+      if (
+        isRecord(prev) &&
+        typeof phase.threshold === 'number' &&
+        typeof prev.threshold === 'number' &&
+        phase.threshold >= prev.threshold
+      ) {
         errors.push({
           path: phaseAt('threshold'),
           keyword: 'shape',
           message: `阶段阈值须严格递减（${phase.threshold} 不得大于等于前一阶段的 ${prev.threshold}）`,
         });
       }
-      if (phase.moveKey !== undefined) {
+      if (typeof phase.moveKey === 'string') {
         moveKeys.add(phase.moveKey);
         if (!hasMove(moves, phase.moveKey)) {
           errors.push({
@@ -1291,7 +1574,9 @@ function checkBosses(
       }
       // 召唤脚本（#30）：池行 enemy xref enemies + 行内去重（投影定位无歧义）。
       const seenSummons = new Map<string, number>();
-      (phase.summons?.enemies ?? []).forEach((entry, k) => {
+      const summons = isRecord(phase.summons) ? phase.summons.enemies : undefined;
+      (Array.isArray(summons) ? summons : []).forEach((entry, k) => {
+        if (!isRecord(entry) || typeof entry.enemy !== 'string') return; // 引用类型坏留给 schema 面（#94）
         if (!enemies.has(entry.enemy)) {
           errors.push({
             path: phaseAt(`summons/enemies/${k}/enemy`),
@@ -1311,7 +1596,9 @@ function checkBosses(
         }
       });
     });
-    for (const [k, drop] of (boss.drops ?? []).entries()) {
+    const bossDrops = Array.isArray(boss.drops) ? boss.drops : [];
+    for (const [k, drop] of bossDrops.entries()) {
+      if (!isRecord(drop) || typeof drop.item !== 'string') continue; // 引用类型坏留给 schema 面（#94）
       if (!items.has(drop.item)) {
         errors.push({
           path: at(`drops/${k}/item`),
@@ -1357,8 +1644,9 @@ function checkAchievements(
 ): void {
   checkIds(achievements, '/achievements', errors);
   achievements.forEach((achievement, i) => {
+    if (!isRecord(achievement) || !isRecord(achievement.condition)) return; // 畸形条目留给 schema 面（#94）
     const at = (field: string) => `/achievements/${i}/${field}`;
-    if (!STAT_KEYS.has(achievement.condition.stat)) {
+    if (typeof achievement.condition.stat === 'string' && !STAT_KEYS.has(achievement.condition.stat)) {
       errors.push({
         path: at('condition/stat'),
         keyword: 'xref',
@@ -1374,7 +1662,10 @@ function checkAchievements(
         message: '布尔型条件（无 target）不应声明 op（比较方向仅对阈值型有意义）',
       });
     }
-    for (const [j, stack] of (achievement.reward?.items ?? []).entries()) {
+    const rewardItems = isRecord(achievement.reward) ? achievement.reward.items : undefined;
+    if (!Array.isArray(rewardItems)) return; // 奖励表形态坏留给 schema 面（#94）
+    for (const [j, stack] of rewardItems.entries()) {
+      if (!isRecord(stack) || typeof stack.item !== 'string') continue; // 引用类型坏留给 schema 面（#94）
       const itemAt = items.get(stack.item);
       if (itemAt === undefined) {
         errors.push({
@@ -1425,9 +1716,10 @@ function checkRebirth(
   const section: RebirthSection | undefined = pack.rebirth;
   if (section === undefined) return;
 
-  // —— 清单键域与互斥。
+  // —— 清单键域与互斥（reset/keep/talents/unlocks/realms 的节级数组形态
+  // 由信任面 scope 保证——clean 路径靠 schema、独立路径靠 semanticScopeOf，#94）。
   for (const [i, key] of section.reset.entries()) {
-    if (!REBIRTH_RESET_KEYS.has(key)) {
+    if (typeof key === 'string' && !REBIRTH_RESET_KEYS.has(key)) {
       errors.push({
         path: `/rebirth/reset/${i}`,
         keyword: 'xref',
@@ -1436,7 +1728,7 @@ function checkRebirth(
     }
   }
   for (const [i, key] of section.keep.entries()) {
-    if (!REBIRTH_KEEP_KEYS.has(key)) {
+    if (typeof key === 'string' && !REBIRTH_KEEP_KEYS.has(key)) {
       errors.push({
         path: `/rebirth/keep/${i}`,
         keyword: 'xref',
@@ -1446,7 +1738,7 @@ function checkRebirth(
   }
   const resetSet = new Set(section.reset);
   for (const [i, key] of section.keep.entries()) {
-    if (resetSet.has(key)) {
+    if (typeof key === 'string' && resetSet.has(key)) {
       errors.push({
         path: `/rebirth/keep/${i}`,
         keyword: 'shape',
@@ -1458,24 +1750,38 @@ function checkRebirth(
   // —— 天赋树：id 去重 + requires xref + 查环 + 效果修饰符区约束。
   const talents: readonly TalentNode[] = section.talents;
   checkIds(talents, '/rebirth/talents', errors);
-  const talentIds = new Set(talents.map((node) => node.id));
+  const talentIds = new Set(
+    talents.filter((node) => isRecord(node) && typeof node.id === 'string').map((node) => node.id),
+  );
   talents.forEach((node, i) => {
+    if (!isRecord(node)) return; // 畸形条目留给 schema 面（#94）
     const at = (field: string) => `/rebirth/talents/${i}/${field}`;
-    for (const [j, req] of (node.requires ?? []).entries()) {
-      if (!talentIds.has(req)) {
-        errors.push({
-          path: at(`requires/${j}`),
-          keyword: 'xref',
-          message: `前置节点 "${req}" 不在同树 talents`,
-        });
+    if (Array.isArray(node.requires)) {
+      for (const [j, req] of node.requires.entries()) {
+        if (typeof req !== 'string') continue; // 引用类型坏留给 schema 面（#94）
+        if (!talentIds.has(req)) {
+          errors.push({
+            path: at(`requires/${j}`),
+            keyword: 'xref',
+            message: `前置节点 "${req}" 不在同树 talents`,
+          });
+        }
       }
     }
-    checkModifiers(node.effects ?? [], at('effects'), errors);
+    if (Array.isArray(node.effects)) {
+      checkModifiers(node.effects, at('effects'), errors);
+    }
     // —— repeatable 价梯（#61）：costs = 第 2..maxStacks 层各一档，长度须
     // = maxStacks − 1（首层价 = 节点 cost；无 costs = 恒价，合法）。
-    // maxStacks ≥ 1 / costs 项正整数归 schema 形态，此处只查跨字段一致性。
+    // maxStacks ≥ 1 / costs 项正整数归 schema 形态，此处只查跨字段一致性；
+    // 字段形态坏（maxStacks 非数值/costs 非数组）不比，留给 schema 面（#94）。
     const repeatable = node.repeatable;
-    if (repeatable?.costs !== undefined && repeatable.costs.length !== repeatable.maxStacks - 1) {
+    if (
+      isRecord(repeatable) &&
+      Array.isArray(repeatable.costs) &&
+      typeof repeatable.maxStacks === 'number' &&
+      repeatable.costs.length !== repeatable.maxStacks - 1
+    ) {
       errors.push({
         path: at('repeatable'),
         keyword: 'shape',
@@ -1486,7 +1792,9 @@ function checkRebirth(
   // 查环（门禁侧保险，与原型继承同律）：DFS 三色标记，回边即环——
   // 菱形依赖（两节点共享前置）合法，不误报；环上每个成员各报一次。
   const requiresOf = new Map<string, readonly string[]>(
-    talents.map((node) => [node.id, node.requires ?? []]),
+    talents
+      .filter((node) => isRecord(node) && typeof node.id === 'string')
+      .map((node) => [node.id, Array.isArray(node.requires) ? node.requires : []]),
   );
   const mark = new Map<string, 'visiting' | 'done'>();
   const detectsCycle = (id: string): boolean => {
@@ -1502,6 +1810,7 @@ function checkRebirth(
     return cycle;
   };
   talents.forEach((node, i) => {
+    if (!isRecord(node) || typeof node.id !== 'string') return; // 畸形条目不参与查环（#94）
     if (detectsCycle(node.id)) {
       errors.push({
         path: `/rebirth/talents/${i}/requires`,
@@ -1515,42 +1824,49 @@ function checkRebirth(
   const claimedEnemies = new Map<string, number>();
   const claimedSkills = new Map<string, number>();
   section.unlocks?.forEach((unlock, i) => {
-    for (const [j, enemyId] of (unlock.enemies ?? []).entries()) {
-      if (!enemies.has(enemyId)) {
-        errors.push({
-          path: `/rebirth/unlocks/${i}/enemies/${j}`,
-          keyword: 'xref',
-          message: `解锁目标敌人 "${enemyId}" 不存在于 enemies`,
-        });
-      }
-      const first = claimedEnemies.get(enemyId);
-      if (first !== undefined) {
-        errors.push({
-          path: `/rebirth/unlocks/${i}/enemies/${j}`,
-          keyword: 'duplicate',
-          message: `敌人 "${enemyId}" 已在第 ${first} 条解锁表登记（同目标重复）`,
-        });
-      } else {
-        claimedEnemies.set(enemyId, i);
+    if (!isRecord(unlock)) return; // 畸形条目留给 schema 面（#94）
+    if (Array.isArray(unlock.enemies)) {
+      for (const [j, enemyId] of unlock.enemies.entries()) {
+        if (typeof enemyId !== 'string') continue; // 引用类型坏留给 schema 面（#94）
+        if (!enemies.has(enemyId)) {
+          errors.push({
+            path: `/rebirth/unlocks/${i}/enemies/${j}`,
+            keyword: 'xref',
+            message: `解锁目标敌人 "${enemyId}" 不存在于 enemies`,
+          });
+        }
+        const first = claimedEnemies.get(enemyId);
+        if (first !== undefined) {
+          errors.push({
+            path: `/rebirth/unlocks/${i}/enemies/${j}`,
+            keyword: 'duplicate',
+            message: `敌人 "${enemyId}" 已在第 ${first} 条解锁表登记（同目标重复）`,
+          });
+        } else {
+          claimedEnemies.set(enemyId, i);
+        }
       }
     }
-    for (const [j, skillId] of (unlock.skills ?? []).entries()) {
-      if (!skills.has(skillId)) {
-        errors.push({
-          path: `/rebirth/unlocks/${i}/skills/${j}`,
-          keyword: 'xref',
-          message: `解锁目标技艺 "${skillId}" 不存在于 skills`,
-        });
-      }
-      const first = claimedSkills.get(skillId);
-      if (first !== undefined) {
-        errors.push({
-          path: `/rebirth/unlocks/${i}/skills/${j}`,
-          keyword: 'duplicate',
-          message: `技艺 "${skillId}" 已在第 ${first} 条解锁表登记（同目标重复）`,
-        });
-      } else {
-        claimedSkills.set(skillId, i);
+    if (Array.isArray(unlock.skills)) {
+      for (const [j, skillId] of unlock.skills.entries()) {
+        if (typeof skillId !== 'string') continue; // 引用类型坏留给 schema 面（#94）
+        if (!skills.has(skillId)) {
+          errors.push({
+            path: `/rebirth/unlocks/${i}/skills/${j}`,
+            keyword: 'xref',
+            message: `解锁目标技艺 "${skillId}" 不存在于 skills`,
+          });
+        }
+        const first = claimedSkills.get(skillId);
+        if (first !== undefined) {
+          errors.push({
+            path: `/rebirth/unlocks/${i}/skills/${j}`,
+            keyword: 'duplicate',
+            message: `技艺 "${skillId}" 已在第 ${first} 条解锁表登记（同目标重复）`,
+          });
+        } else {
+          claimedSkills.set(skillId, i);
+        }
       }
     }
   });
@@ -1558,6 +1874,7 @@ function checkRebirth(
   // —— 境界词表：同层数重复拒绝（层数 → 称号映射歧义）。
   const seenLevels = new Map<number, number>();
   section.realms?.forEach((realm, i) => {
+    if (!isRecord(realm) || typeof realm.level !== 'number') return; // 畸形条目留给 schema 面（#94）
     const first = seenLevels.get(realm.level);
     if (first !== undefined) {
       errors.push({

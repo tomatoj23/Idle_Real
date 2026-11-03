@@ -6,11 +6,12 @@
  * verbs 合并进 combatText.verbs（撞键跳过）。入包是事务式（#56 项 1）：
  * 入包前留整包错误集作基准，入包后立即整包校验，出现**新增**错误（悬空
  * drops 等条目级 schema 查不到的跨引用语义）即抛错——store.update 按
- * 快照整树回滚（#73），包回到入包前时点。校验面板随 data 事件自动重跑
- * 的整包校验照常。
+ * 快照整树回滚（#73），包回到入包前时点。带 schema 错的包整包校验提前
+ * 返回、语义面缺席，对照底与入包后各补一次独立语义入口（#94）——语义
+ * 新增照拦；干净包路径原样。校验面板随 data 事件自动重跑的整包校验照常。
  */
 
-import { validateContent, validateContentPack, sectionSchemas, type ContentError, type JsonSchema } from '@wendao/content';
+import { validateContent, validateContentPack, validatePackSemantics, sectionSchemas, type ContentError, type JsonSchema } from '@wendao/content';
 import type { EditorStore } from '../core/state.js';
 import { entrySchemaOf } from '../core/model.js';
 import { packRecordOf, packSectionArray } from '../core/packSection.js';
@@ -258,6 +259,14 @@ export function applyCandidates(
     // 存量错误不堵入包。
     const baseline = validateContentPack(pack);
     const baselineKeys = new Set(baseline.ok ? [] : baseline.errors.map(errorKeyOf));
+    // 带错包的语义半边（#94）：schema 破时整包校验提前返回、跨引用语义
+    // 缺席，独立语义入口补齐对照底——悬空 drops 等语义存量进差集基准；
+    // 干净包路径原样（整包校验已含语义面，语义入口对干净包恒返回空集）。
+    if (!baseline.ok) {
+      for (const error of validatePackSemantics(pack)) {
+        baselineKeys.add(errorKeyOf(error));
+      }
+    }
     if (kind === 'verbs') {
       applyVerbs(pack);
     } else {
@@ -265,18 +274,23 @@ export function applyCandidates(
     }
     // 事务式整包把关（#56 项 1）：悬空 drops 等跨引用语义条目级 schema
     // 查不到（看不见包），入包后立即整包校验，出现新增错误即抛错回滚。
-    // 已知取舍一：包 schema 已破时 validateContentPack 提前返回（不做语义
-    // 检查），此防线随之只剩 schema 面；带 schema 错编辑期的语义把关由
-    // 校验面板承担（面板同样提前返回，两处行为一致）。
-    // 已知取舍二：差集按 path/keyword/message 全同判等——依赖「追加不位移
+    // after.schema 破时其语义面同样缺席，独立语义入口补齐后合并差集（#94）。
+    // 已知取舍：差集按 path/keyword/message 全同判等——依赖「追加不位移
     // 既有错误下标、错误消息模板不含随追加漂移的计数」这一当前校验器事实
-    // （append-only 入包不满足时才需重审）。
+    // （append-only 入包不满足时才需重审；#94 语义入口对畸形节/畸形条目
+    // 的跳过是内容决定的恒定行为，追加不改变既有节/条目的形态判定，同律
+    // 稳定）。
     const after = validateContentPack(pack);
+    const added = after.ok ? [] : after.errors.filter((error) => !baselineKeys.has(errorKeyOf(error)));
     if (!after.ok) {
-      const added = after.errors.filter((error) => !baselineKeys.has(errorKeyOf(error)));
-      if (added.length > 0) {
-        throw new Error(rollbackMessage(added));
+      for (const error of validatePackSemantics(pack)) {
+        if (!baselineKeys.has(errorKeyOf(error))) {
+          added.push(error);
+        }
       }
+    }
+    if (added.length > 0) {
+      throw new Error(rollbackMessage(added));
     }
   });
   return { applied, skipped, movesRegistered };

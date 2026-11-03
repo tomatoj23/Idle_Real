@@ -281,6 +281,86 @@ describe('#56 项 1 · 入包口语义门禁（撞名逐条拦截 + 事务式整
 });
 
 /**
+ * 变异对照（改完必须验红再还原，别信「测试在场」；集：
+ * scripts/mutation-sets/semantic-gate-94.mjs，2 条）：
+ * - 对照底缺语义半边（#94 基准补齐调用摘除）→ 存量语义错被误判新增、
+ *   好候选入包被误回滚，「不误伤」用例红；
+ * - 入包后语义对照摘除（after 侧 #94 调用摘除）→ 带 schema 错包悬空
+ *   drops 候选入包不再回滚，拦断面/消息定位两用例红。
+ * （content 侧 validatePackSemantics 本体的变异验红走手工，见
+ * packages/content/tests/pack-semantics.test.ts 头注 M1–M5——content 包
+ * 无 vite.config，mutation-check runner 不支持，#94 票评申报。）
+ */
+describe('#94 · 带 schema 错包的语义半边门禁（独立语义入口对照差集）', () => {
+  /** 带字段级 schema 错的编辑期包（右栏实时红是常态，#56 交付评论口径）。 */
+  function brokenStore(): ReturnType<typeof xiuxianStore> {
+    const store = xiuxianStore();
+    store.update((pack) => {
+      (pack['enemies'] as { hp: unknown }[])[0]!.hp = 'oops';
+    });
+    return store;
+  }
+
+  it('带 schema 错包：悬空 drops 候选入包被拦下、抛错整体回滚、包未改动不进历史', async () => {
+    const store = brokenStore();
+    const before = JSON.stringify(store.state.pack);
+    const reply = JSON.stringify({ items: [testEnemy('dangler', '悬空怪', 'ghost_item')] });
+    const result = await generateCandidates({
+      kind: 'enemies', client: fakeClient(reply), config: CONFIG, count: 1, hint: '', pack: store.state.pack,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // 前提钉：候选条目级 schema 零错（悬空只在语义面可见，#56 挂账成因）。
+    expect(result.candidates[0]!.errors).toEqual([]);
+    for (const candidate of result.candidates) candidate.approved = true;
+    expect(() => applyCandidates(store, 'enemies', result.candidates)).toThrow(/回滚/);
+    // 事务性：包回到入包前时点（含那处存量 schema 错原样保留；回滚不入
+    // 历史/不动 dirty 已由 #56 悬空用例钉住，此处不重复）。
+    expect(JSON.stringify(store.state.pack)).toBe(before);
+  });
+
+  it('带 schema 错包 + 语义存量错（悬空 drops）：入包语义新增才拦，存量不堵门', async () => {
+    const store = brokenStore();
+    // 存量语义错：给既有敌人补一条悬空 drop（与候选无牵连）。
+    store.update((pack) => {
+      (pack['enemies'] as { drops: { item: string; chance: number }[] }[])[0]!.drops.push({ item: 'ghost_old', chance: 0.1 });
+    });
+    const reply = JSON.stringify({ items: [testEnemy('fresh_one', '好怪', 'core1')] });
+    const result = await generateCandidates({
+      kind: 'enemies', client: fakeClient(reply), config: CONFIG, count: 1, hint: '', pack: store.state.pack,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    for (const candidate of result.candidates) candidate.approved = true;
+    const report = applyCandidates(store, 'enemies', result.candidates);
+    expect(report.applied).toBe(1);
+    // 存量语义错原样保留（差集只看新增）。
+    expect(JSON.stringify(store.state.pack)).toContain('ghost_old');
+  });
+
+  it('带 schema 错包：悬空 drops 入包的回滚消息指向候选条目（不与存量混淆）', async () => {
+    const store = brokenStore();
+    const reply = JSON.stringify({ items: [testEnemy('dangler', '悬空怪', 'ghost_item')] });
+    const result = await generateCandidates({
+      kind: 'enemies', client: fakeClient(reply), config: CONFIG, count: 1, hint: '', pack: store.state.pack,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    for (const candidate of result.candidates) candidate.approved = true;
+    const appendIndex = (store.state.pack['enemies'] as unknown[]).length; // 追加到既有末尾
+    try {
+      applyCandidates(store, 'enemies', result.candidates);
+      expect.unreachable('应被事务门禁拦下');
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      // 新增错误定位在候选条目的下标（追加到既有 enemies 末尾）。
+      expect(message).toContain(`/enemies/${appendIndex}/drops/0/item`);
+      expect(message).toContain('ghost_item');
+    }
+  });
+});
+
+/**
  * 变异对照（集：scripts/mutation-sets/editor-exit-gates-56.mjs）：
  * pattern 取值断链（verbKeyPatternOf 恒 undefined）→ 单一来源钉住用例红。
  */

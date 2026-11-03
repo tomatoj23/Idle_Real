@@ -8,6 +8,7 @@
 export {
   validateContent,
   validateContentPack,
+  validatePackSemantics,
   formatContentErrors,
   sectionSchemas,
 } from './schema/index.js';

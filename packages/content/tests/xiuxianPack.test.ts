@@ -168,6 +168,7 @@ describe('content 包分居（#23，#29 守卫补强）', () => {
         'skeletonAttr',
         'validateContent',
         'validateContentPack',
+        'validatePackSemantics',
       ].sort(),
     );
   });
