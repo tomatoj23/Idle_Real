@@ -281,16 +281,26 @@ export function applyCandidates(
     // 的跳过是内容决定的恒定行为，追加不改变既有节/条目的形态判定，同律
     // 稳定）。
     const after = validateContentPack(pack);
-    const added = after.ok ? [] : after.errors.filter((error) => !baselineKeys.has(errorKeyOf(error)));
+    // 新增错误收集按身份去重（审计 N-C）：schema 净时 after.errors 已含语义
+    // 面，独立语义入口会对同一错误再报一次——不去重则「入包会引入 N 处」
+    // 计数与条目翻倍。schema 面/语义面关键字域不相交，全同键即同一错误。
+    const addedByKey = new Map<string, ContentError>();
     if (!after.ok) {
+      for (const error of after.errors) {
+        const key = errorKeyOf(error);
+        if (!baselineKeys.has(key)) {
+          addedByKey.set(key, error);
+        }
+      }
       for (const error of validatePackSemantics(pack)) {
-        if (!baselineKeys.has(errorKeyOf(error))) {
-          added.push(error);
+        const key = errorKeyOf(error);
+        if (!baselineKeys.has(key) && !addedByKey.has(key)) {
+          addedByKey.set(key, error);
         }
       }
     }
-    if (added.length > 0) {
-      throw new Error(rollbackMessage(added));
+    if (addedByKey.size > 0) {
+      throw new Error(rollbackMessage([...addedByKey.values()]));
     }
   });
   return { applied, skipped, movesRegistered };

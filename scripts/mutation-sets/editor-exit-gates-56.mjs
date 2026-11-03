@@ -39,9 +39,9 @@ export default {
     {
       id: '01-apply-drop-transactional-gate',
       path: pipelinePath,
-      before: '    if (added.length > 0) {\n      throw new Error(rollbackMessage(added));',
-      after: '    if (false && added.length > 0) {\n      throw new Error(rollbackMessage(added));',
-      note: '事务把关失效：悬空 drops 候选入包不回滚——pipeline 悬空用例、panel 自然红路径、包未改动断言红。（#94 重构后锚点随 added 收敛为单点收口重拟，语义不变。）',
+      before: '    if (addedByKey.size > 0) {\n      throw new Error(rollbackMessage([...addedByKey.values()]));',
+      after: '    if (false && addedByKey.size > 0) {\n      throw new Error(rollbackMessage([...addedByKey.values()]));',
+      note: '事务把关失效：悬空 drops 候选入包不回滚——pipeline 悬空用例、panel 自然红路径、包未改动断言红。（锚点随 #94 审计批 addedByKey 去重收敛点第二次重拟，语义不变。）',
     },
     {
       id: '02-apply-baseline-emptied',

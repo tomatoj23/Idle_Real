@@ -32,9 +32,9 @@ export default {
     {
       id: '02-after-semantic-severed',
       path: pipelinePath,
-      before: '    if (!after.ok) {\n      for (const error of validatePackSemantics(pack)) {',
-      after: '    if (false) {\n      for (const error of validatePackSemantics(pack)) {',
-      note: '入包后语义对照摘除：带 schema 错包的悬空 drops 候选入包畅通（#56 挂账缺口复发）——拦断面/消息定位两用例红。',
+      before: '      for (const error of validatePackSemantics(pack)) {\n        const key = errorKeyOf(error);\n        if (!baselineKeys.has(key) && !addedByKey.has(key)) {',
+      after: '      for (const error of validatePackSemantics(pack)) {\n        const key = errorKeyOf(error);\n        if (false && !baselineKeys.has(key) && !addedByKey.has(key)) {',
+      note: '入包后语义对照摘除：带 schema 错包的悬空 drops 候选入包畅通（#56 挂账缺口复发）——拦断面/消息定位两用例红。（锚点随 #94 审计批 addedByKey 去重重拟，语义不变。）',
     },
   ],
 };

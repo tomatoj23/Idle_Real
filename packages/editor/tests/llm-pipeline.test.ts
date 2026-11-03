@@ -338,6 +338,29 @@ describe('#94 · 带 schema 错包的语义半边门禁（独立语义入口对�
     expect(JSON.stringify(store.state.pack)).toContain('ghost_old');
   });
 
+  it('干净底包纯语义新增：回滚消息计数不翻倍（审计 N-C，schema 净时 after.errors 已含语义面）', async () => {
+    const store = xiuxianStore();
+    const before = JSON.stringify(store.state.pack);
+    const reply = JSON.stringify({ items: [testEnemy('dangler', '悬空怪', 'ghost_item')] });
+    const result = await generateCandidates({
+      kind: 'enemies', client: fakeClient(reply), config: CONFIG, count: 1, hint: '', pack: store.state.pack,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    for (const candidate of result.candidates) candidate.approved = true;
+    try {
+      applyCandidates(store, 'enemies', result.candidates);
+      expect.unreachable('应被事务门禁拦下');
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      // 整包校验（schema 净→含语义）与独立语义入口会对同一悬空各报一次：
+      // 按错误身份去重后计数与条目都必须是 1，不得出现重复条目。
+      expect(message).toContain('引入 1 处校验错误');
+      expect(message).not.toContain('引入 2 处');
+      expect(message.split('/enemies/').length - 1).toBe(1);
+    }
+    expect(JSON.stringify(store.state.pack)).toBe(before);
+  });
   it('带 schema 错包：悬空 drops 入包的回滚消息指向候选条目（不与存量混淆）', async () => {
     const store = brokenStore();
     const reply = JSON.stringify({ items: [testEnemy('dangler', '悬空怪', 'ghost_item')] });

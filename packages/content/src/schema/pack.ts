@@ -395,8 +395,11 @@ function semanticChecks(
     // 低倍」倒挂让阈值语义与直觉相悖（排档约定的语义守护，三处同步口径见文档）。
     // 倍率类型坏（非数值）不比（字典序会误报倒挂），留给 schema 面（#94）。
     for (let i = 1; i < pack.rarities.length; i++) {
-      const prev = pack.rarities[i - 1]!;
-      const cur = pack.rarities[i]!;
+      const prev = pack.rarities[i - 1];
+      const cur = pack.rarities[i];
+      // 条目 record 判定先行（审计 N-B）：null/畸形条目参与会让下面的 typeof
+      // 守卫自身在读 .mult 时崩——不崩溃承诺先于比较律。
+      if (!isRecord(prev) || !isRecord(cur)) continue;
       if (typeof prev.mult !== 'number' || typeof cur.mult !== 'number') continue;
       if (cur.mult < prev.mult) {
         errors.push({
@@ -593,6 +596,9 @@ function checkConfig(
     combat?.tierLightMax !== undefined &&
     combat.tierMidMax !== undefined &&
     combat.tierHeavyMax !== undefined &&
+    typeof combat.tierLightMax === 'number' &&
+    typeof combat.tierMidMax === 'number' &&
+    typeof combat.tierHeavyMax === 'number' &&
     !(combat.tierLightMax < combat.tierMidMax && combat.tierMidMax < combat.tierHeavyMax)
   ) {
     errors.push({
@@ -831,7 +837,9 @@ function checkSkills(
 ): void {
   skills.forEach((skill, i) => {
     if (!isRecord(skill)) return; // 畸形条目留给 schema 面（#94）
-    const hasActivities = skill.activities !== undefined && skill.activities.length > 0;
+    // activities 表形态坏（null/非数组）不读 .length（审计 N-B 同族：属性读取
+    // 前须判型），按「无可查活动」处理，类型错留给 schema 面。
+    const hasActivities = Array.isArray(skill.activities) && skill.activities.length > 0;
     if (skill.kind === 'gather' && !hasActivities) {
       errors.push({
         path: `/skills/${i}`,

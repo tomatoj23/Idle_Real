@@ -329,5 +329,29 @@ describe('validatePackSemantics · 语义独立入口（#94）', () => {
       expect(errors).toHaveLength(1);
       expect(errors[0]).toMatchObject({ path: '/rarities/1/mult', keyword: 'monotonic' });
     });
+
+    it('config 伤害档阈值类型坏（字符串数值递增）：不按字典序误报递增违例（审计 N-A）', () => {
+      const pack = makePack();
+      pack.config = {
+        slots: [{ id: 'weapon', name: '法器' }],
+        combat: { tierLightMax: '5', tierMidMax: '12', tierHeavyMax: '20' },
+      };
+      // 字典序 "5"<"12"<"20" 全 false，旧代码会报出自相矛盾的消息
+      // （「light 5 < mid 12 < heavy 20」被判违例）——类型坏不比，留给 schema 面。
+      expect(validatePackSemantics(pack)).toEqual([]);
+    });
+
+    it('rarities 混入 null 条目：不崩溃、零噪音；数值倍率对照常查（审计 N-B）', () => {
+      const pack = makePack();
+      pack.rarities.push(null);
+      expect(() => validatePackSemantics(pack)).not.toThrow();
+      expect(validatePackSemantics(pack)).toEqual([]);
+    });
+
+    it('技能 activities 为 null：不崩溃（审计 N-B 同族；守护卫读属性前须先 record 判定）', () => {
+      const pack = makePack();
+      pack.skills[0].activities = null;
+      expect(() => validatePackSemantics(pack)).not.toThrow();
+    });
   });
 });
