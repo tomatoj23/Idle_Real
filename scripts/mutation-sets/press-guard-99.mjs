@@ -35,14 +35,14 @@ export default {
       path: uiPath,
       before: '      if (!journalIncremental && pressActive) {\n        rebuildPending = true;',
       after: '      if (!journalIncremental && pressActive) {\n        rebuildPending = true;\n        lastSig = sig;',
-      note: '推迟期误写 lastSig（票评②反例）：补换血时签名比较不再命中，释放/超时后重建永久丢失——三夹具的「补换血落地」断言红。',
+      note: '推迟期误写 lastSig（票评②反例）：补换血时签名比较不再命中，切页/超时路径重建永久丢失——两夹具红（测试 1 幸存：click 落地使签名再变，释放补换血 render-0 重走判据仍重建；其专杀见 03）。（勘误 2026-11-04 审计 A-4：原文「三夹具红」失实，四跑杀伤矩阵一致 2/3。）',
     },
     {
       id: '03-release-flush-severed',
       path: uiPath,
       before: '    if (via === \'up\') {\n      setTimeout(render, 0);',
       after: '    if (false) {\n      setTimeout(render, 0);',
-      note: '释放补换血摘除：真抬起路径不再补 render（click 落地了但页面滞留旧态）——按压跨换血/切页两夹具的释放后断言红。',
+      note: '释放补换血摘除：`if(false)` 使 up 落入 else 的同步 render——抬起即换血（发生在补发 click 之前），吞掉本次 click（#92 N1 形态复现）——测试 1 的 actions 断言红（单夹具专杀）。（勘误 2026-11-04 审计 A-4：原文「click 落地但页面滞留旧态、两夹具红」机制与杀伤面均失实，四跑一致 1/3。）',
     },
     {
       id: '04-starvation-timeout-severed',
