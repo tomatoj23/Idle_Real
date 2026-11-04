@@ -10,7 +10,8 @@
 //   electron packages/app-desktop/scripts/electron-acceptance.mjs <config.json>
 //         —— harness（沙箱内真 app main）：重定向 userData/sessionData/crashDumps/logs
 //         四路径（在导入真实 main 之前）→ 清 Steam 环境 → dialog.showErrorBox 换记录器
-//         （防无人值守模态阻塞）→ 按场景脚本驱动真 BrowserWindow/webContents → 事件 JSONL。
+//         （防无人值守模态阻塞）→ 窗口关后台节流（遮挡/最小化停 rAF 会造断言假阴性，票 #96）
+//         → 按场景脚本驱动真 BrowserWindow/webContents → 事件 JSONL。
 //
 // 八场景（原型 rev2 全过）：
 //   normal-ui                  真渲染层启动：mock 桥、存档往返落盘、start→running、截屏
@@ -569,9 +570,38 @@ async function harnessMain(configPath) {
       reloadCount,
     };
   };
+  // 失败链页面可见性取证（票 #96）：遮挡/最小化下 isVisible()/isFocused() 仍为真，
+  // document.visibilityState 翻 hidden 是唯一判别面——经 executeJavaScript 自 WebContents 侧
+  // 取出并入 harness-error 事件（runner 侧随 failures 链原样进 results.json）。1s 竞速兜底：
+  // 渲染进程已死/挂起时探针不阻塞失败出口；写盘 appendFileSync 同步且在 app.exit 之前完成，
+  // 不被抢先。
+  const pageVisibility = async () => {
+    if (!wc || wc.isDestroyed() || wc.isCrashed()) return { reachable: false, reason: 'webContents-unavailable' };
+    const probe = await Promise.race([
+      wc
+        .executeJavaScript('JSON.stringify({visibilityState: document.visibilityState, hasFocus: document.hasFocus()})')
+        .then((json) => JSON.parse(json))
+        .catch((error) => ({ reason: `probe-failed: ${error.message}` })),
+      new Promise((resolveTimeout) => setTimeout(() => resolveTimeout({ reason: 'probe-timeout' }), 1000)),
+    ]);
+    return probe.visibilityState ? { reachable: true, ...probe } : { reachable: false, reason: probe.reason ?? 'probe-empty' };
+  };
   const fail = (error) => {
-    record('harness-error', { message: error.message, stack: error.stack, ...snapshot() });
-    app.exit(2);
+    if (finished) return;
+    finished = true; // fail 赢家定序：probe ≤1s 窗口内并发来的 success/二次 fail 一律不跑（取证面防被自然退出冲掉）
+    void (async () => {
+      let page;
+      try {
+        page = await pageVisibility();
+      } catch (probeError) {
+        page = { reachable: false, reason: `probe-error: ${probeError.message}` };
+      }
+      try {
+        record('harness-error', { message: error.message, stack: error.stack, page, ...snapshot() });
+      } finally {
+        app.exit(2);
+      }
+    })();
   };
   const success = (details = {}) => {
     if (finished) return;
@@ -645,7 +675,11 @@ async function harnessMain(configPath) {
   });
   app.on('browser-window-created', (_event, window) => {
     win = window;
-    record('browser-window-created', { id: win.id, webPreferences: win.webContents.getLastWebPreferences() });
+    // 工装专用节流豁免（票 #96）：窗口被其他窗口完全盖住或最小化时 Chromium 停发 rAF，
+    // 「点 start → 固定等 → 查 DOM」式断言拿到陈旧 DOM 即假阴性。产品侧勿效仿——产品窗口
+    // 被遮挡时节流降 CPU 是期望行为（tick 循环 setInterval 驱动 + dt 补偿，账目不受影响）。
+    window.webContents.setBackgroundThrottling(false);
+    record('browser-window-created', { id: win.id, backgroundThrottling: false, webPreferences: win.webContents.getLastWebPreferences() });
     for (const event of ['show', 'hide', 'close', 'closed']) win.on(event, () => record(`window-${event}`, snapshot()));
   });
   for (const event of ['before-quit', 'will-quit', 'window-all-closed']) app.on(event, () => record(`app-${event}`, snapshot()));

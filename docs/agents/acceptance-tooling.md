@@ -82,7 +82,7 @@ false 走 exit 1、manifest 留 `sourceFrozenAcrossRun: false` 供复核；另�
 seq/ms 时序）、config/stdout/stderr、commands.json（每次 spawn 的原件留痕）、normal-ui 截图。
 沙箱在 os.tmpdir 下 mkdtemp，真档零接触（红线同 2026-09-29 删档事故教训）。
 
-**已知坑（原型实测吸收）**：
+**已知坑（原型实测吸收，#96 并入两坑）**：
 - 慢资源 fixture（initial-death / close-loading）必须**等请求真实到达、load 仍 pending** 才
   crash / 关窗——harness 内 `slowRequests === 0` 时轮询等待，防 fixture 抢跑把「竞争暴露」
   变成「随机通过」；
@@ -94,10 +94,33 @@ seq/ms 时序）、config/stdout/stderr、commands.json（每次 spawn 的原件
 - 验收超时杀进程须 `taskkill /PID <pid> /T /F`（Windows 下 SIGKILL 到不了进程树）；
 - 判定口径的 reload 分母由 runner 从编译产物 `RELOAD_LIMIT` 读取传入（同源）；`expectedAttempts`
   表与各场景崩溃次数设计仍钉当前 RELOAD_LIMIT=3 的行为——改重载上限须同步重拟场景脚本与
-  期望表，不能只改正则。
+  期望表，不能只改正则；
+- **遮挡/最小化停 rAF（#96 定案；#92 会话审计两轮反方实猎）**：窗口被其他窗口（含外部应用）
+  完全盖住或最小化时，Chromium 停发 requestAnimationFrame，壳层「事件 → scheduleRender →
+  rAF 重绘」链停滞——引擎态已变而 DOM 陈旧，normal-ui「点 start → 固定等 2100ms → 查 stop
+  按钮」拿到旧 DOM 即假阴性（#91 交付时提交说明所记「首轮 normal-ui 冷启动 flake」即此机理）。
+  失焦本身不停 rAF；`isVisible()`/`isFocused()` 被遮挡时仍为 true，不可作遮挡判据；
+  `document.visibilityState` 翻 hidden 才是判别面——**但只在节流开时成立**（产品实际态）：
+  `setBackgroundThrottling(false)` 的豁免机制 = Electron 给每个帧宿主置
+  `RenderWidgetHost::disable_hidden_`（快照 `electron-main` shell/browser/api/
+  `electron_api_web_contents.cc` SetBackgroundThrottling），**吞掉 hidden 迁移本身**——页面
+  对自己恒报 visible、rAF 不停：同一开关既解锁重绘也掩盖可见性判别面。harness 失败链经
+  harness-error 事件把 `document.visibilityState`/`hasFocus` 留痕进 results.json：对照跑
+  （节流临时复开）与产品态读 hidden；修法激活的 harness 跑读 visible 属预期，勿当
+  「遮挡没生效」误判。**「置前 + 重试点击」修法无效**且重试会对在场按钮重复派发动作。修法 =
+  harness 窗口创建点 `setBackgroundThrottling(false)`，**工装专用**——产品侧勿效仿：产品窗口
+  被遮挡时节流降 CPU 是期望行为（tick 循环 setInterval 驱动 + dt 补偿，账目不受影响）。
+  因果对照证据（同遮挡构造下节流开红/节流关绿成对）见
+  `docs/audit/2026-11-04-acceptance-occlusion-96.md`；
+- **Electron ESM 入口顶层 await 结束前不发 `app.ready`**：双模式同文件的一次性驱动脚本，若在
+  顶层 await 里等窗口（窗口依赖 ready）即死锁——#92 首跑实测 90s 超时零断言。官方 esm.md 语义
+  为「await generously before ready」（本地快照 `electron-main` docs/tutorial/esm.md）——启动
+  前置（重定向/监听/导入真实 main）在顶层做完即返回，场景逻辑 detach 自跑。
 
 ## 证据留档
 
 两工装默认把报告落在 `.scratch/`（gitignore，不入库）；需要交付背书时在票评引用报告目录
 路径与关键数字（分类表 / 8 场景结果），原型期先例见 `docs/audit/2026-10-03-renderer-recovery-80.md`。
-`.scratch/` 会被会话清理，长期背书以票评为准。
+`.scratch/` 会被会话清理，长期背书以票评为准；票评之外，交付会话可在 `docs/audit/` 落
+正式留痕文档（构造法、关键读数、机理定案），背书效力次于票评、先于 `.scratch` 原始报告
+（#96 先例：`2026-11-04-acceptance-occlusion-96.md`）。
