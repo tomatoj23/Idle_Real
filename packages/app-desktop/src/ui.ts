@@ -62,6 +62,9 @@ export interface Ui {
 
 /** 战斗日志环形容量（真实 DOM 环形删头上限）。导出为测试真源（D5：禁测试自钉拷贝）。 */
 export const MAX_FLOG = 60;
+/** 按压窗口上限（#99）：整页换血让路给进行中按压的最长时长，超时放行（release
+ * 饥饿兜底）。导出为测试真源（MAX_FLOG 同律）。 */
+export const PRESS_DEFER_MAX_MS = 1500;
 /** 醒目 toast 驻留（毫秒）。 */
 const TOAST_MS = 3200;
 /** toast 栈上限（#76 项 6）：同文去重之外的兜底——不同文连发不盖满屏。导出为测试真源。
@@ -389,6 +392,50 @@ export function buildUi(
     if (!el) return;
     pages[activeTab].handleAction?.(el.dataset.act ?? '', el);
   });
+
+  /* ---------- 按压窗口守卫（#99）----------
+   * 心跳整页换血（render 内 pageEl.innerHTML 重写）若落在按下与抬起之间，
+   * mouseup 落在新 DOM 上不派发 click（mousedown/mouseup 目标无公共祖先的
+   * DOM 标准行为；#92 审计 N1 实证 ~5% 点击落入）。换血让路给进行中的按压：
+   * 窗口内推迟重建，抬起后 click 派发完再补换血。
+   * - 守卫挂换血本体（render 签名变化→重建一处），签名变化/切页（navigate
+   *   lastSig=''）/动作后（env.render lastSig=''）三入口自然全覆盖；
+   * - 推迟路径不动 lastSig（#99 票评②）：强制重建等价面保持，补换血时
+   *   签名比较仍命中；
+   * - release 饥饿兜底（#99 票评③）：pointerup 不达（按下中失窗等）超时
+   *   放行，防换血被永久推迟；长按压超窗后退回原行为（页面不冻结）。
+   * 真实浏览器 click 在 mouseup 后同批派发、先于计时器：pointerup 的补换血
+   * 走宏任务，先让 click 落地再重建（避免补换血自己吞掉本次 click）。 */
+
+  let pressActive = false;
+  /** release 饥饿兜底计时（pointerdown 武装，释放/超时即撤）。 */
+  let pressGuardTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 按压窗口内被推迟的整页换血（释放/超时后补一次 render）。 */
+  let rebuildPending = false;
+
+  /** 释放按压（up=真抬起，补换血让 click 先落地；cancel/timeout 无 click 可言，即时补）。 */
+  function releasePress(via: 'up' | 'cancel' | 'timeout'): void {
+    if (pressGuardTimer !== null) {
+      clearTimeout(pressGuardTimer);
+      pressGuardTimer = null;
+    }
+    pressActive = false;
+    if (!rebuildPending) return;
+    rebuildPending = false;
+    if (via === 'up') {
+      setTimeout(render, 0);
+    } else {
+      render();
+    }
+  }
+
+  root.addEventListener('pointerdown', () => {
+    pressActive = true;
+    if (pressGuardTimer !== null) clearTimeout(pressGuardTimer);
+    pressGuardTimer = setTimeout(() => releasePress('timeout'), PRESS_DEFER_MAX_MS);
+  });
+  root.addEventListener('pointerup', () => releasePress('up'));
+  root.addEventListener('pointercancel', () => releasePress('cancel'));
 
   /* ---------- 反馈枢纽（#34）：飘字两档 + 醒目 toast + 战斗日志 ---------- */
 
@@ -960,26 +1007,36 @@ export function buildUi(
 
     const sig = signature(st, snap);
     if (sig !== lastSig) {
-      lastSig = sig;
       // 修行录页增量路径（#33 AC）：骨架在场时数据面只走页末 update（seq 差量
       // 追加/净收获轻刷），不整页重建——挂页时连续掉落由增量追加承载；
       // 其余页面（含修行录首次挂载、骨架缺失）走全量挂载路径。
       const journalIncremental = activeTab === 'journal' && pageEl.querySelector('#jr-list');
-      if (!journalIncremental) {
-        // 页面挂载（D1：注册表查找分发，if/else 与坊市兜底退役）。
-        pageEl.innerHTML = pages[activeTab].render({ st, snap, content, T });
-        // 战斗日志持久体重挂（#34 持久层机制）：内容体自持于壳层，重建后按
-        // 锚点（页内 #flog 槽）replaceWith 重挂——flogBuffer 重放 hack 退役。
-        // 换血会脱离文档流使真实浏览器 scrollTop 归零（happy-dom 不模拟滚动，
-        // 测试盲区），重挂即恢复滚底语义（日志跟随到底，非旧"滚动恢复 hack"）。
-        const slot = pageEl.querySelector<HTMLElement>('#flog');
-        if (slot && slot !== flogBox) {
-          slot.replaceWith(flogBox);
-          flogBox.scrollTop = flogBox.scrollHeight;
+      // 按压窗口守卫（#99）：换血让路给进行中的按压；lastSig 不动（票评②），
+      // 释放/超时后的补换血重走本判据，切页/动作后强制重建等价面不破。
+      // 修行录增量路径不换血不吞点击，照常增量，不受守卫推迟。
+      if (!journalIncremental && pressActive) {
+        rebuildPending = true;
+      } else {
+        lastSig = sig;
+        if (!journalIncremental) {
+          // 页面挂载（D1：注册表查找分发，if/else 与坊市兜底退役）。
+          pageEl.innerHTML = pages[activeTab].render({ st, snap, content, T });
+          // 战斗日志持久体重挂（#34 持久层机制）：内容体自持于壳层，重建后按
+          // 锚点（页内 #flog 槽）replaceWith 重挂——flogBuffer 重放 hack 退役。
+          // 换血会脱离文档流使真实浏览器 scrollTop 归零（happy-dom 不模拟滚动，
+          // 测试盲区），重挂即恢复滚底语义（日志跟随到底，非旧"滚动恢复 hack"）。
+          const slot = pageEl.querySelector<HTMLElement>('#flog');
+          if (slot && slot !== flogBox) {
+            slot.replaceWith(flogBox);
+            flogBox.scrollTop = flogBox.scrollHeight;
+          }
         }
       }
     }
     // 实况区差量刷新（D3）：进度条/血条归所在页 update（#50 渲染管线的落点）。
+    // 按压推迟窗内若切过页，此处新页 update 会短暂跑在旧页 DOM 上——各页
+    // update 锚点查询均空值守卫（pageFrame updateActivityPct 同律），查不到
+    // 即 no-op，补换血落地后自愈；属 #99 守卫的已知瞬态，非错配 bug。
     pages[activeTab].update?.({ st, snap, content, T });
     // 档一飘字位置随页面重绘刷新（#34：按锚点重查询刷新位置）。
     positionCombatFloats();
