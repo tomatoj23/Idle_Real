@@ -63,7 +63,8 @@ node packages/app-desktop/scripts/electron-acceptance.mjs --self-test        # �
 双模式同文件：普通 node 下是 runner（临时根全新构建 electron main + renderer——`--configLoader
 native` 防缓存写盘，不复用旧 dist——然后逐场景 spawn 真 electron）；`electron <本文件> <config>`
 下是沙箱内 harness（`userData/sessionData/crashDumps/logs` 在导入真实 main **之前**全重定向、
-清 Steam 环境变量、`dialog.showErrorBox` 换记录器防无人值守模态阻塞）。
+清 Steam 环境变量、`dialog.showErrorBox` 换记录器防无人值守模态阻塞、窗口创建点关后台节流
+`setBackgroundThrottling(false)`——遮挡停 rAF 假阴性，见已知坑）。
 
 **八场景**：normal-ui（真渲染层启动 + mock 桥存档往返 + start→running + 截屏）/ crash-loop
 （3 reload + 第 4 次 escalate → exit 1）/ initial-death（首载中真死）/ stable-reset（稳定满窗

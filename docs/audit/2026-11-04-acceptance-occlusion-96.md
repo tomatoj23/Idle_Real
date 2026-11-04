@@ -45,11 +45,12 @@ load-rejection 链；两注入场景各 4 真 + 2 注入（injected 与真死分
   对照红/修法绿成对，因果归因干净。
 - **无效构造教训（v1，occ-green / occ-contrast-red 两跑作废）**：遮挡窗盖满主屏工作区且先坐
   ~60s（构建期间）再让主窗出生即盖——节流开下 DOM 照更新（遮挡未被记账），对照假绿。同文件
-  探针（.scratch/adv96/probe-occlusion.mjs / probe-c / probe-d / probe-e）证明出生即盖在
-  2.5s/0.5s/60s 间隔、跨进程、带节流调用各变体下对**裸页面**都稳定记账（raf:0, vis:hidden），
-  唯全屏尺寸+长时间先坐的实 harness 跑失灵 2/2——机理未深究，**做法上收窄为：遮挡窗只盖
-  主窗区域 + 贴 scenario-start 建**（此构造 3/3 稳定）。另：全屏遮挡窗会长时间遮黑用户桌面，
-  已改小窗并加自杀看门狗（防驱动崩溃残留黑屏）。
+  探针（.scratch/adv96/probe-occlusion.mjs / probe-c / probe-d 已落档；60s 间隔例证=probe-e
+  内联 node -e **未落档**）证明出生即盖在 2.5s/0.5s/60s 间隔、跨进程、带节流调用各变体下对
+  **裸页面**都稳定记账（raf:0, vis:hidden），唯全屏尺寸+长时间先坐的实 harness 跑失灵 2/2
+  ——机理未深究，**做法上收窄为：遮挡窗只盖主窗区域 + 贴 scenario-start 建**（此构造共
+  4 跑全符合预期：对照可观测面 2/2 记账成立 vis:hidden；绿跑 2 跑记账被修法掩盖不可观测）。
+  另：全屏遮挡窗会长时间遮黑用户桌面，已改小窗并加自杀看门狗（防驱动崩溃残留黑屏）。
 - 探针判别面：`document.visibilityState` + rAF 计数（页面内 `requestAnimationFrame` 累加器）
   直读，比 `isVisible/isFocused` 可靠。
 
