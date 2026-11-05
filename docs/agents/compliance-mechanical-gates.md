@@ -79,7 +79,7 @@
 
 ### 落地形态（#82 实施记录，2026-09-29）
 
-- **脚本**：`scripts/policy-check.mjs`（零依赖纯 node）。P1/P3/P4/P7/P8 命中 = 硬失败（exit 1）；P2/P5/P6 命中 = review 级提示（不阻塞，即「命不准转 review」）。断言精度按上表落地，三处细化：
+- **脚本**：`scripts/policy-check.mjs`（零依赖纯 node）。P1/P3/P4/P7/P8/P9 命中 = 硬失败（exit 1）；P2/P5/P6 命中 = review 级提示（不阻塞，即「命不准转 review」）。断言精度按上表落地，三处细化：
   - P1 五类排除（注释/字符串/属性键/声明名/接口·类型块）之外补「成员访问属性位」判定：**探测根**（globalThis/window/self/global）上的属性访问仍算直接引用（`globalThis.setTimeout` 形态），**本地对象**上的同名成员（`timer.setInterval` 绑后调用）放行。词表刻意不含 location/history/alert 等短词（与领域词撞名，宁可漏报）、console（双端标准对象，解构面归 P2）、fetch/crypto 等双端共有对象。
   - P3 扫 `packages/content/src/schema/**` 与 `packages/content/src/packs/**` 全部文件（含 .ts——TS 里拼出的 schema 字符串同样是使用面）；.ts 掩蔽注释（「勿用 $defs」的提醒不误伤），JSON 全文扫（键即字符串）。
   - P4 只认真档落点族（`%APPDATA%` 族 / `AppData\Roaming` 绝对形态 / Roaming\<游戏目录> / macOS/Linux userData 落点 / `process.env.APPDATA`），分隔符取 `[\\/]+`（JS 源码转义双反斜杠形态不漏）；**不扫裸 `userData`**。
@@ -98,7 +98,7 @@
   - P8：删任一 `tests/*.test.ts` 不调基线 → 硬失败（合成树验证：含 package.json、零测试文件的临时树必红）；
   - P9：向受跟踪文本 `git add` 一个含字面 U+FFFD 的文件 → 硬失败且报错含文件名；同内容不 add（未跟踪）→ 不报（受跟踪面）；金丝雀负例用 `\uFFFD` 转义构造（金丝雀源文件自身保持零真实乱码字节，#97 变异集 5/5 全杀：接线摘除/豁免正则收窄/白名单混入 png/受跟踪面断/RULES 缺条目）；
   - 反向（误伤面）：金丝雀 ALLOW 组 = 基线合规形状清单（`g['setInterval']` 探测、接口方法签名、属性键、解构重命名、`timer.setInterval`、裸 `userDataDir: tempRoot()`、`file:///C:/…` URL 夹具、`moduleResolution: node10`、`clock.now()`、`performance.now()`、`Math['random']` 下标等），跑翻红 = 检测面变宽误伤，比失效更伤；DENY 组翻绿 = 门禁失效（同 #81 金丝雀协议）。
-- **已知边界（如实声明）**：P2 只认静态解构/成员抽取形态，探测别名（`g['名']`）与 bind 后使用不进检测面；P4 防呆不防恶（`app.getPath('userData')` 运行时解析、拼接构造的路径都看不见）；P5/P6 粗正则只提示，P5 仍只粗检日期（#83 将完整「快照名 + 内部版本 + 取档日期」标注落入票模板，由 review 核对，不扩大本规则检测面）；AGENTS.md「现役 TS 7」是 P6 的常驻 review 提示（时点数字的已知在案形态，处置随 review）。P1 残余（宁可漏报方向）：同名遮蔽引用不识别（局部变量叫 `document` 的引用面照报——engine 命名纪律兜底，勿用禁词做局部名）；CR-only 行结束符的注释掩蔽不识别（本仓 CRLF/LF 不受影响）。P9 残余（宁可漏报方向，票 #97 价值边界）：**门只覆盖受跟踪文件**——gh 评论、记忆、.scratch、代理消息面仍靠读回纪律；扩展名白名单外的文本（无扩展名/点开头件如 `.gitignore`、`pre-push` 钩子脚本）不扫；walkFiles SKIP_DIRS 内的已跟踪件不进走查面；git 不可用时 P9 整规则跳过（fail-open）。豁免通路注意：`policy-allow` 的解析走 JS 词法掩码，markdown 代码围栏（反引号）内的豁免行会被当模板体抹掉——豁免行写在围栏外普通文本行即可。
+- **已知边界（如实声明）**：P2 只认静态解构/成员抽取形态，探测别名（`g['名']`）与 bind 后使用不进检测面；P4 防呆不防恶（`app.getPath('userData')` 运行时解析、拼接构造的路径都看不见）；P5/P6 粗正则只提示，P5 仍只粗检日期（#83 将完整「快照名 + 内部版本 + 取档日期」标注落入票模板，由 review 核对，不扩大本规则检测面）；AGENTS.md「现役 TS 7」是 P6 的常驻 review 提示（时点数字的已知在案形态，处置随 review）。P1 残余（宁可漏报方向）：同名遮蔽引用不识别（局部变量叫 `document` 的引用面照报——engine 命名纪律兜底，勿用禁词做局部名）；CR-only 行结束符的注释掩蔽不识别（本仓 CRLF/LF 不受影响）。P9 残余（宁可漏报方向，票 #97 价值边界）：**门只覆盖受跟踪文件**——gh 评论、记忆、.scratch、代理消息面仍靠读回纪律；扩展名白名单外的文本（无扩展名/点开头件如 `.gitignore`、`pre-push` 钩子脚本）不扫；walkFiles SKIP_DIRS 内的已跟踪件不进走查面；git 不可用时 P9 整规则跳过（fail-open）；受跟踪面比对是盘上路径对 git index 的精确匹配，Windows 大小写不敏感盘上两者大小写漂移时该文件静默漏扫（fail-open 方向，2026-11-05 审计补记）。豁免通路注意：`policy-allow` 的解析走 JS 词法掩码，markdown 代码围栏（反引号）内的豁免行会被当模板体抹掉——豁免行写在围栏外普通文本行即可。
 
 ## 3. 守卫测试（可选替身）
 
