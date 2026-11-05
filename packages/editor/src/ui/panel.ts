@@ -1,10 +1,12 @@
 /**
- * 校验面板（#11）：复用 content 包 validateContentPack（同一份代码），
- * 错误按节分组展示、点击定位到表单字段（data-path 同构）。
+ * 校验面板（#11）：错误集走 visibleValidation（#100：整包校验 + 带 schema
+ * 错包补语义面，身份去重防双计），错误按节分组展示、点击定位到表单字段
+ * （data-path 同构）。
  */
 
-import { validateContentPack, type ContentError } from '@wendao/content';
+import { type ContentError } from '@wendao/content';
 import { sectionTitle } from '../core/model.js';
+import { visibleValidation } from '../core/validate.js';
 import type { EditorStore } from '../core/state.js';
 
 export interface ValidatePanel {
@@ -50,7 +52,7 @@ export function createValidatePanel(
         lastErrors = [];
         return;
       }
-      const result = validateContentPack(store.state.pack);
+      const result = visibleValidation(store.state.pack);
       if (result.ok) {
         lastErrors = [];
         status.className = 'validate-status valid';

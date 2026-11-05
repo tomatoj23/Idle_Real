@@ -4,10 +4,11 @@
  */
 
 import './style.css';
-import { sectionSchemas, validateContentPack } from '@wendao/content';
+import { sectionSchemas } from '@wendao/content';
 import { xiuxianPackJson } from '@wendao/content/packs/xiuxian';
 import { confirmDirtyLoad, createStore } from './core/state.js';
 import { sectionTitle } from './core/model.js';
+import { visibleValidation } from './core/validate.js';
 import { exportJsonDownload, exportZipDownload, readPackFile } from './io/files.js';
 import { exportToGame } from './io/gameBridge.js';
 import { createValidatePanel } from './ui/panel.js';
@@ -326,11 +327,15 @@ if (app) {
    * 拒启。带错导出先二次确认（取消则不动），干净包静默放行。
    */
   function confirmExportDespiteErrors(): boolean {
-    const result = validateContentPack(store.state.pack);
+    const result = visibleValidation(store.state.pack);
     if (result.ok) {
       return true;
     }
-    if (!window.confirm(`当前包有 ${result.errors.length} 处校验错误，导出后可能无法通过游戏加载校验。仍要导出？`)) {
+    // 语义错注记（#100）：仅 schema 面时维持原措辞；schema 破包补并的语义面
+    // 单独计数标注——此前「N 处」只含 schema 面（带语义错的包可凭低估计数
+    // 确认放行，#56 立门禁要防的后果被计数低估）。
+    const semanticNote = result.extraSemantic > 0 ? `（含 ${result.extraSemantic} 处语义错）` : '';
+    if (!window.confirm(`当前包有 ${result.errors.length} 处校验错误${semanticNote}，导出后可能无法通过游戏加载校验。仍要导出？`)) {
       showToast('已取消导出：请先在校验面板修正错误');
       return false;
     }

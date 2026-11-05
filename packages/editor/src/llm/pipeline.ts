@@ -8,12 +8,15 @@
  * drops 等条目级 schema 查不到的跨引用语义）即抛错——store.update 按
  * 快照整树回滚（#73），包回到入包前时点。带 schema 错的包整包校验提前
  * 返回、语义面缺席，对照底与入包后各补一次独立语义入口（#94）——语义
- * 新增照拦；干净包路径原样。校验面板随 data 事件自动重跑的整包校验照常。
+ * 新增照拦；干净包路径原样。校验面板与导出确认的用户可见校验面走
+ * visibleValidation 合并入口（#100）；本管道的差集对照自带基准合并，
+ * 不共用该入口（错误身份键 errorKeyOf 单点共用）。
  */
 
 import { validateContent, validateContentPack, validatePackSemantics, sectionSchemas, type ContentError, type JsonSchema } from '@wendao/content';
 import type { EditorStore } from '../core/state.js';
 import { entrySchemaOf } from '../core/model.js';
+import { errorKeyOf } from '../core/validate.js';
 import { packRecordOf, packSectionArray } from '../core/packSection.js';
 import { sanitizeParsed } from '../io/files.js';
 import { extractJsonArray, type LlmClient } from './client.js';
@@ -309,11 +312,6 @@ export function applyCandidates(
 /** 入包复核：候选对当前包时点的节级 schema 再验一次。 */
 function passesSchema(value: unknown, schema: JsonSchema): boolean {
   return validateContent(value, schema).ok;
-}
-
-/** 错误身份键（入包前后差集比较用；path/keyword/message 全同即同一错误）。 */
-function errorKeyOf(error: ContentError): string {
-  return `${error.path}\u001F${error.keyword}\u001F${error.message}`;
 }
 
 /** 回滚错误消息（llmPanel catch 直接呈现；逐条列错误，超三条截断）。 */

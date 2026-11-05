@@ -102,9 +102,9 @@ export default {
     {
       id: '10-export-gate-validate-severed',
       path: mainPath,
-      before: '  function confirmExportDespiteErrors(): boolean {\n    const result = validateContentPack(store.state.pack);',
+      before: '  function confirmExportDespiteErrors(): boolean {\n    const result = visibleValidation(store.state.pack);',
       after: '  function confirmExportDespiteErrors(): boolean {\n    const result = { ok: true } as { ok: boolean; errors: never[] };',
-      note: '门禁判定恒放行：形同虚设——干净包零确认与带错确认两组断言双红。',
+      note: '门禁判定恒放行：形同虚设——干净包零确认与带错确认两组断言双红。（锚点随 #100 接线重拟：判定改走 visibleValidation 合并入口，语义不变。）',
     },
   ],
 };
