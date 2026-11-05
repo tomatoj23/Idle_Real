@@ -7,6 +7,7 @@
 //   P4  测试代码无用户真档路径字面量（2026-09-29 删档事故教训；防呆不防恶）
 //   P7  engine 源码无 Math.random / Date.now（ADR-013 确定性三禁的字面两禁；隐式定时器归 P1 词表）
 //   P8  测试文件总数 >= 基线（防测试被静默删除；调基线须显式改 P8_BASELINE 常量并写明理由）
+//   P9  受跟踪文本文件无 U+FFFD（EF BF BD 及一切解码为乱码替换符的非法 UTF-8 字节；#97，2026-11-01 审计 N8）
 // review 级提示（命中只提示，不阻塞——「命不准转 review，不硬失败」）：
 //   P2  从 globalThis/window/console 解构原生方法处有 bind 宿主（弱检测）
 //   P5  docs/research 引用 Reference_Documents 快照带取档日期标注
@@ -35,6 +36,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 // ---------- 规则表（断言 + 来源 + 正确做法，拒绝/提示文案同钩子规格） ----------
@@ -69,6 +71,12 @@ const RULES = {
     title: "测试文件总数不低于基线",
     source: "2026-10-24 retro 批追加（#80 会话测试计数 1043/1044 口径漂移教训；防测试被静默删除）；compliance-mechanical-gates.md §2 P8",
     fix: "删除/合并测试文件须显式改本脚本 P8_BASELINE 常量并在 commit/票写明理由；新增测试不触发。计数口径与 isTestFile 同源（tests 目录 + *.test/*.spec）。",
+  },
+  P9: {
+    level: "error",
+    title: "受跟踪文本无 U+FFFD 乱码",
+    source: "2026-11-01 #92 会话审计 N8 立项（五次 U+FFFD 产出全在库外被读回纪律兜住，受跟踪面当时无门禁；基线全树 0 命中=加门禁零成本时刻）；票 #97；compliance-mechanical-gates.md §2 P9",
+    fix: "乱码文件以 UTF-8 重存或修产出链源头；测试用例数据等确需乱码字样的，源码用 \\uFFFD 转义构造（运行时才成真字符）或加 `policy-allow: P9 <理由>` 豁免。门只覆盖受跟踪文件（git ls-files 面）；gh 评论/记忆/.scratch 仍靠读回纪律。",
   },
   P2: {
     level: "warn",
@@ -633,6 +641,35 @@ function checkP6(relPath, content) {
   return out;
 }
 
+// P9 受跟踪文本无 U+FFFD（#97，2026-11-01 审计 N8）：utf8 解码串里逐个查替换符。
+// EF BF BD 字节必解码出 U+FFFD；其余非法 UTF-8 字节（GBK 落盘等）同样解码为 U+FFFD，
+// 一并命中（#74「U+FFFD 检测须前置」同向：非 UTF-8 编码的受跟踪文本本就是要抓的乱码）。
+// 文本面按扩展名白名单（P9_TEXT_EXT）——二进制/图片不在集合内就永不扫描，零误伤靠
+// 白名单构造性保证；无扩展名/点开头文件（.gitignore、pre-push 等）不进集合，漏报方向可接受
+// （同 P1「宁可漏报不误报」哲学）。受跟踪面在 runCheck 按 git ls-files 过滤；checkFile
+// 是纯 per-file 语义（金丝雀直调即扫），不过滤。
+const P9_TEXT_EXT = new Set([
+  "ts", "tsx", "js", "jsx", "mjs", "cjs", "json", "md", "txt",
+  "html", "htm", "css", "scss", "less", "yml", "yaml", "xml", "svg",
+  "sh", "ps1", "vdf",
+]);
+
+function isP9TextFile(rel) {
+  const ext = path.extname(rel).replace(/^\./, "").toLowerCase();
+  return ext !== "" && P9_TEXT_EXT.has(ext);
+}
+
+function checkP9(relPath, content) {
+  const lineOf = lineIndexer(content);
+  const out = [];
+  let at = content.indexOf("\uFFFD");
+  while (at !== -1) {
+    out.push({ rule: "P9", line: lineOf(at), detail: "文本文件含 U+FFFD 乱码字符（EF BF BD 或非法 UTF-8 字节）" });
+    at = content.indexOf("\uFFFD", at + 1);
+  }
+  return out;
+}
+
 // ---------- 豁免（policy-allow: P<n> <理由>，注释形态、理由必填） ----------
 
 function allowPragmas(content) {
@@ -641,7 +678,7 @@ function allowPragmas(content) {
   const lineOf = lineIndexer(content);
   const ok = new Set();
   const out = [];
-  const re = /policy-allow:\s*P([1-8])\b([^\n]*)/g;
+  const re = /policy-allow:\s*P([1-9])\b([^\n]*)/g;
   let m;
   while ((m = re.exec(masked))) {
     const rule = `P${m[1]}`;
@@ -689,6 +726,21 @@ function underPosix(rel, prefix) {
   return rel.replace(/\\/g, "/").startsWith(prefix);
 }
 
+// P9 受跟踪面收集（#97 口径：收集走 git ls-files，不走路由文件系统）：git 路径以 / 相对
+// cwd，与 runCheck 的 posix 化 rel 同形可比。git 不可用/失败（金丝雀合成树、非 git 仓）
+// 返回 null → P9 整规则跳过（fail-open，同 walkFiles 单目录跳过哲学：宁漏报，勿在
+// 未跟踪面上误伤阻塞交付）。maxBuffer 显式放宽：默认 1 MiB 在大仓会被截断——截断的
+// stdout 仍真值、status 仍 0，门禁会静默致盲（比 fail-open 更坏），故连 r.error 一起判。
+function gitTrackedFiles(root) {
+  try {
+    const r = spawnSync("git", ["ls-files", "-z"], { cwd: root, maxBuffer: 16 * 1024 * 1024 });
+    if (r.error || r.status !== 0 || !r.stdout) return null;
+    return new Set(r.stdout.toString("utf8").split("\0").filter(Boolean));
+  } catch {
+    return null;
+  }
+}
+
 // ---------- 汇总检查 ----------
 
 export function checkFile(relPath, content) {
@@ -709,6 +761,7 @@ export function checkFile(relPath, content) {
   if (isCode && isTestFile(t)) found.push(...checkP4(relPath, content));
   if (underPosix(t, "docs/research/")) found.push(...checkP5(relPath, content));
   if (path.basename(t) === "AGENTS.md") found.push(...checkP6(relPath, content));
+  if (isP9TextFile(t)) found.push(...checkP9(relPath, content));
 
   const { ok, invalid } = allowPragmas(content);
   const violations = found.filter((v) => !ok.has(v.rule));
@@ -720,6 +773,8 @@ export function runCheck(root) {
   const errMap = new Map();
   const warnMap = new Map();
   let testFileCount = 0;
+  // P9 只认受跟踪面：git 收集失败（非 git 仓/无 git）= null → P9 全跳（fail-open）
+  const trackedFiles = gitTrackedFiles(root);
   walkFiles(root, (file) => {
     const rel0 = path.relative(root, file);
     const t0 = rel0.replace(/\\/g, "/");
@@ -732,6 +787,7 @@ export function runCheck(root) {
       return; // fail-open：单个文件读不了跳过（编码/竞态），门禁面大于单文件
     }
     for (const v of checkFile(rel, content)) {
+      if (v.rule === "P9" && (!trackedFiles || !trackedFiles.has(t0))) continue;
       const level = v.level ?? RULES[v.rule].level;
       const map = level === "error" ? errMap : warnMap;
       const key = `${v.rule}|${rel.replace(/\\/g, "/")}|${v.line}`;

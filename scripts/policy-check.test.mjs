@@ -5,6 +5,8 @@
 //   - DENY 组：改坏/放空对应断言实现 → 该组翻绿（门禁失效信号）。
 //   - ALLOW 组：检测面变宽（如改成裸词表）→ 该组翻红（误伤信号，比失效更伤）。
 //   - E2E 组：在临时 fixture 树放违规文件跑 runCheck → 必须报错；干净树 → 必须零报。
+//   - E2E-P9 组：临时树内 git init+add（#97 持久备注：临时树非 git 仓则 git ls-files
+//     收集不到=静默假绿，故本组走真收集路径）；git 不可用时跳过并注明。
 // 真仓本体的红由 `node scripts/policy-check.mjs` 直接跑（金丝雀只验证门禁实现本身）。
 //
 // 本文件含真档路径/平台全局的违禁字样作**用例数据**（字符串，非真实落盘），按豁免纪律
@@ -12,10 +14,13 @@
 // policy-allow: P4 金丝雀用例数据（模拟违禁输入，非真实写盘路径）
 // 注意：无理由的 policy-allow 形态（如行尾就断）在本文件里必须拼接构造——字面连续
 // 出现会把本文件自己豁免/提示掉，属自误伤。
+// P9 乱码用例一律 \uFFFD 转义构造：转义在源码里是 6 个 ASCII 字符、运行时才成真字符，
+// 源文件保持无真实 U+FFFD 字节，防 P9 上线后金丝雀自己踩红。
 
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { checkFile, runCheck } from "./policy-check.mjs";
 
@@ -62,6 +67,9 @@ const DENY_CASES = [
   ["P4-lowercase-env", P4_FILE, "const p = path.join(process.env.appdata, '问道长生');", "P4"],
   ["P4-join-array", P4_FILE, "fs.rmSync(path.join('AppData', 'Roaming', '问道长生', 'x.json'));", "P4"],
   ["P4-pragma-in-string", P4_FILE, "const note = 'policy-allow: P4 已备份';\nrmSync('%APPDATA%\\问道长生\\x');", "P4"],
+  // ---- P9（\uFFFD 转义构造：源文件保持无真实乱码字节，运行时才成真字符——见头注）----
+  ["P9-fffd-in-md", "docs/probe.md", "前文\uFFFD后文", "P9"],
+  ["P9-fffd-in-json", "scripts/probe.json", '{"v": "a\uFFFDb"}', "P9"],
   // ---- P2（review 级，命中=有提示）----
   ["P2-destructure-window", "packages/engine/src/probe.ts", "const { setTimeout } = window;", "P2"],
   ["P2-destructure-console", "packages/engine/src/probe.ts", "const { log } = console;", "P2"],
@@ -111,6 +119,9 @@ const ALLOW_CASES = [
   ["L-catch-binding", P1_FILE, "try {} catch (document) {}"],
   ["L-destr-default", P1_FILE, "const { document = d } = x;"],
   ["L-array-destr-default", P1_FILE, "const [document = 1] = arr;"],
+  // ---- P9 合规形状（白名单外扩展永不扫描；ASCII 提及「EF BF BD / U+FFFD」字样不是乱码本身）----
+  ["L-p9-binary-ext", "assets/logo.png", "\uFFFD 在二进制扩展内，不进文本面"],
+  ["L-p9-ascii-mention", "docs/probe.md", "字节序列 EF BF BD 与替换符字样 U+FFFD 均为 ASCII 提及"],
 ];
 
 // ---------- 断言执行 ----------
@@ -217,16 +228,95 @@ function runPragmaInvalid() {
   return failed;
 }
 
+function runPragmaP9() {
+  // P9 豁免通路（#97 brief：同一 allowPragmas 机制，正则放宽至 P9——不改则 P9 豁免连
+  // 解析都进不去）。无理由形态仍须拼接构造（见头注），防本文件被自家用例豁免/提示。
+  let failed = 0;
+  const report = (ok, msg) => {
+    if (!ok) failed++;
+    console.log(`${ok ? "PASS" : "FAIL"}  ${msg}`);
+  };
+  const exemptContent = `policy-allow: P9 用例数据（模拟乱码输入）\n乱\uFFFD码\n`;
+  report(
+    checkFile("docs/probe.md", exemptContent).length === 0,
+    "pragma-p9 带理由豁免放行（P9 不再报）",
+  );
+  const bare = "// policy-allow: " + "P9";
+  const bareContent = `${bare}\n乱\uFFFD码\n`;
+  const found = checkFile("docs/probe.md", bareContent);
+  report(found.some((v) => v.rule === "P9"), "pragma-p9 无理由豁免仍须报 P9");
+  report(found.some((v) => v.detail.includes("豁免未注明理由")), "pragma-p9 无理由豁免出「未注明理由」提示");
+  return failed;
+}
+
+function runE2EP9() {
+  // P9 受跟踪面 e2e（#97 持久备注口径）：runE2E 的 mkdtempSync 临时树非 git 仓，
+  // git ls-files 收集不到 = 静默假绿——本块在临时树内 git init+add 走真收集路径。
+  // git 不可用时整组跳过并注明（扫描/豁免语义已由 DENY/ALLOW/pragma-p9 组覆盖，不依赖 git）。
+  let failed = 0;
+  let ran = 0;
+  const report = (ok, msg) => {
+    ran++;
+    if (!ok) failed++;
+    console.log(`${ok ? "PASS" : "FAIL"}  ${msg}`);
+  };
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "policy-check-p9-"));
+  try {
+    const trackedRel = "docs/tracked-mojibake.md";
+    const untrackedRel = "docs/untracked-mojibake.md";
+    const cleanRel = "docs/clean-mention.md";
+    fs.mkdirSync(path.join(tmp, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmp, trackedRel), "乱\uFFFD码\n", "utf8");
+    fs.writeFileSync(path.join(tmp, untrackedRel), "乱\uFFFD码\n", "utf8");
+    fs.writeFileSync(path.join(tmp, cleanRel), "字节序列 EF BF BD 与字样 U+FFFD 均为 ASCII 提及\n", "utf8");
+    fs.mkdirSync(path.join(tmp, "assets"), { recursive: true });
+    fs.writeFileSync(path.join(tmp, "assets/logo.png"), "not-text \uFFFD bytes", "utf8");
+    const init = spawnSync("git", ["init"], { cwd: tmp });
+    const add = spawnSync("git", ["add", trackedRel, cleanRel], { cwd: tmp });
+    if (init.status !== 0 || add.status !== 0) {
+      console.log("SKIP  e2e-p9 git 不可用/init|add 失败，本组跳过——受跟踪面收集路径未在本机验证");
+      return { failed, ran };
+    }
+    const result = runCheck(tmp);
+    const p9Errors = result.errors.filter((v) => v.rule === "P9");
+    report(
+      p9Errors.length === 1 && p9Errors[0].file === trackedRel,
+      `e2e-p9 受跟踪乱码文件恰报一条 P9 且含文件名（实得 ${p9Errors.map((v) => `${v.file}:${v.line}`).join(",") || "零"}）`,
+    );
+    report(
+      !result.errors.some((v) => v.file === untrackedRel) && !result.warnings.some((v) => v.file === untrackedRel),
+      "e2e-p9 未跟踪乱码文件不报（受跟踪面过滤）",
+    );
+    report(
+      !result.errors.some((v) => v.file === cleanRel) && !result.warnings.some((v) => v.file === cleanRel),
+      "e2e-p9 ASCII 提及乱码字样的干净文本不报（误伤面）",
+    );
+    report(
+      !result.errors.some((v) => v.file.endsWith("logo.png")) && !result.warnings.some((v) => v.file.endsWith("logo.png")),
+      "e2e-p9 白名单外扩展（.png）不扫（零误伤构造性保证）",
+    );
+  } finally {
+    try {
+      fs.rmSync(tmp, { recursive: true, force: true }); // .git 只读对象由 node rm 的 EPERM 重试兜住
+    } catch {
+      console.log(`WARN  e2e-p9 临时树清理失败（残留：${tmp}）`);
+    }
+  }
+  return { failed, ran };
+}
+
 export function runSelfTest() {
   const denyFailed = runCaseTable(DENY_CASES, true);
   const allowFailed = runCaseTable(ALLOW_CASES, false);
   const e2eFailed = runE2E();
   const pragmaFailed = runPragmaInvalid();
-  const failed = denyFailed + allowFailed + e2eFailed + pragmaFailed;
-  const total = DENY_CASES.length + ALLOW_CASES.length + 4 + 2;
+  const p9PragmaFailed = runPragmaP9();
+  const p9E2E = runE2EP9();
+  const failed = denyFailed + allowFailed + e2eFailed + pragmaFailed + p9PragmaFailed + p9E2E.failed;
+  const total = DENY_CASES.length + ALLOW_CASES.length + 4 + 2 + 3 + p9E2E.ran;
   console.log(
     failed === 0
-      ? `\n金丝雀全绿（deny ${DENY_CASES.length} + allow ${ALLOW_CASES.length} + e2e 4 + pragma 2 = ${total} 项）。`
+      ? `\n金丝雀全绿（deny ${DENY_CASES.length} + allow ${ALLOW_CASES.length} + e2e 4 + pragma 2 + p9-pragma 3 + p9-e2e ${p9E2E.ran}${p9E2E.ran === 0 ? "（git 不可用跳过）" : ""} = ${total} 项）。`
       : `\n${failed} 项失败——门禁失效或误伤，模拟验证未过。`,
   );
   return failed === 0;
