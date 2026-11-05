@@ -123,7 +123,14 @@ function resolveRef(ref: string, root: JsonSchema): JsonSchema | undefined {
   if (!ref.startsWith('#/definitions/')) {
     return undefined;
   }
-  return root.definitions?.[ref.slice('#/definitions/'.length)];
+  // own-properties 语义（#95，checkObject properties 查取 #90 同律）：普通取值
+  // 沿原型链——definitions 真实在时，Object.prototype 成员/污染键会冒充已注册
+  // 定义被解析，坏引用蒙混过校验。
+  const name = ref.slice('#/definitions/'.length);
+  const definitions = root.definitions;
+  return definitions !== undefined && Object.hasOwn(definitions, name)
+    ? definitions[name]
+    : undefined;
 }
 
 /**
@@ -268,7 +275,9 @@ function checkConstraints(
 
 function checkObject(json: Record<string, unknown>, schema: JsonSchema, path: string, ctx: Ctx): void {
   for (const key of schema.required ?? []) {
-    if (!(key in json)) {
+    // own 键判定（#95 原型链家族扫尾，#90 同律）：`key in json` 沿原型链，
+    // Object.prototype 挂 required 键名即可蒙混缺字段。
+    if (!Object.hasOwn(json, key)) {
       ctx.errors.push({
         path: `${path}/${key}`,
         keyword: 'required',

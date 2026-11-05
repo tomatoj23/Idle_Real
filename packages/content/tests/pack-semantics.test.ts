@@ -182,7 +182,13 @@ function appendDanglingEnemy(pack: Record<string, any>, id = 'e2'): void {
  *   红；
  * - M4 indexIds 去掉条目守卫 → items [null] 用例崩溃，红；
  * - M5 rarities 单调检查去掉 typeof number 守卫 → 畸形倍率字符串字典序
- *   误报倒挂，红。
+ *   误报倒挂，红；
+ * - M6 checkItemShapes 槽位 xref 去掉 typeof string 参与守卫（#95 F10）→
+ *   item.slot=123 用例误报「槽位 "123" 未在 config.slots 定义」，红；
+ * - M7 checkConfig shardItem 去掉 typeof string 参与守卫（#95 F10）→
+ *   shardItem=123 用例误报「器屑物品 "123" 不存在于 items」，红；
+ * - M8 checkConfig biasSkillId 去掉 typeof string 参与守卫（#95 F10）→
+ *   biasSkillId=123 用例误报「掉落偏置供体技能 "123" 不存在于 skills」，红。
  */
 describe('validatePackSemantics · 语义独立入口（#94）', () => {
   describe('干净包对拍（schema 面缺席时语义面不缺席的基准）', () => {
@@ -353,5 +359,70 @@ describe('validatePackSemantics · 语义独立入口（#94）', () => {
       pack.skills[0].activities = null;
       expect(() => validatePackSemantics(pack)).not.toThrow();
     });
+  });
+});
+
+/**
+ * 类型坏引用零误报（#95 票评 F10，#94 会话审计转入随手收口）：
+ * 全仓 xref 检查律 = 值须 typeof string 才参与存在性对照（非字符串留给
+ * schema 面），item.slot / config.gear.shardItem / config.gear.biasSkillId
+ * 三处漏守卫——类型坏引用落进 Set/Map 查取恒 miss，好包律变成误导性
+ * 「不存在/未定义」噪音（不崩溃，schema 净包零影响）。收口 = 三处补
+ * 同律守卫；验收 = 独立语义入口对类型坏引用零误报（修复前各测红），
+ * 真悬空/类错照查（守卫不得放宽既有拒绝面）。同族边缘（票评裁不立案，
+ * 此处留观察）：checkInscriptionFeatures feature.value 域检查对字符串
+ * 隐式强转（"0.9" 放过、"1.5" 报越界）。
+ */
+describe('类型坏引用零误报（#95 F10：三处 xref 补 typeof 参与守卫）', () => {
+  /** 形态合法的最小 config（slots 数组 → scope.config 可信，checkConfig 才执行）。 */
+  const weaponConfig = () => ({ slots: [{ id: 'weapon', name: '法器' }] });
+
+  it('item.slot 类型坏（数字）：不报「未在 config.slots 定义」；字符串悬空槽位照查', () => {
+    const pack = makePack();
+    pack.config = weaponConfig();
+    pack.items.push({ id: 'gsword', name: '断剑', icon: '剑', type: 'equip', slot: 123, sell: 1 });
+    // 修复前误报：`槽位 "123" 未在 config.slots 定义`（类型坏留给 schema 面）。
+    expect(validatePackSemantics(pack)).toEqual([]);
+
+    const pack2 = makePack();
+    pack2.config = weaponConfig();
+    pack2.items.push({ id: 'gsword', name: '断剑', icon: '剑', type: 'equip', slot: 'ghost_slot', sell: 1 });
+    const errors = validatePackSemantics(pack2);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({ path: '/items/3/slot', keyword: 'xref' });
+  });
+
+  it('config.gear.shardItem 类型坏：不报「不存在于 items」；字符串悬空/类错照查', () => {
+    const pack = makePack();
+    pack.config = { ...weaponConfig(), gear: { shardItem: 123 } };
+    expect(validatePackSemantics(pack)).toEqual([]);
+
+    const pack2 = makePack();
+    pack2.config = { ...weaponConfig(), gear: { shardItem: 'ghost_item' } };
+    const errors = validatePackSemantics(pack2);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({ path: '/config/gear/shardItem', keyword: 'xref' });
+
+    const pack3 = makePack();
+    pack3.config = { ...weaponConfig(), gear: { shardItem: 'sword1' } }; // 存在但非 mat
+    const errors3 = validatePackSemantics(pack3);
+    expect(errors3).toHaveLength(1);
+    expect(errors3[0]!.message).toContain('mat');
+  });
+
+  it('config.gear.biasSkillId 类型坏：不报「不存在于 skills」；字符串悬空照查、在册即静默', () => {
+    const pack = makePack();
+    pack.config = { ...weaponConfig(), gear: { biasSkillId: 123 } };
+    expect(validatePackSemantics(pack)).toEqual([]);
+
+    const pack2 = makePack();
+    pack2.config = { ...weaponConfig(), gear: { biasSkillId: 'ghost_skill' } };
+    const errors = validatePackSemantics(pack2);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({ path: '/config/gear/biasSkillId', keyword: 'xref' });
+
+    const pack3 = makePack();
+    pack3.config = { ...weaponConfig(), gear: { biasSkillId: 'smith' } }; // BASE_PACK 在册技能
+    expect(validatePackSemantics(pack3)).toEqual([]);
   });
 });

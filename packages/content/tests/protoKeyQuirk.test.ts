@@ -25,6 +25,17 @@ import { expectError, minimalPack } from './fixtures.js';
  *   （audit 探针 4/5）——修复不得改动这些既有拒绝面。
  * 验红钉：改前本文件 quirk 用例全红（ok:true 放行）、反对照恒绿；
  * 修复后全绿。
+ *
+ * #95 增补（原型链查取家族扫尾，#90 同族两处 own 化的对抗注入回归）：
+ * - required 检查 `key in json`（validate.ts checkObject）：Object.prototype
+ *   挂 required 键名 → 缺 own 键被 `in` 沿链蒙混（缺字段不报）；
+ * - resolveRef 的 `root.definitions?.[name]`：definitions 真实在时查取沿链，
+ *   Object.prototype 污染键 / 内建成员（constructor）冒充已注册定义被解析
+ *   （伪造 {type:'string'} 形态即可让坏引用蒙混通过）。
+ *   两注入均先断言污染键不在场、注入后断言确已在（防空测试），finally
+ *   删键还原（防污染同文件后续用例）；注入与还原各断言一次。
+ * 验红钉（#95 同律）：注入两测改前红（ok:true 蒙混放行）、反对照恒绿；
+ * 修复后全绿。
  */
 
 /** 合成极简 schema（audit 探针同构：闭键域 + 必填，最小复现面）。 */
@@ -120,5 +131,70 @@ describe('properties 键查找原型链 quirk（#90）', () => {
       '/combatText/verbs/basic/0/__proto__',
       'additionalProperties',
     );
+  });
+});
+
+describe('原型链查取家族 own 化（#95：required in + definitions 查取）', () => {
+  const PROTO = Object.prototype as unknown as Record<string, unknown>;
+
+  it('对抗注入：Object.prototype 挂 required 键名 → 缺 own 键仍报 required', () => {
+    const schema: JsonSchema = {
+      type: 'object',
+      required: ['ghost_required'],
+      additionalProperties: false,
+      properties: { ghost_required: { type: 'string' } },
+    };
+    expect(Object.hasOwn(PROTO, 'ghost_required')).toBe(false); // 注入前不在场（防空测试）
+    PROTO['ghost_required'] = 1;
+    try {
+      expect(Object.hasOwn(PROTO, 'ghost_required')).toBe(true); // 注入确已在
+      // 修复前：`'ghost_required' in {}` 沿链命中 → 必填检查被蒙混（ok:true）。
+      expectError(validateContent({}, schema), '/ghost_required', 'required');
+    } finally {
+      delete PROTO['ghost_required']; // 还原，防污染同文件后续用例
+    }
+    expect(Object.hasOwn(PROTO, 'ghost_required')).toBe(false);
+  });
+
+  it('对抗注入：Object.prototype 挂 definitions 名（污染键 + 内建 constructor）→ $ref 不沿链解析', () => {
+    const schema: JsonSchema = {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        weapon: { $ref: '#/definitions/ghost_def' },
+        spare: { $ref: '#/definitions/constructor' },
+      },
+      definitions: { real: { type: 'string' } }, // definitions 真实在，?.[name] 才会走链
+    };
+    expect(Object.hasOwn(PROTO, 'ghost_def')).toBe(false); // 注入前不在场（防空测试）
+    PROTO['ghost_def'] = { type: 'string' }; // 伪造「可解析」定义
+    try {
+      expect(Object.hasOwn(PROTO, 'ghost_def')).toBe(true);
+      const value = JSON.parse('{"weapon":"断水","spare":"备剑"}') as Record<string, unknown>;
+      // 修复前：两引用分别沿链命中污染键 / 内建 constructor（函数当 schema）→ 蒙混通过。
+      const result = validateContent(value, schema);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.errors.map((e) => e.keyword)).toEqual(['$ref', '$ref']);
+        expect(result.errors.map((e) => e.path)).toEqual(['/weapon', '/spare']);
+      }
+    } finally {
+      delete PROTO['ghost_def'];
+    }
+    expect(Object.hasOwn(PROTO, 'ghost_def')).toBe(false);
+  });
+
+  it('反对照：合法 $ref 照常解析、链外未知名照常拒（拒绝面不因修复改变）', () => {
+    const schema: JsonSchema = {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        weapon: { $ref: '#/definitions/real' },
+        spare: { $ref: '#/definitions/ghost_other' },
+      },
+      definitions: { real: { type: 'string' } },
+    };
+    expect(validateContent(JSON.parse('{"weapon":"断水"}'), schema).ok).toBe(true);
+    expectError(validateContent(JSON.parse('{"spare":"备剑"}'), schema), '/spare', '$ref');
   });
 });

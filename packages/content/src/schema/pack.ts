@@ -608,7 +608,9 @@ function checkConfig(
     });
   }
   const shardItem = config.gear?.shardItem;
-  if (shardItem !== undefined) {
+  // typeof string 参与守卫（#95 F10，enemies drops xref #94 同律）：类型坏引用
+  // 落 Map 查取恒 miss，会误报「不存在于 items」——留给 schema 面。
+  if (typeof shardItem === 'string') {
     const itemAt = items.get(shardItem);
     if (itemAt === undefined) {
       errors.push({
@@ -627,7 +629,9 @@ function checkConfig(
   // 掉落侧稀有度偏置供体（#62 P1-2）：xref skills——引擎侧缺技能静默无偏置
   //（零降级路径），声明了不存在的技能是包作者的拼写错，加载期大声拒绝。
   const biasSkillId = config.gear?.biasSkillId;
-  if (biasSkillId !== undefined && !skills.has(biasSkillId)) {
+  // typeof string 参与守卫（#95 F10，shardItem 同条）：类型坏引用误报「不存在
+  // 于 skills」——留给 schema 面。
+  if (typeof biasSkillId === 'string' && !skills.has(biasSkillId)) {
     errors.push({
       path: '/config/gear/biasSkillId',
       keyword: 'xref',
@@ -676,7 +680,9 @@ function checkItemShapes(
     if (!isRecord(item)) return; // 畸形条目留给 schema 面（#94）
     const at = (field: string) => `/items/${index}/${field}`;
     // 槽位数据化跨引用：equip/blank 声明的 slot 须在 config.slots 有定义。
-    if (item.slot !== undefined && slotIds !== undefined && !slotIds.has(item.slot)) {
+    // typeof string 参与守卫（#95 F10，drops xref #94 同律）：类型坏引用误报
+    // 「未在 config.slots 定义」——留给 schema 面。
+    if (typeof item.slot === 'string' && slotIds !== undefined && !slotIds.has(item.slot)) {
       errors.push({
         path: at('slot'),
         keyword: 'xref',
