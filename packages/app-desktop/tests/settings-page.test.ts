@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 /**
- * 设置页（#62 P1-1 存档管理页回迁；#93 导入失败分文案）：卡片渲染/手动保存/
- * 散功重修两段式/携档云游（导出密文/导入门禁/bad-cipher 与 held 分文案内联报错）/
- * 服务缺省降级。
+ * 设置页（#62 P1-1 存档管理页回迁；#93 导入失败分文案；#98 foreign-version 三判别）：
+ * 卡片渲染/手动保存/散功重修两段式/携档云游（导出密文/导入门禁/bad-cipher、held、
+ * foreign-version 分文案内联报错）/服务缺省降级。
  * 存档字节面全在注入的 ShellSaveService 夹具——本套件钉页面行为与转发面，
  * 编解码与受控重载的装配语义归 main 装配侧（main-entry）。
  */
@@ -122,6 +122,20 @@ describe('#62 · 设置页', () => {
     root.querySelector<HTMLButtonElement>('[data-act="import-save"]')!.click();
     expect(root.querySelector('#page-root')?.textContent).toContain('其他版本的存档占用');
     expect(root.querySelector('#page-root')?.textContent).not.toContain('密文无效');
+    expect(root.querySelector<HTMLTextAreaElement>('#imp-box')!.value).toBe('S0VZ');
+  });
+
+  it('#98：foreign-version 判别 → 内联报 importForeign（含出路指引），不渲染 importBad/importHeld，草稿保留', () => {
+    const foreign = makeService('foreign-version');
+    const { root } = mountGame({ saveService: foreign });
+    goSettings(root);
+    const box = root.querySelector<HTMLTextAreaElement>('#imp-box')!;
+    box.value = 'S0VZ';
+    root.querySelector<HTMLButtonElement>('[data-act="import-save"]')!.click();
+    expect(root.querySelector('#page-root')?.textContent).toContain('导出该密文的版本');
+    // 双向负断言：异版本合法密文不得误报「密文无效」，也不得占用文案
+    expect(root.querySelector('#page-root')?.textContent).not.toContain('密文无效');
+    expect(root.querySelector('#page-root')?.textContent).not.toContain('占用');
     expect(root.querySelector<HTMLTextAreaElement>('#imp-box')!.value).toBe('S0VZ');
   });
 

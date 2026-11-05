@@ -34,19 +34,23 @@ export type TabId =
 export type ShellText = (key: string, vars?: Readonly<Record<string, string | number>>) => string;
 
 /**
- * 导入结果判别值（#93）：服务层只返判别不返文案（ADR-016 玩家可见串归 content），
- * 设置页按判别选 texts 键渲染。
+ * 导入结果判别值（#93；#98 起 decode 拒再分异版本子形态）：服务层只返判别不返
+ * 文案（ADR-016 玩家可见串归 content），设置页按判别选 texts 键渲染。
  * - 'ok'：写入并回读验真，受控重载已触发；
- * - 'bad-cipher'：粘贴密文未过 decodeSave 形状/版本门禁（真·密文无效）；
+ * - 'bad-cipher'：粘贴密文未过 decodeSave 门禁且非自证异引擎档（真·密文无效：
+ *   解析失败/形状坏/读不懂的碎片）；
+ * - 'foreign-version'：密文完整合法但自证为另一引擎档（整数版本号 ≠ 本引擎，
+ *   decodeSave 拒且 holdSlot）——给「用导出版本读取」指引，不误报密文无效；
  * - 'held'：写入未验真——槽位被 #69 保槽闩占守（内躺异版本档，写被静默拒）
  *   或读通道异常回读为 null，两成因保守同报（文案含指引，见 texts settings.importHeld）。
  */
-export type ImportResult = 'ok' | 'bad-cipher' | 'held';
+export type ImportResult = 'ok' | 'bad-cipher' | 'foreign-version' | 'held';
 
 /**
  * 存档管理服务（#62 P1-1）：设置页的保存/导出/导入三个壳层能力。
  * main.ts 持有 adapter/autoSave/受控重载旗标——引擎零平台依赖，槽位字节
- * 只有壳看得见。importText 返判别值（#93）：bad-cipher/held 由页分文案内联报错。
+ * 只有壳看得见。importText 返判别值（#93；#98 起 bad-cipher/foreign-version/held
+ * 三判别）由页分文案内联报错。
  */
 export interface ShellSaveService {
   /** 立即保存一次（等价自动保存 flush）。 */

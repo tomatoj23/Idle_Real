@@ -371,6 +371,7 @@ export const textsSample: TextsSection = {
         importLabel: '读档密文',
         importBtn: '读档',
         importBad: '密文无效',
+        importForeign: '密文来自其他版本',
         importHeld: '槽位被占用',
         guideTitle: '玩法说明',
         guide: '采药炼丹，斗法夺宝',

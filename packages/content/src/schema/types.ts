@@ -1003,8 +1003,10 @@ export interface ShellPageSettings {
   readonly importLabel: string;
   /** 导入按钮。 */
   readonly importBtn: string;
-  /** 导入密文无效提示（形状/版本门禁拒绝）。 */
+  /** 导入密文无效提示（真·密文无效——解析失败或形状门禁拒；异版本合法密文分 importForeign）。 */
   readonly importBad: string;
+  /** 导入异版本密文提示（#98：密文完整合法但由其他版本导出，给「用导出版本读取」出路指引）。 */
+  readonly importForeign: string;
   /** 导入未能落盘提示（#93：密文合法但槽位被异版本档占守/回读未验真，含处理指引）。 */
   readonly importHeld: string;
   /** 玩法说明区标题。 */

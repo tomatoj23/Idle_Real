@@ -10,6 +10,16 @@
 import { esc } from '../pageFrame';
 import type { ImportResult, PageCtx, PageEnv, PageView } from './types';
 
+/**
+ * 导入失败判别 → texts 键映射（#93 分文案；#98 起 decode 拒再分异版本子形态，
+ * 三判别三键——服务层不返文案，ADR-016 玩家可见串归 content）。
+ */
+const IMPORT_FAIL_TEXT: Record<Exclude<ImportResult, 'ok'>, string> = {
+  'bad-cipher': 'pages.settings.importBad',
+  'foreign-version': 'pages.settings.importForeign',
+  held: 'pages.settings.importHeld',
+};
+
 export function createSettingsPage(env: PageEnv): PageView {
   /** 散功重修两段式确认（#6 rebirth 同款 arm 形）。 */
   let resetArmed = false;
@@ -17,8 +27,9 @@ export function createSettingsPage(env: PageEnv): PageView {
   let importDraft = '';
   /**
    * 导入失败内联报错（toast 面留给要紧事，失败就在框边说清）。
-   * #93 存失败判别值分文案：'bad-cipher'=密文门禁拒（importBad 原文案），
-   * 'held'=槽被闩/落盘未验真（importHeld 占用指引文案）；null=无错。
+   * #93 存失败判别值分文案：'bad-cipher'=真·密文无效（importBad 原文案），
+   * 'held'=槽被闩/落盘未验真（importHeld 占用指引文案）；#98 增
+   * 'foreign-version'=粘贴密文跨版本（importForeign 出路指引文案）；null=无错。
    */
   let importFail: Exclude<ImportResult, 'ok'> | null = null;
 
@@ -66,9 +77,7 @@ export function createSettingsPage(env: PageEnv): PageView {
                  ${
                    importFail === null
                      ? ''
-                     : `<p class="act-lockmsg">${esc(
-                         T(importFail === 'held' ? 'pages.settings.importHeld' : 'pages.settings.importBad'),
-                       )}</p>`
+                     : `<p class="act-lockmsg">${esc(T(IMPORT_FAIL_TEXT[importFail]))}</p>`
                  }
                  <div class="card-actions">
                    <button class="btn" data-act="import-save">${esc(T('pages.settings.importBtn'))}</button>

@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 /**
- * 存档管理服务（#62 P1-1；审计 20261031-191624 F2/F4/N1 修复面；#93 判别值）：
- * - 门禁前置：坏密文 → 'bad-cipher'，不写不重载；
+ * 存档管理服务（#62 P1-1；审计 20261031-191624 F2/F4/N1 修复面；#93 判别值；
+ * #98 异版本密文 foreign-version 判别）：
+ * - 门禁前置：坏密文 → 'bad-cipher'，不写不重载；#98 起门禁拒再分——
+ *   自证为另一引擎档的完整密文（holdSlot 子形态）→ 'foreign-version'，同不碰槽位；
  * - F2：保槽闩静默拒写 → 写后回读拦截，报 'held' 不重载（假成功清零；
  *   #93 起与 decode 拒分判别——密文合法被闩拒时不得误报「密文无效」）；
  * - F4：成功路径先 autoSave.stop 摘 pagehide flush 再重载（导入档不被当前局覆掉）；
@@ -75,6 +77,19 @@ describe('#62 审计修复 · 存档管理服务', () => {
     expect(calls).toEqual(['write']); // 写了但被闩拒——回读拦截
     expect(calls).not.toContain('reload');
     expect(localStorage.getItem(SAVE_KEY)).toBe(FOREIGN_SAVE); // 异版本字节未被覆
+  });
+
+  it('#98：粘贴异版本完整密文 → foreign-version，不写槽不重载；形状坏/真垃圾仍 bad-cipher', () => {
+    const { service, calls } = makeHarness(memoryAdapter());
+    // 自证为另一引擎档（整数版本号且 ≠ SAVE_VERSION）的完整合法密文
+    const foreignCipher = encodeSaveText({ version: 999, time: 0, state: { gold: 1 } } as unknown as SaveData);
+    expect(service.importText(foreignCipher)).toBe('foreign-version');
+    expect(calls).toEqual([]); // 门禁前置：槽位未触碰、无 stop/reload
+    // 形状坏（version 缺失 → holdSlot false）不因「同为拒」混入 foreign-version
+    const noVersion = encodeSaveText({ time: 0, state: {} } as unknown as SaveData);
+    expect(service.importText(noVersion)).toBe('bad-cipher');
+    expect(service.importText('garbage!!!')).toBe('bad-cipher');
+    expect(calls).toEqual([]); // 三连拒全程零落盘尝试
   });
 
   it('#93 判别面：同一合法密文，槽被闩返 held、槽空返 ok；坏密文无论槽态恒 bad-cipher', () => {

@@ -3,7 +3,9 @@
  *
  * 存档字节面（导出编码/导入门禁/槽位写入/受控重载）在壳层——引擎零平台依赖。
  * 导入链三条纪律：
- * 1. 门禁前置：decodeSave 形状/版本门禁不过 = 报 'bad-cipher'（页内联），不碰槽位；
+ * 1. 门禁前置：decodeSave 门禁不过 = 不碰槽位（页内联报错）；#98 起拒再分两判别——
+ *    自证为另一引擎档的完整合法密文（holdSlot 子形态）报 'foreign-version'，
+ *    其余（解析失败/形状坏/真垃圾）报 'bad-cipher'；
  * 2. 写后回读（F2）：#69 保槽闩会**静默拒写**（槽内异版本档时 save/flushSync
  *    无声返回）——写后 load() 回读验证，拒 = 报 'held' 不重载，杜绝假成功；
  *    #93：两种失败分判别值返回（服务层不返文案，ADR-016）——密文合法却被闩拒
@@ -54,7 +56,12 @@ export function createSaveService(deps: SaveServiceDeps): ShellSaveService {
     exportText: () => encodeSaveText(deps.snapshot()),
     importText(raw): ImportResult {
       const decoded = decodeSave(decodeSaveCipher(raw));
-      if (!decoded.save) return 'bad-cipher';
+      if (!decoded.save) {
+        // #98 分判别：holdSlot=「整数版本号且 ≠ 本引擎」的自证形态——密文完整
+        // 合法、只是版本不同，误报「密文无效」属误导；读不懂的碎片仍 bad-cipher
+        //（区分判据与 engine saveRejection.holdSlot 同源，见其注）。
+        return decoded.holdSlot ? 'foreign-version' : 'bad-cipher';
+      }
       if (deps.adapter.flushSync) deps.adapter.flushSync(decoded.save);
       else deps.adapter.save(decoded.save);
       // 写后回读（F2）：保槽闩拒写是静默的——回读 null = 写入丢失，报 held 不重载
